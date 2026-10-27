@@ -1,0 +1,45 @@
+{
+  "name": "opencloth",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "WebGPU 服装设计软件",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "build:site": "vite build --mode site && node scripts/check-site-bundle.mjs",
+    "preview": "vite preview",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint src --ext .ts,.tsx",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "earcut": "^3.0.1",
+    "oidn-webgpu": "^0.6.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "three": "^0.185.1",
+    "three-gpu-pathtracer": "^0.0.27",
+    "three-mesh-bvh": "^0.9.17",
+    "zustand": "^5.0.1"
+  },
+  "devDependencies": {
+    "@types/earcut": "^2.1.4",
+    "@types/node": "^26.6.5",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@types/three": "^0.185.1",
+    "@typescript-eslint/eslint-plugin": "^8.18.0",
+    "@typescript-eslint/parser": "^8.18.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "@webgpu/types": "^0.1.74",
+    "eslint": "^9.16.0",
+    "eslint-plugin-react": "^7.37.2",
+    "eslint-plugin-react-hooks": "^5.1.0",
+    "typescript": "^5.6.3",
+    "vite": "^6.0.3",
+    "vitest": "^5.0.5"
+  }
+}
