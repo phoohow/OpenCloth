@@ -3,10 +3,10 @@ export const styles: Record<string, React.CSSProperties> = {
   editor: { display: 'flex', flex: 1, minHeight: 0, height: '100%', overflow: 'hidden' },
   body: { flex: 1, minWidth: 0, overflowY: 'auto', padding: '6px 6px 10px' },
   objectName: {
-    fontSize: 11, color: '#4da6ff', padding: '2px 4px 6px', borderBottom: '1px solid #333', marginBottom: 7,
+    fontSize: 'var(--oc-fs-micro)', color: '#4da6ff', padding: '2px 4px 6px', borderBottom: '1px solid #333', marginBottom: 7,
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
   },
-  note: { fontSize: 10, color: '#777', lineHeight: 1.5, margin: '5px 2px 1px' },
+  note: { fontSize: 'var(--oc-fs-note)', color: '#777', lineHeight: 1.5, margin: '5px 2px 1px' },
   rail: {
     flex: '0 0 auto', width: 30, display: 'flex', flexDirection: 'column',
     alignItems: 'stretch', justifyContent: 'center', gap: 2, padding: '0 3px',

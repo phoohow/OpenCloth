@@ -36,7 +36,8 @@ export interface MenuState {
   recent: RecentSummary[];
 }
 
-const AUTO_SAVE_ITEMS = [
+/** Autosave periods offered by 文件 ▸ 自动保存, shared with the phone menu. */
+export const AUTO_SAVE_ITEMS = [
   { seconds: 0, label: '关闭' },
   { seconds: 30, label: '每 30 秒' },
   { seconds: 60, label: '每 1 分钟' },

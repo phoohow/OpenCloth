@@ -2,22 +2,23 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#1a1a1e" />
     <title>OpenCloth - 服装设计平台</title>
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
       html, body, #root { width: 100%; height: 100%; overflow: hidden; }
       body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif; background: #1a1a1a; color: #e0e0e0; }
-      #webgpu-error { display: none; position: fixed; inset: 0; background: #1a1a1a; z-index: 9999; padding: 40px; text-align: center; }
-      #webgpu-error h1 { color: #ff6b6b; margin-bottom: 16px; }
-      #webgpu-error p { color: #aaa; line-height: 1.6; }
+      #webgpu-error { display: none; position: fixed; inset: 0; background: #1a1a1a; z-index: 9999; padding: max(24px, env(safe-area-inset-top)) 22px 24px; text-align: center; }
+      #webgpu-error h1 { color: #ff6b6b; margin-bottom: 16px; font-size: 20px; }
+      #webgpu-error p { color: #aaa; line-height: 1.7; font-size: 14px; }
     </style>
   </head>
   <body>
     <div id="root"></div>
     <div id="webgpu-error">
       <h1>当前浏览器不支持 WebGPU</h1>
-      <p>OpenCloth 需要 WebGPU 支持才能运行。<br/>请使用 Chrome 113+ 或 Edge 113+，并确保显卡驱动已更新。<br/>访问 <code>chrome://gpu</code> 查看 WebGPU 状态。</p>
+      <p>OpenCloth 需要 WebGPU 支持才能运行。<br/>电脑端请使用 Chrome 113+ 或 Edge 113+，并确保显卡驱动已更新。<br/>手机端请使用 Android 12+ 上的 Chrome 121+，或 iOS / iPadOS 26 上的 Safari。<br/>访问 <code>chrome://gpu</code> 查看 WebGPU 状态。</p>
     </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

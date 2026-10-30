@@ -87,6 +87,9 @@ export async function createRendererContext(canvas: HTMLCanvasElement): Promise<
   const controls = new OrbitControls<THREE.Camera>(camera, canvas);
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
+  // One finger turns, two fingers dolly and truck; stated so a phone keeps those gestures
+  // even if a later three release changes the library defaults.
+  controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
   controls.target.set(0, 0.9, 0);
   controls.update();
 

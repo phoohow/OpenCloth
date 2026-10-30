@@ -64,6 +64,8 @@ export function NumberField({ value, step, precision = 3, min, max, axis, suffix
       style={styles.cell}
       title={title}
       onPointerDown={e => {
+        // A finger taps to type; scrubbing needs the pixel precision of a mouse.
+        if (e.pointerType === 'touch') { startEdit(); return; }
         drag.current = { x: e.clientX, from: value, moved: false };
         try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* no capture available */ }
         e.preventDefault();
@@ -141,17 +143,17 @@ export function Vec3Field({ label, value, step, precision, min, max, suffix, onP
 
 const styles: Record<string, React.CSSProperties> = {
   cell: {
-    flex: 1, minWidth: 0, height: 20, display: 'flex', alignItems: 'center', gap: 3,
+    flex: 1, minWidth: 0, height: 'var(--oc-h-control)', display: 'flex', alignItems: 'center', gap: 3,
     background: '#26262b', border: '1px solid #3a3a42', borderRadius: 3,
     padding: '0 4px', cursor: 'ew-resize', overflow: 'hidden',
   },
   edit: {
-    flex: 1, minWidth: 0, height: 20, background: '#1c1c20', border: '1px solid #4da6ff',
-    borderRadius: 3, color: '#fff', fontSize: 11, padding: '0 4px',
+    flex: 1, minWidth: 0, height: 'var(--oc-h-control)', background: '#1c1c20', border: '1px solid #4da6ff',
+    borderRadius: 3, color: '#fff', fontSize: 'var(--oc-fs-micro)', padding: '0 4px',
   },
-  axis: { fontSize: 10, fontWeight: 700, flex: '0 0 auto' },
-  value: { fontSize: 11, color: '#ddd', marginLeft: 'auto', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' },
-  vecRow: { display: 'flex', alignItems: 'center', gap: 6, margin: '3px 0' },
-  vecLabel: { fontSize: 11, color: '#999', width: 34, flex: '0 0 auto' },
+  axis: { fontSize: 'var(--oc-fs-note)', fontWeight: 700, flex: '0 0 auto' },
+  value: { fontSize: 'var(--oc-fs-micro)', color: '#ddd', marginLeft: 'auto', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' },
+  vecRow: { display: 'flex', alignItems: 'center', gap: 6, margin: '4px 0' },
+  vecLabel: { fontSize: 'var(--oc-fs-micro)', color: '#999', width: 'var(--oc-w-field-label)', flex: '0 0 auto' },
   vecCells: { flex: 1, display: 'flex', gap: 3, minWidth: 0 },
 };

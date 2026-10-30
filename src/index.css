@@ -21,6 +21,56 @@ button {
   font-family: inherit;
 }
 
+/* Control sizes one shell-wide; the phone mode widens the values at the bottom. */
+:root {
+  --oc-fs-micro: 11px;
+  --oc-fs-note: 10px;
+  --oc-fs-dialog-title: 15px;
+  --oc-h-control: 20px;
+  --oc-h-row: 22px;
+  --oc-h-slot: 24px;
+  --oc-h-section-header: 24px;
+  --oc-w-select: 130px;
+  --oc-w-field-label: 34px;
+  --oc-w-slider-thumb: 14px;
+}
+
+html[data-ui-mode="mobile"] {
+  --oc-fs-micro: 14px;
+  --oc-fs-note: 12px;
+  --oc-fs-dialog-title: 17px;
+  --oc-h-control: 34px;
+  --oc-h-row: 40px;
+  --oc-h-slot: 40px;
+  --oc-h-section-header: 44px;
+  --oc-w-select: 170px;
+  --oc-w-field-label: 54px;
+  --oc-w-slider-thumb: 26px;
+  /* Pull-to-refresh, pinch-to-zoom of the page and text selection would eat canvas gestures. */
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+html[data-ui-mode="mobile"] body {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+html[data-ui-mode="mobile"],
+html[data-ui-mode="mobile"] body,
+html[data-ui-mode="mobile"] #root {
+  height: 100vh;
+  height: 100dvh;
+}
+
+input[type="number"],
+input[type="text"] {
+  font-size: var(--oc-fs-micro);
+}
+
 input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
@@ -33,16 +83,16 @@ input[type="range"] {
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 14px;
-  height: 14px;
+  width: var(--oc-w-slider-thumb);
+  height: var(--oc-w-slider-thumb);
   background: #4da6ff;
   border-radius: 50%;
   cursor: pointer;
 }
 
 input[type="range"]::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
+  width: var(--oc-w-slider-thumb);
+  height: var(--oc-w-slider-thumb);
   background: #4da6ff;
   border-radius: 50%;
   cursor: pointer;

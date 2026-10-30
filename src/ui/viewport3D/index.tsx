@@ -9,16 +9,22 @@ import { EngineSync, recoverWithRaster, syncSelectionOverlay } from './engineSyn
 import { useClothPicking } from './useClothPicking';
 import { ViewportHint } from '../widgets/viewportHint';
 import { normalizeRayTracing } from '../../core/model/defaults';
+import { MOBILE_VIEWPORT_HINT, isMobileUi } from '../mobile/mobileUi';
+
+/** Width the phone shell's floating buttons reserve at the right of the pane. */
+const MOBILE_HINT_RIGHT = 72;
 
 interface Viewport3DProps {
   onEngineReady?: (engine: GarmentEngine, ctx: RendererContext) => void;
 }
 
 /** Gestures the current layout allows. */
-const statusHint = (layout: ViewLayout): string =>
-  isSplitLayout(layout)
+const statusHint = (layout: ViewLayout): string => {
+  if (isMobileUi()) return MOBILE_VIEWPORT_HINT;
+  return isSplitLayout(layout)
     ? '3D 试衣 · 拖拽旋转 · 滚轮缩放 · 双击选片 · 快捷键需点击聚焦本窗格'
     : '3D 试衣 · 拖拽旋转 · 滚轮缩放 · 右键平移 · Alt+点击打PIN · Alt+Shift+点击取消PIN · 双击选择版型片 · 小键盘 2/8/4/6/0/5 正视/后视/左视/右视/仰视/俯视，1/3/7/9 四个 45° 侧视 · Esc取消选中';
+};
 
 /** 3D fitting viewport: owns the renderer context, the garment engine and their store sync. */
 export function Viewport3D({ onEngineReady }: Viewport3DProps) {
@@ -124,8 +130,8 @@ export function Viewport3D({ onEngineReady }: Viewport3DProps) {
   return (
     <div ref={containerRef} style={{ width: '100%', height: '100%', position: 'relative' }}>
       <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%' }} />
-      <ViewportHint>{statusHint(layout)}</ViewportHint>
-      {renderMode === 'raytraced' && (
+      <ViewportHint right={isMobileUi() ? MOBILE_HINT_RIGHT : 8}>{statusHint(layout)}</ViewportHint>
+      {renderMode === 'raytraced' && !isMobileUi() && (
         <div style={{
           position: 'absolute', top: 8, left: 8, padding: '5px 8px', color: '#bde7ff',
           background: 'rgba(18, 39, 55, 0.84)', border: '1px solid #2f6d92',
@@ -134,7 +140,8 @@ export function Viewport3D({ onEngineReady }: Viewport3DProps) {
       )}
       {renderError && (
         <div style={{
-          position: 'absolute', top: 8, right: 8, maxWidth: 360, padding: '7px 10px',
+          position: 'absolute', top: 8, right: 8, maxWidth: isMobileUi() ? '72%' : 360,
+          padding: '7px 10px',
           color: '#ffd9a0', background: 'rgba(60, 38, 20, 0.92)', border: '1px solid #8a6030',
           borderRadius: 4, fontSize: 12, pointerEvents: 'none',
         }}>{renderError}</div>

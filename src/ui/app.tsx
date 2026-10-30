@@ -1,15 +1,18 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import { Menubar } from './menubar';
 import { LeftPanel } from './panels/leftPanel';
 import { RightPanel } from './panels/rightPanel';
 import { Timeline } from './panels/timeline';
 import { Viewport3D } from './viewport3D';
 import { Viewport2D } from './viewport2D';
+import { MobileShell } from './mobile/mobileShell';
+import { isMobileUi } from './mobile/mobileUi';
 import { PaneDivider } from './paneDivider';
 import { Toolbar2D, Toolbar3D } from './paneToolbars';
 import { createMenuActions, refreshRecentList, shortcutActions, writeAutosave } from './menu/actions';
 import { menuOwnsKeyboard } from './menu/menuStore';
 import { SHORTCUTS, matchShortcut } from './menu/shortcuts';
+import type { MenuActions } from './menu/actions';
 import {
   useUIStore, is3DFocus, isSplitLayout, leftPaneOf, isRightPanelShown,
   FPS_SAMPLE_MS, usePerfStore, type PaneId,
@@ -21,28 +24,22 @@ import {
   isPaneShown, paneFlex, leftPanelWidthFromPointer, rightPanelWidthFromPointer, splitRatioFromPointer,
 } from './viewportLayout';
 
-/** Application shell: menu bar, panels, the two viewports, global shortcuts and autosave. */
+/** Engine handle and menu actions every shell drives. */
+interface ShellProps {
+  actions: MenuActions;
+  engineRef: MutableRefObject<GarmentEngine | null>;
+  onEngineReady: (engine: GarmentEngine, ctx: RendererContext) => void;
+  /** Whether the 3D viewport has finished creating its renderer. */
+  ready: boolean;
+}
+
+/** Picks the desktop or the phone shell and owns what the two share. */
 export function App() {
-  const layout = useUIStore(s => s.layout);
-  const focus = useUIStore(s => s.focus);
-  const splitRatio = useUIStore(s => s.splitRatio);
-  const showTemplatePanel = useUIStore(s => s.showTemplatePanel);
-  const showScenePanel = useUIStore(s => s.showScenePanel);
-  const showPropertiesPanel = useUIStore(s => s.showPropertiesPanel);
-  const showTimeline = useUIStore(s => s.showTimeline);
   const autoSaveSeconds = useUIStore(s => s.autoSaveSeconds);
   const setLastAutosaveAt = useUIStore(s => s.setLastAutosaveAt);
-  const setFocus = useUIStore(s => s.setFocus);
-  const setSplitRatio = useUIStore(s => s.setSplitRatio);
-  const setLeftPanelWidth = useUIStore(s => s.setLeftPanelWidth);
-  const setRightPanelWidth = useUIStore(s => s.setRightPanelWidth);
   const engineRef = useRef<GarmentEngine | null>(null);
   const ctxRef = useRef<RendererContext | null>(null);
   const projectInputRef = useRef<HTMLInputElement | null>(null);
-  const bodyRef = useRef<HTMLDivElement>(null);
-  const viewportAreaRef = useRef<HTMLDivElement>(null);
-  const pane2DRef = useRef<HTMLDivElement>(null);
-  const pane3DRef = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
 
   const actions = useMemo(() => createMenuActions({ engineRef, ctxRef, projectInputRef }), []);
@@ -54,25 +51,7 @@ export function App() {
     setReady(true);
   };
 
-  // Split position follows the cursor, in units of the flexed area beside the divider.
-  const applyDividerDrag = (clientX: number) => {
-    const box = viewportAreaRef.current?.getBoundingClientRect();
-    if (!box) return;
-    setSplitRatio(splitRatioFromPointer(clientX, box.left, box.width));
-  };
-
-  // Side panels are dragged in pixels, bounded by the width of the whole body row.
-  const applyLeftPanelDrag = (clientX: number) => {
-    const box = bodyRef.current?.getBoundingClientRect();
-    if (!box) return;
-    setLeftPanelWidth(leftPanelWidthFromPointer(clientX, box.left, box.width));
-  };
-
-  const applyRightPanelDrag = (clientX: number) => {
-    const box = bodyRef.current?.getBoundingClientRect();
-    if (!box) return;
-    setRightPanelWidth(rightPanelWidthFromPointer(clientX, box.right, box.width));
-  };
+  const shellProps: ShellProps = { actions, engineRef, onEngineReady: handleEngineReady, ready };
 
   // Global keyboard shortcuts, dispatched through the shared shortcut table.
   useEffect(() => {
@@ -97,19 +76,6 @@ export function App() {
     return () => window.removeEventListener('keydown', handler);
   }, [runShortcut]);
 
-  // Clicking a pane gives it keyboard focus. Capture phase runs before the
-  // viewport listeners, which may stop propagation.
-  useEffect(() => {
-    const on2D = () => setFocus('2d');
-    const on3D = () => setFocus('3d');
-    pane2DRef.current?.addEventListener('pointerdown', on2D, true);
-    pane3DRef.current?.addEventListener('pointerdown', on3D, true);
-    return () => {
-      pane2DRef.current?.removeEventListener('pointerdown', on2D, true);
-      pane3DRef.current?.removeEventListener('pointerdown', on3D, true);
-    };
-  }, [setFocus]);
-
   // Local archive is read once so 文件 ▸ 最近 and the autosave stamp start populated.
   useEffect(() => {
     refreshRecentList();
@@ -132,6 +98,75 @@ export function App() {
     );
     return () => window.clearInterval(timer);
   }, []);
+
+  return (
+    <>
+      {isMobileUi() ? <MobileShell {...shellProps} /> : <DesktopShell {...shellProps} />}
+      <input
+        ref={projectInputRef}
+        type="file"
+        accept=".json,.ocproj.json"
+        style={{ display: 'none' }}
+        onChange={e => {
+          const file = e.target.files?.[0];
+          if (file) actions.openProjectFile(file);
+          e.target.value = '';
+        }}
+      />
+    </>
+  );
+}
+
+/** Desktop layout: menu bar, side panels, the two viewports and the timeline. */
+function DesktopShell({ actions, engineRef, onEngineReady, ready }: ShellProps) {
+  const layout = useUIStore(s => s.layout);
+  const focus = useUIStore(s => s.focus);
+  const splitRatio = useUIStore(s => s.splitRatio);
+  const showTemplatePanel = useUIStore(s => s.showTemplatePanel);
+  const showScenePanel = useUIStore(s => s.showScenePanel);
+  const showPropertiesPanel = useUIStore(s => s.showPropertiesPanel);
+  const showTimeline = useUIStore(s => s.showTimeline);
+  const setFocus = useUIStore(s => s.setFocus);
+  const setSplitRatio = useUIStore(s => s.setSplitRatio);
+  const setLeftPanelWidth = useUIStore(s => s.setLeftPanelWidth);
+  const setRightPanelWidth = useUIStore(s => s.setRightPanelWidth);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const viewportAreaRef = useRef<HTMLDivElement>(null);
+  const pane2DRef = useRef<HTMLDivElement>(null);
+  const pane3DRef = useRef<HTMLDivElement>(null);
+
+  // Split position follows the cursor, in units of the flexed area beside the divider.
+  const applyDividerDrag = (clientX: number) => {
+    const box = viewportAreaRef.current?.getBoundingClientRect();
+    if (!box) return;
+    setSplitRatio(splitRatioFromPointer(clientX, box.left, box.width));
+  };
+
+  // Side panels are dragged in pixels, bounded by the width of the whole body row.
+  const applyLeftPanelDrag = (clientX: number) => {
+    const box = bodyRef.current?.getBoundingClientRect();
+    if (!box) return;
+    setLeftPanelWidth(leftPanelWidthFromPointer(clientX, box.left, box.width));
+  };
+
+  const applyRightPanelDrag = (clientX: number) => {
+    const box = bodyRef.current?.getBoundingClientRect();
+    if (!box) return;
+    setRightPanelWidth(rightPanelWidthFromPointer(clientX, box.right, box.width));
+  };
+
+  // Clicking a pane gives it keyboard focus. Capture phase runs before the
+  // viewport listeners, which may stop propagation.
+  useEffect(() => {
+    const on2D = () => setFocus('2d');
+    const on3D = () => setFocus('3d');
+    pane2DRef.current?.addEventListener('pointerdown', on2D, true);
+    pane3DRef.current?.addEventListener('pointerdown', on3D, true);
+    return () => {
+      pane2DRef.current?.removeEventListener('pointerdown', on2D, true);
+      pane3DRef.current?.removeEventListener('pointerdown', on3D, true);
+    };
+  }, [setFocus]);
 
   const paneStyle = (pane: PaneId): React.CSSProperties => ({
     ...styles.pane,
@@ -156,7 +191,7 @@ export function App() {
           <div style={paneStyle('3d')} ref={pane3DRef}>
             <Toolbar3D engineRef={engineRef} />
             <div style={styles.paneBody}>
-              <Viewport3D onEngineReady={handleEngineReady} />
+              <Viewport3D onEngineReady={onEngineReady} />
               {!ready && (
                 <div style={styles.loading}>
                   <div style={styles.spinner} />
@@ -175,17 +210,6 @@ export function App() {
         {showRightPanel && <RightPanel engineRef={engineRef} />}
       </div>
       {showTimeline && <Timeline />}
-      <input
-        ref={projectInputRef}
-        type="file"
-        accept=".json,.ocproj.json"
-        style={{ display: 'none' }}
-        onChange={e => {
-          const file = e.target.files?.[0];
-          if (file) actions.openProjectFile(file);
-          e.target.value = '';
-        }}
-      />
     </div>
   );
 }

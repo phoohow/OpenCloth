@@ -445,6 +445,11 @@ export class GarmentEngine {
     this.picker.applyPreset(preset);
   }
 
+  /** Refits the scene box along the current view direction, leaving the camera angle alone. */
+  frameScene(): void {
+    this.picker.frameScene();
+  }
+
   /** Projection the viewport camera renders with. */
   getProjection(): CameraProjection {
     return this.rendererCtx.projection;
