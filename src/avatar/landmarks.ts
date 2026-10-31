@@ -46,6 +46,20 @@ export interface BodyProportions {
   hipX: number;
   /** Outward tilt of a relaxed arm from vertical. */
   armRakeRad: number;
+  /** Outward splay of a leg from vertical. */
+  legRakeRad: number;
+  /** Lateral lean of the torso from vertical. */
+  torsoLeanRad: number;
+}
+
+/** Largest lean the shared body geometry accepts, keeping the shear finite. */
+const LEAN_LIMIT_RAD = 0.78;
+/** Largest leg splay the shared body geometry accepts. */
+const LEG_SPREAD_LIMIT_RAD = 1.2;
+
+/** Clamps an angle into the range the body geometry can represent. */
+function clampAngle(value: number, limit: number): number {
+  return Math.min(Math.max(value, -limit), limit);
 }
 
 /** Vertical torso outline anchors: height, girth reference radius and depth-to-width ratio. */
@@ -99,6 +113,8 @@ export function bodyProportions(params: AvatarParams): BodyProportions {
     shoulderX: chestR * 1.3,
     hipX: hipR * 0.45,
     armRakeRad: params.poseArmAngleRad ?? 0.12,
+    legRakeRad: Math.min(Math.max(params.poseLegSpreadRad ?? 0, 0), LEG_SPREAD_LIMIT_RAD),
+    torsoLeanRad: clampAngle(params.poseTorsoLeanRad ?? 0, LEAN_LIMIT_RAD),
   };
 }
 
@@ -106,6 +122,8 @@ export function bodyProportions(params: AvatarParams): BodyProportions {
 export interface BodyLandmarks extends BodyProportions {
   /** Torso half width and half depth at a world height. */
   torsoEllipseAt(y: number): BodyEllipse;
+  /** Lateral offset of the torso cross-section at a world height. */
+  torsoCenterXAt(y: number): number;
 }
 
 /** Builds the landmark set used by draping, collision and the procedural mannequin. */
@@ -129,6 +147,8 @@ export function bodyLandmarks(params: AvatarParams): BodyLandmarks {
       }
       return { rx: last.rx, rz: last.rz };
     },
+    torsoCenterXAt: (y: number): number =>
+      Math.tan(p.torsoLeanRad) * Math.max(y - p.hipY, 0),
   };
 }
 

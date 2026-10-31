@@ -55,14 +55,14 @@ function sampleStations(anchors: Station[], count: number): Station[] {
 }
 
 /** Builds a closed lofted tube through elliptical stations, capped at both ends. */
-function loftStations(stations: Station[], radial: number): THREE.BufferGeometry {
+function loftStations(stations: Station[], radial: number, centerX: (y: number) => number = () => 0): THREE.BufferGeometry {
   const rings = stations.length;
   const pos: number[] = [];
   const idx: number[] = [];
   for (const st of stations) {
     for (let j = 0; j < radial; j++) {
       const a = (j / radial) * Math.PI * 2;
-      pos.push(st.rx * Math.cos(a), st.y, st.rz * Math.sin(a));
+      pos.push(centerX(st.y) + st.rx * Math.cos(a), st.y, st.rz * Math.sin(a));
     }
   }
   for (let k = 0; k < rings - 1; k++) {
@@ -76,10 +76,10 @@ function loftStations(stations: Station[], radial: number): THREE.BufferGeometry
   // End caps as center vertices, wound outward.
   const first = stations[0], last = stations[rings - 1];
   const c0 = pos.length / 3;
-  pos.push(0, first.y, 0);
+  pos.push(centerX(first.y), first.y, 0);
   for (let j = 0; j < radial; j++) idx.push(c0, j, (j + 1) % radial);
   const c1 = pos.length / 3;
-  pos.push(0, last.y, 0);
+  pos.push(centerX(last.y), last.y, 0);
   const base = (rings - 1) * radial;
   for (let j = 0; j < radial; j++) idx.push(c1, base + (j + 1) % radial, base + j);
   const geo = new THREE.BufferGeometry();
@@ -114,7 +114,7 @@ export function generateProceduralAvatar(params: AvatarParams): THREE.Group {
   const {
     height: heightM, headH, neckH, torsoH, legH, armH,
     torsoTop, neckTopY, bustY, waistY, hipY, crotchY,
-    hipR, shoulderX, shoulderY, armR, legR, hipX, armRakeRad,
+    hipR, shoulderX, shoulderY, armR, legR, hipX, armRakeRad, legRakeRad,
   } = body;
 
   const mat = new THREE.MeshStandardMaterial({
@@ -146,31 +146,35 @@ export function generateProceduralAvatar(params: AvatarParams): THREE.Group {
     { y: neckTopY, rx: headH * 0.2, rz: headH * 0.2 },
     { y: neckTopY + 0.015, rx: 0.004, rz: 0.004 },
   ];
-  add(loftStations(sampleStations(torsoAnchors, 28), 30));
+  add(loftStations(sampleStations(torsoAnchors, 28), 30, body.torsoCenterXAt));
 
-  // Legs: tapered thigh -> knee -> calf -> ankle with a flat bottom.
+  // Legs: tapered thigh -> knee -> calf -> ankle, pivot-aligned at the hip so the splay rotates there.
   const legAnchors: [number, number][] = [
-    [legH + hipR * 0.15, legR * 0.98],
-    [legH * 0.62, legR * 0.9],
-    [legH * 0.5, legR * 0.8],
-    [legH * 0.3, legR * 0.68],
-    [legH * 0.09, legR * 0.5],
-    [legH * 0.02, legR * 0.46],
-    [legH * 0.02 - 0.001, 0.004],
+    [hipR * 0.15, legR * 0.98],
+    [-legH * 0.38, legR * 0.9],
+    [-legH * 0.5, legR * 0.8],
+    [-legH * 0.7, legR * 0.68],
+    [-legH * 0.91, legR * 0.5],
+    [-legH * 0.98, legR * 0.46],
+    [-legH * 0.98 - 0.001, 0.004],
   ];
-  add(latheProfile(legAnchors, 20, 16), -hipX, 0, 0, 0, 0.85);
-  add(latheProfile(legAnchors, 20, 16), hipX, 0, 0, 0, 0.85);
+  add(latheProfile(legAnchors, 20, 16), -hipX, legH, 0, -legRakeRad, 0.85);
+  add(latheProfile(legAnchors, 20, 16), hipX, legH, 0, legRakeRad, 0.85);
 
-  // Rounded feet.
+  // Rounded feet, carried along the splayed leg axis.
   const footGeo = new THREE.SphereGeometry(legR * 1.1, 18, 12);
   footGeo.scale(0.7, 0.4, 1.5);
-  add(footGeo, -hipX, legR * 0.44, legR * 0.35);
-  add(footGeo, hipX, legR * 0.44, legR * 0.35);
+  for (const side of [-1, 1]) {
+    const angle = side * legRakeRad;
+    const drop = legH - legR * 0.44;
+    add(footGeo, side * hipX + Math.sin(angle) * drop, legH - Math.cos(angle) * drop, legR * 0.35, angle);
+  }
 
   // Arms: rounded shoulder ball + tapered lathe raked outward from vertical.
+  const shoulderCenter = body.torsoCenterXAt(shoulderY);
   const ballGeo = new THREE.SphereGeometry(armR * 1.15, 16, 12);
-  add(ballGeo, -(shoulderX - armR * 0.35), shoulderY);
-  add(ballGeo, shoulderX - armR * 0.35, shoulderY);
+  add(ballGeo, shoulderCenter - (shoulderX - armR * 0.35), shoulderY);
+  add(ballGeo, shoulderCenter + shoulderX - armR * 0.35, shoulderY);
 
   const armAnchors: [number, number][] = [
     [0, armR * 0.95],
@@ -180,21 +184,21 @@ export function generateProceduralAvatar(params: AvatarParams): THREE.Group {
     [-armH, armR * 0.55],
     [-armH - 0.001, 0.004],
   ];
-  add(latheProfile(armAnchors, 14, 14), -shoulderX, shoulderY, 0, -armRakeRad, 0.9);
-  add(latheProfile(armAnchors, 14, 14), shoulderX, shoulderY, 0, armRakeRad, 0.9);
+  add(latheProfile(armAnchors, 14, 14), shoulderCenter - shoulderX, shoulderY, 0, -armRakeRad, 0.9);
+  add(latheProfile(armAnchors, 14, 14), shoulderCenter + shoulderX, shoulderY, 0, armRakeRad, 0.9);
 
   // Simple hands along the raked arm axis.
   const handDist = armH + armR * 1.1;
   const handGeo = new THREE.SphereGeometry(armR * 0.8, 12, 8);
   handGeo.scale(0.75, 1.5, 0.5);
   const hx = Math.sin(armRakeRad) * handDist, hy = Math.cos(armRakeRad) * handDist;
-  add(handGeo, -(shoulderX + hx), shoulderY - hy);
-  add(handGeo, shoulderX + hx, shoulderY - hy);
+  add(handGeo, shoulderCenter - (shoulderX + hx), shoulderY - hy);
+  add(handGeo, shoulderCenter + shoulderX + hx, shoulderY - hy);
 
   // Smooth ovoid head, no facial features.
   const headGeo = new THREE.SphereGeometry(headH * 0.45, 24, 18);
   headGeo.scale(0.86, 1.0, 0.92);
-  add(headGeo, 0, body.headCenterY);
+  add(headGeo, body.torsoCenterXAt(body.headCenterY), body.headCenterY);
 
   group.userData.bodyMetrics = {
     heightM, chestR: body.chestR, waistR: body.waistR, hipR,

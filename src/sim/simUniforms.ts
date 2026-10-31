@@ -1,4 +1,5 @@
 import type { SimulationConfig, FabricPhysics } from '../core/model/types';
+import { DEFAULT_CLOTH_THICKNESS_CM, DEFAULT_LAYER_SPACING_CM } from '../core/model/defaults';
 
 /** Velocity clamp applied by the integrate and update passes, in meters per second. */
 const MAX_SPEED = 6;
@@ -31,6 +32,20 @@ export function packIntegrateParams(
   return data;
 }
 
+/** Cloth thickness in meters, clamped to the 0–1 cm slider range. */
+export function clothThicknessMeters(config: SimulationConfig): number {
+  const cm = config.clothThicknessCm;
+  const value = typeof cm === 'number' && Number.isFinite(cm) ? cm : DEFAULT_CLOTH_THICKNESS_CM;
+  return Math.min(1, Math.max(0, value)) / 100;
+}
+
+/** Extra separation per collision-layer step, in meters, clamped to 0–2 cm. */
+export function layerSpacingMeters(config: SimulationConfig): number {
+  const cm = config.layerSpacingCm;
+  const value = typeof cm === 'number' && Number.isFinite(cm) ? cm : DEFAULT_LAYER_SPACING_CM;
+  return Math.min(2, Math.max(0, value)) / 100;
+}
+
 /** COLLIDE SimParams block: 32 bytes; capsule count is 0 when body collision is off or absent. */
 export function packCollideParams(
   config: SimulationConfig,
@@ -46,20 +61,19 @@ export function packCollideParams(
   data[3] = SURFACE_OFFSET;
   data[4] = CONTACT_FRICTION;
   data[5] = floorY;
+  data[6] = clothThicknessMeters(config);
   return data;
 }
 
-/** UPDATE SimParams block: 32 bytes. */
+/** UPDATE SimParams block: 16 bytes. */
 export function packUpdateParams(
   config: SimulationConfig,
-  fabric: FabricPhysics,
   particleCount: number,
 ): Float32Array<ArrayBuffer> {
-  const data = new Float32Array(8);
+  const data = new Float32Array(4);
   data[0] = config.dt;
   new Uint32Array(data.buffer)[1] = particleCount;
-  data[2] = fabric.damping;
-  data[3] = MAX_SPEED;
+  data[2] = MAX_SPEED;
   return data;
 }
 

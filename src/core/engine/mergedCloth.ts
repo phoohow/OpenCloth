@@ -1,20 +1,28 @@
-import type { Project, Seam } from '../model/types';
+import type { Dart, Pattern, Project, Seam } from '../model/types';
 import type { PanelMesh } from '../../pattern/panel/panelBuilder';
+import { edgeVertexRun, meshSpacingCm, panelCreaseEdges, toTriangleMesh } from '../../pattern/panel/panelBuilder';
 import type { ClothSimInput } from '../../sim/clothSimulator';
 import type { Constraint } from '../../sim/buffers/constraintBuilder';
 import type { TriangleMesh } from '../../pattern/triangulate/triangulate';
 import { fabricForPanel } from '../model/fabric';
 import { collapseSeamPairs, type VertexRef } from '../../pattern/drape/sewnTargets';
+import { seamBreakStretch } from '../../sim/seamStrength';
 import { FALLBACK_PHYSICS } from './clothConstants';
 import { flatRestPositions, initialPositions3D, posedPositions3D, topBandParticles, type BodyLandmarkCache } from './initialPose';
 
-/** One panel's seam pair, in merged particle indices; `open` is its gap in the initial layout. */
+/** Compliance of a stitched dart leg pair, as strong as a fully tight seam. */
+const DART_STITCH_STRENGTH = 1;
+
+/** One merged particle pair stitched together, by a seam or by a closing dart. */
 export interface SeamPair {
   p0: number;
   p1: number;
+  /** Gap between the pair in the initial layout, in meters. */
   open: number;
-  /** Seam record the pair belongs to. */
+  /** Seam record the pair belongs to, or the dart record when it stitches dart legs. */
   seamId: string;
+  /** Dart whose two legs the pair stitches; set instead of a seam pairing. */
+  dartId?: string;
 }
 
 /** Cloth built from every panel mesh: merged simulation input plus the index maps panels share. */
@@ -33,12 +41,15 @@ export class MergedCloth {
   trianglePanelIds: (string | null)[] = [];
   /** Seam pairs, in the same order as the simulation's seam constraints. */
   seamPairs: SeamPair[] = [];
+  /** Wrapped (unsewn but posed) merged positions, kept so closing changes can rebuild the dress targets. */
+  private wrappedPositions: Float32Array = new Float32Array(0);
 
   /** Merges the panel meshes into one simulation input and rebuilds every derived map. */
   build(project: Project, panelMeshes: Map<string, PanelMesh>, landmarks: BodyLandmarkCache): ClothSimInput | null {
     this.input = null;
     this.positions = new Float32Array(0);
     this.dressPositions = new Float32Array(0);
+    this.wrappedPositions = new Float32Array(0);
     this.panelRanges.clear();
     this.panelTriangles.clear();
     this.trianglePanelIds = [];
@@ -81,12 +92,8 @@ export class MergedCloth {
         indices[indexOffset + i] = mesh.indices[i] + vertexOffset;
       }
 
-      const triangleMesh: TriangleMesh = {
-        positions: mesh.positions2D,
-        indices: mesh.indices,
-        vertexCount: mesh.vertexCount,
-        triangleCount: mesh.triangleCount,
-      };
+      const triangleMesh = toTriangleMesh(mesh);
+      const creaseEdges = panelCreaseEdges(project.pattern, panelId, triangleMesh);
       this.panelTriangles.set(panelId, offsetTriangleList(mesh, vertexOffset));
       const firstTriangle = indexOffset / 3;
       for (let t = 0; t < mesh.triangleCount; t++) this.trianglePanelIds[firstTriangle + t] = panelId;
@@ -98,6 +105,8 @@ export class MergedCloth {
         positions3D: start,
         restPositions: flatRestPositions(mesh),
         physics: fabricForPanel(project, panelId)?.physics ?? FALLBACK_PHYSICS,
+        collisionLayer: panel.collisionLayer ?? 0,
+        ...(creaseEdges.length > 0 ? { creaseEdges } : {}),
       });
       this.panelRanges.set(panelId, [vertexOffset, vertexOffset + mesh.vertexCount]);
 
@@ -106,11 +115,12 @@ export class MergedCloth {
     }
 
     this.positions = initial;
-    const seamConstraints = this.buildSeamConstraints(project, panelMeshes, panelIds);
+    this.wrappedPositions = wrapped;
+    const seamConstraints = this.buildClosingConstraints(project, panelMeshes, panelIds);
     // Sewn pairs share one target point, so the dressing glide and the closed seams agree.
     this.dressPositions = sewnTargets(wrapped, this.seamPairs);
 
-    return {
+    this.input = {
       positions: initial,
       indices,
       panels,
@@ -119,6 +129,32 @@ export class MergedCloth {
       particleCount: totalVertices,
       triangleCount: totalTriangles,
     };
+    return this.input;
+  }
+
+  /**
+   * Re-reads the seam pairings, the closing dart legs and the fold crease lines onto the merged
+   * layout without touching particles, triangles or rest positions. False when the panel meshes no
+   * longer match the merged ranges, which needs a full `build`.
+   */
+  refreshConstraintSets(project: Project, panelMeshes: Map<string, PanelMesh>): boolean {
+    const input = this.input;
+    if (!input) return false;
+    const panelIds = input.panels.map(panel => panel.panelId);
+    for (const panelId of panelIds) {
+      const mesh = panelMeshes.get(panelId);
+      const range = this.panelRanges.get(panelId);
+      if (!mesh || !range || range[1] - range[0] !== mesh.vertexCount) return false;
+    }
+
+    for (const panel of input.panels) {
+      const edges = panelCreaseEdges(project.pattern, panel.panelId, panel.mesh);
+      if (edges.length > 0) panel.creaseEdges = edges;
+      else delete panel.creaseEdges;
+    }
+    input.seamConstraints = this.buildClosingConstraints(project, panelMeshes, panelIds);
+    this.dressPositions = sewnTargets(this.wrappedPositions, this.seamPairs);
+    return true;
   }
 
   /** Panel owning a particle, or null when unmapped. */
@@ -144,8 +180,11 @@ export class MergedCloth {
     return triangles;
   }
 
-  /** Seam constraints as particle pairs across panels, filling `seamPairs` as a side effect. */
-  private buildSeamConstraints(
+  /**
+   * Constraints that pull edge runs together: seam pairings and the legs of darts marked closing.
+   * Fills `seamPairs` in the same order as the returned constraints.
+   */
+  private buildClosingConstraints(
     project: Project,
     panelMeshes: Map<string, PanelMesh>,
     panelIds: string[],
@@ -171,35 +210,128 @@ export class MergedCloth {
     }
 
     for (const seam of Object.values(pattern.seams) as Seam[]) {
-      const a = edgeToPanel.get(seam.edgeAId);
-      const b = edgeToPanel.get(seam.edgeBId);
+      // An open edge marks intent only; its sides stay unstitched.
+      if (seam.type === 'free') continue;
+      const a = edgeToPanel.get(seam.a.edgeId);
+      const b = edgeToPanel.get(seam.b.edgeId);
       if (!a || !b) continue;
 
       const offA = vertexOffsets.get(a.panelId) ?? 0;
       const offB = vertexOffsets.get(b.panelId) ?? 0;
-      const vertsA = a.vertices;
-      const vertsB = seam.flipB ? [...b.vertices].reverse() : b.vertices;
+      const vertsA = intervalVertices(a.vertices, seam.a.t0, seam.a.t1, this.positions, offA);
+      const vertsBRaw = intervalVertices(b.vertices, seam.b.t0, seam.b.t1, this.positions, offB);
+      const vertsB = seam.flip ? [...vertsBRaw].reverse() : vertsBRaw;
+      if (vertsA.length === 0 || vertsB.length === 0) continue;
 
-      // Pair vertices by arc-length fraction along each edge.
-      const n = Math.max(vertsA.length, vertsB.length);
-      for (let i = 0; i < n; i++) {
-        const ia = vertsA[Math.min(Math.floor(i * vertsA.length / n), vertsA.length - 1)];
-        const ib = vertsB[Math.min(Math.floor(i * vertsB.length / n), vertsB.length - 1)];
-        if (ia === undefined || ib === undefined) continue;
-        const p0 = ia + offA, p1 = ib + offB;
-        const gap = distance(this.positions, p0, p1);
-        this.seamPairs.push({ p0, p1, open: gap, seamId: seam.id });
-        constraints.push({
-          p0,
-          p1,
-          // Rest length starts at the flat-layout gap so a closed seam carries no initial stress.
-          restLength: gap,
-          compliance: 1.0 / (Math.max(seam.strength, 0.01) * 3600),
-        });
+      // Anchor pairs split the run into two independently mapped sections.
+      let sections: Array<[number[], number[]]>;
+      if (seam.a.anchorT !== undefined && seam.b.anchorT !== undefined) {
+        const sa = splitAtAnchor(vertsA, seam.a.anchorT, seam.a.t0, seam.a.t1);
+        const sb = splitAtAnchor(vertsB, seam.b.anchorT, seam.b.t0, seam.b.t1);
+        sections = sa.length === 2 && sb.length === 2
+          ? [[sa[0], sb[0]], [sa[1], sb[1]]]
+          : [[vertsA, vertsB]];
+      } else {
+        sections = [[vertsA, vertsB]];
+      }
+
+      // Rest length starts at the flat-layout gap so a closed seam carries no initial stress.
+      // Gather seams pull B toward A by their ratio, giving the eased fullness.
+      const restOf = seam.type === 'gather' && seam.gatherRatio
+        ? (gap: number): number => gap * seam.gatherRatio!
+        : (gap: number): number => gap;
+      const compliance = 1.0 / (Math.max(seam.strength, 0.01) * 3600);
+      const tearFactor = seamBreakStretch(seam.strength);
+      for (const [secA, secB] of sections) {
+        this.stitchRun(secA, secB, offA, offB, restOf, compliance, seam.id, undefined, tearFactor, constraints);
+      }
+    }
+
+    for (const panelId of panelIds) {
+      const panel = pattern.panels[panelId];
+      const panelMesh = panelMeshes.get(panelId);
+      if (!panel || !panelMesh) continue;
+      const off = vertexOffsets.get(panelId) ?? 0;
+      for (const dartId of panel.dartIds) {
+        const dart = pattern.darts[dartId];
+        if (!dart?.closing) continue;
+        const [legA, legB] = dartLegRuns(pattern, dart, toTriangleMesh(panelMesh));
+        if (legA.length === 0 || legB.length === 0) continue;
+        // The legs meet at the tip, so reversing one run pairs base to base and tip to tip.
+        this.stitchRun(legA, [...legB].reverse(), off, off, () => 0,
+          1.0 / (DART_STITCH_STRENGTH * 3600), dartId, dartId, undefined, constraints);
       }
     }
     return constraints;
   }
+
+  /** Pairs two vertex runs by normalized position and records one closing constraint per pair. */
+  private stitchRun(
+    vertsA: number[],
+    vertsB: number[],
+    offA: number,
+    offB: number,
+    restOf: (gap: number) => number,
+    compliance: number,
+    seamId: string,
+    dartId: string | undefined,
+    tearFactor: number | undefined,
+    constraints: Constraint[],
+  ): void {
+    const n = Math.max(vertsA.length, vertsB.length);
+    for (let i = 0; i < n; i++) {
+      const ia = vertsA[Math.min(Math.floor(i * vertsA.length / n), vertsA.length - 1)];
+      const ib = vertsB[Math.min(Math.floor(i * vertsB.length / n), vertsB.length - 1)];
+      if (ia === undefined || ib === undefined) continue;
+      const p0 = ia + offA, p1 = ib + offB;
+      const gap = distance(this.positions, p0, p1);
+      this.seamPairs.push({ p0, p1, open: gap, seamId, ...(dartId ? { dartId } : {}) });
+      constraints.push({
+        p0, p1, restLength: restOf(gap), compliance,
+        ...(tearFactor !== undefined ? { tearLength: gap * tearFactor } : {}),
+      });
+    }
+  }
+}
+
+/**
+ * Vertex runs of a dart's two legs on its panel mesh, sampled at the mesh's own spacing so the
+ * fabric eases toward the tip instead of stitching only the two leg endpoints.
+ */
+function dartLegRuns(pattern: Pattern, dart: Dart, mesh: TriangleMesh): [number[], number[]] {
+  const spacing = meshSpacingCm(mesh);
+  return [
+    edgeVertexRun(pattern, dart.edge1Id, mesh, spacing),
+    edgeVertexRun(pattern, dart.edge2Id, mesh, spacing),
+  ];
+}
+
+/** Vertex indices of the boundary run whose arc-length fraction lies inside [t0, t1]. */
+function intervalVertices(
+  vertices: number[], t0: number, t1: number, positions: Float32Array, offset: number,
+): number[] {
+  if ((t0 === 0 && t1 === 1) || vertices.length < 2) return vertices;
+  const acc = [0];
+  for (let i = 1; i < vertices.length; i++) {
+    acc.push(acc[i - 1] + distance(positions, offset + vertices[i - 1], offset + vertices[i]));
+  }
+  const total = acc[acc.length - 1] || 1;
+  const out: number[] = [];
+  for (let i = 0; i < vertices.length; i++) {
+    const f = acc[i] / total;
+    if (f >= Math.min(t0, t1) - 1e-9 && f <= Math.max(t0, t1) + 1e-9) out.push(vertices[i]);
+  }
+  return out.length >= 2 ? out : vertices;
+}
+
+/** Splits a vertex run into the parts before and after an anchor fraction. */
+function splitAtAnchor(vertices: number[], anchorT: number, t0: number, t1: number): number[][] {
+  const span = Math.abs(t1 - t0) || 1;
+  const local = (anchorT - Math.min(t0, t1)) / span;
+  const cut = Math.max(1, Math.min(vertices.length - 1, Math.round(local * vertices.length)));
+  const first = vertices.slice(0, cut + 1);
+  const second = vertices.slice(cut);
+  return first.length >= 2 && second.length >= 2 ? [first, second] : [vertices];
 }
 
 /** Distance between two merged particles. */

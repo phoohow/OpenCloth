@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { Icon } from '../icons';
 
 /** Collapsible titled group of property rows, like a Blender panel. */
@@ -112,6 +112,40 @@ export function SlotRow({ label, children }: { label?: string; children: ReactNo
   );
 }
 
+/** File slot row: the chosen file's name, a picker and a clear button. */
+export function FileRow({ label, name, accept, pickLabel, clearLabel, clearDisabled, onPick, onClear }: {
+  label: string;
+  /** Shown file name, or the unset placeholder. */
+  name: string;
+  accept: string;
+  pickLabel: string;
+  clearLabel: string;
+  clearDisabled?: boolean;
+  onPick: (file: File) => void;
+  onClear: () => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  return (
+    <div style={styles.fileRow}>
+      <span style={styles.label}>{label}</span>
+      <span style={styles.fileName} title={name}>{name}</span>
+      <input
+        ref={inputRef}
+        type="file"
+        accept={accept}
+        style={styles.fileInput}
+        onChange={e => {
+          const file = e.target.files?.[0];
+          e.currentTarget.value = '';
+          if (file) onPick(file);
+        }}
+      />
+      <button style={styles.fileBtn} onClick={() => inputRef.current?.click()}>{pickLabel}</button>
+      <button style={styles.fileBtn} onClick={onClear} disabled={clearDisabled}>{clearLabel}</button>
+    </div>
+  );
+}
+
 /** A value that is also the button, drawn as plain text like the readouts above the sliders. */
 export function ValueButton({ children, onClick, disabled, title }: {
   children: ReactNode; onClick: () => void; disabled?: boolean; title?: string;
@@ -183,14 +217,14 @@ export function FlexSelect<T extends string>({ label, value, options, onChange, 
 export function SelectRow<T extends string>({ label, value, options, onChange }: {
   label: string;
   value: T;
-  options: Array<{ value: T; label: string }>;
+  options: Array<{ value: T; label: string; disabled?: boolean }>;
   onChange: (v: T) => void;
 }) {
   return (
     <div style={styles.row}>
       <span style={styles.label}>{label}</span>
       <select style={styles.select} value={value} onChange={e => onChange(e.target.value as T)}>
-        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        {options.map(o => <option key={o.value} value={o.value} disabled={o.disabled}>{o.label}</option>)}
       </select>
     </div>
   );
@@ -271,6 +305,17 @@ const styles: Record<string, React.CSSProperties> = {
   },
   slotRow: { display: 'flex', alignItems: 'center', gap: 4, minHeight: 'var(--oc-h-slot)', fontSize: 'var(--oc-fs-micro)', color: '#ccc' },
   slotFill: { flex: '1 1 auto', minWidth: 0 },
+  fileRow: { display: 'flex', alignItems: 'center', gap: 4, minHeight: 'var(--oc-h-slot)', fontSize: 'var(--oc-fs-micro)', color: '#ccc' },
+  fileName: {
+    flex: '1 1 auto', minWidth: 0, color: '#ddd', textAlign: 'right',
+    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+  },
+  fileInput: { display: 'none' },
+  fileBtn: {
+    flex: '0 0 auto', height: 'var(--oc-h-row)', padding: '0 6px', background: '#2a2a30',
+    border: '1px solid #3a3a42', borderRadius: 3, color: '#ccc', cursor: 'pointer',
+    fontSize: 'var(--oc-fs-micro)', whiteSpace: 'nowrap',
+  },
   iconBtn: {
     flex: '0 0 auto', height: 'var(--oc-h-row)', padding: '0 4px', display: 'inline-flex', alignItems: 'center',
     justifyContent: 'center', background: '#2a2a30', border: '1px solid #3a3a42',

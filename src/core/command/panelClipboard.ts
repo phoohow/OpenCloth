@@ -1,6 +1,6 @@
 import type { Command, ProjectContext } from './command';
 import type {
-  Dart, InternalLine, Panel, Pattern, PatternEdge, PatternPoint, Seam, Vec2,
+  Annotation, Dart, InternalLine, Measurement, Notch, Panel, Pattern, PatternEdge, PatternPoint, Seam, Vec2,
 } from '../model/types';
 import { genId } from '../model/defaults';
 
@@ -12,6 +12,9 @@ export interface PanelClipboard {
   darts: Dart[];
   internalLines: InternalLine[];
   seams: Seam[];
+  notches: Notch[];
+  annotations: Annotation[];
+  measurements: Measurement[];
 }
 
 /** Gap kept between the copied outline and the pasted one, in cm. */
@@ -29,9 +32,10 @@ export function capturePanels(pattern: Pattern, panelIds: readonly string[]): Pa
   const pointIds = new Set<string>();
   const dartIds = new Set<string>();
   const lineIds = new Set<string>();
+  const panelIdSet = new Set(panels.map(p => p.id));
 
   for (const panel of panels) {
-    for (const edgeId of panel.outlineEdgeIds) {
+    for (const edgeId of [...panel.outlineEdgeIds, ...(panel.holes ?? []).flat()]) {
       edgeIds.add(edgeId);
       const edge = pattern.edges[edgeId];
       if (edge) { pointIds.add(edge.startPointId); pointIds.add(edge.endPointId); }
@@ -53,7 +57,10 @@ export function capturePanels(pattern: Pattern, panelIds: readonly string[]): Pa
 
   const edges = [...edgeIds].flatMap(id => { const e = pattern.edges[id]; return e ? [e] : []; });
   const points = [...pointIds].flatMap(id => { const p = pattern.points[id]; return p ? [p] : []; });
-  const seams = Object.values(pattern.seams).filter(s => edgeIds.has(s.edgeAId) && edgeIds.has(s.edgeBId));
+  const seams = Object.values(pattern.seams).filter(s => edgeIds.has(s.a?.edgeId ?? '') && edgeIds.has(s.b?.edgeId ?? ''));
+  const notches = Object.values(pattern.notches ?? {}).filter(n => edgeIds.has(n.edgeId));
+  const annotations = Object.values(pattern.annotations ?? {}).filter(a => panelIdSet.has(a.panelId));
+  const measurements = Object.values(pattern.measurements ?? {}).filter(m => panelIdSet.has(m.panelId));
 
   return structuredClone({
     panels,
@@ -62,6 +69,9 @@ export function capturePanels(pattern: Pattern, panelIds: readonly string[]): Pa
     darts: [...dartIds].flatMap(id => { const d = pattern.darts[id]; return d ? [d] : []; }),
     internalLines: [...lineIds].flatMap(id => { const l = pattern.internalLines[id]; return l ? [l] : []; }),
     seams,
+    notches,
+    annotations,
+    measurements,
   });
 }
 
@@ -89,6 +99,7 @@ export class PastePanelsCommand implements Command {
     const edgeIds = new Map<string, string>();
     const dartIds = new Map<string, string>();
     const lineIds = new Map<string, string>();
+    const panelIds = new Map<string, string>();
     this.created = { points: [], edges: [], darts: [], lines: [], seams: [] };
 
     for (const point of this.clip.points) {
@@ -99,6 +110,9 @@ export class PastePanelsCommand implements Command {
         id,
         pos: { x: point.pos.x + delta.x, y: point.pos.y + delta.y },
         ...(point.construction !== undefined ? { construction: point.construction } : {}),
+        ...(point.kind !== undefined ? { kind: point.kind } : {}),
+        ...(point.handleIn ? { handleIn: { ...point.handleIn, x: point.handleIn.x + delta.x, y: point.handleIn.y + delta.y } } : {}),
+        ...(point.handleOut ? { handleOut: { ...point.handleOut, x: point.handleOut.x + delta.x, y: point.handleOut.y + delta.y } } : {}),
       };
     }
 
@@ -111,12 +125,7 @@ export class PastePanelsCommand implements Command {
         id,
         startPointId: pointIds.get(edge.startPointId) ?? edge.startPointId,
         endPointId: pointIds.get(edge.endPointId) ?? edge.endPointId,
-        ...(edge.bezier ? {
-          bezier: {
-            c0: { x: edge.bezier.c0.x + delta.x, y: edge.bezier.c0.y + delta.y },
-            c1: { x: edge.bezier.c1.x + delta.x, y: edge.bezier.c1.y + delta.y },
-          },
-        } : {}),
+        ...(edge.arc ? { arc: { ...edge.arc, center: { x: edge.arc.center.x + delta.x, y: edge.arc.center.y + delta.y } } } : {}),
       };
     }
 
@@ -147,12 +156,14 @@ export class PastePanelsCommand implements Command {
     this.pastedPanelIds = [];
     for (const panel of this.clip.panels) {
       const id = genId('panel');
+      panelIds.set(panel.id, id);
       this.pastedPanelIds.push(id);
       pattern.panels[id] = {
         ...panel,
         id,
         name: nextCopyName(pattern, panel.name),
         outlineEdgeIds: panel.outlineEdgeIds.map(eid => edgeIds.get(eid) ?? eid),
+        ...(panel.holes ? { holes: panel.holes.map(loop => loop.map(eid => edgeIds.get(eid) ?? eid)) } : {}),
         dartIds: panel.dartIds.map(did => dartIds.get(did) ?? did),
         internalLineIds: panel.internalLineIds.map(lid => lineIds.get(lid) ?? lid),
         visible: true,
@@ -166,8 +177,36 @@ export class PastePanelsCommand implements Command {
       pattern.seams[id] = {
         ...seam,
         id,
-        edgeAId: edgeIds.get(seam.edgeAId) ?? seam.edgeAId,
-        edgeBId: edgeIds.get(seam.edgeBId) ?? seam.edgeBId,
+        a: { ...seam.a, edgeId: edgeIds.get(seam.a.edgeId) ?? seam.a.edgeId },
+        b: { ...seam.b, edgeId: edgeIds.get(seam.b.edgeId) ?? seam.b.edgeId },
+      };
+    }
+
+    pattern.notches ??= {};
+    pattern.annotations ??= {};
+    pattern.measurements ??= {};
+    for (const notch of this.clip.notches ?? []) {
+      const id = genId('notch');
+      pattern.notches[id] = { ...notch, id, edgeId: edgeIds.get(notch.edgeId) ?? notch.edgeId };
+    }
+    for (const annotation of this.clip.annotations ?? []) {
+      const id = genId('note');
+      pattern.annotations[id] = {
+        ...annotation, id,
+        panelId: panelIds.get(annotation.panelId) ?? annotation.panelId,
+        pos: { x: annotation.pos.x + delta.x, y: annotation.pos.y + delta.y },
+      };
+    }
+    for (const measurement of this.clip.measurements ?? []) {
+      const id = genId('meas');
+      pattern.measurements[id] = {
+        ...measurement, id,
+        panelId: panelIds.get(measurement.panelId) ?? measurement.panelId,
+        refs: {
+          ...(measurement.refs.pointAId ? { pointAId: pointIds.get(measurement.refs.pointAId) } : {}),
+          ...(measurement.refs.pointBId ? { pointBId: pointIds.get(measurement.refs.pointBId) } : {}),
+          ...(measurement.refs.edgeId ? { edgeId: edgeIds.get(measurement.refs.edgeId) } : {}),
+        },
       };
     }
 
@@ -176,6 +215,17 @@ export class PastePanelsCommand implements Command {
   undo(ctx: ProjectContext): void {
     const pattern = ctx.project.pattern;
     for (const id of this.pastedPanelIds) delete pattern.panels[id];
+    const pastedPanels = new Set(this.pastedPanelIds);
+    for (const [id, record] of Object.entries(pattern.annotations ?? {})) {
+      if (pastedPanels.has(record.panelId)) delete pattern.annotations[id];
+    }
+    for (const [id, record] of Object.entries(pattern.measurements ?? {})) {
+      if (pastedPanels.has(record.panelId)) delete pattern.measurements[id];
+    }
+    for (const id of Object.keys(pattern.notches ?? {})) {
+      const notch = pattern.notches[id];
+      if (notch && this.created.edges.includes(notch.edgeId)) delete pattern.notches[id];
+    }
     for (const id of this.created.seams) delete pattern.seams[id];
     for (const id of this.created.darts) delete pattern.darts[id];
     for (const id of this.created.lines) delete pattern.internalLines[id];

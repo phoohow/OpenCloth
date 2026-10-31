@@ -6,7 +6,7 @@ import { formatSavedAt } from '../timeFormat';
 import type { CameraProjection } from '../../core/model/types';
 import type { PaneId, PropTab, ViewLayout } from '../../store/stores';
 import { isSplitLayout } from '../../store/stores';
-import type { RecentSummary } from '../../io/projectArchive';
+import type { RecentSummary, AutosaveSummary } from '../../io/projectArchive';
 
 export { formatSavedAt };
 
@@ -34,6 +34,7 @@ export interface MenuState {
   panelCount: number;
   referenceCount: number;
   recent: RecentSummary[];
+  autosaves: AutosaveSummary[];
 }
 
 /** Autosave periods offered by 文件 ▸ 自动保存, shared with the phone menu. */
@@ -61,6 +62,14 @@ export function buildMenus(state: MenuState, actions: MenuActions): TopMenu[] {
       `recent:${item.id}`,
       `${item.name}  ${formatSavedAt(item.savedAt)}`,
       () => actions.reopenRecent(item.id),
+    ));
+
+  const autosaveEntries: MenuEntry[] = state.autosaves.length === 0
+    ? [leaf('autosaveEmpty', '暂无快照', () => {}, { disabled: true })]
+    : state.autosaves.map(item => leaf(
+      `autosave:${item.id}`,
+      formatSavedAt(item.savedAt),
+      () => actions.restoreAutosave(item.id),
     ));
 
   const layoutGroup: MenuEntry[] = [
@@ -101,14 +110,17 @@ export function buildMenus(state: MenuState, actions: MenuActions): TopMenu[] {
           )),
           menuSep(),
           leaf('snapshotNow', '立即保存快照', actions.saveSnapshotNow),
-          leaf('restoreAutosave', `从快照恢复${state.lastAutosaveAt ? `（${formatSavedAt(state.lastAutosaveAt)}）` : ''}…`,
-            actions.restoreAutosave, { disabled: !state.lastAutosaveAt }),
+          menuSep(),
+          ...autosaveEntries,
         ]),
         menuSep(),
         group('import', '导入', [
           leaf('importAvatar', '模特模型…', actions.importAvatar),
           leaf('importReference', '参考物体…', actions.importReference),
           leaf('importEnvironment', '环境贴图…', actions.importEnvironment),
+          menuSep(),
+          leaf('importDxf', 'DXF 版型…', actions.importDxf),
+          leaf('importPatternJson', 'JSON 版型…', actions.importPatternJson),
           menuSep(),
           leaf('resetEnvironment', '恢复内置环境', actions.resetEnvironment),
           leaf('clearReferences', '清除全部参考物体', actions.clearReferences, { disabled: state.referenceCount === 0 }),
@@ -117,6 +129,13 @@ export function buildMenus(state: MenuState, actions: MenuActions): TopMenu[] {
           leaf('exportGlb', '服装 GLB…', actions.exportGlb),
           leaf('exportObj', '服装 OBJ…', actions.exportObj),
           leaf('screenshot', '导出截图 PNG', actions.screenshot),
+          leaf('exportAnimation', '导出动画 WebM…', actions.exportAnimation),
+          menuSep(),
+          leaf('exportDxf', 'DXF 版型…', actions.exportDxf),
+          leaf('exportSvg', 'SVG 平面图…', actions.exportPatternSvg),
+          leaf('exportPdf', 'PDF 图纸…', actions.exportPdf),
+          leaf('exportTechPack', '工艺单…', actions.exportTechPack),
+          leaf('exportMarker', '排料图…', actions.exportMarker),
         ]),
       ],
     },

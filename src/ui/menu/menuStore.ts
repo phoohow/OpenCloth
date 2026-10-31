@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 import { CLOSED_NAV, type MenuNavState } from './nav';
 
-/** Modal shown over the app from the 帮助 menu. */
-export type MenuDialog = 'shortcuts' | 'about' | null;
+/** Modal shown over the app from the menu. */
+export type MenuDialog = 'shortcuts' | 'about' | 'exportDxf' | 'exportSvg' | 'exportPdf' | 'exportTechPack' | 'exportMarker' | null;
 
 interface MenuStore {
   /** Which dropdown, submenu and row the menu bar currently highlights. */

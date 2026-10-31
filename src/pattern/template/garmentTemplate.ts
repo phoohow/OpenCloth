@@ -1,5 +1,7 @@
 import type { Pattern } from '../../core/model/types';
-import type { IconName } from '../../ui/icons';
+
+/** Glyph key of a template card; the UI resolves it to an icon. */
+export type TemplateIcon = 't-shirt' | 'shirt' | 'dress' | 'skirt' | 'sleeve';
 
 /** One numeric garment measurement shown in the template picker. */
 export interface ParamField {
@@ -15,7 +17,7 @@ export interface ParamField {
 export interface GarmentTemplate {
   key: string;
   name: string;
-  icon: IconName;
+  icon: TemplateIcon;
   /** Panel composition shown under the template name. */
   summary: string;
   fields: ParamField[];
@@ -26,7 +28,7 @@ export interface GarmentTemplate {
 
 /** Turns a typed generator and its default measurements into a UI-listed template. */
 export function defineTemplate<P extends object>(
-  meta: { key: string; name: string; icon: IconName; summary: string; fields: ParamField[]; defaults: P },
+  meta: { key: string; name: string; icon: TemplateIcon; summary: string; fields: ParamField[]; defaults: P },
   generate: (params: P, fabricId: string) => Pattern,
 ): GarmentTemplate {
   return {

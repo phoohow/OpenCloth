@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { vec2, type Pattern, type Project } from '../../../src/core/model/types';
+import { vec2, type ArcGeom, type Pattern, type Project, type Vec2 } from '../../../src/core/model/types';
 import { createDefaultProject } from '../../../src/core/model/defaults';
 import { generateTShirt } from '../../../src/pattern/template/tShirtTemplate';
 import { samplePanelOutline } from '../../../src/pattern/panel/panelBuilder';
@@ -8,6 +8,7 @@ import {
   AddPointOnEdgeCommand, DeleteSelectionCommand, MovePanelsCommand, MovePointsCommand,
   panelMoveGeometry, previewMove,
 } from '../../../src/core/command/patternCommands';
+import { arcFromThreePoints, evalArc } from '../../../src/pattern/geom/arc';
 
 function makeCtx(project: Project): ProjectContext {
   return { project };
@@ -35,20 +36,19 @@ describe('MovePointsCommand', () => {
 
   it('moves a coincident bezier handle anchored at the point', () => {
     const pattern = createEmptyTestPattern();
-    // Edge p1 -> p2 with c0 exactly at p1.
-    pattern.edges['e1'] = {
-      id: 'e1', type: 'bezier', startPointId: 'p1', endPointId: 'p2',
-      bezier: { c0: vec2(1, 0), c1: vec2(6, 5) },
-    };
+    // Bezier edge p1 -> p2 with c0 exactly at p1.
+    pattern.edges['e1'] = { id: 'e1', type: 'bezier', startPointId: 'p1', endPointId: 'p2' };
+    pattern.points.p1 = { id: 'p1', pos: vec2(1, 0), kind: 'smooth', handleOut: { x: 1, y: 0 } };
+    pattern.points.p2 = { id: 'p2', pos: vec2(5, 0), kind: 'smooth', handleIn: { x: 6, y: 5 } };
     const ctx = makeCtx(projectWithPattern(pattern));
 
     const cmd = new MovePointsCommand(new Map([['p1', vec2(2, 1)]]));
     cmd.execute(ctx);
-    expect(pattern.edges.e1.bezier!.c0).toEqual({ x: 3, y: 1 });
-    expect(pattern.edges.e1.bezier!.c1).toEqual({ x: 6, y: 5 });
+    expect(pattern.points.p1.handleOut).toEqual({ x: 3, y: 1 });
+    expect(pattern.points.p2.handleIn).toEqual({ x: 6, y: 5 });
 
     cmd.undo(ctx);
-    expect(pattern.edges.e1.bezier!.c0).toEqual({ x: 1, y: 0 });
+    expect(pattern.points.p1.handleOut).toEqual({ x: 1, y: 0 });
   });
 
   it('moves coincident internal-line vertices of panels owning the point', () => {
@@ -91,7 +91,9 @@ describe('MovePanelsCommand', () => {
     const pattern = generateTShirt();
     const panel = Object.values(pattern.panels).find(p => p.name === '右袖')!;
     const capEdge = pattern.edges[panel.outlineEdgeIds[3]];
-    const handlesBefore = { ...capEdge.bezier! };
+    const capStart = pattern.points[capEdge.startPointId];
+    const capEnd = pattern.points[capEdge.endPointId];
+    const handlesBefore = { out: { ...capStart.handleOut! }, in: { ...capEnd.handleIn! } };
     pattern.darts['d1'] = { id: 'd1', tipId: 'tip1', edge1Id: capEdge.id, edge2Id: capEdge.id, intakeCm: 2 };
     pattern.points['tip1'] = { id: 'tip1', pos: vec2(0, 0) };
     pattern.internalLines['l1'] = { id: 'l1', kind: 'fold', points: [vec2(3, 3), vec2(4, 9)] };
@@ -102,8 +104,8 @@ describe('MovePanelsCommand', () => {
     new MovePanelsCommand([panel.id], vec2(10, 0)).execute(ctx);
 
     expect(pattern.points.tip1.pos).toEqual({ x: 10, y: 0 });
-    expect(capEdge.bezier!.c0).toEqual({ x: handlesBefore.c0.x + 10, y: handlesBefore.c0.y });
-    expect(capEdge.bezier!.c1).toEqual({ x: handlesBefore.c1.x + 10, y: handlesBefore.c1.y });
+    expect(capStart.handleOut).toEqual({ x: handlesBefore.out.x + 10, y: handlesBefore.out.y });
+    expect(capEnd.handleIn).toEqual({ x: handlesBefore.in.x + 10, y: handlesBefore.in.y });
     expect(pattern.internalLines.l1.points).toEqual([vec2(13, 3), vec2(14, 9)]);
   });
 
@@ -138,6 +140,68 @@ describe('MovePanelsCommand', () => {
   });
 });
 
+describe('arc edges follow their endpoints', () => {
+  it('refits through the previous midpoint when one end moves', () => {
+    const pattern = arcTestPattern();
+    const original = pattern.edges.e1.arc!;
+    const ctx = makeCtx(projectWithPattern(pattern));
+    const cmd = new MovePointsCommand(new Map([['p1', vec2(0, 3)]]));
+
+    cmd.execute(ctx);
+
+    expect(pattern.edges.e1.type).toBe('arc');
+    const arc = pattern.edges.e1.arc!;
+    assertOn(arc, 0, pattern.points.p1.pos);
+    assertOn(arc, 1, pattern.points.p2.pos);
+    expect(Math.hypot(3 - arc.center.x, 2 - arc.center.y)).toBeCloseTo(arc.radius, 9);
+
+    cmd.undo(ctx);
+    expect(pattern.edges.e1.arc).toEqual(original);
+  });
+
+  it('stays rigid when the whole panel moves', () => {
+    const pattern = arcTestPattern();
+    const before = pattern.edges.e1.arc!;
+    const ctx = makeCtx(projectWithPattern(pattern));
+
+    new MovePanelsCommand(['panel1'], vec2(10, 0)).execute(ctx);
+
+    const after = pattern.edges.e1.arc!;
+    expect(after.radius).toBeCloseTo(before.radius, 9);
+    expect(after.center).toEqual({ x: before.center.x + 10, y: before.center.y });
+    assertOn(after, 0.5, { x: 13, y: 2 });
+    assertOn(after, 0, pattern.points.p1.pos);
+    assertOn(after, 1, pattern.points.p2.pos);
+  });
+
+  it('becomes a straight edge when the ends line up with the midpoint, and undo restores the arc', () => {
+    const pattern = arcTestPattern();
+    const original = pattern.edges.e1.arc!;
+    const ctx = makeCtx(projectWithPattern(pattern));
+    const cmd = new MovePointsCommand(new Map([['p1', vec2(0, 4)]]));
+
+    cmd.execute(ctx);
+    expect(pattern.edges.e1.type).toBe('line');
+    expect(pattern.edges.e1.arc).toBeUndefined();
+
+    cmd.undo(ctx);
+    expect(pattern.edges.e1.type).toBe('arc');
+    expect(pattern.edges.e1.arc).toEqual(original);
+  });
+
+  it('previewMove carries the refit arc', () => {
+    const pattern = arcTestPattern();
+    const ctx = makeCtx(projectWithPattern(pattern));
+    const delta = vec2(-2, 7);
+    const geom = panelMoveGeometry(pattern, ['panel1']);
+
+    const previewed = previewMove(pattern, geom, delta);
+    new MovePanelsCommand(['panel1'], delta).execute(ctx);
+
+    expect(previewed).toEqual(ctx.project.pattern);
+  });
+});
+
 describe('AddPointOnEdgeCommand', () => {
   it('splits a line edge inside a panel outline', () => {
     const pattern = createEmptyTestPattern();
@@ -163,33 +227,44 @@ describe('AddPointOnEdgeCommand', () => {
     expect(pattern.points[newPointId]).toBeUndefined();
   });
 
-  it('rejects bezier edges', () => {
+  it('splits bezier edges preserving the curve shape', () => {
     const pattern = createEmptyTestPattern();
-    pattern.edges['e1'] = {
-      id: 'e1', type: 'bezier', startPointId: 'p1', endPointId: 'p2',
-      bezier: { c0: vec2(1, 1), c1: vec2(2, 2) },
-    };
+    pattern.edges['e1'] = { id: 'e1', type: 'bezier', startPointId: 'p1', endPointId: 'p2' };
+    pattern.points.p1 = { id: 'p1', pos: vec2(1, 0), kind: 'smooth', handleOut: { x: 1, y: 1 } };
+    pattern.points.p2 = { id: 'p2', pos: vec2(5, 0), kind: 'smooth', handleIn: { x: 2, y: 2 } };
+    pattern.panels.panel1.outlineEdgeIds = ['e1'];
     const ctx = makeCtx(projectWithPattern(pattern));
-    expect(() => new AddPointOnEdgeCommand('e1', vec2(3, 0)).execute(ctx))
-      .toThrow(/贝塞尔/);
+
+    const cmd = new AddPointOnEdgeCommand('e1', vec2(3, 0));
+    cmd.execute(ctx);
+    const pieces = pattern.panels.panel1.outlineEdgeIds;
+    expect(pieces).toHaveLength(2);
+    expect(pieces.every(id => pattern.edges[id]?.type === 'bezier')).toBe(true);
+    const midId = pattern.edges[pieces[0]!].endPointId;
+    expect(pattern.points[midId]!.handleIn).toBeDefined();
+    expect(pattern.points[midId]!.handleOut).toBeDefined();
+
+    cmd.undo(ctx);
+    expect(pattern.edges.e1).toBeDefined();
+    expect(pattern.points[midId]).toBeUndefined();
   });
 
   it('reattaches seams referencing the removed edge', () => {
     const pattern = createEmptyTestPattern();
     pattern.edges['e1'] = { id: 'e1', type: 'line', startPointId: 'p1', endPointId: 'p2' };
     pattern.seams['s1'] = {
-      id: 's1', type: 'normal', edgeAId: 'e1', edgeBId: 'e1',
-      flipB: false, strength: 1, threadColor: '#f00', stitchVisible: true,
+      id: 's1', type: 'normal', a: { edgeId: 'e1', t0: 0, t1: 1 }, b: { edgeId: 'e1', t0: 0, t1: 1 },
+      flip: false, strength: 1, threadColor: '#f00', stitchVisible: true,
     };
     const ctx = makeCtx(projectWithPattern(pattern));
 
     const cmd = new AddPointOnEdgeCommand('e1', vec2(3, 0));
     cmd.execute(ctx);
-    expect(pattern.seams.s1.edgeAId).not.toBe('e1');
+    expect(pattern.seams.s1.a.edgeId).not.toBe('e1');
 
     cmd.undo(ctx);
-    expect(pattern.seams.s1.edgeAId).toBe('e1');
-    expect(pattern.seams.s1.edgeBId).toBe('e1');
+    expect(pattern.seams.s1.a.edgeId).toBe('e1');
+    expect(pattern.seams.s1.b.edgeId).toBe('e1');
   });
 });
 
@@ -246,6 +321,24 @@ describe('DeleteSelectionCommand', () => {
     expect(pattern.panels.panel1).toBeDefined();
   });
 });
+
+/** Panel edge e1 is a semicircle from p1(1,0) to p2(5,0) through (3,2). */
+function arcTestPattern(): Pattern {
+  const pattern = createEmptyTestPattern();
+  pattern.edges['e1'] = {
+    id: 'e1', type: 'arc', startPointId: 'p1', endPointId: 'p2',
+    arc: arcFromThreePoints(vec2(1, 0), vec2(3, 2), vec2(5, 0))!,
+  };
+  pattern.panels.panel1.outlineEdgeIds = ['e1'];
+  return pattern;
+}
+
+/** Asserts the arc passes within rounding of the expected point at fraction t. */
+function assertOn(arc: ArcGeom, t: number, expected: Vec2): void {
+  const at = evalArc(arc, t);
+  expect(at.x).toBeCloseTo(expected.x, 9);
+  expect(at.y).toBeCloseTo(expected.y, 9);
+}
 
 /** Two panels plus points p1(1,0), p2(5,0), p3(5,4). */
 function createEmptyTestPattern(): Pattern {

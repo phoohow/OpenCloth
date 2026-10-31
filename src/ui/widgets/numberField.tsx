@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import type { Vec3 } from '../../core/model/types';
+import type { Vec2, Vec3 } from '../../core/model/types';
 
 const AXIS_COLOR = { X: '#e06c5e', Y: '#78c860', Z: '#5f8fd3' } as const;
 
@@ -133,6 +133,43 @@ export function Vec3Field({ label, value, step, precision, min, max, suffix, onP
             max={max}
             suffix={suffix}
             onPreview={v => onPreview?.(withAxis(a, v))}
+            onCommit={v => onCommit(withAxis(a, v))}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+interface Vec2FieldProps {
+  label: string;
+  value: Vec2;
+  step: number;
+  precision?: number;
+  min?: number;
+  max?: number;
+  title?: string;
+  onCommit: (v: Vec2) => void;
+}
+
+/** Two axis cells editing one 2D vector. */
+export function Vec2Field({ label, value, step, precision, min, max, title, onCommit }: Vec2FieldProps) {
+  const axes: Array<keyof typeof AXIS_COLOR> = ['X', 'Y'];
+  const withAxis = (axis: keyof typeof AXIS_COLOR, v: number): Vec2 => ({ ...value, [axis.toLowerCase()]: v });
+  return (
+    <div style={styles.vecRow}>
+      <span style={styles.vecLabel}>{label}</span>
+      <div style={styles.vecCells}>
+        {axes.map(a => (
+          <NumberField
+            key={a}
+            axis={a}
+            value={value[a.toLowerCase() as keyof Vec2]}
+            step={step}
+            precision={precision}
+            min={min}
+            max={max}
+            title={title}
             onCommit={v => onCommit(withAxis(a, v))}
           />
         ))}

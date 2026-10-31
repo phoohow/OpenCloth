@@ -1,7 +1,7 @@
 import type {
   Project, Pattern, Fabric, Avatar, AvatarParams, SceneConfig, ObjectTransform,
   FabricPresetKey, FabricPhysics, FabricAppearance, RayTracingConfig, DenoiseModel,
-  LightType, SceneLight, LightConfig, LegacyLightConfig, Vec3, SeamType,
+  LightType, SceneLight, LightConfig, Vec3, SeamType, EdgeSemantic,
 } from './types';
 import { vec2, vec3 } from './types';
 
@@ -78,6 +78,9 @@ export function createEmptyPattern(): Pattern {
     internalLines: {},
     panels: {},
     seams: {},
+    notches: {},
+    annotations: {},
+    measurements: {},
   };
 }
 
@@ -122,6 +125,12 @@ export function createDefaultAvatar(): Avatar {
 /** Default simulation mesh edge length in cm; finer than the per-panel pattern value. */
 export const DEFAULT_MESH_RESOLUTION_CM = 1.5;
 
+/** Default cloth thickness in cm; the minimum clearance against body and floor. */
+export const DEFAULT_CLOTH_THICKNESS_CM = 0.2;
+
+/** Default extra separation per collision-layer step, in cm. */
+export const DEFAULT_LAYER_SPACING_CM = 0.4;
+
 /** Display names of the light types, in the order the UI lists them. */
 export const LIGHT_TYPE_LABELS: Record<LightType, string> = {
   directional: '方向光',
@@ -143,7 +152,13 @@ export const SEAM_TYPE_LABELS: Record<SeamType, string> = {
 /** Every seam type, in select order. */
 export const SEAM_TYPES: SeamType[] = ['normal', 'gather', 'free'];
 
-/** Light placement shared by new lights and migrated legacy ones. */
+/** Display names of the outline edge roles, shared by the outliner and the tech pack. */
+export const EDGE_SEMANTIC_LABELS: Record<EdgeSemantic, string> = {
+  hem: '脚口', neckline: '领口', armhole: '袖窿', sideSeam: '侧缝', shoulder: '肩线',
+  sleeveCap: '袖山', waist: '腰节', dart: '省道', internal: '内部', free: '自由边',
+};
+
+/** Default placement for each light type. */
 const LIGHT_PLACEMENT = {
   directional: { position: vec3(2, 4, 3), target: vec3(0, 0, 0) },
   point: { position: vec3(1.2, 1.8, 1.2), target: vec3(0, 1, 0) },
@@ -199,7 +214,7 @@ const clampVec3 = (value: Vec3 | undefined, fallback: Vec3): Vec3 => ({
   z: clampNumber(value?.z, fallback.z, -100, 100),
 });
 
-/** Sanitizes one persisted light, filling in anything an older file lacks. */
+/** Sanitizes one persisted light, filling in anything the record lacks. */
 function normalizeLight(raw: Partial<SceneLight>, index: number): SceneLight {
   const type = LIGHT_TYPES.includes(raw.type as LightType) ? raw.type as LightType : 'directional';
   const placement = LIGHT_PLACEMENT[type];
@@ -220,47 +235,14 @@ function normalizeLight(raw: Partial<SceneLight>, index: number): SceneLight {
   };
 }
 
-/** Directional light saved as the old key/fill shape, placed along its direction. */
-function lightFromLegacy(
-  raw: { direction: Vec3; intensity: number; color: string } | undefined,
-  name: string,
-  index: number,
-): SceneLight | null {
-  if (!raw) return null;
-  const light = normalizeLight({}, index);
-  return {
-    ...light,
-    name,
-    color: typeof raw.color === 'string' ? raw.color : light.color,
-    intensity: clampNumber(raw.intensity, light.intensity, 0, 500),
-    position: clampVec3(raw.direction, light.position),
-    target: vec3(0, 0, 0),
-  };
-}
-
-/** Lights of a project, migrating files saved with only a key and fill light. */
-export function normalizeLights(lights: LegacyLightConfig | undefined): SceneLight[] {
+/** Sanitized list of a project's lights; empty or absent falls back to the defaults. */
+export function normalizeLights(lights: LightConfig | undefined): SceneLight[] {
   if (Array.isArray(lights?.lights)) return lights.lights.map(normalizeLight);
-  const key = lightFromLegacy(lights?.keyLight, '主光', 0);
-  const fill = lightFromLegacy(lights?.fillLight, '补光', 1);
-  const migrated = [key, fill].filter((light): light is SceneLight => !!light);
-  return migrated.length > 0 ? migrated : createDefaultLights();
-}
-
-/** Environment lighting saved with a project, with defaults for absent fields. */
-export function normalizeLightConfig(lights: LegacyLightConfig | undefined): LightConfig {
-  return {
-    lights: normalizeLights(lights),
-    iblUrl: lights?.iblUrl,
-    iblObjectKey: lights?.iblObjectKey,
-    iblName: lights?.iblName,
-    iblEnabled: lights?.iblEnabled !== false,
-    iblIntensity: clampNumber(lights?.iblIntensity, 1, 0, 4),
-  };
+  return createDefaultLights();
 }
 
 /** Environment lighting in effect: zero while the environment light is off. */
-export function iblStrength(lights: LightConfig | LegacyLightConfig): number {
+export function iblStrength(lights: LightConfig): number {
   return lights.iblEnabled === false ? 0 : (lights.iblIntensity ?? 0);
 }
 
@@ -323,6 +305,9 @@ export function createDefaultScene(): SceneConfig {
       constraintIterations: 5,
       meshResolutionCm: DEFAULT_MESH_RESOLUTION_CM,
       avatarCollision: true,
+      clothThicknessCm: DEFAULT_CLOTH_THICKNESS_CM,
+      selfCollision: true,
+      layerSpacingCm: DEFAULT_LAYER_SPACING_CM,
     },
   };
 }
@@ -337,8 +322,6 @@ export function createDefaultProject(name = '未命名工程'): Project {
       name,
       createdAt: new Date().toISOString(),
       modifiedAt: new Date().toISOString(),
-      appVersion: '0.1.0',
-      dataVersion: 1,
     },
     pattern: createEmptyPattern(),
     fabrics: { [fabric.id]: fabric },

@@ -56,7 +56,7 @@ export function createSimPipelines(device: GPUDevice): SimPipelines {
   const layoutIntegrate = createLayout(device, ['storage', 'storage', 'storage', 'storage', 'uniform']);
   const layoutSolve = createLayout(device, ['storage', 'read-only-storage', 'read-only-storage', 'uniform']);
   const layoutCollide = createLayout(device, ['storage', 'read-only-storage', 'uniform', 'read-only-storage']);
-  const layoutUpdate = createLayout(device, ['storage', 'read-only-storage', 'storage', 'storage', 'uniform']);
+  const layoutUpdate = createLayout(device, ['storage', 'read-only-storage', 'storage', 'storage', 'uniform', 'read-only-storage']);
   const layoutNormals = createLayout(device, ['read-only-storage', 'storage', 'read-only-storage', 'uniform']);
   const layoutParticleCount = createLayout(device, ['storage', 'uniform']);
   const layoutSetPin = createLayout(device, ['storage', 'read-only-storage', 'uniform', 'read-only-storage']);

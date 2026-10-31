@@ -12,6 +12,56 @@ export const MIN_SCALE = 0.5;
 export const MAX_SCALE = 50;
 export const SNAP_STEP_CM = 0.5;
 
+/**
+ * Centimetres between grid lines at this zoom. The step coarsens as the view zooms out and doubles
+ * until the lines stay at least `minPx` apart, so they never smear into a solid fill.
+ */
+export function gridStepCm(scale: number, minPx = 4): number {
+  let cm = scale > 8 ? 5 : scale > 3 ? 10 : 20;
+  while (cm * scale < minPx) cm *= 2;
+  return cm;
+}
+
+/** Tick ladder the ruler labels step through, in centimetres. */
+const RULER_STEPS_CM = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500];
+
+/** Centimetres between major ruler ticks, spaced for at least `minPx` pixels. */
+export function rulerStepCm(scale: number, minPx = 64): number {
+  return RULER_STEPS_CM.find(cm => cm * scale >= minPx) ?? RULER_STEPS_CM[RULER_STEPS_CM.length - 1];
+}
+
+/** Major ruler tick positions in centimetres spanning the visible world range. */
+export function rulerTicks(fromCm: number, toCm: number, stepCm: number): number[] {
+  return tickRange(fromCm, toCm, stepCm);
+}
+
+/** Minor ruler tick positions: the subdivisions between the majors, majors excluded. */
+export function rulerMinorTicks(fromCm: number, toCm: number, stepCm: number): number[] {
+  return tickRange(fromCm, toCm, stepCm / 5).filter(v => !isMultipleOf(v, stepCm));
+}
+
+/** Every `unit` step inside the range, rounded so labels print clean numbers. */
+function tickRange(fromCm: number, toCm: number, unit: number): number[] {
+  const first = Math.ceil(fromCm / unit - 1e-9) * unit;
+  const out: number[] = [];
+  for (let v = first; v <= toCm + 1e-9; v += unit) {
+    const tick = Math.round(v * 1e6) / 1e6;
+    out.push(tick === 0 ? 0 : tick);
+  }
+  return out;
+}
+
+/** Whether a tick sits exactly on a multiple of the major step. */
+function isMultipleOf(value: number, step: number): boolean {
+  const ratio = value / step;
+  return Math.abs(ratio - Math.round(ratio)) < 1e-6;
+}
+
+/** Ruler label text: whole centimetres print bare, sub-centimetre steps keep one decimal. */
+export function rulerLabel(tickCm: number, stepCm: number): string {
+  return stepCm >= 1 ? String(Math.round(tickCm)) : tickCm.toFixed(1);
+}
+
 /** World centimeters to canvas pixels; canvas-centered, Y up. */
 export function toScreen(p: Vec2, view: ViewTransform, w: number, h: number): Vec2 {
   return {

@@ -1,4 +1,5 @@
-import type { Project } from '../model/types';
+import type { Pattern, Project } from '../model/types';
+import { autoSyncMirrors } from './patternSymmetry';
 
 /** Draft project a command mutates; the store commits the result as immutable project data. */
 export interface ProjectContext {
@@ -9,10 +10,33 @@ export interface ProjectContext {
 export interface Command {
   /** Chinese label shown in the undo/redo menus. */
   readonly label: string;
+  /** True when the command rebuilds its symmetry links itself. */
+  readonly skipMirrorSync?: boolean;
   /** Applies the edit to the draft project. */
   execute(ctx: ProjectContext): void;
   /** Restores the state captured by execute. */
   undo(ctx: ProjectContext): void;
+}
+
+/** Deep copy taken only when a symmetry pair could need syncing after the command. */
+function snapshotWithSymmetry(pattern: Pattern): Pattern | null {
+  return Object.values(pattern.panels).some(panel => !!panel.symmetry) ? structuredClone(pattern) : null;
+}
+
+/** Wraps a command whose edit moved one side of a symmetry pair, restoring both on undo. */
+class MirrorSyncedCommand implements Command {
+  readonly label: string;
+  constructor(private readonly inner: Command, private readonly before: Pattern) {
+    this.label = inner.label;
+  }
+  execute(ctx: ProjectContext): void {
+    this.inner.execute(ctx);
+    autoSyncMirrors(ctx.project.pattern, this.before);
+  }
+  undo(ctx: ProjectContext): void {
+    this.inner.undo(ctx);
+    Object.assign(ctx.project.pattern, structuredClone(this.before));
+  }
 }
 
 /** Undo and redo stacks for executed commands; the undo stack keeps the latest 100. */
@@ -22,8 +46,10 @@ export class CommandHistory {
   private limit = 100;
 
   execute(cmd: Command, ctx: ProjectContext): void {
+    const before = cmd.skipMirrorSync ? null : snapshotWithSymmetry(ctx.project.pattern);
     cmd.execute(ctx);
-    this.undoStack.push(cmd);
+    const synced = before ? autoSyncMirrors(ctx.project.pattern, before) : false;
+    this.undoStack.push(synced && before ? new MirrorSyncedCommand(cmd, before) : cmd);
     if (this.undoStack.length > this.limit) this.undoStack.shift();
     this.redoStack = [];
   }

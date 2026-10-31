@@ -4,11 +4,12 @@ import {
   disposeRendererContext, setRendererMode, type RendererContext,
 } from '../../render/renderer/rendererContext';
 import { GarmentEngine } from '../../core/engine/garmentEngine';
-import { useProjectStore, useSimStore, useUIStore, isSplitLayout, type ViewLayout } from '../../store/stores';
+import { useProjectStore, useSimStore, useUIStore, usePerfStore, isSplitLayout, type ViewLayout } from '../../store/stores';
 import { EngineSync, recoverWithRaster, syncSelectionOverlay } from './engineSync';
 import { useClothPicking } from './useClothPicking';
 import { ViewportHint } from '../widgets/viewportHint';
 import { normalizeRayTracing } from '../../core/model/defaults';
+import { rayTraceStateLabel } from '../optionTables';
 import { MOBILE_VIEWPORT_HINT, isMobileUi } from '../mobile/mobileUi';
 
 /** Width the phone shell's floating buttons reserve at the right of the pane. */
@@ -37,6 +38,7 @@ export function Viewport3D({ onEngineReady }: Viewport3DProps) {
 
   const renderMode = useUIStore(s => s.renderMode);
   const layout = useUIStore(s => s.layout);
+  const rayState3D = usePerfStore(s => s.rayState3D);
 
   useEffect(() => {
     let cancelled = false;
@@ -136,7 +138,7 @@ export function Viewport3D({ onEngineReady }: Viewport3DProps) {
           position: 'absolute', top: 8, left: 8, padding: '5px 8px', color: '#bde7ff',
           background: 'rgba(18, 39, 55, 0.84)', border: '1px solid #2f6d92',
           borderRadius: 4, fontSize: 11, pointerEvents: 'none',
-        }}>光线追踪 · 渐进采样</div>
+        }}>光线追踪 · {rayTraceStateLabel(rayState3D) || '渐进采样'}</div>
       )}
       {renderError && (
         <div style={{

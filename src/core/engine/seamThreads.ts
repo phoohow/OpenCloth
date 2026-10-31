@@ -13,13 +13,10 @@ export class SeamThreads {
   attach(scene: THREE.Scene, pairs: SeamPair[], positions: Float32Array, seams: Record<string, Seam>): void {
     this.detach(scene);
     if (pairs.length === 0) return;
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pairs.length * 6), 3));
-    geometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(pairs.length * 6), 3));
     const material = new THREE.LineBasicMaterial({
       vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
     });
-    this.lines = new THREE.LineSegments(geometry, material);
+    this.lines = new THREE.LineSegments(threadGeometry(pairs.length), material);
     this.lines.renderOrder = 3;
     this.lines.name = 'seamThreads';
     scene.add(this.lines);
@@ -38,6 +35,11 @@ export class SeamThreads {
   /** Moves the threads to the given positions and dims each one as its seam closes. */
   update(pairs: SeamPair[], positions: Float32Array): void {
     if (!this.lines) return;
+    // The pair set changes when a dart closes, so the buffers are rebuilt rather than overrun.
+    if (this.lines.geometry.getAttribute('position').count !== pairs.length * 2) {
+      this.lines.geometry.dispose();
+      this.lines.geometry = threadGeometry(pairs.length);
+    }
     const pos = this.lines.geometry.getAttribute('position') as THREE.BufferAttribute;
     const col = this.lines.geometry.getAttribute('color') as THREE.BufferAttribute;
     const arr = pos.array as Float32Array;
@@ -68,6 +70,14 @@ export class SeamThreads {
     (this.lines.material as THREE.Material).dispose();
     this.lines = null;
   }
+}
+
+/** Position and color buffers sized for one segment per seam pair. */
+function threadGeometry(pairCount: number): THREE.BufferGeometry {
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pairCount * 6), 3));
+  geometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(pairCount * 6), 3));
+  return geometry;
 }
 
 /** Thread color used when a pair's seam record is gone. */

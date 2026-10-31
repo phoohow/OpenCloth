@@ -33,7 +33,19 @@ const GLB_MAGIC = [0x67, 0x6c, 0x54, 0x46];
 export function detectFormat(filename: string, bytes?: Uint8Array): ModelFormat {
   const ext = baseName(filename).split('.').pop()?.toLowerCase() ?? '';
   if (ext === 'glb' || ext === 'gltf' || ext === 'obj') return ext;
+  if (filename.startsWith('data:')) {
+    const comma = filename.indexOf(',');
+    const mime = (comma > 5 ? filename.slice(5, comma) : '').split(';')[0]?.toLowerCase() ?? '';
+    if (mime.includes('gltf-binary')) return 'glb';
+    if (mime.includes('gltf+json') || mime.includes('json')) return 'gltf';
+    if (mime.includes('obj')) return 'obj';
+  }
   if (bytes && GLB_MAGIC.every((byte, i) => bytes[i] === byte)) return 'glb';
+  if (bytes) {
+    const head = new TextDecoder().decode(bytes.slice(0, 128)).trimStart();
+    if (head.startsWith('{')) return 'gltf';
+    if (/^(#|v\s|o\s|g\s|mtllib\s)/.test(head)) return 'obj';
+  }
   throw new Error(`Unknown model format: ${filename}`);
 }
 

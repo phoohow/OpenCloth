@@ -9,7 +9,8 @@ import { MobileShell } from './mobile/mobileShell';
 import { isMobileUi } from './mobile/mobileUi';
 import { PaneDivider } from './paneDivider';
 import { Toolbar2D, Toolbar3D } from './paneToolbars';
-import { createMenuActions, refreshRecentList, shortcutActions, writeAutosave } from './menu/actions';
+import { ToastHost } from './widgets/toast';
+import { createMenuActions, refreshAutosaveList, refreshRecentList, shortcutActions, writeAutosave } from './menu/actions';
 import { menuOwnsKeyboard } from './menu/menuStore';
 import { SHORTCUTS, matchShortcut } from './menu/shortcuts';
 import type { MenuActions } from './menu/actions';
@@ -79,6 +80,7 @@ export function App() {
   // Local archive is read once so 文件 ▸ 最近 and the autosave stamp start populated.
   useEffect(() => {
     refreshRecentList();
+    refreshAutosaveList();
     void readAutosave().then(record => {
       if (record) setLastAutosaveAt(record.savedAt);
     });
@@ -102,6 +104,7 @@ export function App() {
   return (
     <>
       {isMobileUi() ? <MobileShell {...shellProps} /> : <DesktopShell {...shellProps} />}
+      <ToastHost />
       <input
         ref={projectInputRef}
         type="file"
@@ -160,11 +163,13 @@ function DesktopShell({ actions, engineRef, onEngineReady, ready }: ShellProps) 
   useEffect(() => {
     const on2D = () => setFocus('2d');
     const on3D = () => setFocus('3d');
-    pane2DRef.current?.addEventListener('pointerdown', on2D, true);
-    pane3DRef.current?.addEventListener('pointerdown', on3D, true);
+    const pane2D = pane2DRef.current;
+    const pane3D = pane3DRef.current;
+    pane2D?.addEventListener('pointerdown', on2D, true);
+    pane3D?.addEventListener('pointerdown', on3D, true);
     return () => {
-      pane2DRef.current?.removeEventListener('pointerdown', on2D, true);
-      pane3DRef.current?.removeEventListener('pointerdown', on3D, true);
+      pane2D?.removeEventListener('pointerdown', on2D, true);
+      pane3D?.removeEventListener('pointerdown', on3D, true);
     };
   }, [setFocus]);
 

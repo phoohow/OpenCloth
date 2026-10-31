@@ -1,13 +1,16 @@
 import {
-  applyLightConfig, renderScene, setRayTracingConfig, setRendererMode,
+  applyLightConfig, rayTraceState, renderScene, setRayTracingConfig, setRendererMode,
 } from '../../render/renderer/rendererContext';
+import { RayTracingUnsupportedError } from '../../render/renderer/rendererContext';
 import type { RendererContext } from '../../render/renderer/rendererContext';
 import type { GarmentEngine } from '../../core/engine/garmentEngine';
 import {
-  noteDrawnFrame, noteRayTracingSamples, useProjectStore, useSimStore, useUIStore,
+  noteDrawnFrame, noteRayTraceState, noteRayTracingSamples, noteRayTracingUnsupported,
+  useProjectStore, useSimStore, useUIStore,
 } from '../../store/stores';
 import { normalizeLights, normalizeRayTracing } from '../../core/model/defaults';
 import { AVATAR_NODE_ID } from '../sceneTree';
+import { rayTraceFailureLabel } from '../optionTables';
 import type { Pattern, Project } from '../../core/model/types';
 
 /** Applies the UI store's selection to the panel and avatar highlights. */
@@ -26,6 +29,12 @@ export function recoverWithRaster(ctx: RendererContext, error: unknown, report: 
   ctx.rayTracerLoading = null;
   ctx.renderMode = 'shaded';
   if (useUIStore.getState().renderMode === 'raytraced') useUIStore.getState().setRenderMode('shaded');
+  if (error instanceof RayTracingUnsupportedError) {
+    const capability = { ok: false, failure: error.failure, detail: error.detail };
+    noteRayTracingUnsupported(capability);
+    report(`本机 WebGPU 跑不了光线追踪（${rayTraceFailureLabel(error.failure)}）：${error.detail}。已切回光栅化模式。`);
+    return;
+  }
   report('光线追踪运行失败，已切回光栅化模式。');
 }
 
@@ -56,6 +65,16 @@ export class EngineSync {
   private rebuildSeq = 0;
   private last: ProjectSignals;
   private unsubscribes: (() => void)[] = [];
+  /** Newest in-flight drag pattern; the frame loop applies it at most once per frame. */
+  private pendingPreviewPattern: Pattern | null = null;
+  /** Whether a queued drag pattern still needs applying. */
+  private previewQueued = false;
+  /** Whether the drawn cloth is a drag preview rather than the committed pattern. */
+  private previewApplied = false;
+  /** Geometry rebuilds awaiting the engine; a preview never lands in the middle of one. */
+  private rebuildsInFlight = 0;
+  /** Fractional physics steps carried across frames so slower speeds still slow playback. */
+  private stepAccumulator = 0;
 
   constructor(private engine: GarmentEngine, private ctx: RendererContext, private report: (message: string) => void) {
     const state = useProjectStore.getState();
@@ -66,6 +85,10 @@ export class EngineSync {
       const signals = projectSignals(state);
       if (signals.cloth !== this.last.cloth) {
         this.last.cloth = signals.cloth;
+        // The committed pattern supersedes any drag preview still queued.
+        this.previewQueued = false;
+        this.previewApplied = false;
+        this.pendingPreviewPattern = null;
         this.rebuildCloth(project);
       }
       if (signals.env !== this.last.env) {
@@ -103,6 +126,27 @@ export class EngineSync {
       if (state.selection !== previous?.selection) {
         syncSelectionOverlay(this.engine, useProjectStore.getState().project.pattern, state.selection);
       }
+      if (state.editPreviewPattern !== previous?.editPreviewPattern) {
+        this.pendingPreviewPattern = state.editPreviewPattern;
+        // Ending a preview needs a redraw only when one was actually drawn.
+        this.previewQueued = state.editPreviewPattern !== null || this.previewApplied;
+      }
+      if (state.editPreview !== previous?.editPreview && state.editPreviewPattern) {
+        // A tier switch mid-drag rebuilds the preview at the new density.
+        this.previewQueued = true;
+      }
+      if (state.fitCheck !== previous?.fitCheck
+        || state.fitTightCm !== previous?.fitTightCm
+        || state.fitLooseCm !== previous?.fitLooseCm) {
+        const stats = this.engine.setFitCheck(state.fitCheck, state.fitTightCm, state.fitLooseCm);
+        useSimStore.getState().setFitStats(stats);
+      }
+      if (state.strainCheck !== previous?.strainCheck
+        || state.strainMin !== previous?.strainMin
+        || state.strainMax !== previous?.strainMax) {
+        const stats = this.engine.setStrainCheck(state.strainCheck, state.strainMin, state.strainMax);
+        useSimStore.getState().setStrainStats(stats);
+      }
     }));
 
     this.unsubscribes.push(useSimStore.subscribe((state, previous) => {
@@ -116,6 +160,7 @@ export class EngineSync {
         });
       }
       if (state.resetToken !== previous?.resetToken) {
+        this.stepAccumulator = 0;
         this.engine.resetSimulation();
       }
     }));
@@ -130,14 +175,49 @@ export class EngineSync {
     this.engine.setSelectedPanels([]);
     this.engine.setAvatarHighlighted(false);
     void (async () => {
-      await this.engine.buildFromProject(project);
-      await this.engine.initSimulator(project);
+      this.rebuildsInFlight++;
+      try {
+        await this.engine.syncFromProject(project);
+        if (this.engine.needsSimulatorRebuild()) await this.engine.initSimulator(project);
+      } finally {
+        this.rebuildsInFlight--;
+      }
       if (this.cancelled || seq !== this.rebuildSeq) return;
       syncSelectionOverlay(this.engine, project.pattern, useUIStore.getState().selection);
       useSimStore.getState().reset();
       useSimStore.getState().setDraped(false);
       useSimStore.getState().bumpPins();
+      const fit = useUIStore.getState();
+      if (fit.fitCheck) {
+        const stats = this.engine.setFitCheck(true, fit.fitTightCm, fit.fitLooseCm);
+        useSimStore.getState().setFitStats(stats);
+      }
+      if (fit.strainCheck) {
+        const stats = this.engine.setStrainCheck(true, fit.strainMin, fit.strainMax);
+        useSimStore.getState().setStrainStats(stats);
+      }
     })();
+  }
+
+  /**
+   * Rebuilds the cloth from the drag pattern queued since the last frame, so a fast pointer
+   * produces one preview per frame instead of one per pointer event.
+   */
+  private applyEditPreview(): void {
+    if (!this.previewQueued || this.rebuildsInFlight > 0) return;
+    this.previewQueued = false;
+    const project = useProjectStore.getState().project;
+    const pattern = this.pendingPreviewPattern;
+    const tier = useUIStore.getState().editPreview;
+    if (!pattern) {
+      // A drag that nets no geometry leaves the preview mesh drawn, so redraw the committed pattern.
+      if (this.previewApplied) this.engine.previewEditPattern(project, 'full');
+      this.previewApplied = false;
+      return;
+    }
+    if (tier === 'off') return;
+    this.previewApplied = true;
+    this.engine.previewEditPattern({ ...project, pattern }, tier);
   }
 
   /** Re-reads materials, visibility and seam threads from the project; all paths are signature-guarded. */
@@ -161,16 +241,29 @@ export class EngineSync {
     const projState = useProjectStore.getState().project;
 
     try {
+      this.applyEditPreview();
       if (simState.isPlaying) {
-        const steps = Math.max(1, Math.round(simState.speed));
+        this.stepAccumulator += simState.speed;
+        const steps = Math.floor(this.stepAccumulator);
+        this.stepAccumulator -= steps;
         for (let i = 0; i < steps; i++) {
           await this.engine.stepFrame(projState);
+          simState.incrementFrame();
         }
-        simState.incrementFrame();
       }
       // The engine owns the dressing stages, so the UI mirrors its state.
       if (simState.isDraping !== this.engine.isDraping) simState.setDraping(this.engine.isDraping);
       if (simState.isDraped !== this.engine.isDressed) simState.setDraped(this.engine.isDressed);
+      if (useUIStore.getState().fitCheck) {
+        const fit = useUIStore.getState();
+        const stats = this.engine.refreshFit(fit.fitTightCm, fit.fitLooseCm);
+        if (stats) simState.setFitStats(stats);
+      }
+      if (useUIStore.getState().strainCheck) {
+        const strain = useUIStore.getState();
+        const stats = this.engine.refreshStrain(strain.strainMin, strain.strainMax);
+        if (stats) simState.setStrainStats(stats);
+      }
 
       this.ctx.controls.update();
       // Physics keeps running while the pane is hidden; only the draw is skipped.
@@ -187,6 +280,7 @@ export class EngineSync {
       }
       const samples = drawn && this.ctx.renderMode === 'raytraced' ? this.ctx.rayTracer?.sampleCount ?? 0 : 0;
       noteRayTracingSamples(samples, this.ctx.rayTracer?.isAccumulating ?? false, performance.now());
+      noteRayTraceState(rayTraceState(this.ctx));
     } finally {
       // Queued after the awaited work so one frame never overlaps the next.
       if (!this.cancelled) this.raf = requestAnimationFrame(this.loop);

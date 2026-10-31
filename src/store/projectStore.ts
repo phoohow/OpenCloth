@@ -1,9 +1,10 @@
 import { create } from 'zustand';
 import type { Project } from '../core/model/types';
 import type { PanelClipboard } from '../core/command/panelClipboard';
-import type { RecentSummary } from '../io/projectArchive';
+import type { RecentSummary, AutosaveSummary } from '../io/projectArchive';
 import { CommandHistory, type Command } from '../core/command/command';
 import { createStarterProject } from '../pattern/template';
+import { avatarBodySignature } from '../core/engine/clothSignatures';
 
 interface ProjectStore {
   project: Project;
@@ -14,12 +15,15 @@ interface ProjectStore {
   clipboard: PanelClipboard | null;
   /** Saved project snapshots shown under 文件 ▸ 最近. */
   recent: RecentSummary[];
+  /** Autosave snapshots shown under 文件 ▸ 自动保存. */
+  autosaves: AutosaveSummary[];
   executeCommand: (cmd: Command) => void;
   undo: () => void;
   redo: () => void;
   loadProject: (project: Project) => void;
   setClipboard: (clip: PanelClipboard | null) => void;
   setRecent: (recent: RecentSummary[]) => void;
+  setAutosaves: (autosaves: AutosaveSummary[]) => void;
   canUndo: () => boolean;
   canRedo: () => boolean;
   /** Label of the command that undo would revert. */
@@ -30,13 +34,13 @@ interface ProjectStore {
 
 /**
  * One comparable string over everything a cloth rebuild reads: the pattern minus
- * draw-only flags, the avatar fields that shape the body (display and transform sync
- * to the scene without a rebuild) and the global mesh resolution.
+ * draw-only flags and names, the avatar fields that shape the body (display, name and
+ * transform sync to the scene without a rebuild) and the global mesh resolution.
  */
 export function computeClothSignature(project: Project): string {
-  const drawOnly = new Set(['display', 'visible', 'stitchVisible']);
+  const drawOnly = new Set(['display', 'visible', 'stitchVisible', 'name']);
   const pattern = JSON.stringify(project.pattern, (key, value) => (drawOnly.has(key) ? undefined : value));
-  const body = JSON.stringify({ ...project.avatar, display: undefined, transform: undefined });
+  const body = avatarBodySignature(project.avatar);
   return `${pattern}|${body}|${project.scene.simulation.meshResolutionCm ?? null}`;
 }
 
@@ -57,6 +61,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
     history: new CommandHistory(),
     clipboard: null,
     recent: [],
+    autosaves: [],
 
     executeCommand(cmd) {
       const { project, history } = get();
@@ -84,6 +89,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
 
     setClipboard: (clip) => set({ clipboard: clip }),
     setRecent: (recent) => set({ recent }),
+    setAutosaves: (autosaves) => set({ autosaves }),
 
     canUndo: () => get().history.canUndo,
     canRedo: () => get().history.canRedo,

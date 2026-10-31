@@ -15,44 +15,96 @@ export const vec3 = (x: number, y: number, z: number): Vec3 => ({ x, y, z });
 /** Named point of a panel outline or a construction guide. */
 export interface PatternPoint {
   id: string;
+  /** Custom display name overriding the generic row label. */
+  name?: string;
   pos: Vec2;
   /** Helper point used to build geometry; not part of a cut outline. */
   construction?: boolean;
+  /** Curve join style; 'corner' breaks tangency between its edges. */
+  kind?: PointKind;
+  /** Control point of the curve reaching this point, in absolute coordinates. */
+  handleIn?: BezierHandle;
+  /** Control point of the curve leaving this point, in absolute coordinates. */
+  handleOut?: BezierHandle;
+  /** Per-size grading offsets in cm from the base geometry, keyed by size id. */
+  grading?: Record<string, Vec2>;
 }
 
+/** Point where a curve leaves or reaches a pattern point, in absolute pattern coordinates. */
+export interface BezierHandle {
+  x: number;
+  y: number;
+  /** False when the opposite handle stays independent while dragging. */
+  mirrored?: boolean;
+}
+
+/** How a point joins its two edges. */
+export type PointKind = 'corner' | 'smooth';
+
 /** How an edge runs between its two points. */
-export type EdgeType = 'line' | 'bezier';
+export type EdgeType = 'line' | 'bezier' | 'arc';
+
+/** Circular arc between the edge endpoints, sampled at the bezier tolerance. */
+export interface ArcGeom {
+  center: Vec2;
+  radius: number;
+  /** Start and end angle in radians, measured at the center. */
+  startAngle: number;
+  endAngle: number;
+  /** True sweeps counter-clockwise from start to end. */
+  ccw: boolean;
+}
 
 /** Role an edge plays on the finished garment. */
 export type EdgeSemantic =
   | 'hem' | 'neckline' | 'armhole' | 'sideSeam'
   | 'shoulder' | 'sleeveCap' | 'waist' | 'dart' | 'internal' | 'free';
 
+/** How two edges meet at a shared vertex of the offset seam allowance. */
+export type SeamAllowanceCorner = 'miter' | 'round' | 'bevel';
+
 /** One edge of the pattern, shared by the outlines and seams that reference it. */
 export interface PatternEdge {
   id: string;
+  /** Custom display name overriding the semantic or type label. */
+  name?: string;
   type: EdgeType;
   startPointId: string;
   endPointId: string;
-  /** Bezier handles in absolute pattern coordinates; present when type is 'bezier'. */
-  bezier?: { c0: Vec2; c1: Vec2 };
+  /** Present when type is 'arc'. */
+  arc?: ArcGeom;
   semantic?: EdgeSemantic;
+  /** Seam allowance overriding the panel default, in cm. */
+  seamAllowanceCm?: number;
+  /** Join shape at this edge's end when the allowance is offset. */
+  cornerStyle?: SeamAllowanceCorner;
 }
 
 /** Wedge of fabric removed between two edges meeting at a tip. */
 export interface Dart {
   id: string;
+  /** Custom display name overriding the generic row label. */
+  name?: string;
   tipId: string;
   edge1Id: string;
   edge2Id: string;
   /** Fabric width the dart takes out, in centimeters. */
   intakeCm: number;
+  /**
+   * True while the solver stitches the two legs together (收省). The flag lives on the record, so
+   * it survives grading and size changes; the leg constraints are rebuilt from the pattern each time
+   * the constraint signature changes.
+   */
+  closing?: boolean;
 }
 
 /** Line drawn inside a panel outline rather than on its edge. */
 export interface InternalLine {
   id: string;
+  /** Custom display name overriding the generic row label. */
+  name?: string;
   points: Vec2[];
+  /** `fold` stiffens the mesh edges it crosses into a crease, `split` cuts the panel, `decor` only draws. */
   kind: 'fold' | 'decor' | 'split';
 }
 
@@ -114,6 +166,8 @@ export interface Panel {
   outlineEdgeIds: string[];
   dartIds: string[];
   internalLineIds: string[];
+  /** Closed loops cut out of the panel; each lists edge ids in winding order. */
+  holes?: string[][];
   /** Seam allowance added around the outline, in centimeters. */
   seamAllowanceCm: number;
   fabricId: string;
@@ -123,8 +177,65 @@ export interface Panel {
   /** Offsets the panel's built pose around its own centre; absent leaves it as built. */
   transform?: ObjectTransform;
   drape?: PanelDrape;
+  /** Grain line direction in degrees, counter-clockwise from pattern X+. */
+  grainAngleDeg?: number;
+  /** Grain line midpoint as an offset from the outline bounding-box centre, in cm. */
+  grainOffset?: Vec2;
+  /** Grain line total length in cm; absent uses 60% of the shorter outline side. */
+  grainLengthCm?: number;
+  /** Symmetry link: edits to `linkedPanelId` mirror across `axisEdgeId` onto this panel. */
+  symmetry?: { axisEdgeId: string; linkedPanelId: string };
+  /** Panels that move and edit together. */
+  groupId?: string;
+  /** Cloth collision layer, 0 is the innermost; outer layers stay this many steps further apart. */
+  collisionLayer?: number;
   visible: boolean;
   locked: boolean;
+}
+
+// ============ Production markings ============
+
+/** V-notch or drill mark placed along an edge. */
+export interface Notch {
+  id: string;
+  /** Custom display name overriding the generic row label. */
+  name?: string;
+  edgeId: string;
+  /** Arc-length fraction along the edge where the notch sits. */
+  t: number;
+  /** Notch width in millimetres. */
+  widthMm?: number;
+  style?: 'v' | 't' | 'drill';
+}
+
+/** Text note placed on a panel or beside an edge. */
+export interface Annotation {
+  id: string;
+  /** Custom row name; the note text remains the canvas content. */
+  name?: string;
+  panelId: string;
+  text: string;
+  pos: Vec2;
+  angleDeg?: number;
+  /** Font height in millimetres. */
+  sizeMm?: number;
+}
+
+/** Reference objects a measurement runs between; length is derived, never stored. */
+export interface MeasurementRefs {
+  pointAId?: string;
+  pointBId?: string;
+  edgeId?: string;
+}
+
+/** A dimension line shown in the editor and exports. */
+export interface Measurement {
+  id: string;
+  /** Custom display name overriding the generic row label. */
+  name?: string;
+  panelId: string;
+  kind: 'distance' | 'edgeLength' | 'angle';
+  refs: MeasurementRefs;
 }
 
 // ============ Seams ============
@@ -132,14 +243,28 @@ export interface Panel {
 /** How the two edges of a seam are joined. */
 export type SeamType = 'normal' | 'gather' | 'free';
 
-/** Pair of pattern edges stitched together. */
+/** One side of a seam: an interval of a single edge, with an optional matching point. */
+export interface SeamEnd {
+  edgeId: string;
+  /** Interval bounds as arc-length fractions along the edge. */
+  t0: number;
+  t1: number;
+  /** Anchor (对位点) position inside the interval; anchors pair with anchors. */
+  anchorT?: number;
+}
+
+/** Pair of pattern edge intervals stitched together. */
 export interface Seam {
   id: string;
+  /** Custom display name overriding the joined panel names. */
+  name?: string;
   type: SeamType;
-  edgeAId: string;
-  edgeBId: string;
-  /** Reverses edge B's vertex order before the two edges are paired. */
-  flipB: boolean;
+  a: SeamEnd;
+  b: SeamEnd;
+  /** Reverses edge B's vertex order before the two sides are paired. */
+  flip: boolean;
+  /** Shortened-to-length ratio for gather seams; absent means 1. */
+  gatherRatio?: number;
   /** Stiffness of the join. */
   strength: number;
   /** Stitch thread color drawn in the viewport. */
@@ -157,6 +282,9 @@ export interface Pattern {
   internalLines: Record<string, InternalLine>;
   panels: Record<string, Panel>;
   seams: Record<string, Seam>;
+  notches: Record<string, Notch>;
+  annotations: Record<string, Annotation>;
+  measurements: Record<string, Measurement>;
 }
 
 // ============ Fabric ============
@@ -164,12 +292,17 @@ export interface Pattern {
 /** Built-in fabric presets a new material starts from. */
 export type FabricPresetKey = 'cotton' | 'silk' | 'denim' | 'knit';
 
+/** Image slot of a fabric's material maps. */
+export type FabricMapSlot = 'albedo' | 'normal' | 'roughness' | 'metallic';
+
 /** Image references of the material maps; null clears a slot. */
 export interface FabricMaps {
   albedo?: string | null;
   normal?: string | null;
   roughness?: string | null;
   metallic?: string | null;
+  /** File names shown beside the slots; a slot without one has no display name. */
+  fileNames?: Partial<Record<FabricMapSlot, string>>;
 }
 
 /** How a fabric looks in the viewport and in exports. */
@@ -192,6 +325,11 @@ export interface FabricPhysics {
   shearStiffness: number;
   massPerArea: number;
   damping: number;
+  /**
+   * Bending stiffness of the creases a panel's fold lines produce, 0..1; absent uses
+   * `DEFAULT_CREASE_STIFFNESS`. Never softer than the fabric's own bending stiffness.
+   */
+  creaseStiffness?: number;
 }
 
 /** One material record worn by panels. */
@@ -218,11 +356,17 @@ export interface AvatarParams {
   hipCm: number;
   /** Outward arm rake from vertical, in radians; default 0.12. */
   poseArmAngleRad?: number;
+  /** Outward leg splay from vertical, in radians; default 0. */
+  poseLegSpreadRad?: number;
+  /** Lateral torso lean from vertical, in radians; default 0. */
+  poseTorsoLeanRad?: number;
 }
 
 /** The body the garment dresses. */
 export interface Avatar {
   id: string;
+  /** Display name of the body in the outliner; absent means the model name. */
+  name?: string;
   source: AvatarSource;
   params: AvatarParams;
   /** Bundled model key or url of the avatar mesh. */
@@ -268,22 +412,12 @@ export interface SceneLight {
   height: number;
 }
 
-/** Lighting saved before the punctual-light list existed. */
-export interface LegacyLightConfig {
-  keyLight?: { direction: Vec3; intensity: number; color: string; castShadow?: boolean };
-  fillLight?: { direction: Vec3; intensity: number; color: string };
-  lights?: SceneLight[];
-  iblUrl?: string;
-  iblObjectKey?: string;
-  iblName?: string;
-  iblEnabled?: boolean;
-  iblIntensity?: number;
-}
-
 /** Scene lighting from the project's lights plus an environment image. */
 export interface LightConfig {
   /** Punctual lights, in outliner order. */
   lights: SceneLight[];
+  /** Outliner display name of the environment light; the image name stays in `iblName`. */
+  iblLabel?: string;
   /** Url of an equirectangular environment image; absent selects the bundled default. */
   iblUrl?: string;
   /** Object-store key of an imported environment image. */
@@ -306,6 +440,9 @@ export type DenoiseModel = 'small' | 'base';
 
 /** Projection the 3D viewport renders through. */
 export type CameraProjection = 'perspective' | 'orthographic';
+
+/** 3D fidelity the cloth follows an in-flight 2D edit with. */
+export type EditPreviewTier = 'off' | 'low' | 'full';
 
 /** Tuning for the WebGPU path tracer and its progressive samples. */
 export interface RayTracingConfig {
@@ -350,6 +487,14 @@ export interface SimulationConfig {
   avatarCollision: boolean;
   /** Target simulation mesh edge length in cm; smaller means finer cloth. */
   meshResolutionCm?: number;
+  /** Cloth thickness in cm; the minimum clearance against the body and the floor. */
+  clothThicknessCm?: number;
+  /** CPU self-collision pass after each readback; absent or false skips it entirely. */
+  selfCollision?: boolean;
+  /** Extra separation per collision-layer step, in cm. */
+  layerSpacingCm?: number;
+  /** Seam constraints tear once stretched past their strength-derived limit; absent or false never tears. */
+  seamTearing?: boolean;
 }
 
 /** Persisted descriptor of an imported reference object. */
@@ -358,6 +503,8 @@ export interface ReferenceObjectRef {
   name: string;
   /** Blob key in the local object store; absent when the file is no longer available. */
   objectKey?: string;
+  /** Embedded model data URL written on save; takes precedence over `objectKey`. */
+  objectUrl?: string;
   visible: boolean;
   opacity: number;
   /** Scene placement; absent means the identity transform. */
@@ -370,6 +517,21 @@ export interface SceneConfig {
   render: RenderConfig;
   simulation: SimulationConfig;
   referenceObjects?: ReferenceObjectRef[];
+  /** Outliner display name of the viewport camera; its pose stays viewport state. */
+  cameraName?: string;
+}
+
+// ============ Sizes ============
+
+/** One entry of the project size chart. */
+export interface SizeDef {
+  id: string;
+  /** Display label, e.g. M. */
+  label: string;
+  /** Ordered index; grading steps follow this order. */
+  seq: number;
+  /** True on the size whose geometry the pattern stores directly. */
+  isBase?: boolean;
 }
 
 // ============ Project root ============
@@ -379,9 +541,6 @@ export interface ProjectMeta {
   name: string;
   createdAt: string;
   modifiedAt: string;
-  appVersion: string;
-  /** Serialization format this file was written with. */
-  dataVersion: number;
 }
 
 /** Root of the persisted document. */
@@ -391,4 +550,8 @@ export interface Project {
   fabrics: Record<string, Fabric>;
   avatar: Avatar;
   scene: SceneConfig;
+  /** Size chart; absent means a single unsized pattern. */
+  sizes?: SizeDef[];
+  /** Size the pattern geometry is currently resolved to. */
+  activeSizeId?: string;
 }

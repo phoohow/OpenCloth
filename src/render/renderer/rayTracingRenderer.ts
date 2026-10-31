@@ -4,6 +4,7 @@ import { OIDNDenoiser, WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { normalizeRayTracing } from '../../core/model/defaults';
 import { bundledAssetUrl } from '../../core/assets/bundledAssetUrls';
 import type { DenoiseModel, RayTracingConfig } from '../../core/model/types';
+import { useUIStore } from '../../store/uiStore';
 
 type PathTracingMaterial = THREE.MeshStandardMaterial | THREE.MeshPhysicalMaterial;
 type GeometryWithBVH = THREE.BufferGeometry & { boundsTree?: { refit(): void } };
@@ -48,6 +49,9 @@ const RASTER_BLEND_SAMPLES = 32;
 /** Readback interval while a pass is still blending in, so the ramp stays smooth. */
 const BLEND_READBACK_MS = 60;
 
+/** Why the last drawn frame showed rasterization instead of the traced image. */
+export type RayTraceDefer = 'deforming' | 'moving';
+
 /** Progressive WebGPU path tracing for the meshes and lights in the existing scene. */
 export class RayTracingRenderer {
   private readonly renderer: THREE.WebGPURenderer;
@@ -58,7 +62,8 @@ export class RayTracingRenderer {
   private readonly drawingSize = new THREE.Vector2();
   private readonly tracerSize = new THREE.Vector2();
   private activeDenoiser: OIDNDenoiser | null = null;
-  private denoiserFailed = false;
+  /** Model whose weights failed to load; clearing the denoise switch allows another attempt. */
+  private failedDenoiseModel: DenoiseModel | null = null;
   private topologyKey = '';
   private materialKey = '';
   private transformKey = '';
@@ -71,6 +76,8 @@ export class RayTracingRenderer {
   private viewSignature = '';
   /** Whether the view is being manipulated; the viewport rasterizes while it is. */
   private viewMoving = false;
+  /** Gate that held the last rendered frame on rasterization; null when the traced image was shown. */
+  private lastDefer: RayTraceDefer | null = null;
   private frameBudget = 0;
   private measuredSamples = 0;
   private sampleGeneration = 0;
@@ -135,12 +142,30 @@ export class RayTracingRenderer {
     return this.sampleCount < this.tracer.maxSamples;
   }
 
+  /** Gate that kept the last `render` call from showing the traced image. */
+  get deferReason(): RayTraceDefer | null {
+    return this.lastDefer;
+  }
+
+  /** Whether the traced image is still laid under the raster frame it fades up from. */
+  get isBlending(): boolean {
+    return this.blendWeight < 1;
+  }
+
+  /** Averages the per-pixel sample counts straight from the tracer, bypassing the throttled readback. */
+  async measureSampleAverage(): Promise<number> {
+    if (this.disposed) return 0;
+    const counts = await this.tracer.getSampleCountsAsync();
+    return counts.avg;
+  }
+
   /** Applies project settings, loading OIDN weights lazily when denoising turns on. */
   async setConfig(config: RayTracingConfig): Promise<void> {
     if (this.disposed) return;
     const normalized = normalizeRayTracing(config);
     this.applyTracerSettings(normalized);
-    if (normalized.denoise && !this.denoiserFailed) {
+    if (!normalized.denoise) this.failedDenoiseModel = null;
+    if (normalized.denoise && this.failedDenoiseModel !== normalized.denoiseModel) {
       const denoiser = await this.ensureDenoiser(normalized.denoiseModel);
       if (!this.disposed && denoiser && this.activeDenoiser !== denoiser) {
         this.tracer.setDenoiser(denoiser);
@@ -184,7 +209,10 @@ export class RayTracingRenderer {
     const unsynced = state.topologyKey !== this.topologyKey || state.materialKey !== this.materialKey ||
       state.transformKey !== this.transformKey || cameraChanged ||
       this.lightsDirty || this.environmentDirty;
-    if (unsynced && this.viewMoving) return false;
+    if (unsynced && this.viewMoving) {
+      this.lastDefer = sceneChanged ? 'deforming' : 'moving';
+      return false;
+    }
 
     if (unsynced) {
       if (state.topologyKey !== this.topologyKey) {
@@ -223,6 +251,7 @@ export class RayTracingRenderer {
     withPathTracingScene(scene, () => this.tracer.renderSample());
     if (this.blendWeight < 1) this.drawRasterOverlay(scene, camera);
     this.readSampleCount(now);
+    this.lastDefer = null;
     return true;
   }
 
@@ -347,7 +376,7 @@ export class RayTracingRenderer {
     this.tracer.clampIndirect = config.clampIndirect;
   }
 
-  /** Creates a guided OIDN model once per selected weight, falling back permanently after failure. */
+  /** Creates a guided OIDN model once per selected weight, returning null after a failed load. */
   private async ensureDenoiser(model: DenoiseModel): Promise<OIDNDenoiser | null> {
     const existing = this.denoisers.get(model);
     if (existing) return existing;
@@ -362,8 +391,8 @@ export class RayTracingRenderer {
           colorWeightsUrl: bundledAssetUrl(OIDN_COLOR_WEIGHTS),
         });
         const guarded = guardDenoiser(denoiser, error => {
-          console.warn('OIDN denoiser unavailable:', error);
-          this.denoiserFailed = true;
+          this.failedDenoiseModel = model;
+          this.reportDenoiserFailure(error);
           this.activeDenoiser = null;
           this.tracer.setDenoiser(null);
         });
@@ -379,12 +408,18 @@ export class RayTracingRenderer {
     try {
       return await loading;
     } catch (error) {
-      console.warn('OIDN denoiser unavailable:', error);
-      this.denoiserFailed = true;
+      this.failedDenoiseModel = model;
+      this.reportDenoiserFailure(error);
       this.activeDenoiser = null;
       this.tracer.setDenoiser(null);
       return null;
     }
+  }
+
+  /** Logs an OIDN failure and tells the user how to retry the weight download. */
+  private reportDenoiserFailure(error: unknown): void {
+    console.warn('OIDN denoiser unavailable:', error);
+    useUIStore.getState().showToast('OIDN 降噪权重加载失败，已改用无降噪渲染；关闭再开启降噪可重试。');
   }
 }
 

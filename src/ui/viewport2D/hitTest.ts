@@ -1,5 +1,7 @@
 import type { Pattern, Vec2 } from '../../core/model/types';
-import { sampleEdge } from '../../pattern/panel/panelBuilder';
+import { sampleEdge, sampleEdgeInterval } from '../../pattern/panel/panelBuilder';
+import { pointAtT } from '../../pattern/geom/edgeSample';
+import { elementNodeId, type PatternElementKind } from '../../core/model/elementRef';
 
 /** Axis-aligned bounds in world centimeters. */
 export interface Rect { min: Vec2; max: Vec2 }
@@ -73,10 +75,11 @@ export function nearestEdgeSegment(
   return best;
 }
 
-/** Panel whose outline contains the edge. */
+/** Panel whose outline or hole loop contains the edge. */
 export function panelIdOfEdge(pattern: Pattern, edgeId: string): string | null {
   for (const panel of Object.values(pattern.panels)) {
     if (panel.outlineEdgeIds.includes(edgeId)) return panel.id;
+    if ((panel.holes ?? []).some(loop => loop.includes(edgeId))) return panel.id;
   }
   return null;
 }
@@ -123,16 +126,96 @@ export function rectIntersectsBBox(rect: Rect, points: readonly Vec2[]): boolean
   return maxX >= rect.min.x && minX <= rect.max.x && maxY >= rect.min.y && minY <= rect.max.y;
 }
 
-/** Whether any outline corner of the panel falls inside the rect. */
-export function panelOutlineInRect(pattern: Pattern, panelId: string, rect: Rect): boolean {
-  const panel = pattern.panels[panelId];
-  if (!panel) return false;
-  for (const edgeId of panel.outlineEdgeIds) {
-    const edge = pattern.edges[edgeId];
-    const point = edge && pattern.points[edge.startPointId];
-    if (!point) continue;
-    const p = point.pos;
-    if (p.x >= rect.min.x && p.x <= rect.max.x && p.y >= rect.min.y && p.y <= rect.max.y) return true;
+/** Element rows of the given kinds whose geometry the marquee rect covers. Panels stay plain scene ids. */
+export function elementsInRect(
+  pattern: Pattern, rect: Rect, kinds: readonly PatternElementKind[],
+): string[] {
+  const rows: string[] = [];
+  for (const kind of kinds) {
+    for (const element of elementGeometry(pattern, kind)) {
+      if (element.points.some(p => p.x >= rect.min.x && p.x <= rect.max.x && p.y >= rect.min.y && p.y <= rect.max.y)) {
+        rows.push(kind === 'panel' ? element.id : elementNodeId(kind, element.id));
+      }
+    }
   }
-  return false;
+  return rows;
+}
+
+/** Nearest element of the given kinds within radius, as a selection row. */
+export function pickElements(
+  pattern: Pattern, target: Vec2, radius: number, kinds: readonly PatternElementKind[],
+): string | null {
+  let best: { row: string; distance: number } | null = null;
+  for (const kind of kinds) {
+    for (const element of elementGeometry(pattern, kind)) {
+      const distance = distanceToPolyline(element.points, target);
+      if (distance > radius || (best && best.distance <= distance)) continue;
+      best = { row: elementNodeId(kind, element.id), distance };
+    }
+  }
+  return best?.row ?? null;
+}
+
+/** Shortest distance from a point to a polyline; a single point measures to itself. */
+function distanceToPolyline(points: readonly Vec2[], target: Vec2): number {
+  if (points.length === 0) return Infinity;
+  if (points.length === 1) return Math.hypot(target.x - points[0].x, target.y - points[0].y);
+  let best = Infinity;
+  for (let i = 0; i + 1 < points.length; i++) {
+    const hit = projectOnSegment(target, points[i], points[i + 1]).point;
+    best = Math.min(best, Math.hypot(target.x - hit.x, target.y - hit.y));
+  }
+  return best;
+}
+
+/**
+ * Sampled polylines of every element of one kind, in object-id order. Panels list their outline
+ * corners; the marquee rule and the pick rule both read this, so they stay in step.
+ */
+function elementGeometry(pattern: Pattern, kind: PatternElementKind): Array<{ id: string; points: Vec2[] }> {
+  switch (kind) {
+    case 'panel':
+      return Object.values(pattern.panels).map(panel => ({
+        id: panel.id,
+        points: panel.outlineEdgeIds
+          .map(edgeId => pattern.edges[edgeId] && pattern.points[pattern.edges[edgeId]!.startPointId])
+          .filter((p): p is NonNullable<typeof p> => !!p)
+          .map(p => p.pos),
+      }));
+    case 'point':
+      return Object.values(pattern.points).map(point => ({ id: point.id, points: [point.pos] }));
+    case 'edge':
+      return Object.values(pattern.edges).map(edge => ({ id: edge.id, points: sampleEdge(pattern, edge.id) }));
+    case 'internal':
+      return Object.values(pattern.internalLines ?? {}).map(line => ({ id: line.id, points: line.points }));
+    case 'dart':
+      return Object.values(pattern.darts).map(dart => ({
+        id: dart.id,
+        points: [pattern.points[dart.tipId]?.pos,
+          ...sampleEdge(pattern, dart.edge1Id),
+          ...sampleEdge(pattern, dart.edge2Id)].filter((p): p is Vec2 => !!p),
+      }));
+    case 'seam':
+      return Object.values(pattern.seams)
+        .filter(seam => seam.stitchVisible !== false)
+        .map(seam => ({
+          id: seam.id,
+          points: [...sampleEdgeInterval(pattern, seam.a.edgeId, seam.a.t0, seam.a.t1),
+            ...sampleEdgeInterval(pattern, seam.b.edgeId, seam.b.t0, seam.b.t1)],
+        }));
+    case 'notch':
+      return Object.values(pattern.notches ?? {}).map(notch => {
+        const at = pointAtT(pattern, notch.edgeId, notch.t);
+        return { id: notch.id, points: at ? [at] : [] };
+      });
+    case 'annotation':
+      return Object.values(pattern.annotations ?? {}).map(note => ({ id: note.id, points: [note.pos] }));
+    case 'measurement':
+      return Object.values(pattern.measurements ?? {}).map(measurement => {
+        const a = measurement.refs.pointAId && pattern.points[measurement.refs.pointAId];
+        const b = measurement.refs.pointBId && pattern.points[measurement.refs.pointBId];
+        const points = a && b ? [a.pos, b.pos] : (measurement.refs.edgeId ? sampleEdge(pattern, measurement.refs.edgeId) : []);
+        return { id: measurement.id, points };
+      });
+  }
 }

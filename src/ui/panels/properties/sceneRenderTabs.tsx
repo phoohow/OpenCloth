@@ -1,9 +1,12 @@
-import { useUIStore } from '../../../store/stores';
+import { usePerfStore, useSimStore, useUIStore } from '../../../store/stores';
 import type { Project } from '../../../core/model/types';
-import { DEFAULT_MESH_RESOLUTION_CM, normalizeRayTracing } from '../../../core/model/defaults';
-import { setRayTracingConfig, setSimulationConfig, setToneMapping } from '../../sceneCommands';
-import { DENOISE_MODELS, RENDER_MODES, TONE_MAPPING } from '../../optionTables';
-import { CheckRow, Row, Section, SelectRow, SliderRow } from '../../widgets/propertyRows';
+import { DEFAULT_CLOTH_THICKNESS_CM, DEFAULT_LAYER_SPACING_CM, DEFAULT_MESH_RESOLUTION_CM, normalizeRayTracing } from '../../../core/model/defaults';
+import { patchValue, setGlobalMeshResolution, setRayTracingConfig, setSimulationConfig, setToneMapping } from '../../sceneCommands';
+import { DENOISE_MODELS, RENDER_MODES, TONE_MAPPING, rayTracingUnavailableReason } from '../../optionTables';
+import { CheckRow, Row, Section, SelectRow, SliderRow, TextRow } from '../../widgets/propertyRows';
+import { downloadTextFile } from '../../../io/codec';
+import { fitReportCsv } from '../../../render/analysis/fitReport';
+import { strainReportCsv } from '../../../render/analysis/strainReport';
 import { styles } from './styles';
 
 // ===== Scene and render tabs ("场景" / "渲染") =====
@@ -17,7 +20,10 @@ export function SceneTab({ project }: { project: Project }) {
   return (
     <>
       <Section title="工程">
-        <Row label="名称">{project.meta.name}</Row>
+        <TextRow label="名称" value={project.meta.name}
+          onChange={v => patchValue('重命名工程',
+            p => p.meta.name,
+            (ctx, name) => { ctx.project.meta = { ...ctx.project.meta, name }; }, v)} />
         <Row label="版型片">{panels.length}</Row>
         <Row label="缝合">{Object.keys(project.pattern.seams).length}</Row>
         <Row label="面料">{Object.keys(project.fabrics).length}</Row>
@@ -30,10 +36,18 @@ export function SceneTab({ project }: { project: Project }) {
           onChange={v => setSimulationConfig('修改风速', { wind: { ...sim.wind, speed: v } })} />
         <SliderRow label="迭代次数" min={1} max={15} step={1} value={sim.constraintIterations}
           onChange={v => setSimulationConfig('修改迭代次数', { constraintIterations: Math.round(v) })} />
-        <SliderRow label="全局网格边长" min={0.8} max={3} step={0.1} suffix="cm"
+        <SliderRow label="全局网格边长" min={0.5} max={10} step={0.5} suffix="cm"
           value={sim.meshResolutionCm ?? DEFAULT_MESH_RESOLUTION_CM} commitOnRelease
-          onChange={v => setSimulationConfig('修改全局网格边长', { meshResolutionCm: v })} />
-        <div style={styles.note}>全局网格边长在松手后重建全部布料。</div>
+          onChange={v => setGlobalMeshResolution(v)} />
+        <CheckRow label="布料自碰撞" checked={sim.selfCollision !== false}
+          onChange={v => setSimulationConfig('修改布料自碰撞', { selfCollision: v })} />
+        <SliderRow label="布料厚度（cm）" min={0} max={1} step={0.05}
+          value={sim.clothThicknessCm ?? DEFAULT_CLOTH_THICKNESS_CM}
+          onChange={v => setSimulationConfig('修改布料厚度', { clothThicknessCm: v })} />
+        <SliderRow label="层间距（cm）" min={0} max={2} step={0.1}
+          value={sim.layerSpacingCm ?? DEFAULT_LAYER_SPACING_CM}
+          onChange={v => setSimulationConfig('修改层间距', { layerSpacingCm: v })} />
+        <div style={styles.note}>全局网格边长在松手后把全部版片的网格密度设为该值并重建布料；之后可在单片的「模拟」区块单独调整。布料厚度同时抬高人体与地面的碰撞距离；层间距按相邻版片的「碰撞层」差值加大分离距离，0 为最内层。</div>
       </Section>
     </>
   );
@@ -43,14 +57,80 @@ export function SceneTab({ project }: { project: Project }) {
 export function RenderTab({ project }: { project: Project }) {
   const renderMode = useUIStore(s => s.renderMode);
   const setRenderMode = useUIStore(s => s.setRenderMode);
+  const fitCheck = useUIStore(s => s.fitCheck);
+  const fitTightCm = useUIStore(s => s.fitTightCm);
+  const fitLooseCm = useUIStore(s => s.fitLooseCm);
+  const setFitCheck = useUIStore(s => s.setFitCheck);
+  const setFitThresholds = useUIStore(s => s.setFitThresholds);
+  const fitStats = useSimStore(s => s.fitStats);
+  const strainCheck = useUIStore(s => s.strainCheck);
+  const strainMin = useUIStore(s => s.strainMin);
+  const strainMax = useUIStore(s => s.strainMax);
+  const setStrainCheck = useUIStore(s => s.setStrainCheck);
+  const setStrainRange = useUIStore(s => s.setStrainRange);
+  const strainStats = useSimStore(s => s.strainStats);
+  const rayUnavailable = rayTracingUnavailableReason(usePerfStore(s => s.rayUnsupported3D));
   const ray = normalizeRayTracing(project.scene.render.rayTracing);
 
   return (
     <>
       <Section title="显示">
         <SelectRow label="显示模式" value={renderMode}
-          options={RENDER_MODES.map(m => ({ value: m.value, label: m.label }))}
+          options={RENDER_MODES.map(m => m.value === 'raytraced' && rayUnavailable
+            ? { value: m.value, label: `${m.label}（不支持）`, disabled: true }
+            : { value: m.value, label: m.label })}
           onChange={v => setRenderMode(v)} />
+        {rayUnavailable && <div style={styles.note}>本机 WebGPU 跑不了光线追踪：{rayUnavailable}。</div>}
+      </Section>
+      <Section title="合身检查">
+        <CheckRow label="合身颜色" checked={fitCheck} onChange={v => setFitCheck(v)} />
+        <SliderRow label="贴近阈值" min={0} max={3} step={0.1} suffix="cm" value={fitTightCm}
+          onChange={v => setFitThresholds(v, fitLooseCm)} />
+        <SliderRow label="宽松阈值" min={0.5} max={8} step={0.1} suffix="cm" value={fitLooseCm}
+          onChange={v => setFitThresholds(fitTightCm, v)} />
+        {fitStats && (
+          <>
+            <Row label="顶点">{fitStats.vertices}</Row>
+            <Row label="穿透 / 贴近 / 合适 / 宽松">
+              {fitStats.penetration} / {fitStats.tight} / {fitStats.ideal} / {fitStats.loose}
+            </Row>
+            <Row label="最小 / 平均 / 最大">
+              {fitStats.minCm.toFixed(2)} / {fitStats.meanCm.toFixed(2)} / {fitStats.maxCm.toFixed(2)} cm
+            </Row>
+            <button
+              style={styles.action}
+              onClick={() => downloadTextFile(
+                `${project.meta.name}-合身报告.csv`,
+                '\ufeff' + fitReportCsv(project.meta.name, fitStats, { tightCm: fitTightCm, looseCm: fitLooseCm }),
+                'text/csv;charset=utf-8',
+              )}
+            >导出合身报告 CSV</button>
+          </>
+        )}
+        <div style={styles.note}>合身颜色按布料顶点到人体胶囊的间隙着色：红色穿透、橙色贴近、绿色合适、蓝色宽松。开启后布料改为纯色热图，关闭即恢复面料材质。</div>
+      </Section>
+      <Section title="应变检查">
+        <CheckRow label="应变颜色" checked={strainCheck} onChange={v => setStrainCheck(v)} />
+        <SliderRow label="色标下限" min={-1} max={0} step={0.05} value={strainMin}
+          onChange={v => setStrainRange(v, strainMax)} />
+        <SliderRow label="色标上限" min={0} max={1} step={0.05} value={strainMax}
+          onChange={v => setStrainRange(strainMin, v)} />
+        {strainStats && (
+          <>
+            <Row label="最小 / 最大 / 平均应变">
+              {strainStats.min.toFixed(4)} / {strainStats.max.toFixed(4)} / {strainStats.meanAbs.toFixed(4)}
+            </Row>
+            <button
+              style={styles.action}
+              onClick={() => downloadTextFile(
+                `${project.meta.name}-应变报告.csv`,
+                '\ufeff' + strainReportCsv(project.meta.name, strainStats, { min: strainMin, max: strainMax }),
+                'text/csv;charset=utf-8',
+              )}
+            >导出应变报告 CSV</button>
+          </>
+        )}
+        <div style={styles.note}>应变颜色按每个顶点相邻边的长度变化着色：蓝色受压缩、白色无变形、红色被拉伸。取平坦版型为基准，色标范围由上下限控制。开启后布料改为纯色热图，与合身检查互斥。</div>
       </Section>
       {renderMode === 'raytraced' && (
         <>

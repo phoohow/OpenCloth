@@ -111,7 +111,7 @@ struct SimParams {
   surfaceOffset: f32,
   friction: f32,
   floorY: f32,
-  _p1: f32,
+  clothThickness: f32,
   _p2: f32,
 };
 
@@ -141,6 +141,8 @@ fn collide(@builtin(global_invocation_id) gid: vec3<u32>) {
 
   var pos = predicted[i].xyz;
   var moved = false;
+  // Cloth thickness adds to the clearance kept against every collision surface.
+  let clearance = params.surfaceOffset + params.clothThickness;
 
   // Minimum penetration across all capsules (body collision).
   if (params.capsuleCount > 0u) {
@@ -170,13 +172,13 @@ fn collide(@builtin(global_invocation_id) gid: vec3<u32>) {
         bestRadius = r;
       }
     }
-    // If penetrating (dist < surfaceOffset), push back to the surface.
-    if (minDist < params.surfaceOffset) {
+    // If penetrating (dist < clearance), push back to the surface.
+    if (minDist < clearance) {
       let dir = pos - bestClosest;
       let dirLen = length(dir);
       var n = vec3<f32>(0.0, 1.0, 0.0);
       if (dirLen > 1e-7) { n = dir / dirLen; }
-      let targetDist = bestRadius + params.surfaceOffset;
+      let targetDist = bestRadius + clearance;
       pos = bestClosest + n * targetDist;
       moved = true;
       // Friction: pull the tangential position toward the previous frame position; the normal component is unchanged.
@@ -188,7 +190,7 @@ fn collide(@builtin(global_invocation_id) gid: vec3<u32>) {
   }
 
   // Floor collision: particles cannot pass through the plane y = floorY.
-  let floorLimit = params.floorY + params.surfaceOffset;
+  let floorLimit = params.floorY + clearance;
   if (pos.y < floorLimit) {
     pos.y = floorLimit;
     moved = true;
@@ -212,10 +214,8 @@ export const UPDATE_WGSL = /* wgsl */`
 struct SimParams {
   dt: f32,
   particleCount: u32,
-  damping: f32,
   maxSpeed: f32,
-  _p0: vec3<f32>,
-  _p1: f32,
+  _p0: f32,
 };
 
 @group(0) @binding(0) var<storage, read_write> posInvMass: array<vec4<f32>>;
@@ -223,6 +223,7 @@ struct SimParams {
 @group(0) @binding(2) var<storage, read_write> velocity: array<vec4<f32>>;
 @group(0) @binding(3) var<storage, read_write> predicted: array<vec4<f32>>;
 @group(0) @binding(4) var<uniform> params: SimParams;
+@group(0) @binding(5) var<storage, read> particleDamping: array<f32>;
 
 @compute @workgroup_size(256)
 fn updateVelocity(@builtin(global_invocation_id) gid: vec3<u32>) {
@@ -237,7 +238,7 @@ fn updateVelocity(@builtin(global_invocation_id) gid: vec3<u32>) {
   // v = (x_pred - x_prev) / dt
   var vel = (pred.xyz - prev.xyz) / params.dt;
   // Damping.
-  vel = vel * (1.0 - params.damping);
+  vel = vel * (1.0 - particleDamping[i]);
   // Clamp to max speed.
   let speed = length(vel);
   if (speed > params.maxSpeed) { vel = vel / speed * params.maxSpeed; }

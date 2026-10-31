@@ -73,7 +73,10 @@ export class BodyLandmarkCache {
 
   /** Landmarks for these measurements, rebuilt only when they change. */
   resolve(avatar: AvatarParams): BodyLandmarks {
-    const key = `${avatar.heightCm}/${avatar.chestCm}/${avatar.waistCm}/${avatar.hipCm}/${avatar.poseArmAngleRad ?? 0.12}`;
+    const key = [
+      avatar.heightCm, avatar.chestCm, avatar.waistCm, avatar.hipCm,
+      avatar.poseArmAngleRad ?? 0.12, avatar.poseLegSpreadRad ?? 0, avatar.poseTorsoLeanRad ?? 0,
+    ].join('/');
     if (this.key !== key || !this.cached) {
       this.cached = bodyLandmarks(avatar);
       this.key = key;

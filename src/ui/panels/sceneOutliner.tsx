@@ -46,14 +46,15 @@ export function SceneOutliner({ engineRef }: { engineRef: EngineRef }) {
     }
   };
 
+  /** Picks the object a row stands for; collections only expand or collapse. */
   const onRowClick = (node: SceneNode) => {
-    if (node.children.length > 0 && node.kind !== 'scene') { toggleOutliner(node.id); return; }
+    if (node.kind === 'collection') { toggleOutliner(node.id); return; }
     select([node.id]);
   };
 
   const toggleCollapseAll = () => {
     if (collapsed.length > 0) { setCollapsedOutliner([]); return; }
-    setCollapsedOutliner(collectExpandableIds(tree));
+    setCollapsedOutliner(tree.children.flatMap(collectExpandableIds));
   };
 
   const renderNode = (node: SceneNode, depth: number): React.ReactNode[] => {
@@ -63,6 +64,7 @@ export function SceneOutliner({ engineRef }: { engineRef: EngineRef }) {
         key={node.id}
         style={{ ...styles.row, marginLeft: depth * 12, ...(activeId === node.id ? styles.rowActive : null) }}
         onClick={() => onRowClick(node)}
+        onDoubleClick={() => { if (node.children.length > 0) toggleOutliner(node.id); }}
         title={node.children.length > 0 ? `${node.label} (${node.children.length})` : node.label}
       >
         <span style={styles.chevron} onClick={e => { if (node.children.length > 0) { e.stopPropagation(); toggleOutliner(node.id); } }}>
@@ -110,7 +112,7 @@ export function SceneOutliner({ engineRef }: { engineRef: EngineRef }) {
           <Icon name={collapsed.length > 0 ? 'expand-all' : 'collapse-all'} size={12} />
         </button>
       </div>
-      <div style={styles.body} key={`tree${refVersion}`}>{renderNode(tree, 0)}</div>
+      <div style={styles.body} key={`tree${refVersion}`}>{tree.children.flatMap(child => renderNode(child, 0))}</div>
     </div>
   );
 }

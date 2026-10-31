@@ -215,13 +215,13 @@ function seamPairs(scene: Scene): SeamPair[] {
   const byEdge = edgePanels(scene);
   const out: SeamPair[] = [];
   for (const seam of scene.seams) {
-    const ea = byEdge.get(seam.edgeAId);
-    const eb = byEdge.get(seam.edgeBId);
+    const ea = byEdge.get(seam.a.edgeId);
+    const eb = byEdge.get(seam.b.edgeId);
     if (!ea || !eb) continue;
-    const semA = scene.pattern.edges[seam.edgeAId]?.semantic ?? '?';
-    const semB = scene.pattern.edges[seam.edgeBId]?.semantic ?? '?';
+    const semA = scene.pattern.edges[seam.a.edgeId]?.semantic ?? '?';
+    const semB = scene.pattern.edges[seam.b.edgeId]?.semantic ?? '?';
     const label = `${ea.panel.name}.${semA}+${eb.panel.name}.${semB}`;
-    const vb = seam.flipB ? [...eb.verts].reverse() : eb.verts;
+    const vb = seam.flip ? [...eb.verts].reverse() : eb.verts;
     const n = Math.max(ea.verts.length, vb.length);
     for (let i = 0; i < n; i++) {
       const a = ea.verts[Math.min(Math.floor(i * ea.verts.length / n), ea.verts.length - 1)];
@@ -299,8 +299,8 @@ function seamGapReport(scene: Scene, stage: Options['stage']): string[] {
 /** Arc lengths of the two edges each seam joins, in centimeters. */
 function seamLengthReport(scene: Scene): string[] {
   const lengths = scene.seams.map(seam => {
-    const a = sampleEdge(scene.pattern, seam.edgeAId);
-    const b = sampleEdge(scene.pattern, seam.edgeBId, seam.flipB);
+    const a = sampleEdge(scene.pattern, seam.a.edgeId);
+    const b = sampleEdge(scene.pattern, seam.b.edgeId, seam.flip);
     return `${seam.type === 'gather' ? 'gather' : 'seam'} ${(polylineLength(a) * 100).toFixed(1)}/`
       + `${(polylineLength(b) * 100).toFixed(1)}cm`;
   });

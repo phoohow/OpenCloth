@@ -2,11 +2,11 @@ import { useEffect, type ReactNode } from 'react';
 import type { MenuActions } from '../menu/actions';
 import { AUTO_SAVE_ITEMS } from '../menu/menuModel';
 import { formatSavedAt } from '../timeFormat';
-import { CAMERA_PRESETS, CAMERA_PROJECTIONS, PROP_TAB_OPTIONS, RENDER_MODES } from '../optionTables';
+import { CAMERA_PRESETS, CAMERA_PROJECTIONS, PROP_TAB_OPTIONS, RENDER_MODES, rayTracingUnavailableReason } from '../optionTables';
 import { usePropsTarget } from '../panels/propertiesEditor';
 import { Icon } from '../icons';
 import type { EngineRef } from '../sceneCommands';
-import { useProjectStore, useSimStore, useUIStore } from '../../store/stores';
+import { usePerfStore, useProjectStore, useSimStore, useUIStore } from '../../store/stores';
 import { SPEED_STEPS } from './mobileUi';
 import type { PropTab } from '../../store/stores';
 import type { CameraProjection, RenderMode } from '../../core/model/types';
@@ -121,6 +121,13 @@ function CameraSheet({ actions, engineRef, onClose }: {
 function DisplaySheet({ onClose }: { onClose: () => void }) {
   const renderMode = useUIStore(s => s.renderMode);
   const setRenderMode = useUIStore(s => s.setRenderMode);
+  const rayUnavailable = rayTracingUnavailableReason(usePerfStore(s => s.rayUnsupported3D));
+  const fitCheck = useUIStore(s => s.fitCheck);
+  const fitTightCm = useUIStore(s => s.fitTightCm);
+  const fitLooseCm = useUIStore(s => s.fitLooseCm);
+  const setFitCheck = useUIStore(s => s.setFitCheck);
+  const setFitThresholds = useUIStore(s => s.setFitThresholds);
+  const fitStats = useSimStore(s => s.fitStats);
 
   return (
     <>
@@ -128,12 +135,33 @@ function DisplaySheet({ onClose }: { onClose: () => void }) {
         {RENDER_MODES.map(mode => (
           <SheetButton
             key={mode.value}
-            label={mode.label}
+            label={mode.value === 'raytraced' && rayUnavailable ? `${mode.label}（不支持）` : mode.label}
+            hint={mode.value === 'raytraced' ? rayUnavailable ?? undefined : undefined}
+            disabled={mode.value === 'raytraced' && !!rayUnavailable}
             active={renderMode === mode.value}
             onClick={() => { setRenderMode(mode.value as RenderMode); onClose(); }}
           />
         ))}
       </SheetGroup>
+      <SheetGroup title="合身检查">
+        <SheetButton label="合身颜色" active={fitCheck} onClick={() => setFitCheck(!fitCheck)} />
+      </SheetGroup>
+      <label style={styles.rangeRow}>
+        <span>贴近阈值 {fitTightCm.toFixed(1)} cm</span>
+        <input type="range" min={0} max={3} step={0.1} value={fitTightCm}
+          onChange={e => setFitThresholds(Number(e.target.value), fitLooseCm)} />
+      </label>
+      <label style={styles.rangeRow}>
+        <span>宽松阈值 {fitLooseCm.toFixed(1)} cm</span>
+        <input type="range" min={0.5} max={8} step={0.1} value={fitLooseCm}
+          onChange={e => setFitThresholds(fitTightCm, Number(e.target.value))} />
+      </label>
+      {fitStats && (
+        <SheetNote>
+          穿透 {fitStats.penetration} · 贴近 {fitStats.tight} · 合适 {fitStats.ideal} · 宽松 {fitStats.loose}
+          ；间隙 {fitStats.minCm.toFixed(2)} / {fitStats.meanCm.toFixed(2)} / {fitStats.maxCm.toFixed(2)} cm。
+        </SheetNote>
+      )}
       <SheetNote>光线追踪按渐进采样出图，布料每帧变形都会重新累计采样；手机上建议先暂停模拟再看收敛结果。</SheetNote>
     </>
   );
@@ -256,6 +284,7 @@ function MenuSheet({ actions, onClose }: { actions: MenuActions; onClose: () => 
         <SheetButton label="服装 GLB…" onClick={actions.exportGlb} />
         <SheetButton label="服装 OBJ…" onClick={actions.exportObj} />
         <SheetButton label="截图 PNG" onClick={actions.screenshot} />
+        <SheetButton label="动画 WebM…" onClick={actions.exportAnimation} />
       </SheetGroup>
       <SheetGroup title="帮助">
         <SheetButton label="快捷键总览…" onClick={() => { actions.showShortcuts(); onClose(); }} />
@@ -328,6 +357,10 @@ const styles: Record<string, React.CSSProperties> = {
   cellLabel: { fontSize: 14, lineHeight: 1.25 },
   cellHint: { fontSize: 11, color: '#8a94a6' },
   note: { fontSize: 12, color: '#8a8a94', lineHeight: 1.6, margin: '14px 2px 4px' },
+  rangeRow: {
+    display: 'flex', flexDirection: 'column', gap: 4, margin: '8px 2px',
+    fontSize: 12, color: '#bbb',
+  },
   tabStrip: {
     display: 'flex', gap: 4, overflowX: 'auto', WebkitOverflowScrolling: 'touch',
     padding: '10px 0 8px', borderBottom: '1px solid #333',

@@ -1,18 +1,28 @@
 import { useState } from 'react';
 import { useProjectStore } from '../../../store/stores';
-import type { Fabric, FabricPresetKey, Project } from '../../../core/model/types';
+import type { Fabric, FabricMapSlot, FabricPresetKey, Project } from '../../../core/model/types';
 import { FABRIC_PRESET_KEYS, FABRIC_PRESET_LABELS } from '../../../core/model/defaults';
 import { fabricList, panelsUsingFabric, uniqueFabricName } from '../../../core/model/fabric';
 import { AddFabricCommand, AssignFabricCommand, DetachFabricCommand } from '../../../core/command/fabricCommands';
 import type { Command } from '../../../core/command/command';
+import { readImageAsPngDataUrl } from '../../../io/imageData';
 import { patchValue, type EngineRef } from '../../sceneCommands';
+import { Vec2Field } from '../../widgets/numberField';
 import { Icon } from '../../icons';
 import {
-  ColorRow, FlexSelect, Hint, IconButton, InlineText, PopupSelect, Row, Section,
+  ColorRow, FileRow, FlexSelect, Hint, IconButton, InlineText, PopupSelect, Row, Section,
   SliderRow, SlotRow, ValueButton,
 } from '../../widgets/propertyRows';
 
 // ===== Material tab ("材质") =====
+
+/** Texture slots of the appearance block, in display order. */
+const MAP_SLOTS: Array<{ slot: FabricMapSlot; label: string }> = [
+  { slot: 'albedo', label: '基础色贴图' },
+  { slot: 'normal', label: '法线贴图' },
+  { slot: 'roughness', label: '粗糙度贴图' },
+  { slot: 'metallic', label: '金属度贴图' },
+];
 
 /** Fabric assigned to a panel row. */
 export function panelFabric(project: Project, panelId: string): Fabric | undefined {
@@ -61,6 +71,25 @@ export function MaterialTab({ project, panelId, engineRef }: {
   });
   /** Renaming edits the record every panel sharing it wears, so names stay unique. */
   const rename = (name: string) => setFabric('重命名材质', { ...fabric!, name: uniqueFabricName(project, name) });
+
+  /** Reads a picked image, shrinks it, and writes it into one map slot. */
+  const pickMap = async (slot: FabricMapSlot, file: File) => {
+    const url = await readImageAsPngDataUrl(file);
+    const latest = useProjectStore.getState().project.fabrics[fabric!.id];
+    if (!latest) return;
+    const prev = latest.appearance.maps ?? {};
+    const maps = { ...prev, [slot]: url, fileNames: { ...prev.fileNames, [slot]: file.name } };
+    writeFabric('修改材质贴图', latest, { ...latest, appearance: { ...latest.appearance, maps } });
+  };
+
+  /** Clears one map slot and the file name stored beside it. */
+  const clearMap = (slot: FabricMapSlot) => {
+    const prev = fabric!.appearance.maps ?? {};
+    const fileNames = { ...prev.fileNames };
+    delete fileNames[slot];
+    appearance({ maps: { ...prev, [slot]: null, fileNames } });
+  };
+  const maps = fabric?.appearance.maps ?? {};
 
   return (
     <>
@@ -113,6 +142,23 @@ export function MaterialTab({ project, panelId, engineRef }: {
           <ColorRow label="光泽色" value={fabric.appearance.sheenColor} onChange={v => appearance({ sheenColor: v })} />
           <SliderRow label="法线强度" min={0} max={2} step={0.05} value={fabric.appearance.normalScale}
             onChange={v => appearance({ normalScale: v })} />
+          {MAP_SLOTS.map(({ slot, label }) => (
+            <FileRow
+              key={slot}
+              label={label}
+              name={maps.fileNames?.[slot] || (maps[slot] ? '已设置' : '未设置')}
+              accept="image/*"
+              pickLabel="选择图片"
+              clearLabel="清除"
+              clearDisabled={!maps[slot]}
+              onPick={file => void pickMap(slot, file)}
+              onClear={() => clearMap(slot)}
+            />
+          ))}
+          <Vec2Field label="平铺" value={fabric.appearance.uvTiling} step={0.1} precision={2} min={0.01}
+            title="UV 平铺次数，最小 0.01" onCommit={v => appearance({ uvTiling: v })} />
+          <Vec2Field label="偏移" value={fabric.appearance.uvOffset} step={0.1} precision={2}
+            title="UV 偏移" onCommit={v => appearance({ uvOffset: v })} />
         </Section>
       ) : (
         <Hint>这个版型片还没有材质，点右侧下拉换用一个，或用「＋」建一个。</Hint>

@@ -6,6 +6,7 @@ import { Icon, type IconName } from '../icons';
 import { nextSpeed } from './mobileUi';
 import { normalizeRayTracing } from '../../core/model/defaults';
 import { usePerfStore, useProjectStore, useSimStore, useUIStore } from '../../store/stores';
+import { rayTraceStateLabel } from '../optionTables';
 import type { MenuActions } from '../menu/actions';
 import type { GarmentEngine } from '../../core/engine/garmentEngine';
 import type { RendererContext } from '../../render/renderer/rendererContext';
@@ -65,6 +66,7 @@ function TopBar({ onOpenMenu, onOpenProps }: { onOpenMenu: () => void; onOpenPro
   const renderMode = useUIStore(s => s.renderMode);
   const fps3D = usePerfStore(s => s.fps['3d']);
   const samples3D = usePerfStore(s => s.samples3D);
+  const rayState3D = usePerfStore(s => s.rayState3D);
 
   const status = isDraping
     ? { text: '缝合着装中', color: '#4da6ff' }
@@ -80,7 +82,9 @@ function TopBar({ onOpenMenu, onOpenProps }: { onOpenMenu: () => void; onOpenPro
         <button style={styles.menuBtn} onClick={onOpenMenu}>菜单</button>
         <span style={styles.projectName}>{projectName}</span>
         <span style={styles.readout}>
-          {renderMode === 'raytraced' ? `SPP ${samples3D}/${maxSamples}` : `FPS ${fps3D}`}
+          {renderMode === 'raytraced'
+            ? `SPP ${samples3D}/${maxSamples}${samples3D === 0 ? ` · ${rayTraceStateLabel(rayState3D)}` : ''}`
+            : `FPS ${fps3D}`}
           <span style={styles.readoutDim}> · 帧 {currentFrame}</span>
         </span>
       </div>

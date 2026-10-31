@@ -3,23 +3,22 @@ import { vec2 } from '../../core/model/types';
 import { samplePanelOutline } from '../panel/panelBuilder';
 import { computeBBox } from '../geom/vec2';
 
-/** Shifts a panel's outline points and Bezier handles. */
+/** Shifts a panel's outline points, their curve handles and arc centers. */
 export function offsetPanel(pattern: Pattern, panel: Panel, dx: number, dy: number): void {
   const moved = new Set<string>();
-  for (const edgeId of panel.outlineEdgeIds) {
+  const shiftIds = [...panel.outlineEdgeIds, ...(panel.holes ?? []).flat()];
+  for (const edgeId of shiftIds) {
     const edge = pattern.edges[edgeId];
     if (!edge) continue;
+    if (edge.arc) edge.arc = { ...edge.arc, center: vec2(edge.arc.center.x + dx, edge.arc.center.y + dy) };
     for (const pointId of [edge.startPointId, edge.endPointId]) {
       if (moved.has(pointId)) continue;
       moved.add(pointId);
       const point = pattern.points[pointId];
-      if (point) point.pos = vec2(point.pos.x + dx, point.pos.y + dy);
-    }
-    if (edge.bezier) {
-      edge.bezier = {
-        c0: vec2(edge.bezier.c0.x + dx, edge.bezier.c0.y + dy),
-        c1: vec2(edge.bezier.c1.x + dx, edge.bezier.c1.y + dy),
-      };
+      if (!point) continue;
+      point.pos = vec2(point.pos.x + dx, point.pos.y + dy);
+      if (point.handleIn) point.handleIn = { ...point.handleIn, x: point.handleIn.x + dx, y: point.handleIn.y + dy };
+      if (point.handleOut) point.handleOut = { ...point.handleOut, x: point.handleOut.x + dx, y: point.handleOut.y + dy };
     }
   }
 }
@@ -60,6 +59,12 @@ export function appendPattern(target: Pattern, source: Pattern, gapCm = 8): void
   for (const [id, line] of Object.entries(source.internalLines)) target.internalLines[id] = line;
   for (const [id, seam] of Object.entries(source.seams)) target.seams[id] = seam;
   for (const [id, panel] of Object.entries(source.panels)) target.panels[id] = panel;
+  const extras = ['notches', 'annotations', 'measurements'] as const;
+  for (const key of extras) {
+    const src = (source as unknown as Record<string, Record<string, never>>)[key] ?? {};
+    const dst = ((target as unknown as Record<string, Record<string, never>>)[key] ??= {});
+    for (const [id, value] of Object.entries(src)) dst[id] = value;
+  }
 
   if (existingBoxes.length === 0) return;
   const targetMaxX = Math.max(...existingBoxes.map(box => box.max.x));

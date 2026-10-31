@@ -8,6 +8,8 @@ export interface Constraint {
   p1: number;
   restLength: number;
   compliance: number;
+  /** Distance beyond which the constraint tears; absent constraints never tear. */
+  tearLength?: number;
 }
 
 /** Constraint groups of a mesh, split by how the solver applies them. */
@@ -15,7 +17,78 @@ export interface ConstraintSet {
   structural: Constraint[];
   shear: Constraint[];
   bending: Constraint[];
+  /** Stiff bending constraints along the mesh edges the panel's fold lines cross. */
+  crease: Constraint[];
   seam: Constraint[];
+}
+
+/** Bending stiffness a fold crease uses when its fabric sets none. */
+export const DEFAULT_CREASE_STIFFNESS = 0.9;
+
+/** Crease stiffness of a fabric: its own value, never softer than plain bending. */
+export function creaseStiffnessOf(fabric: FabricPhysics): number {
+  const wanted = fabric.creaseStiffness ?? DEFAULT_CREASE_STIFFNESS;
+  return Math.min(1, Math.max(wanted, fabric.bendingStiffness));
+}
+
+/** Sorted particle pair key. */
+function pairKey(a: number, b: number): string {
+  return a < b ? `${a}_${b}` : `${b}_${a}`;
+}
+
+/**
+ * Stiff bending constraints along the mesh edges a fold line crosses. `creaseEdges` holds flat
+ * local vertex index pairs [a, b, ...]; each edge shared by two triangles yields the pair of
+ * apexes opposite it, so the crease band resists bending and the fold concentrates at its sides.
+ */
+export function creaseConstraintsForEdges(
+  positions: Float32Array,
+  mesh: TriangleMesh,
+  creaseEdges: readonly number[],
+  fabric: FabricPhysics,
+  dt: number,
+): Constraint[] {
+  const wanted = new Set<string>();
+  for (let i = 0; i + 1 < creaseEdges.length; i += 2) {
+    const a = creaseEdges[i]!, b = creaseEdges[i + 1]!;
+    if (a !== b) wanted.add(pairKey(a, b));
+  }
+  if (wanted.size === 0) return [];
+
+  // Apexes of the triangles sitting on each crease edge.
+  const apexes = new Map<string, number[]>();
+  for (let t = 0; t < mesh.triangleCount; t++) {
+    const tri = [mesh.indices[t * 3]!, mesh.indices[t * 3 + 1]!, mesh.indices[t * 3 + 2]!];
+    for (let e = 0; e < 3; e++) {
+      const key = pairKey(tri[e]!, tri[(e + 1) % 3]!);
+      if (!wanted.has(key)) continue;
+      const list = apexes.get(key);
+      if (list) list.push(tri[(e + 2) % 3]!);
+      else apexes.set(key, [tri[(e + 2) % 3]!]);
+    }
+  }
+
+  const compliance = stiffnessToCompliance(creaseStiffnessOf(fabric), dt);
+  const getPos = (i: number): [number, number, number] =>
+    [positions[i * 3]!, positions[i * 3 + 1]!, positions[i * 3 + 2]!];
+  const creased = new Set<string>();
+  const constraints: Constraint[] = [];
+  for (const list of apexes.values()) {
+    if (list.length < 2) continue;
+    const a = list[0]!, b = list[1]!;
+    if (a === b) continue;
+    const pair = pairKey(a, b);
+    if (creased.has(pair)) continue;
+    creased.add(pair);
+    const pa = getPos(a), pb = getPos(b);
+    constraints.push({
+      p0: a,
+      p1: b,
+      restLength: Math.hypot(pa[0] - pb[0], pa[1] - pb[1], pa[2] - pb[2]),
+      compliance,
+    });
+  }
+  return constraints;
 }
 
 /**

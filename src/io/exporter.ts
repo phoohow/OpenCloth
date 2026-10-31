@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
 import { OBJExporter } from 'three/examples/jsm/exporters/OBJExporter.js';
 import { downloadTextFile } from './codec';
+import { whenFabricTexturesReady } from '../render/material/fabricTextures';
 
 /** Toggles which scene contents the exporters write. */
 export interface ExportOptions {
@@ -31,6 +32,8 @@ function downloadUrl(url: string, filename: string): void {
 
 /** Exports the garment as binary glTF (GLB). */
 export async function exportGLB(scene: THREE.Scene, filename = 'garment.glb', options: ExportOptions = { includeAvatar: false, includeMaterial: true }): Promise<void> {
+  // Every map image must carry its pixels before the exporter reads the materials.
+  await whenFabricTexturesReady();
   const exporter = new GLTFExporter();
   const result = await new Promise<ArrayBuffer>((resolve, reject) => {
     exporter.parse(buildExportScene(scene, options), (gltf) => resolve(gltf as ArrayBuffer), reject, { binary: true });

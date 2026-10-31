@@ -8,6 +8,7 @@ import {
   LIGHT_TYPE_LABELS, createLight, normalizeLights, normalizeRayTracing,
 } from '../core/model/defaults';
 import { useProjectStore, useUIStore } from '../store/stores';
+import { SetGlobalMeshResolutionCommand } from '../core/command/patternProductionCommands';
 import type { GarmentEngine } from '../core/engine/garmentEngine';
 import {
   AVATAR_NODE_ID, lightNodeId, readTransform, referenceObjectId, writeTransform,
@@ -230,8 +231,12 @@ export function setSimulationConfig(label: string, patch: Partial<SimulationConf
   );
 }
 
-/** Edits the tone-mapping mode. */
-export function setToneMapping(mode: ToneMappingMode): void {
+/** Applies one mesh edge length to every panel through the project's undo history. */
+export function setGlobalMeshResolution(cm: number): void {
+  useProjectStore.getState().executeCommand(new SetGlobalMeshResolutionCommand(cm));
+}
+
+/** Edits the tone-mapping mode. */export function setToneMapping(mode: ToneMappingMode): void {
   patchValue(
     '修改色调映射',
     p => p.scene.render.toneMapping,

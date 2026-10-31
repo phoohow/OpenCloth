@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu';
-import type { Project, SimulationConfig, FabricPhysics, ObjectTransform, RenderMode, Vec3, CameraProjection, ReferenceObjectRef } from '../model/types';
+import type { Project, SimulationConfig, FabricPhysics, ObjectTransform, RenderMode, Vec3, CameraProjection, ReferenceObjectRef, EditPreviewTier } from '../model/types';
 import { buildPanelMesh, type PanelMesh } from '../../pattern/panel/panelBuilder';
 import { DEFAULT_MESH_RESOLUTION_CM } from '../model/defaults';
 import { fabricForPanel, fabricSlotPlan } from '../model/fabric';
@@ -20,8 +20,12 @@ import { ReferenceStage, type ReferenceObject } from './referenceStage';
 import { SeamThreads } from './seamThreads';
 import { SelectionOverlay } from './selectionOverlay';
 import { DressingController } from './dressingController';
-import { appearanceSignature, physicsSignature, visibilitySignature, type ClothGroupRange } from './clothSignatures';
-import { FALLBACK_APPEARANCE, FALLBACK_PHYSICS } from './clothConstants';
+import { appearanceSignature, avatarBodySignature, clothLayoutFingerprint, constraintSignature, geometrySignatures, physicsSignature, visibilitySignature, type ClothGroupRange } from './clothSignatures';
+import { timeAsync } from './engineTiming';
+import { FALLBACK_APPEARANCE, FALLBACK_PHYSICS, editPreviewResolutionCm } from './clothConstants';
+import { computeFitField, fitStats, type FitStats } from '../../render/analysis/fit';
+import { FitOverlay } from '../../render/analysis/fitOverlay';
+import { computeVertexStrain, strainStats, type StrainStats } from '../../render/analysis/strain';
 
 export type { CameraPreset, ReferenceObject };
 export { applyObjectTransform } from './objectTransforms';
@@ -75,18 +79,40 @@ export class GarmentEngine {
   /** Panel meshes built from the pattern, keyed by panel id in merged order. */
   private panelMeshes: Map<string, PanelMesh> = new Map();
   private clothMeshes: Map<string, ClothMeshManager> = new Map();
+  /** Heatmap mesh drawn in place of the fabric while the fit check is on. */
+  private fitOverlay: FitOverlay | null = null;
+  private fitVisible = false;
+  /** Frames between two clearance passes; the CPU check is heavier than one solver step. */
+  private fitCountdown = 0;
+  /** Strain heatmap toggle, sharing the one heatmap overlay with the fit check. */
+  private strainVisible = false;
+  private strainCountdown = 0;
+  /** Flat-pattern rest positions of every merged particle, the strain denominator. */
+  private mergedRestPositions: Float32Array = new Float32Array(0);
   /** Material id behind each cloth geometry group slot, in first-use order. */
   private clothSlots: (string | null)[] = [];
   /** Index range, material slot and owning panel of every cloth geometry group. */
   private clothGroupRanges: ClothGroupRange[] = [];
   /** Signature of the panel visibility applied to the cloth groups. */
   private appliedVisibility = '';
+  /** Per-panel geometry signatures from the last full or incremental build. */
+  private appliedGeometry: Map<string, string> = new Map();
+  /** Body signature of the avatar currently built in the scene. */
+  private appliedAvatar = '';
+  /** Fingerprint of the merged layout the live simulator was set up for. */
+  private simulatorLayout = '';
+  /** Body signature the live simulator's collision capsules were built for. */
+  private simulatorAvatar = '';
   /** Render mode the cloth materials were last built for. */
   private clothMaterialMode: RenderMode | null = null;
   /** Signature of the appearance values currently bound to the cloth materials. */
   private appliedAppearance = '';
   /** Signature of the material physics currently loaded in the solver. */
   private appliedPhysics = '';
+  /** Signature of the seam, dart-closing and fold-crease constraint sets currently loaded in the solver. */
+  private appliedConstraints = '';
+  /** Seam pair count the thread overlay was last built for; -1 when it is not attached. */
+  private threadedPairCount = -1;
 
   /** Translucent clone of the selected panels' triangles. */
   private selection = new SelectionOverlay();
@@ -125,8 +151,154 @@ export class GarmentEngine {
     return cached?.length === input.particleCount * 3 ? cached : this.mergedPositions;
   }
 
-  /** Builds or rebuilds the cloth meshes from the project pattern. */
+  /** Builds or rebuilds the cloth meshes from the project pattern; dev builds log the cost. */
   async buildFromProject(project: Project): Promise<void> {
+    await timeAsync(`buildFromProject (${Object.keys(project.pattern.panels).length} panels)`, () => this.buildCloth(project));
+    this.appliedGeometry = geometrySignatures(project);
+    this.appliedAvatar = avatarBodySignature(project.avatar);
+  }
+
+  /**
+   * Rebuilds only the panels whose geometry signature changed. Unchanged panels keep
+   * their mesh and, when particle layout is stable, their live simulated positions.
+   */
+  async syncFromProject(project: Project): Promise<void> {
+    // A measurement or pose edit changes the body, its capsules and the drape wrap.
+    if (avatarBodySignature(project.avatar) !== this.appliedAvatar) {
+      await this.buildFromProject(project);
+      return;
+    }
+    const next = geometrySignatures(project);
+    const previous = this.appliedGeometry;
+    if (previous.size === 0) {
+      await this.buildFromProject(project);
+      return;
+    }
+
+    const changed = [...next.keys()].filter(id => previous.get(id) !== next.get(id));
+    const removed = [...previous.keys()].filter(id => !next.has(id));
+    if (changed.length === 0 && removed.length === 0) {
+      // Only drawing flags or constraint data moved; keep meshes, refresh constraints and threads.
+      this.refreshConstraintSets(project);
+      this.applySeamStitchVisibility(project);
+      return;
+    }
+
+    for (const panelId of removed) this.panelMeshes.delete(panelId);
+    const layoutStable = removed.length === 0
+      && [...next.keys()].join('|') === [...previous.keys()].join('|');
+    let statePreserved = layoutStable;
+    for (const panelId of changed) {
+      const mesh = buildPanelMesh(project.pattern, panelId);
+      const old = this.panelMeshes.get(panelId);
+      if (mesh) {
+        if (old && mesh.vertexCount !== old.vertexCount) statePreserved = false;
+        this.panelMeshes.set(panelId, mesh);
+      } else {
+        this.panelMeshes.delete(panelId);
+        statePreserved = false;
+      }
+    }
+
+    const carried = statePreserved && this.lastGoodPositions.length === this.mergedPositions.length
+      ? this.lastGoodPositions
+      : null;
+    const before = this.mergedInput;
+    this.mergedInput = this.mergePanelMeshes(project);
+    if (!this.mergedInput) return;
+    let rebased = false;
+    if (carried && before) {
+      this.carryParticleRanges(before, this.mergedInput, carried);
+      if (clothLayoutFingerprint(before, this.cloth.seamPairs.length) === clothLayoutFingerprint(this.mergedInput, this.cloth.seamPairs.length)
+        && this.simulator && this.simReady) {
+        this.simulator.rebaseGeometry(this.mergedInput, this.mergedInput.positions, carried);
+        this.mergedPositions = this.mergedInput.positions.slice();
+        rebased = true;
+      }
+    }
+    this.removeRenderMesh();
+    this.createRenderMesh(project);
+    if (rebased) {
+      this.simulatorLayout = clothLayoutFingerprint(this.mergedInput, this.cloth.seamPairs.length);
+      this.installConstraintSets();
+    } else {
+      this.simulatorLayout = '';
+    }
+    this.appliedGeometry = next;
+  }
+
+  /**
+   * Rebuilds the cloth from an in-flight 2D edit and redraws it at the preview tier's mesh
+   * density, or redraws the committed pattern when the edit ends. The applied geometry signature
+   * and the simulator layout keep describing the committed pattern, so the edit's own commit still
+   * rebuilds; the committed panel meshes are only borrowed for the merge and restored afterwards.
+   */
+  previewEditPattern(project: Project, tier: EditPreviewTier): void {
+    const drawn = this.mergedInput;
+    if (tier === 'off' || !drawn) return;
+
+    const committed = this.appliedGeometry;
+    const previewMeshes = new Map<string, PanelMesh>();
+    let everyMeshLent = true;
+    for (const [panelId, signature] of geometrySignatures(project)) {
+      const lent = tier === 'full' ? this.panelMeshes.get(panelId) : undefined;
+      if (lent && committed.get(panelId) === signature) {
+        previewMeshes.set(panelId, lent);
+        continue;
+      }
+      everyMeshLent = false;
+      const panelResolution = project.pattern.panels[panelId]?.meshResolutionCm ?? DEFAULT_MESH_RESOLUTION_CM;
+      const mesh = buildPanelMesh(project.pattern, panelId, editPreviewResolutionCm(tier, panelResolution));
+      if (mesh) previewMeshes.set(panelId, mesh);
+    }
+
+    const live = this.lastGoodPositions;
+    const committedMeshes = this.panelMeshes;
+    this.panelMeshes = previewMeshes;
+    try {
+      const input = this.mergePanelMeshes(project);
+      if (!input || input.particleCount === 0) return;
+      // The solver's live positions only fit a layout with the same particle count.
+      const fits = live.length === input.particleCount * 3;
+      if (fits && everyMeshLent) {
+        // Every panel lent its committed mesh, so this is the committed layout again.
+        input.positions.set(live);
+        this.mergedPositions = live.slice();
+      } else if (fits && input.particleCount === drawn.particleCount) {
+        this.carryParticleRanges(drawn, input, live);
+        if (clothLayoutFingerprint(drawn, this.cloth.seamPairs.length)
+          === clothLayoutFingerprint(input, this.cloth.seamPairs.length)
+          && this.simulator && this.simReady) {
+          this.simulator.rebaseGeometry(input, input.positions, live);
+        }
+      }
+      this.removeRenderMesh();
+      this.createRenderMesh(project);
+    } finally {
+      this.panelMeshes = committedMeshes;
+    }
+  }
+
+  /** Copies live positions of unchanged panel ranges into the freshly merged layout. */
+  private carryParticleRanges(
+    before: ClothSimInput, after: ClothSimInput, carried: Float32Array,
+  ): void {
+    const beforeRanges = new Map(before.panels.map(p => [p.panelId, p]));
+    let copied = 0;
+    for (const panel of after.panels) {
+      const old = beforeRanges.get(panel.panelId);
+      if (!old || old.vertexOffset !== panel.vertexOffset) continue;
+      const count = old.mesh.vertexCount;
+      if (count !== panel.mesh.vertexCount) continue;
+      for (let i = 0; i < count * 3; i++) {
+        after.positions[panel.vertexOffset * 3 + i] = carried[old.vertexOffset * 3 + i];
+      }
+      copied += count;
+    }
+    if (copied > 0) this.mergedPositions = after.positions.slice();
+  }
+
+  private async buildCloth(project: Project): Promise<void> {
     const scene = this.rendererCtx.scene;
     this.clearCloth();
     this.nonFiniteReported = false;
@@ -142,15 +314,22 @@ export class GarmentEngine {
     if (panelIds.length === 0) return;
 
     // Global mesh density from the simulation settings overrides per-panel resolution.
-    const resolutionCm = project.scene.simulation.meshResolutionCm ?? DEFAULT_MESH_RESOLUTION_CM;
     for (const panelId of panelIds) {
-      const mesh = buildPanelMesh(project.pattern, panelId, resolutionCm);
+      const mesh = buildPanelMesh(project.pattern, panelId);
       if (mesh) this.panelMeshes.set(panelId, mesh);
     }
 
     this.mergedInput = this.mergePanelMeshes(project);
     if (!this.mergedInput || this.mergedInput.particleCount === 0) return;
     this.createRenderMesh(project);
+    this.simulatorLayout = clothLayoutFingerprint(this.mergedInput);
+  }
+
+  /** Whether the live solver still matches the merged layout; false after an incremental sync. */
+  needsSimulatorRebuild(): boolean {
+    if (!this.mergedInput) return false;
+    return this.simulatorAvatar !== this.appliedAvatar
+      || this.simulatorLayout !== clothLayoutFingerprint(this.mergedInput, this.cloth.seamPairs.length);
   }
 
   /** Merges the panel meshes into a single simulation input. */
@@ -158,8 +337,38 @@ export class GarmentEngine {
     const input = this.cloth.build(project, this.panelMeshes, this.landmarks);
     this.mergedInput = input;
     this.mergedPositions = this.cloth.positions;
+    this.mergedRestPositions = input ? mergedRestPositions(input) : new Float32Array(0);
     this.dressPositions = this.cloth.dressPositions;
+    this.appliedConstraints = input ? constraintSignature(project) : '';
     return input;
+  }
+
+  /**
+   * Re-reads the panel fold lines and the darts whose legs are being closed onto the live solver.
+   * Panel meshes, particle layout and pins stay untouched; when the meshes no longer match the
+   * merged layout the input is rebuilt and the viewport re-inits the simulator.
+   */
+  refreshConstraintSets(project: Project): void {
+    if (!this.mergedInput) return;
+    const signature = constraintSignature(project);
+    if (signature === this.appliedConstraints) return;
+    if (!this.cloth.refreshConstraintSets(project, this.panelMeshes)) {
+      this.mergePanelMeshes(project);
+      this.simulatorLayout = '';
+      return;
+    }
+    this.appliedConstraints = signature;
+    this.installConstraintSets();
+    this.applySeamStitchVisibility(project);
+  }
+
+  /** Installs the merged input's seam and fold-crease constraint groups into the running solver. */
+  private installConstraintSets(): void {
+    const input = this.mergedInput;
+    if (!input || !this.simulator || !this.simReady) return;
+    this.simulator.setSeamConstraints(input.seamConstraints);
+    this.simulator.setCreaseEdges(input.panels.map(panel => panel.creaseEdges ?? []));
+    this.simulatorLayout = clothLayoutFingerprint(input, this.cloth.seamPairs.length);
   }
 
   /** Replaces the scene body and re-applies its display, transform and highlight. */
@@ -185,7 +394,28 @@ export class GarmentEngine {
     this.clothMeshes.set(MERGED_MESH_KEY, manager);
     this.bindClothMaterials(project, mode);
     this.rendererCtx.scene.add(manager.mesh);
-    this.seamThreads.attach(this.rendererCtx.scene, this.cloth.seamPairs, this.mergedPositions, project.pattern.seams);
+    this.fitOverlay = new FitOverlay(manager.geometry);
+    this.fitOverlay.setSlotCount(this.clothSlots.length);
+    this.rendererCtx.scene.add(this.fitOverlay.mesh);
+    this.updateHeatmapVisibility();
+    this.fitCountdown = 0;
+    this.strainCountdown = 0;
+    this.threadedPairCount = -1;
+    this.applySeamStitchVisibility(project);
+  }
+
+  /** Takes the cloth render mesh the scene shows right now out of it and frees its buffers. */
+  private removeRenderMesh(): void {
+    if (this.fitOverlay) {
+      this.rendererCtx.scene.remove(this.fitOverlay.mesh);
+      this.fitOverlay.dispose();
+      this.fitOverlay = null;
+    }
+    const previous = this.clothMeshes.get(MERGED_MESH_KEY);
+    if (!previous) return;
+    this.rendererCtx.scene.remove(previous.mesh);
+    previous.dispose();
+    this.clothMeshes.delete(MERGED_MESH_KEY);
   }
 
   /** Panel ids in merged-cloth order. */
@@ -209,6 +439,7 @@ export class GarmentEngine {
     });
 
     merged.setMaterials(materials);
+    this.fitOverlay?.setSlotCount(materials.length);
     this.clothGroupRanges = ranges;
     merged.addGroups(ranges);
     this.clothSlots = plan.fabrics.map(fabric => fabric?.id ?? null);
@@ -234,16 +465,94 @@ export class GarmentEngine {
   }
 
   /**
-   * Re-reads each seam record onto the thread overlay: color and viewport visibility, drawn
-   * over the positions the cloth currently holds.
+   * Switches the cloth between fabric materials and the body-clearance heatmap.
+   * Returns the first summary when turning the overlay on.
    */
-  applySeamStitchVisibility(project: Project): void {
-    if (this.cloth.seamPairs.length === 0) return;
-    this.seamThreads.setSeams(project.pattern.seams);
+  setFitCheck(enabled: boolean, tightCm: number, looseCm: number): FitStats | null {
+    if (enabled) this.strainVisible = false;
+    this.fitVisible = enabled;
+    this.updateHeatmapVisibility();
+    this.fitCountdown = 0;
+    return enabled ? this.refreshFit(tightCm, looseCm, true) : null;
+  }
+
+  /** Shows, hides or fades the shared heatmap overlay and the cloth mesh underneath. */
+  private updateHeatmapVisibility(): void {
+    const on = this.fitVisible || this.strainVisible;
+    this.fitOverlay?.setVisible(on);
+    const merged = this.clothMeshes.get(MERGED_MESH_KEY);
+    if (merged) merged.mesh.visible = !on;
+  }
+
+  /**
+   * Recomputes body clearance on the live positions every few frames while the overlay is on.
+   * Returns null when the overlay is off or this call was skipped by the throttle.
+   */
+  refreshFit(tightCm: number, looseCm: number, force = false): FitStats | null {
+    if (!this.fitVisible || !this.fitOverlay) return null;
+    if (!force && this.fitCountdown > 0) {
+      this.fitCountdown--;
+      return null;
+    }
+    this.fitCountdown = 5;
+    const sdf = this.avatar.sdf;
     const positions = this.lastGoodPositions.length === this.mergedPositions.length && this.mergedPositions.length > 0
       ? this.lastGoodPositions
       : this.mergedPositions;
-    this.seamThreads.update(this.cloth.seamPairs, positions);
+    if (!sdf || positions.length === 0) return null;
+    const field = computeFitField(positions, sdf, { thresholds: { tightCm, looseCm } });
+    this.fitOverlay.update(field);
+    return fitStats(field);
+  }
+
+  /**
+   * Switches the cloth between fabric materials and the strain heatmap.
+   * Returns the first summary when turning the overlay on.
+   */
+  setStrainCheck(enabled: boolean, min: number, max: number): StrainStats | null {
+    if (enabled) this.fitVisible = false;
+    this.strainVisible = enabled;
+    this.updateHeatmapVisibility();
+    this.strainCountdown = 0;
+    return enabled ? this.refreshStrain(min, max, true) : null;
+  }
+
+  /** Recomputes per-vertex strain on the live positions every few frames while the overlay is on. */
+  refreshStrain(min: number, max: number, force = false): StrainStats | null {
+    if (!this.strainVisible || !this.fitOverlay || !this.mergedInput) return null;
+    if (!force && this.strainCountdown > 0) {
+      this.strainCountdown--;
+      return null;
+    }
+    this.strainCountdown = 5;
+    const rest = this.mergedRestPositions;
+    const positions = this.lastGoodPositions.length === rest.length && rest.length > 0
+      ? this.lastGoodPositions
+      : rest;
+    if (rest.length === 0 || positions.length === 0) return null;
+    const strain = computeVertexStrain(rest, positions, this.mergedInput!.indices);
+    const stats = strainStats(strain);
+    this.fitOverlay.updateStrain(strain, min, max);
+    return stats;
+  }
+
+  /**
+   * Re-reads each seam record onto the thread overlay: color and viewport visibility, drawn
+   * over the positions the cloth currently holds. The overlay is rebuilt whenever the pair set
+   * changes size, which is what closing a dart does.
+   */
+  applySeamStitchVisibility(project: Project): void {
+    const pairs = this.cloth.seamPairs;
+    const positions = this.lastGoodPositions.length === this.mergedPositions.length && this.mergedPositions.length > 0
+      ? this.lastGoodPositions
+      : this.mergedPositions;
+    if (pairs.length !== this.threadedPairCount) {
+      this.threadedPairCount = pairs.length;
+      this.seamThreads.attach(this.rendererCtx.scene, pairs, positions, project.pattern.seams);
+      return;
+    }
+    this.seamThreads.setSeams(project.pattern.seams);
+    this.seamThreads.update(pairs, positions);
   }
 
   /**
@@ -299,16 +608,20 @@ export class GarmentEngine {
   /** Initializes the GPU cloth simulator on the viewport device, keeping the PINs the markers show. */
   async initSimulator(project: Project): Promise<void> {
     if (!this.mergedInput) return;
-    this.simulator?.destroy();
-    const carried = this.carriedPinIndices(this.mergedInput.particleCount);
-    const input = carried.length > 0
-      ? { ...this.mergedInput, pinnedIndices: [...new Set([...(this.mergedInput.pinnedIndices ?? []), ...carried])] }
-      : this.mergedInput;
-    const simulator = new ClothSimulator(rendererDevice(this.rendererCtx));
-    await simulator.setup(input, this.avatar.sdf, project.scene.simulation);
-    this.simulator = simulator;
-    this.simReady = true;
-    this.appliedPhysics = physicsSignature(this.clothPanelIds(), project);
+    await timeAsync(`initSimulator (${this.mergedInput.particleCount} particles)`, async () => {
+      this.simulator?.destroy();
+      const carried = this.carriedPinIndices(this.mergedInput!.particleCount);
+      const input = carried.length > 0
+        ? { ...this.mergedInput!, pinnedIndices: [...new Set([...(this.mergedInput!.pinnedIndices ?? []), ...carried])] }
+        : this.mergedInput!;
+      const simulator = new ClothSimulator(rendererDevice(this.rendererCtx));
+      await simulator.setup(input, this.avatar.sdf, project.scene.simulation);
+      this.simulator = simulator;
+      this.simReady = true;
+      this.appliedPhysics = physicsSignature(this.clothPanelIds(), project);
+      this.simulatorLayout = clothLayoutFingerprint(this.mergedInput!, this.cloth.seamPairs.length);
+      this.simulatorAvatar = this.appliedAvatar;
+    });
   }
 
   /** Marked particles a simulator rebuild re-applies; markers past the particle count are dropped. */
@@ -337,6 +650,8 @@ export class GarmentEngine {
         }
         return;
       }
+      // A preview mesh can hold fewer particles than the live solver; the readback would not fit it.
+      if (positions.length !== this.mergedPositions.length) return;
       this.clothMeshes.get(MERGED_MESH_KEY)?.updateFromSim(positions, normals);
       if (this.lastGoodPositions.length !== positions.length) this.lastGoodPositions = new Float32Array(positions.length);
       this.lastGoodPositions.set(positions);
@@ -558,15 +873,25 @@ export class GarmentEngine {
     this.simulator?.destroy();
     this.simulator = null;
     this.lastGoodPositions = new Float32Array(0);
+    this.mergedRestPositions = new Float32Array(0);
+    this.fitVisible = false;
+    this.strainVisible = false;
     for (const manager of this.clothMeshes.values()) {
       this.rendererCtx.scene.remove(manager.mesh);
       manager.dispose();
+    }
+    if (this.fitOverlay) {
+      this.rendererCtx.scene.remove(this.fitOverlay.mesh);
+      this.fitOverlay.dispose();
+      this.fitOverlay = null;
     }
     this.clothMeshes.clear();
     this.clothSlots = [];
     this.clothMaterialMode = null;
     this.appliedAppearance = '';
     this.appliedPhysics = '';
+    this.appliedConstraints = '';
+    this.threadedPairCount = -1;
     this.simReady = false;
   }
 
@@ -600,6 +925,15 @@ function mergedUVs(panelMeshes: Map<string, PanelMesh>, particleCount: number): 
     offset += mesh.vertexCount * 2;
   }
   return uvs;
+}
+
+/** Flat-pattern rest positions of every panel, concatenated in merged order. */
+function mergedRestPositions(input: ClothSimInput): Float32Array {
+  const rest = new Float32Array(input.positions.length);
+  for (const panel of input.panels) {
+    rest.set(panel.restPositions, panel.vertexOffset * 3);
+  }
+  return rest;
 }
 
 /** Index of the first non-finite readback component, or -1 when every position is finite. */

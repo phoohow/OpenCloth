@@ -1,5 +1,6 @@
 import { normalizeRayTracing } from '../../core/model/defaults';
 import { usePerfStore, useProjectStore, useSimStore, useUIStore } from '../../store/stores';
+import { rayTraceStateLabel } from '../optionTables';
 import { Icon } from '../icons';
 
 /** Playback bar for the cloth simulation: the 3D view's frame rate or per-pixel sample count and its elapsed cost, transport buttons, speed, frame and status. */
@@ -17,13 +18,19 @@ export function Timeline() {
   const fps3D = usePerfStore(s => s.fps['3d']);
   const samples3D = usePerfStore(s => s.samples3D);
   const costMs3D = usePerfStore(s => s.costMs3D);
+  const rayState3D = usePerfStore(s => s.rayState3D);
   const maxSamples = useProjectStore(s => normalizeRayTracing(s.project.scene.render.rayTracing).maxSamples);
   const raytraced = renderMode === 'raytraced';
+  /** Gate the traced image is stuck behind; the sample count already explains a running pass. */
+  const rayNote = raytraced && samples3D === 0 ? rayTraceStateLabel(rayState3D) : '';
 
   return (
     <div style={styles.bar}>
       {raytraced ? (
-        <div style={styles.spp} title={`3D 窗格每像素累计采样 ${samples3D} / ${maxSamples}，耗时 ${costLabel(costMs3D)}`}>
+        <div
+          style={styles.spp}
+          title={`3D 窗格每像素累计采样 ${samples3D} / ${maxSamples}，耗时 ${costLabel(costMs3D)}${rayNote ? `，${rayNote}` : ''}`}
+        >
           <span style={styles.sppLabel}>SPP:</span>
           <div style={styles.fps}>
             <span style={styles.sppValue}>{samples3D}</span>
@@ -31,6 +38,7 @@ export function Timeline() {
           </div>
           <span style={styles.sppLabel}>Cost:</span>
           <span style={styles.sppValue}>{costLabel(costMs3D)}</span>
+          {rayNote && <span style={styles.sppNote}>{rayNote}</span>}
         </div>
       ) : (
         <div style={styles.fps} title="3D 窗格每秒绘制帧数">
@@ -98,6 +106,7 @@ const styles: Record<string, React.CSSProperties> = {
   sppLabel: { fontSize: 11, fontWeight: 700, color: '#d0d0d6', letterSpacing: 0.3 },
   sppValue: { fontSize: 12, color: '#4da6ff', fontWeight: 600, fontVariantNumeric: 'tabular-nums' },
   sppMax: { fontSize: 12, color: '#8a94a6' },
+  sppNote: { fontSize: 11, color: '#c0a060' },
   timelineTrack: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 3, background: '#1a1a1e' },
   progress: { height: '100%', background: '#4da6ff', transition: 'width 0.1s' },
 };

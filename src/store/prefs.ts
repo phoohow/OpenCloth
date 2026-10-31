@@ -1,5 +1,5 @@
 import type { PaneId, PropTab, ViewLayout } from './stores';
-import type { CameraProjection, RenderMode } from '../core/model/types';
+import type { CameraProjection, EditPreviewTier, RenderMode } from '../core/model/types';
 
 /** Key holding the persisted UI preferences. */
 export const PREFS_KEY = 'oc-ui-prefs-v2';
@@ -20,6 +20,8 @@ export interface UiPrefs {
   leftPanelWidth: number;
   /** Width of the outliner and properties column in pixels. */
   rightPanelWidth: number;
+  /** 3D fidelity the cloth follows an in-flight 2D edit with. */
+  editPreview: EditPreviewTier;
   // Panel visibility.
   showTemplatePanel: boolean;
   showScenePanel: boolean;
@@ -39,11 +41,12 @@ export const DEFAULT_PREFS: UiPrefs = {
   sceneRatio: 0.5,
   leftPanelWidth: 220,
   rightPanelWidth: 280,
+  editPreview: 'off',
   showTemplatePanel: true,
   showScenePanel: true,
   showPropertiesPanel: true,
   showTimeline: true,
-  autoSaveSeconds: 0,
+  autoSaveSeconds: 60,
 };
 
 const LAYOUTS: ViewLayout[] = ['split3d2d', 'split2d3d', '2d', '3d'];
@@ -51,6 +54,7 @@ const PANES: PaneId[] = ['2d', '3d'];
 const RENDER_MODES: RenderMode[] = ['shaded', 'raytraced', 'wireframe', 'shadedWireframe', 'uvCheck', 'normalVis'];
 const CAMERA_PROJECTIONS: CameraProjection[] = ['perspective', 'orthographic'];
 const PROP_TABS: PropTab[] = ['object', 'material', 'physics', 'scene', 'render'];
+const EDIT_PREVIEW_TIERS: EditPreviewTier[] = ['off', 'low', 'full'];
 const AUTO_SAVE_SECONDS = [0, 30, 60, 300];
 /** Draggable ranges matching the divider helpers in the viewport layout. */
 const SPLIT_RATIO_RANGE: [number, number] = [0.15, 0.85];
@@ -110,6 +114,9 @@ export function readPrefs(storage: PreferencesStorage = browserStorage()): UiPre
     showScenePanel: flag('showScenePanel', DEFAULT_PREFS.showScenePanel),
     showPropertiesPanel: flag('showPropertiesPanel', DEFAULT_PREFS.showPropertiesPanel),
     showTimeline: flag('showTimeline', DEFAULT_PREFS.showTimeline),
+    editPreview: EDIT_PREVIEW_TIERS.includes(value.editPreview as EditPreviewTier)
+      ? value.editPreview as EditPreviewTier
+      : DEFAULT_PREFS.editPreview,
     autoSaveSeconds: seconds,
   };
 }
@@ -145,6 +152,7 @@ export function pickPrefs(state: UiPrefs): UiPrefs {
     showScenePanel: state.showScenePanel,
     showPropertiesPanel: state.showPropertiesPanel,
     showTimeline: state.showTimeline,
+    editPreview: state.editPreview,
     autoSaveSeconds: state.autoSaveSeconds,
   };
 }

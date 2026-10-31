@@ -40,6 +40,8 @@ export interface RendererContext {
   renderConfig?: RenderConfig;
   rayTracer: RayTracingRenderer | null;
   rayTracerLoading: Promise<RayTracingRenderer | null> | null;
+  /** Result of the path tracing probe; null until the first ray-traced switch runs it. */
+  rayCapability: RayTracingCapability | null;
   /** Watcher that keeps the drawing buffer in sync with the viewport's layout size. */
   resizeObserver?: ResizeObserver;
   disposed: boolean;
@@ -50,6 +52,138 @@ export function rendererDevice(ctx: RendererContext): GPUDevice {
   const device = (ctx.renderer.backend as unknown as { device?: GPUDevice }).device;
   if (!device) throw new Error('WebGPU renderer device unavailable before init');
   return device;
+}
+
+/** Stage of the ray tracing pipeline the 3D view is in. */
+export type RayTraceState =
+  | 'inactive'
+  | 'building'
+  | 'deforming'
+  | 'moving'
+  | 'blending'
+  | 'traced'
+  | 'unsupported';
+
+/** Why the first ray-traced frames showed this device cannot path trace. */
+export type RayTraceFailure = 'gpu-error' | 'setup-failed';
+
+/** Outcome of the one-time path tracing probe. */
+export interface RayTracingCapability {
+  ok: boolean;
+  failure: RayTraceFailure | null;
+  /** Raw technical text shown beside the label. */
+  detail: string;
+}
+
+/** Thrown instead of building a tracer on a device the probe rejected. */
+export class RayTracingUnsupportedError extends Error {
+  readonly failure: RayTraceFailure;
+  readonly detail: string;
+
+  constructor(capability: RayTracingCapability) {
+    super(`WebGPU path tracing unsupported: ${capability.failure}`);
+    this.failure = capability.failure ?? 'setup-failed';
+    this.detail = capability.detail;
+  }
+}
+
+/** Frames the first ray-traced switch draws to prove the kernels answer. */
+const VERIFY_FRAMES = 2;
+
+/** Below this CSS size the view is a hidden or one-pixel pane; its buffers are too small to judge. */
+const VERIFY_MIN_SIZE = 16;
+
+/**
+ * Milliseconds the GPU queue may take to drain. Sized for a slow mobile GPU finishing the first
+ * full-pane sample rounds: exceeding it means the switch gives up, so it must not be a normal wait.
+ */
+const VERIFY_TIMEOUT_MS = 30000;
+
+/** Characters of technical detail kept for the readout. */
+const PROBE_DETAIL_LIMIT = 180;
+
+/** Clips diagnostic text to the width the viewport toast can show. */
+function probeDetail(text: string): string {
+  const single = text.replace(/\s+/g, ' ').trim();
+  return single.length > PROBE_DETAIL_LIMIT ? `${single.slice(0, PROBE_DETAIL_LIMIT)}…` : single;
+}
+
+/** Resolves as `'timeout'` after `ms`; bounds the GPU queue drain. */
+function verifyTimeout(ms: number): Promise<'timeout'> {
+  return new Promise(resolve => setTimeout(() => resolve('timeout'), ms));
+}
+
+/**
+ * Runs the freshly built tracer over the live scene and reports whether the GPU answered.
+ * Kernel and bind-group failures surface asynchronously, so drawing the first frames is the only
+ * honest capability test — and they are the frames the view draws anyway, so nothing is compiled twice.
+ * Returns null when the view is too small to judge: a hidden pane is clamped to 1×1 CSS pixel and
+ * one-pixel ray buffers make three emit struct bindings that are not arrays, which every wavefront
+ * kernel then fails to parse — a healthy GPU must not be condemned for that.
+ */
+async function verifyRayTracing(ctx: RendererContext, tracer: RayTracingRenderer): Promise<RayTracingCapability | null> {
+  const viewSize = new THREE.Vector2();
+  ctx.renderer.getSize(viewSize);
+  if (viewSize.x < VERIFY_MIN_SIZE || viewSize.y < VERIFY_MIN_SIZE) return null;
+
+  let device: GPUDevice;
+  try {
+    device = rendererDevice(ctx);
+  } catch (error) {
+    return { ok: false, failure: 'setup-failed', detail: probeDetail(error instanceof Error ? error.message : String(error)) };
+  }
+
+  const errors: string[] = [];
+  let lost = '';
+  const onError = (event: Event) => {
+    errors.push((event as { error?: { message?: string } }).error?.message ?? 'uncaptured GPU error');
+  };
+  device.addEventListener('uncapturederror', onError);
+  void device.lost.then(info => { lost = String(info.reason); });
+  try {
+    // The first call only records the scene change; the kernels go out on the ones after it.
+    for (let frame = 0; frame < VERIFY_FRAMES; frame++) tracer.render(ctx.scene, ctx.camera);
+
+    // Browsers without the drain call skip that check rather than failing the device.
+    const queue = device.queue as { onSubmittedWorkDone?: () => Promise<undefined> };
+    if (queue.onSubmittedWorkDone) {
+      const settled = await Promise.race([
+        queue.onSubmittedWorkDone().then(() => 'done' as const),
+        verifyTimeout(VERIFY_TIMEOUT_MS),
+      ]);
+      if (settled === 'timeout') {
+        return { ok: false, failure: 'gpu-error', detail: probeDetail(`${VERIFY_TIMEOUT_MS}ms 内 GPU 队列没有排空`) };
+      }
+    }
+
+    if (errors.length > 0) return { ok: false, failure: 'gpu-error', detail: probeDetail(errors[0]) };
+    if (lost) return { ok: false, failure: 'gpu-error', detail: probeDetail(`GPU 上下文丢失：${lost}`) };
+
+    // The wavefront backend advances one bounce per frame, so a couple of frames legitimately
+    // report no finished sample yet. The count is shown, never judged.
+    let average = Number.NaN;
+    try {
+      average = await tracer.measureSampleAverage();
+    } catch {
+      average = Number.NaN;
+    }
+    const counted = Number.isNaN(average) ? '样本计数不可读' : `平均 ${average.toFixed(1)} 样本`;
+    return { ok: true, failure: null, detail: probeDetail(`试跑 ${VERIFY_FRAMES} 帧 · ${counted}`) };
+  } catch (error) {
+    return { ok: false, failure: 'setup-failed', detail: probeDetail(error instanceof Error ? `${error.name}: ${error.message}` : String(error)) };
+  } finally {
+    device.removeEventListener('uncapturederror', onError);
+  }
+}
+
+/** Which ray tracing gate the viewport's next drawn frame is behind. */
+export function rayTraceState(ctx: RendererContext): RayTraceState {
+  if (ctx.renderMode !== 'raytraced') return 'inactive';
+  if (ctx.rayCapability && !ctx.rayCapability.ok) return 'unsupported';
+  const tracer = ctx.rayTracer;
+  if (!tracer) return 'building';
+  if (tracer.deferReason) return tracer.deferReason;
+  return tracer.isBlending ? 'blending' : 'traced';
 }
 
 /** Whether this browser exposes a usable WebGPU adapter. */
@@ -97,7 +231,8 @@ export async function createRendererContext(canvas: HTMLCanvasElement): Promise<
     renderer, scene, camera, perspectiveCamera: camera, orthographicCamera,
     projection: 'perspective', orthoViewHeight: 1, controls, canvas,
     renderMode: 'shaded', rayConfig: createDefaultRayTracing(),
-    rayTracer: null, rayTracerLoading: null, disposed: false,
+    rayTracer: null, rayTracerLoading: null, rayCapability: null,
+    disposed: false,
   };
   syncOrthoFrustum(ctx, width / height);
   return ctx;
@@ -145,12 +280,26 @@ export function setCameraProjection(ctx: RendererContext, projection: CameraProj
 export async function setRendererMode(ctx: RendererContext, mode: RenderMode): Promise<void> {
   ctx.renderMode = mode;
   if (mode !== 'raytraced' || ctx.rayTracer || ctx.disposed) return;
+  if (ctx.rayCapability && !ctx.rayCapability.ok) throw new RayTracingUnsupportedError(ctx.rayCapability);
   if (!ctx.rayTracerLoading) {
     ctx.rayTracerLoading = import('./rayTracingRenderer')
       .then(async ({ RayTracingRenderer }) => {
         if (ctx.disposed) return null;
         const tracer = new RayTracingRenderer(ctx.renderer, ctx.rayConfig);
         await tracer.setConfig(ctx.rayConfig);
+        // The switch is only proven once the kernels have drawn; see verifyRayTracing.
+        const capability = ctx.rayCapability ?? await verifyRayTracing(ctx, tracer);
+        if (capability) {
+          ctx.rayCapability = capability;
+          if (!capability.ok) {
+            tracer.dispose();
+            throw new RayTracingUnsupportedError(capability);
+          }
+        }
+        if (ctx.disposed) {
+          tracer.dispose();
+          return null;
+        }
         return tracer;
       })
       .catch(error => {

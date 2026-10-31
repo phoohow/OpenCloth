@@ -5,4 +5,6 @@ node_modules/*
 .preview/*
 .probe/*
 tsconfig.tsbuildinfo
+test-results
+playwright-report
 docs/draft

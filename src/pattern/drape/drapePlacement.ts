@@ -1,6 +1,7 @@
 import type { Panel, PanelDrape, BodyLandmark } from '../../core/model/types';
 import { landmarkY, type BodyEllipse, type BodyLandmarks } from '../../avatar/landmarks';
 import type { PanelMesh } from '../panel/panelBuilder';
+import { inferDrape } from './drapeInfer';
 
 const DEG = Math.PI / 180;
 
@@ -112,13 +113,14 @@ export function drapePositions(mesh: PanelMesh, panel: Panel, body: BodyLandmark
       const ring = drape.plumb ? plumbRing(body, wy, topY) : body.torsoEllipseAt(wy);
       // Fabric longer than the body arc at this height stays loose; shorter fabric is let out.
       const k = Math.max(1, rowWidth * 0.01 / ellipseArc(ring, spanRad));
-      out[i * 3] = (ring.rx * k + ease) * Math.sin(theta);
+      out[i * 3] = body.torsoCenterXAt(wy) + (ring.rx * k + ease) * Math.sin(theta);
       out[i * 3 + 1] = wy;
       out[i * 3 + 2] = (ring.rz * k + ease) * Math.cos(theta);
     } else {
       const r = rows ? Math.max(limbR, rowWidth * 0.01 / spanRad) : limbR;
-      // A relaxed arm hangs raked outward, so the limb axis shifts with height.
-      const rake = drape.region === 'arm' ? Math.tan(body.armRakeRad) * (limbX >= 0 ? 1 : -1) : 0;
+      // A relaxed arm or splayed leg hangs outward, so the limb axis shifts with height.
+      const rakeAngle = drape.region === 'arm' ? body.armRakeRad : drape.region === 'leg' ? body.legRakeRad : 0;
+      const rake = Math.tan(rakeAngle) * (limbX >= 0 ? 1 : -1);
       const axis = limbX + rake * Math.max(topY - wy, 0);
       out[i * 3] = axis + r * Math.cos(theta);
       out[i * 3 + 1] = wy;
@@ -220,15 +222,4 @@ function limbAxisX(drape: ResolvedDrape, body: BodyLandmarks): number {
   if (drape.region === 'neck') return 0;
   const sign = drape.side === 'left' ? -1 : 1;
   return sign * (drape.region === 'arm' ? body.shoulderX : body.hipX);
-}
-
-/** Bodice halves and sleeves recognized from their Chinese panel names. */
-function inferDrape(name: string): PanelDrape {
-  if (name.includes('袖')) {
-    return { region: 'arm', side: name.includes('左') ? 'left' : 'right' };
-  }
-  if (name.includes('后')) {
-    return { region: 'torso', startDeg: 270, sweepDeg: -180 };
-  }
-  return { region: 'torso' };
 }

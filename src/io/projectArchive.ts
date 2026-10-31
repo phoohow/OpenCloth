@@ -1,16 +1,19 @@
 import type { Project } from '../core/model/types';
 import { projectCodec } from './codec';
 import { deleteModelBlob, listModelBlobKeys } from './objectStore';
+import { embedProjectAssets } from './projectPackage';
 
-/** IndexedDB archive of project snapshots: the recent-project list and the autosave slot. */
+/** IndexedDB archive of project snapshots: the recent-project list and the autosave snapshots. */
 
 const DB_NAME = 'oc-projects';
 const RECENT_STORE = 'recent';
 const AUTOSAVE_STORE = 'autosave';
-const AUTOSAVE_KEY = 'autosave';
 
 /** Entries kept in the recent-project list. */
 export const RECENT_LIMIT = 8;
+
+/** Autosave snapshots kept before the oldest is dropped. */
+export const AUTOSAVE_LIMIT = 5;
 
 /** Menu entry for one stored project snapshot. */
 export interface RecentSummary {
@@ -24,11 +27,15 @@ interface RecentRecord extends RecentSummary {
   json: string;
 }
 
-/** Autosave slot contents. */
+/** Autosave snapshot contents. */
 export interface AutosaveRecord {
+  id: string;
   savedAt: string;
   json: string;
 }
+
+/** One autosave snapshot without its payload. */
+export type AutosaveSummary = Omit<AutosaveRecord, 'json'>;
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -80,13 +87,14 @@ export function pruneRecents(records: RecentRecord[], record: RecentRecord, limi
 /** Stores the project under its name, dropping entries beyond the limit. */
 export async function pushRecent(project: Project): Promise<void> {
   if (!storageAvailable()) return;
-  const record: RecentRecord = {
-    id: project.meta.name,
-    name: project.meta.name,
-    savedAt: new Date().toISOString(),
-    json: projectCodec.encode(project),
-  };
   try {
+    const embedded = await embedProjectAssets(project);
+    const record: RecentRecord = {
+      id: project.meta.name,
+      name: project.meta.name,
+      savedAt: new Date().toISOString(),
+      json: projectCodec.encode(embedded),
+    };
     const stale = await withStores([RECENT_STORE], 'readonly', tx =>
       requestResult<RecentRecord[]>(tx.objectStore(RECENT_STORE).getAll() as IDBRequest));
     const next = pruneRecents(stale, record);
@@ -134,24 +142,62 @@ export async function clearRecent(): Promise<void> {
   }
 }
 
-/** Overwrites the single autosave slot with the current project. */
-export async function saveAutosave(project: Project): Promise<void> {
-  if (!storageAvailable()) return;
-  const record: AutosaveRecord = { savedAt: new Date().toISOString(), json: projectCodec.encode(project) };
+/** Autosave snapshots, newest first. */
+export function sortAutosaves(records: AutosaveRecord[]): AutosaveRecord[] {
+  return [...records].sort((a, b) => b.savedAt.localeCompare(a.savedAt));
+}
+
+/** Snapshots to keep after a write: newest first, oldest beyond the limit dropped. */
+export function pruneAutosaves(records: AutosaveRecord[], limit = AUTOSAVE_LIMIT): AutosaveRecord[] {
+  return sortAutosaves(records).slice(0, Math.max(1, limit));
+}
+
+/** Stores one autosave snapshot and drops the oldest ones beyond the limit. */
+export async function saveAutosave(project: Project): Promise<AutosaveRecord | null> {
+  if (!storageAvailable()) return null;
   try {
-    await withStores([AUTOSAVE_STORE], 'readwrite', tx => { tx.objectStore(AUTOSAVE_STORE).put(record, AUTOSAVE_KEY); });
+    const embedded = await embedProjectAssets(project);
+    const savedAt = new Date().toISOString();
+    const record: AutosaveRecord = { id: savedAt, savedAt, json: projectCodec.encode(embedded) };
+    await withStores([AUTOSAVE_STORE], 'readwrite', tx => tx.objectStore(AUTOSAVE_STORE).put(record, record.id));
+    const stored = await withStores([AUTOSAVE_STORE], 'readonly', tx =>
+      requestResult<AutosaveRecord[]>(tx.objectStore(AUTOSAVE_STORE).getAll() as IDBRequest));
+    const keep = pruneAutosaves(stored);
+    const keepIds = new Set(keep.map(r => r.id));
+    await withStores([AUTOSAVE_STORE], 'readwrite', tx => {
+      const store = tx.objectStore(AUTOSAVE_STORE);
+      for (const entry of stored) if (!keepIds.has(entry.id)) store.delete(entry.id);
+    });
+    return record;
   } catch {
-    // Report autosave failures through the status line.
+    return null;
   }
 }
 
-/** Current autosave slot; null when autosave has never run. */
-export async function readAutosave(): Promise<AutosaveRecord | null> {
+/** Autosave snapshots, newest first. */
+export async function listAutosaves(): Promise<AutosaveSummary[]> {
+  if (!storageAvailable()) return [];
+  try {
+    const records = await withStores([AUTOSAVE_STORE], 'readonly', tx =>
+      requestResult<AutosaveRecord[]>(tx.objectStore(AUTOSAVE_STORE).getAll() as IDBRequest));
+    return sortAutosaves(records).map(({ id, savedAt }) => ({ id, savedAt }));
+  } catch {
+    return [];
+  }
+}
+
+/** One autosave snapshot by id, or the newest one when no id is given. */
+export async function readAutosave(id?: string): Promise<AutosaveRecord | null> {
   if (!storageAvailable()) return null;
   try {
-    const record = await withStores([AUTOSAVE_STORE], 'readonly', tx =>
-      requestResult<AutosaveRecord | undefined>(tx.objectStore(AUTOSAVE_STORE).get(AUTOSAVE_KEY) as IDBRequest));
-    return record ?? null;
+    if (id !== undefined) {
+      const record = await withStores([AUTOSAVE_STORE], 'readonly', tx =>
+        requestResult<AutosaveRecord | undefined>(tx.objectStore(AUTOSAVE_STORE).get(id) as IDBRequest));
+      return record ?? null;
+    }
+    const records = await withStores([AUTOSAVE_STORE], 'readonly', tx =>
+      requestResult<AutosaveRecord[]>(tx.objectStore(AUTOSAVE_STORE).getAll() as IDBRequest));
+    return sortAutosaves(records)[0] ?? null;
   } catch {
     return null;
   }
@@ -186,8 +232,9 @@ export async function pruneOrphanBlobs(current: Project): Promise<void> {
         for (const key of collectBlobKeys(JSON.parse(record.json))) live.add(key);
       } catch { /* A corrupt entry keeps nothing alive. */ }
     }
-    const autosave = await readAutosave();
-    if (autosave) {
+    const autosaves = await withStores([AUTOSAVE_STORE], 'readonly', tx =>
+      requestResult<AutosaveRecord[]>(tx.objectStore(AUTOSAVE_STORE).getAll() as IDBRequest));
+    for (const autosave of autosaves) {
       try {
         for (const key of collectBlobKeys(JSON.parse(autosave.json))) live.add(key);
       } catch { /* ignore */ }

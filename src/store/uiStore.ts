@@ -1,15 +1,22 @@
 import { create } from 'zustand';
-import type { CameraProjection, RenderMode } from '../core/model/types';
+import type { CameraProjection, EditPreviewTier, Pattern, RenderMode, Vec2 } from '../core/model/types';
+import type { PatternElementKind } from '../core/model/elementRef';
 import { pickPrefs, readPrefs, writePrefs } from './prefs';
 
 /** 2D drafting and 3D fitting tools; each pane owns a subset. */
-export type ToolType = 'select' | 'point' | 'line' | 'curve' | 'internalLine' | 'dart' | 'seam' | 'pan' | 'pin' | 'unpin';
+export type ToolType = 'select' | 'point' | 'line' | 'curve' | 'internalLine' | 'dart' | 'seam' | 'pin' | 'unpin' | 'rect' | 'circle' | 'ellipse' | 'split' | 'hole' | 'notch' | 'annotation' | 'measure';
 /** Properties-editor tabs, one icon in the right-hand rail. Identity and data share `object`. */
 export type PropTab = 'object' | 'material' | 'physics' | 'scene' | 'render';
 /** How the viewport area divides between panes. */
 export type ViewLayout = 'split3d2d' | 'split2d3d' | '2d' | '3d';
 /** Id of one viewport pane. */
 export type PaneId = '2d' | '3d';
+
+/** Transient message shown over the viewports; a fresh id restarts the toast on repeated text. */
+export interface ToastMessage {
+  id: number;
+  text: string;
+}
 
 /** Layouts that show both panes side by side. */
 export function isSplitLayout(layout: ViewLayout): boolean {
@@ -65,8 +72,40 @@ interface UIStore {
   cameraProjection: CameraProjection;
   /** Bumped to fit the pattern into the 2D pane. */
   fitToken: number;
+  /** Layer switches for drafting-only visuals; toggles stay out of the undo history. */
+  displayOptions: {
+    internal: boolean;
+    darts: boolean;
+    seamAllowance: boolean;
+    notches: boolean;
+    grain: boolean;
+    annotations: boolean;
+    measurements: boolean;
+    gradingOverlay: boolean;
+    seamJoin: boolean;
+  };
   /** Bumped after reference-object list changes so panels re-read the engine list. */
   refObjectsVersion: number;
+  /** Element kinds a marquee rectangle collects. Session-only. */
+  marqueeKinds: PatternElementKind[];
+  /** 3D fidelity the cloth follows an in-flight 2D edit with. */
+  editPreview: EditPreviewTier;
+  /** Shows body-clearance colours on the cloth instead of fabric materials. */
+  fitCheck: boolean;
+  /** Clearance below this reads as tight, in centimetres. */
+  fitTightCm: number;
+  /** Clearance above this reads as loose, in centimetres. */
+  fitLooseCm: number;
+  /** Shows per-vertex strain colours on the cloth instead of fabric materials. */
+  strainCheck: boolean;
+  /** Lower bound of the strain colour ramp. */
+  strainMin: number;
+  /** Upper bound of the strain colour ramp. */
+  strainMax: number;
+  /** Pattern copy of the in-flight 2D drag; session-only transport to the 3D pane. */
+  editPreviewPattern: Pattern | null;
+  /** Grading delta copied from one point, pasted onto the selected points. Session-only. */
+  gradingClipboard: Vec2 | null;
   showTemplatePanel: boolean;
   showScenePanel: boolean;
   showPropertiesPanel: boolean;
@@ -75,6 +114,8 @@ interface UIStore {
   autoSaveSeconds: number;
   /** Timestamp of the last autosave written to the local archive. */
   lastAutosaveAt: string | null;
+  /** Transient message over the viewports; null when none is shown. */
+  toast: ToastMessage | null;
   setLayout: (v: ViewLayout) => void;
   setSplitRatio: (r: number) => void;
   setFocus: (p: PaneId) => void;
@@ -82,6 +123,15 @@ interface UIStore {
   select: (ids: string[]) => void;
   toggleSelection: (id: string) => void;
   clearSelection: () => void;
+  setDisplayOption: (key: keyof UIStore['displayOptions'], value: boolean) => void;
+  setMarqueeKinds: (kinds: PatternElementKind[]) => void;
+  setEditPreview: (tier: EditPreviewTier) => void;
+  setFitCheck: (on: boolean) => void;
+  setFitThresholds: (tightCm: number, looseCm: number) => void;
+  setStrainCheck: (on: boolean) => void;
+  setStrainRange: (min: number, max: number) => void;
+  setEditPreviewPattern: (pattern: Pattern | null) => void;
+  setGradingClipboard: (delta: Vec2 | null) => void;
   setSceneRatio: (r: number) => void;
   setLeftPanelWidth: (w: number) => void;
   setRightPanelWidth: (w: number) => void;
@@ -98,10 +148,15 @@ interface UIStore {
   toggleTimeline: () => void;
   setAutoSaveSeconds: (s: number) => void;
   setLastAutosaveAt: (at: string | null) => void;
+  showToast: (text: string) => void;
+  dismissToast: () => void;
   balancePanes: () => void;
 }
 
 const prefs = readPrefs();
+
+/** Sequence behind `ToastMessage.id`. */
+let toastSeq = 0;
 
 /** Viewport layout, tool, selection and panel-visibility state. */
 export const useUIStore = create<UIStore>((set, get) => ({
@@ -119,12 +174,26 @@ export const useUIStore = create<UIStore>((set, get) => ({
   cameraProjection: prefs.cameraProjection,
   fitToken: 0,
   refObjectsVersion: 0,
+  marqueeKinds: ['panel'],
+  editPreview: prefs.editPreview,
+  fitCheck: false,
+  fitTightCm: 0.5,
+  fitLooseCm: 2.5,
+  strainCheck: false,
+  strainMin: -0.25,
+  strainMax: 0.25,
+  editPreviewPattern: null,
+  gradingClipboard: null,
+  displayOptions: {
+    internal: true, darts: true, seamAllowance: false, notches: true, grain: true, annotations: true, measurements: true, gradingOverlay: false, seamJoin: false,
+  },
   showTemplatePanel: prefs.showTemplatePanel,
   showScenePanel: prefs.showScenePanel,
   showPropertiesPanel: prefs.showPropertiesPanel,
   showTimeline: prefs.showTimeline,
   autoSaveSeconds: prefs.autoSaveSeconds,
   lastAutosaveAt: null,
+  toast: null,
 
   setLayout: (v) => set({ layout: v }),
   setSplitRatio: (r) => set({ splitRatio: r }),
@@ -137,6 +206,21 @@ export const useUIStore = create<UIStore>((set, get) => ({
     set({ selection: next });
   },
   clearSelection: () => set({ selection: [] }),
+  setDisplayOption: (key, value) => set(s => ({ displayOptions: { ...s.displayOptions, [key]: value } })),
+  setMarqueeKinds: (kinds) => set({ marqueeKinds: kinds }),
+  setEditPreview: (tier) => set({ editPreview: tier }),
+  setFitCheck: (on) => set(s => ({ fitCheck: on, strainCheck: on ? false : s.strainCheck })),
+  setFitThresholds: (tightCm, looseCm) => set({
+    fitTightCm: Math.max(0, tightCm),
+    fitLooseCm: Math.max(tightCm, looseCm),
+  }),
+  setStrainCheck: (on) => set(s => ({ strainCheck: on, fitCheck: on ? false : s.fitCheck })),
+  setStrainRange: (min, max) => set({
+    strainMin: Math.min(max, min),
+    strainMax: Math.max(max, min),
+  }),
+  setEditPreviewPattern: (pattern) => set({ editPreviewPattern: pattern }),
+  setGradingClipboard: (delta) => set({ gradingClipboard: delta }),
   setSceneRatio: (r) => set({ sceneRatio: r }),
   setLeftPanelWidth: (w) => set({ leftPanelWidth: w }),
   setRightPanelWidth: (w) => set({ rightPanelWidth: w }),
@@ -157,6 +241,8 @@ export const useUIStore = create<UIStore>((set, get) => ({
   toggleTimeline: () => set(s => ({ showTimeline: !s.showTimeline })),
   setAutoSaveSeconds: (s) => set({ autoSaveSeconds: s }),
   setLastAutosaveAt: (at) => set({ lastAutosaveAt: at }),
+  showToast: (text) => set({ toast: { id: ++toastSeq, text } }),
+  dismissToast: () => set({ toast: null }),
   balancePanes: () => set(s => ({
     splitRatio: 0.5,
     layout: isSplitLayout(s.layout) ? s.layout : 'split3d2d',

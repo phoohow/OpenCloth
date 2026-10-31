@@ -4,6 +4,7 @@ import { memo, type CSSProperties } from 'react';
 export const ICON_NAMES = [
   // 2D pattern tools
   'select', 'add-point', 'line', 'curve', 'internal-line', 'dart', 'seam', 'pan',
+  'rect', 'circle', 'ellipse',
   // 3D pin tools
   'pin', 'unpin',
   // Properties tabs

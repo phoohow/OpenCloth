@@ -48,7 +48,7 @@ export function generateAvatarSDF(params: AvatarParams): AvatarSDF {
     radius: number, radiusZ = radius,
   ) => capsules.push({ ax, ay, az, bx, by, bz, radius, radiusZ });
 
-  // Torso: hip, waist and chest segments, elliptical like the visible body.
+  // Torso: hip, waist and chest segments, elliptical and shifted by the lateral lean.
   const torsoSpans: [number, number][] = [
     [body.crotchY, body.hipY],
     [body.hipY, body.waistY],
@@ -57,36 +57,56 @@ export function generateAvatarSDF(params: AvatarParams): AvatarSDF {
   ];
   for (const [y0, y1] of torsoSpans) {
     const e = widestEllipse(body, y0, y1);
-    cap(0, y0, 0, 0, y1, 0, e.rx * 0.98, e.rz * 0.98);
+    cap(body.torsoCenterXAt(y0), y0, 0, body.torsoCenterXAt(y1), y1, 0, e.rx * 0.98, e.rz * 0.98);
   }
 
   // Neck
-  cap(0, body.torsoTop, 0, 0, body.neckTopY, 0, body.neckR);
+  cap(body.torsoCenterXAt(body.torsoTop), body.torsoTop, 0,
+    body.torsoCenterXAt(body.neckTopY), body.neckTopY, 0, body.neckR);
   // Head
   const headC = body.headCenterY;
-  cap(0, headC - body.headH * 0.3, 0, 0, headC + body.headH * 0.3, 0, body.headH * 0.42);
+  const headX = body.torsoCenterXAt(headC);
+  cap(headX, headC - body.headH * 0.3, 0, headX, headC + body.headH * 0.3, 0, body.headH * 0.42);
 
-  // Legs
+  // Legs: thigh and shin segments splayed outward about the hip joint.
   const legX = body.hipX;
-  cap(-legX, body.legH, 0, -legX, body.kneeY, 0, body.legR, body.legR * 0.85);
-  cap(-legX, body.kneeY, 0, -legX, 0.04, 0, body.legR * 0.7, body.legR * 0.6);
-  cap(legX, body.legH, 0, legX, body.kneeY, 0, body.legR, body.legR * 0.85);
-  cap(legX, body.kneeY, 0, legX, 0.04, 0, body.legR * 0.7, body.legR * 0.6);
+  const legRake = body.legRakeRad;
+  for (const side of [-1, 1]) {
+    const angle = side * legRake;
+    const hip = { x: side * legX, y: body.legH };
+    const knee = {
+      x: hip.x + Math.sin(angle) * (body.legH - body.kneeY),
+      y: hip.y - Math.cos(angle) * (body.legH - body.kneeY),
+    };
+    const ankle = {
+      x: hip.x + Math.sin(angle) * (body.legH - 0.04),
+      y: hip.y - Math.cos(angle) * (body.legH - 0.04),
+    };
+    cap(hip.x, hip.y, 0, knee.x, knee.y, 0, body.legR, body.legR * 0.85);
+    cap(knee.x, knee.y, 0, ankle.x, ankle.y, 0, body.legR * 0.7, body.legR * 0.6);
+  }
 
   // Arms: shoulder ball plus raked upper arm and forearm along the pose angle.
   const armR = body.armR;
   const rake = body.armRakeRad;
   const midX = Math.sin(rake) * body.armH * 0.5;
   const midY = Math.cos(rake) * body.armH * 0.5;
+  const shoulderCenter = body.torsoCenterXAt(body.shoulderY);
   for (const side of [-1, 1]) {
-    const sx = side * body.shoulderX;
+    const sx = shoulderCenter + side * body.shoulderX;
     cap(sx, body.shoulderY, 0, sx, body.shoulderY, 0, armR * 1.15, armR * 1.15);
     cap(sx, body.shoulderY, 0, sx + side * midX, body.shoulderY - midY, 0, armR, armR * 0.9);
     cap(sx + side * midX, body.shoulderY - midY, 0, sx + side * midX * 2, body.shoulderY - midY * 2, 0, armR * 0.7, armR * 0.65);
   }
 
   const pad = 0.1;
-  const reach = body.shoulderX + Math.abs(Math.sin(rake)) * body.armH + armR;
+  const armReach = Math.abs(shoulderCenter) + body.shoulderX + Math.abs(Math.sin(rake)) * body.armH + armR;
+  const legReach = legX + Math.abs(Math.sin(legRake)) * body.legH + body.legR;
+  const leanReach = Math.max(
+    Math.abs(body.torsoCenterXAt(body.torsoTop)),
+    Math.abs(body.torsoCenterXAt(body.height)),
+  ) + body.chestR;
+  const reach = Math.max(armReach, legReach, leanReach);
   const bounds = {
     min: [-reach - pad, -pad, -body.hipR - pad] as [number, number, number],
     max: [reach + pad, body.height + pad, body.hipR + pad] as [number, number, number],

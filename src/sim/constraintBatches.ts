@@ -1,18 +1,20 @@
 import type { FabricPhysics } from '../core/model/types';
 import {
-  buildMeshConstraints, colorConstraints, packConstraints, type Constraint,
+  buildMeshConstraints, colorConstraints, creaseConstraintsForEdges, packConstraints,
+  type Constraint,
 } from './buffers/constraintBuilder';
 import type { BatchedConstraints, ClothSimInput } from './simTypes';
 
-/** Structural, shear and bending constraints of every panel, each with its own material stiffness. */
+/** Structural, shear, crease and bending constraints of every panel, each with its own material stiffness. */
 export function buildPanelConstraints(
   input: ClothSimInput,
   physics: FabricPhysics[],
   dt: number,
-): { structural: Constraint[]; shear: Constraint[]; bending: Constraint[] } {
+): { structural: Constraint[]; shear: Constraint[]; bending: Constraint[]; crease: Constraint[] } {
   const structural: Constraint[] = [];
   const shear: Constraint[] = [];
   const bending: Constraint[] = [];
+  const crease: Constraint[] = [];
 
   input.panels.forEach((panel, slot) => {
     // Rest lengths come from the 3D conformed positions.
@@ -23,8 +25,25 @@ export function buildPanelConstraints(
     structural.push(...offset(meshConstraints.structural));
     shear.push(...offset(meshConstraints.shear));
     bending.push(...offset(meshConstraints.bending));
+    crease.push(...offset(creaseConstraintsForEdges(
+      panel.positions3D, panel.mesh, panel.creaseEdges ?? [], physics[slot], dt,
+    )));
   });
-  return { structural, shear, bending };
+  return { structural, shear, bending, crease };
+}
+
+/** Fold crease constraints of every panel, offset into merged particle indices. */
+export function buildCreaseConstraints(
+  input: ClothSimInput,
+  physics: FabricPhysics[],
+  dt: number,
+): Constraint[] {
+  const crease: Constraint[] = [];
+  input.panels.forEach((panel, slot) => {
+    const local = creaseConstraintsForEdges(panel.positions3D, panel.mesh, panel.creaseEdges ?? [], physics[slot], dt);
+    for (const c of local) crease.push({ ...c, p0: c.p0 + panel.vertexOffset, p1: c.p1 + panel.vertexOffset });
+  });
+  return crease;
 }
 
 /** Colors constraints into batches and writes each packed batch to its own storage buffer. */

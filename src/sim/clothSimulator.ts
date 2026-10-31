@@ -1,7 +1,7 @@
 import type { SimulationConfig, FabricPhysics } from '../core/model/types';
 import type { AvatarSDF } from '../avatar/sdf/avatarSDF';
 import { packCapsules } from '../avatar/sdf/avatarSDF';
-import { packConstraints } from './buffers/constraintBuilder';
+import { packConstraints, type Constraint } from './buffers/constraintBuilder';
 import {
   computeParticlePanelMap, ParticleGrid, pickNearest, pickNearestToPoint,
   type ParticlePickHit, type Vec3Like,
@@ -11,11 +11,16 @@ import {
 } from './gpuPipelines';
 import {
   packCollideParams, packIntegrateParams, packPinParams, packSolveParams, packUpdateParams,
+  clothThicknessMeters, layerSpacingMeters,
 } from './simUniforms';
 import {
-  buildPanelConstraints, createBatchedConstraints, rewriteBatches,
+  buildCreaseConstraints, buildPanelConstraints, createBatchedConstraints, rewriteBatches,
 } from './constraintBatches';
-import { computeBaseInvMass, type BatchedConstraints, type ClothSimInput } from './simTypes';
+import {
+  computeBaseInvMass, computeParticleDamping, computeParticleLayers, CONSTRAINT_GROUP_ORDER,
+  type ClothSimInput, type ConstraintGroup, type ConstraintGroupKind,
+} from './simTypes';
+import { SelfCollisionSolver } from './selfCollision';
 
 export type { ClothSimInput } from './simTypes';
 
@@ -35,17 +40,20 @@ export class ClothSimulator {
   private normalsBuf!: GPUBuffer;
   private indicesBuf!: GPUBuffer;
 
-  // Constraint buffers, batched by type
-  private structuralBatches: BatchedConstraints = { batches: [], buffers: [], count: 0 };
-  private shearBatches: BatchedConstraints = { batches: [], buffers: [], count: 0 };
-  private bendingBatches: BatchedConstraints = { batches: [], buffers: [], count: 0 };
-  private seamBatches: BatchedConstraints = { batches: [], buffers: [], count: 0 };
+  // Constraint buffers, one replaceable group per constraint kind
+  private groups = new Map<ConstraintGroupKind, ConstraintGroup>();
   /** Seam rest lengths before any closing, per batch and constraint. */
   private seamOpenLengths: number[][] = [];
+  /** Seam-tearing switch, updated on every step; torn constraints stop pulling. */
+  private seamTearing = false;
+  /** Flat indices (into the live seam constraint stream) already torn. */
+  private tornSeams = new Set<number>();
 
   // Body collision
   private capsuleBuf!: GPUBuffer;
   private capsuleCount = 0;
+  /** Per-particle damping mirroring each panel's material. */
+  private dampingBuf!: GPUBuffer;
 
   // Uniform buffers
   private integrateParamsBuf!: GPUBuffer;
@@ -71,8 +79,6 @@ export class ClothSimulator {
   private solveBGs: GPUBindGroup[] = [];
   /** Constraint count per solve batch, one-to-one with solveBGs. */
   private solveBatchCounts: number[] = [];
-  /** Uniform buffers behind the solve bind groups, released on destroy. */
-  private solveParamBufs: GPUBuffer[] = [];
 
   private readbackBuf!: GPUBuffer;
   private readbackNormalsBuf!: GPUBuffer;
@@ -89,6 +95,17 @@ export class ClothSimulator {
   private initialPosInvMass: Float32Array = new Float32Array(0);
   /** Inverse mass of every unpinned particle, taken from its own panel's fabric weight. */
   private baseInvMass: Float32Array = new Float32Array(0);
+  /** Inverse mass mirror for the CPU self-collision pass, in step with the GPU buffers. */
+  private invMassMirror: Float32Array = new Float32Array(0);
+  /** Collision layer of every particle, from its panel's `collisionLayer`. */
+  private layerByParticle: Uint8Array = new Uint8Array(0);
+  /** Scratch upload buffer holding self-collision corrected positions. */
+  private selfCollisionWriteback: Float32Array<ArrayBuffer> = new Float32Array(0);
+  private selfCollisionSolver = new SelfCollisionSolver(0);
+  /** Self-collision settings of the most recent step, read again by every readback. */
+  private selfCollisionEnabled = true;
+  private clothThickness = 0.002;
+  private layerSpacing = 0.004;
   /** Particle indices currently pinned (inverse mass = 0). */
   private pinnedSet = new Set<number>();
   /** Setup input, kept so material edits can rebuild constraints without touching geometry. */
@@ -114,9 +131,12 @@ export class ClothSimulator {
     // ---- Per-panel material state ----
     this.simInput = input;
     this.constraintDt = config.dt;
+    this.tornSeams.clear();
     this.panelPhysics = input.panels.map(p => p.physics);
     this.panelMap = computeParticlePanelMap(input);
     this.baseInvMass = computeBaseInvMass(input, this.panelPhysics, pc);
+    this.dampingBuf = createStorageBuffer(dev, computeParticleDamping(
+      input, this.panelPhysics, pc, this.panelPhysics[0]?.damping ?? 0.02));
 
     // ---- Particle buffers ----
     const posData = new Float32Array(pc * 4);
@@ -132,6 +152,8 @@ export class ClothSimulator {
 
     this.pinnedSet = new Set(input.pinnedIndices ?? []);
     this.pickGrid = null;
+    this.syncCollisionState(input);
+    this.applySelfCollisionConfig(config);
 
     // Save initial state (with inverse mass) for exact restore on reset
     this.initialPosInvMass = posData.slice();
@@ -150,12 +172,6 @@ export class ClothSimulator {
 
     // ---- Constraint build and coloring ----
     const built = buildPanelConstraints(input, this.panelPhysics, config.dt);
-
-    this.structuralBatches = createBatchedConstraints(dev, built.structural, pc);
-    this.shearBatches = createBatchedConstraints(dev, built.shear, pc);
-    this.bendingBatches = createBatchedConstraints(dev, built.bending, pc);
-    this.seamBatches = createBatchedConstraints(dev, input.seamConstraints, pc);
-    this.seamOpenLengths = this.seamBatches.batches.map(batch => batch.map(c => c.restLength));
 
     // ---- Body capsules ----
     if (avatarSDF) {
@@ -191,6 +207,14 @@ export class ClothSimulator {
     this.pipelines = createSimPipelines(dev);
     this.createBindGroups();
 
+    // Constraint groups need the solve pipeline, so they are installed after it.
+    this.installGroup('structural', built.structural);
+    this.installGroup('shear', built.shear);
+    this.installGroup('bending', built.bending);
+    this.installGroup('crease', built.crease);
+    this.installGroup('seam', input.seamConstraints);
+    this.seamOpenLengths = this.group('seam').batched.batches.map(batch => batch.map(c => c.restLength));
+
     // ---- Readback buffers ----
     this.readbackBuf = dev.createBuffer({
       size: pc * 16, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
@@ -206,6 +230,105 @@ export class ClothSimulator {
   }
 
   /**
+   * Rebuilds the per-particle layer map, the inverse-mass mirror and the self-collision scratch
+   * for the current particle layout.
+   */
+  private syncCollisionState(input: ClothSimInput): void {
+    const pc = this.particleCount;
+    this.layerByParticle = computeParticleLayers(input, pc);
+    this.invMassMirror = new Float32Array(pc);
+    this.syncInvMassMirror();
+    this.selfCollisionSolver = new SelfCollisionSolver(pc);
+    this.selfCollisionWriteback = new Float32Array(pc * 4);
+  }
+
+  /** Refreshes the inverse-mass mirror from the live pin set and base masses. */
+  private syncInvMassMirror(): void {
+    const pc = this.particleCount;
+    if (this.invMassMirror.length !== pc) this.invMassMirror = new Float32Array(pc);
+    for (let i = 0; i < pc; i++) this.invMassMirror[i] = this.pinnedSet.has(i) ? 0 : this.baseInvMass[i]!;
+  }
+
+  /** Copies the cloth self-collision and seam-tearing tunables of one frame step. */
+  private applySelfCollisionConfig(config: SimulationConfig): void {
+    this.selfCollisionEnabled = config.selfCollision !== false;
+    this.clothThickness = clothThicknessMeters(config);
+    this.layerSpacing = layerSpacingMeters(config);
+    this.seamTearing = config.seamTearing === true;
+  }
+
+  /**
+   * Projects overlapping particle pairs apart on the CPU and uploads the corrected positions to
+   * the solver's position buffer, so the next substep starts from them. Velocity keeps the value
+   * the UPDATE pass computed, and previous positions are left alone.
+   */
+  private applySelfCollision(): void {
+    if (!this.selfCollisionEnabled) return;
+    const pc = this.particleCount;
+    const result = this.selfCollisionSolver.resolve(this.readPositions, this.invMassMirror, this.layerByParticle, {
+      thickness: this.clothThickness,
+      layerSpacing: this.layerSpacing,
+    });
+    if (!result.moved) return;
+    const data = this.selfCollisionWriteback;
+    for (let i = 0; i < pc; i++) {
+      data[i * 4] = this.readPositions[i * 3]!;
+      data[i * 4 + 1] = this.readPositions[i * 3 + 1]!;
+      data[i * 4 + 2] = this.readPositions[i * 3 + 2]!;
+      data[i * 4 + 3] = this.invMassMirror[i]!;
+    }
+    this.device.queue.writeBuffer(this.posInvMassBuf, 0, data);
+  }
+
+  /** Flat index each seam batch starts at, so torn and progress paths index the same constraint. */
+  private seamBatchOffsets(): number[] {
+    const seam = this.groups.get('seam');
+    if (!seam) return [];
+    const offsets: number[] = [];
+    let acc = 0;
+    for (const batch of seam.batched.batches) {
+      offsets.push(acc);
+      acc += batch.length;
+    }
+    return offsets;
+  }
+
+  /** Neutralizes seam constraints stretched past their strength-derived tear length. */
+  private resolveSeamTears(): void {
+    if (!this.seamTearing) return;
+    const seam = this.groups.get('seam');
+    const pc = this.particleCount;
+    if (!seam || !(this.readPositions.length >= pc * 3)) return;
+    const offsets = this.seamBatchOffsets();
+    const dirty = new Set<number>();
+    seam.batched.batches.forEach((batch, b) => {
+      batch.forEach((constraint, i) => {
+        const flat = (offsets[b] ?? 0) + i;
+        if (this.tornSeams.has(flat)) return;
+        const tearLength = constraint.tearLength;
+        if (tearLength === undefined || !Number.isFinite(tearLength) || tearLength <= 0) return;
+        const p0 = constraint.p0;
+        const p1 = constraint.p1;
+        if (p0 < 0 || p1 < 0 || p0 >= pc || p1 >= pc) return;
+        const dx = this.readPositions[p0 * 3]! - this.readPositions[p1 * 3]!;
+        const dy = this.readPositions[p0 * 3 + 1]! - this.readPositions[p1 * 3 + 1]!;
+        const dz = this.readPositions[p0 * 3 + 2]! - this.readPositions[p1 * 3 + 2]!;
+        const dist = Math.hypot(dx, dy, dz);
+        if (!Number.isFinite(dist)) return;
+        if (dist > tearLength) {
+          this.tornSeams.add(flat);
+          constraint.restLength = dist; // a torn stitch keeps neither pulling nor pushing
+          dirty.add(b);
+        }
+      });
+    });
+    for (const b of dirty) {
+      const packed = packConstraints(seam.batched.batches[b]);
+      this.device.queue.writeBuffer(seam.batched.buffers[b], 0, packed.data);
+    }
+  }
+
+  /**
    * Mirrors a position write into the CPU readback cache, so picking and pin markers follow
    * the solver from the first frame instead of waiting for a GPU readback.
    */
@@ -218,41 +341,76 @@ export class ClothSimulator {
   }
 
   private createBindGroups(): void {
-    const dev = this.device;
     const L = this.pipelines.layouts;
     const bind = (layout: GPUBindGroupLayout, buffers: GPUBuffer[]): GPUBindGroup =>
-      dev.createBindGroup({
-        layout,
-        entries: buffers.map((buffer, binding): GPUBindGroupEntry => ({ binding, resource: { buffer } })),
-      });
+      this.bindGroup(layout, buffers);
 
     this.integrateBG = bind(L.integrate,
       [this.posInvMassBuf, this.prevPosBuf, this.velocityBuf, this.predictedBuf, this.integrateParamsBuf]);
     this.collideBG = bind(L.collide,
       [this.predictedBuf, this.capsuleBuf, this.collideParamsBuf, this.prevPosBuf]);
     this.updateBG = bind(L.update,
-      [this.posInvMassBuf, this.prevPosBuf, this.velocityBuf, this.predictedBuf, this.updateParamsBuf]);
+      [this.posInvMassBuf, this.prevPosBuf, this.velocityBuf, this.predictedBuf, this.updateParamsBuf,
+        this.dampingBuf]);
     this.normalsBG = bind(L.normals,
       [this.posInvMassBuf, this.normalsBuf, this.indicesBuf, this.normalsParamsBuf]);
     this.normalizeBG = bind(L.particleCount, [this.normalsBuf, this.particleCountBuf]);
     this.clearNormalsBG = bind(L.particleCount, [this.normalsBuf, this.particleCountBuf]);
     this.setPinBG = bind(L.setPin,
       [this.posInvMassBuf, this.pinIndicesBuf, this.pinParamsBuf, this.pinInvMassBuf]);
+  }
 
-    // One solve bind group per constraint batch, each with its own params and constraint count
+  /** Bind group wiring `buffers` to the layout's bindings, in order. */
+  private bindGroup(layout: GPUBindGroupLayout, buffers: GPUBuffer[]): GPUBindGroup {
+    return this.device.createBindGroup({
+      layout,
+      entries: buffers.map((buffer, binding): GPUBindGroupEntry => ({ binding, resource: { buffer } })),
+    });
+  }
+
+  /** Constraints of a live group, by kind; the kind must have been installed. */
+  private group(kind: ConstraintGroupKind): ConstraintGroup {
+    const group = this.groups.get(kind);
+    if (!group) throw new Error(`Constraint group ${kind} is not installed`);
+    return group;
+  }
+
+  /**
+   * Colors constraints into batches, packs them into fresh storage buffers and rebuilds the flat
+   * dispatch list; the group's previous buffers and uniform buffers are released.
+   */
+  private installGroup(kind: ConstraintGroupKind, constraints: Constraint[]): void {
+    const dev = this.device;
+    const previous = this.groups.get(kind);
+    for (const buffer of previous?.batched.buffers ?? []) buffer.destroy();
+    for (const buffer of previous?.paramBufs ?? []) buffer.destroy();
+
+    const batched = createBatchedConstraints(dev, constraints, this.particleCount);
+    const group: ConstraintGroup = { batched, bindGroups: [], counts: [], paramBufs: [] };
+    const layout = this.pipelines.layouts.solve;
+    for (let b = 0; b < batched.buffers.length; b++) {
+      const count = batched.batches[b].length;
+      const pbuf = createUniformBuffer(dev, 32);
+      dev.queue.writeBuffer(pbuf, 0, packSolveParams(this.particleCount, count));
+      group.paramBufs.push(pbuf);
+      group.counts.push(count);
+      group.bindGroups.push(this.bindGroup(
+        layout, [this.predictedBuf, this.posInvMassBuf, batched.buffers[b], pbuf],
+      ));
+    }
+    this.groups.set(kind, group);
+    this.rebuildSolveLists();
+  }
+
+  /** Solve bind groups in constraint-group order. */
+  private rebuildSolveLists(): void {
     this.solveBGs = [];
     this.solveBatchCounts = [];
-    const allBatches = [this.structuralBatches, this.shearBatches, this.bendingBatches, this.seamBatches];
-    for (const batched of allBatches) {
-      for (let b = 0; b < batched.buffers.length; b++) {
-        const count = batched.batches[b].length;
-        const pbuf = createUniformBuffer(dev, 32);
-        dev.queue.writeBuffer(pbuf, 0, packSolveParams(this.particleCount, count));
-        this.solveBatchCounts.push(count);
-        this.solveParamBufs.push(pbuf);
-        this.solveBGs.push(bind(L.solve,
-          [this.predictedBuf, this.posInvMassBuf, batched.buffers[b], pbuf]));
-      }
+    for (const kind of CONSTRAINT_GROUP_ORDER) {
+      const group = this.groups.get(kind);
+      if (!group) continue;
+      this.solveBGs.push(...group.bindGroups);
+      this.solveBatchCounts.push(...group.counts);
     }
   }
 
@@ -265,6 +423,7 @@ export class ClothSimulator {
     const subDt = config.dt / substeps;
     const frameStart = this.time;
     this.time += config.dt;
+    this.applySelfCollisionConfig(config);
 
     const wg = (n: number) => Math.ceil(n / 256);
     dev.queue.writeBuffer(this.particleCountBuf, 0, new Uint32Array([pc]));
@@ -277,7 +436,7 @@ export class ClothSimulator {
       const encoder = dev.createCommandEncoder();
 
       dev.queue.writeBuffer(this.integrateParamsBuf, 0, packIntegrateParams(subConfig, fabric, pc, subTime));
-      dev.queue.writeBuffer(this.updateParamsBuf, 0, packUpdateParams(subConfig, fabric, pc));
+      dev.queue.writeBuffer(this.updateParamsBuf, 0, packUpdateParams(subConfig, pc));
 
       // Predict positions from velocity, gravity and wind
       {
@@ -360,7 +519,7 @@ export class ClothSimulator {
   /**
    * Applies new per-panel material physics to the live solver: constraint compliances and
    * particle masses are rewritten in place, keeping positions, velocity source and pins.
-   * Returns false when the batch layout changed and a full re-setup is required.
+   * Groups whose batch layout changed are repacked into fresh buffers instead.
    */
   updateMaterialPhysics(physicsByPanel: FabricPhysics[], positions: Float32Array): boolean {
     const input = this.simInput;
@@ -368,16 +527,55 @@ export class ClothSimulator {
 
     this.panelPhysics = physicsByPanel.map(p => ({ ...p }));
     const built = buildPanelConstraints(input, this.panelPhysics, this.constraintDt);
-    if (!rewriteBatches(this.device, this.structuralBatches, built.structural, input.particleCount)) return false;
-    if (!rewriteBatches(this.device, this.shearBatches, built.shear, input.particleCount)) return false;
-    if (!rewriteBatches(this.device, this.bendingBatches, built.bending, input.particleCount)) return false;
+    const sets: Array<[ConstraintGroupKind, Constraint[]]> = [
+      ['structural', built.structural],
+      ['shear', built.shear],
+      ['bending', built.bending],
+      ['crease', built.crease],
+    ];
+    const inPlace = sets.every(([kind, constraints]) =>
+      rewriteBatches(this.device, this.group(kind).batched, constraints, input.particleCount));
+    if (!inPlace) for (const [kind, constraints] of sets) this.installGroup(kind, constraints);
 
     this.baseInvMass = computeBaseInvMass(input, this.panelPhysics, input.particleCount);
+    this.device.queue.writeBuffer(this.dampingBuf, 0, computeParticleDamping(
+      input, this.panelPhysics, input.particleCount, this.panelPhysics[0]?.damping ?? 0.02));
+    this.syncInvMassMirror();
     for (let i = 0; i < input.particleCount; i++) {
       const w = this.pinnedSet.has(i) ? 0 : this.baseInvMass[i];
       this.initialPosInvMass[i * 4 + 3] = w;
     }
     this.setPositions(positions);
+    return true;
+  }
+
+  /**
+   * Replaces the live seam constraint group, e.g. when a dart's legs are stitched or released.
+   * Positions, pins, particle count and the other constraint groups stay as they are.
+   */
+  setSeamConstraints(constraints: Constraint[]): void {
+    if (!this.initialized || !this.simInput) return;
+    this.simInput.seamConstraints = constraints;
+    this.installGroup('seam', constraints);
+    this.seamOpenLengths = this.group('seam').batched.batches.map(batch => batch.map(c => c.restLength));
+    this.tornSeams.clear();
+  }
+
+  /**
+   * Replaces each panel's fold crease edges, given as flat local vertex index pairs in panel-slot
+   * order, and repacks the crease group with the current material physics. False when the panel
+   * slots no longer match the live layout.
+   */
+  setCreaseEdges(creaseEdgesByPanel: readonly number[][]): boolean {
+    const input = this.simInput;
+    if (!input || !this.initialized) return false;
+    if (creaseEdgesByPanel.length !== input.panels.length) return false;
+    input.panels.forEach((panel, slot) => {
+      const edges = creaseEdgesByPanel[slot] ?? [];
+      if (edges.length === 0) delete panel.creaseEdges;
+      else panel.creaseEdges = [...edges];
+    });
+    this.installGroup('crease', buildCreaseConstraints(input, this.panelPhysics, this.constraintDt));
     return true;
   }
 
@@ -405,6 +603,8 @@ export class ClothSimulator {
       }
       this.readbackBuf.unmap();
       this.readbackNormalsBuf.unmap();
+      this.applySelfCollision();
+      this.resolveSeamTears();
       this.positionsVersion++;
     } catch {
       // Destroyed readback buffers: the caller's generation is gone; serve the last cache.
@@ -414,8 +614,7 @@ export class ClothSimulator {
   }
 
   /** Restores the initial positions; the current pin set is preserved. */
-  reset(initialPositions: Float32Array): void {
-    if (!this.initialized) return;
+  reset(initialPositions: Float32Array): void {    if (!this.initialized) return;
     const pc = this.particleCount;
     const data = new Float32Array(pc * 4);
     // Inverse mass comes from initialPosInvMass, which mirrors live pin changes.
@@ -435,18 +634,66 @@ export class ClothSimulator {
   }
 
   /**
+   * Replaces the flat-pattern initial positions for an incremental geometry rebuild:
+   * particles whose live positions are given keep simulating, the rest are placed at the
+   * new initial layout. Constraint batches are untouched.
+   */
+  rebaseGeometry(input: ClothSimInput, initialPositions: Float32Array, livePositions: Float32Array | null): void {
+    if (!this.initialized) return;
+    const pc = input.particleCount;
+    if (pc !== this.particleCount) return;
+    this.simInput = input;
+    this.panelPhysics = input.panels.map(p => p.physics);
+    this.panelMap = computeParticlePanelMap(input);
+    this.baseInvMass = computeBaseInvMass(input, this.panelPhysics, pc);
+    this.layerByParticle = computeParticleLayers(input, pc);
+    this.device.queue.writeBuffer(this.dampingBuf, 0, computeParticleDamping(
+      input, this.panelPhysics, pc, this.panelPhysics[0]?.damping ?? 0.02));
+    this.syncInvMassMirror();
+
+    const data = new Float32Array(pc * 4);
+    for (let i = 0; i < pc; i++) {
+      const src = livePositions && livePositions.length >= pc * 3 ? livePositions : initialPositions;
+      data[i * 4] = src[i * 3];
+      data[i * 4 + 1] = src[i * 3 + 1];
+      data[i * 4 + 2] = src[i * 3 + 2];
+      data[i * 4 + 3] = this.initialPosInvMass.length > 0 ? this.initialPosInvMass[i * 4 + 3] : 1.0;
+    }
+    for (const idx of input.pinnedIndices ?? []) data[idx * 4 + 3] = 0;
+    this.initialPosInvMass = data.slice();
+
+    this.device.queue.writeBuffer(this.posInvMassBuf, 0, data);
+    this.device.queue.writeBuffer(this.prevPosBuf, 0, data);
+    this.device.queue.writeBuffer(this.predictedBuf, 0, data);
+    this.device.queue.writeBuffer(this.velocityBuf, 0, new Float32Array(pc * 4));
+    const xyz = new Float32Array(pc * 3);
+    for (let i = 0; i < pc; i++) {
+      xyz[i * 3] = data[i * 4]!;
+      xyz[i * 3 + 1] = data[i * 4 + 1]!;
+      xyz[i * 3 + 2] = data[i * 4 + 2]!;
+    }
+    this.cachePositions(xyz);
+    this.time = 0;
+  }
+
+  /**
    * Closes every seam by the same fraction: rest length runs from the open pair distance to zero.
    * `progress` is clamped to 0..1 and the batches are repacked into their existing buffers.
    */
   setSeamProgress(progress: number): void {
-    if (this.seamBatches.buffers.length === 0) return;
+    const seam = this.groups.get('seam');
+    if (!seam || seam.batched.buffers.length === 0) return;
     const p = Math.min(1, Math.max(0, progress));
-    for (let b = 0; b < this.seamBatches.batches.length; b++) {
-      const batch = this.seamBatches.batches[b];
+    const offsets = this.seamBatchOffsets();
+    for (let b = 0; b < seam.batched.batches.length; b++) {
+      const batch = seam.batched.batches[b];
       const open = this.seamOpenLengths[b] ?? [];
-      for (let i = 0; i < batch.length; i++) batch[i].restLength = (open[i] ?? batch[i].restLength) * (1 - p);
+      for (let i = 0; i < batch.length; i++) {
+        if (this.tornSeams.has((offsets[b] ?? 0) + i)) continue; // torn stitches stay open
+        batch[i].restLength = (open[i] ?? batch[i].restLength) * (1 - p);
+      }
       const packed = packConstraints(batch);
-      this.device.queue.writeBuffer(this.seamBatches.buffers[b], 0, packed.data);
+      this.device.queue.writeBuffer(seam.batched.buffers[b], 0, packed.data);
     }
   }
 
@@ -499,6 +746,7 @@ export class ClothSimulator {
       const index = particleIndices[i];
       invMasses[i] = pinned ? 0 : this.baseInvMass[index];
       this.initialPosInvMass[index * 4 + 3] = invMasses[i];
+      if (this.invMassMirror.length > index) this.invMassMirror[index] = invMasses[i];
       if (pinned) this.pinnedSet.add(index);
       else this.pinnedSet.delete(index);
     }
@@ -560,14 +808,13 @@ export class ClothSimulator {
     this.initialized = false;
     const buffers: (GPUBuffer | undefined)[] = [
       this.posInvMassBuf, this.prevPosBuf, this.velocityBuf, this.predictedBuf, this.normalsBuf,
-      this.indicesBuf, this.capsuleBuf,
+      this.indicesBuf, this.capsuleBuf, this.dampingBuf,
       this.integrateParamsBuf, this.collideParamsBuf, this.updateParamsBuf, this.normalsParamsBuf,
       this.particleCountBuf, this.pinIndicesBuf, this.pinInvMassBuf, this.pinParamsBuf,
       this.readbackBuf, this.readbackNormalsBuf,
-      ...this.structuralBatches.buffers, ...this.shearBatches.buffers,
-      ...this.bendingBatches.buffers, ...this.seamBatches.buffers,
-      ...this.solveParamBufs,
     ];
+    for (const group of this.groups.values()) buffers.push(...group.batched.buffers, ...group.paramBufs);
+    this.groups.clear();
     for (const buffer of buffers) buffer?.destroy();
   }
 }

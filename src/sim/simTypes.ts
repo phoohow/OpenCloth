@@ -22,6 +22,13 @@ export interface ClothSimInput {
     restPositions: Float32Array;
     /** Material physics of the piece; its stiffness and weight shape its own constraints. */
     physics: FabricPhysics;
+    /** Collision layer of the piece, 0 is the innermost. */
+    collisionLayer?: number;
+    /**
+     * Flat local mesh vertex index pairs [a, b, ...] of the triangle edges the panel's fold lines
+     * cross; each pair becomes a stiff crease constraint.
+     */
+    creaseEdges?: number[];
   }>;
   /** Seam constraints (particle pairs across pattern pieces). */
   seamConstraints: Constraint[];
@@ -41,6 +48,22 @@ export interface BatchedConstraints {
   count: number;
 }
 
+/** Constraint groups the solver dispatches, in solve order. */
+export const CONSTRAINT_GROUP_ORDER = ['structural', 'shear', 'bending', 'crease', 'seam'] as const;
+
+/** One solver constraint group, replaceable while the simulation keeps running. */
+export type ConstraintGroupKind = typeof CONSTRAINT_GROUP_ORDER[number];
+
+/** A constraint group with its GPU resources: one batch, bind group and parameter buffer per color. */
+export interface ConstraintGroup {
+  batched: BatchedConstraints;
+  bindGroups: GPUBindGroup[];
+  /** Constraint count of each batch, one-to-one with `bindGroups`. */
+  counts: number[];
+  /** Uniform buffers behind the bind groups. */
+  paramBufs: GPUBuffer[];
+}
+
 /**
  * Per-particle inverse mass from each panel's fabric weight; particles outside every
  * panel keep the mid-weight default so they never read as pinned.
@@ -58,4 +81,31 @@ export function computeBaseInvMass(
     for (let i = panel.vertexOffset; i < end && i < particleCount; i++) out[i] = invMass;
   });
   return out;
+}
+
+/** Per-particle damping from each panel's fabric; particles outside every panel keep the fallback. */
+export function computeParticleDamping(
+  input: ClothSimInput,
+  physics: FabricPhysics[],
+  particleCount: number,
+  fallback: number,
+): Float32Array<ArrayBuffer> {
+  const out = new Float32Array(particleCount).fill(fallback);
+  input.panels.forEach((panel, slot) => {
+    const value = physics[slot]?.damping ?? fallback;
+    const end = Math.min(panel.vertexOffset + panel.mesh.vertexCount, particleCount);
+    for (let i = panel.vertexOffset; i < end; i++) out[i] = value;
+  });
+  return out;
+}
+
+/** Per-particle collision layer from each panel record, clamped to 0–9. */
+export function computeParticleLayers(input: ClothSimInput, particleCount: number): Uint8Array {
+  const layers = new Uint8Array(particleCount);
+  for (const panel of input.panels) {
+    const layer = Math.min(9, Math.max(0, Math.round(panel.collisionLayer ?? 0)));
+    const end = Math.min(panel.vertexOffset + panel.mesh.vertexCount, particleCount);
+    for (let i = panel.vertexOffset; i < end; i++) layers[i] = layer;
+  }
+  return layers;
 }

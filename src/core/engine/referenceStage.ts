@@ -1,7 +1,7 @@
 import * as THREE from 'three/webgpu';
 import type { ObjectTransform, ReferenceObjectRef } from '../model/types';
 import { IDENTITY_TRANSFORM, cloneTransform } from '../model/defaults';
-import { loadModelFromFile } from '../../io/modelLoader';
+import { loadModelFromFile, loadModelFromUrl } from '../../io/modelLoader';
 import { getModelBlob, putModelBlob } from '../../io/objectStore';
 import { applyTransform } from './objectTransforms';
 
@@ -26,14 +26,22 @@ export class ReferenceStage {
   /** Loads stored models that are not in the scene yet. */
   async ensure(references: ReferenceObjectRef[], scene: THREE.Scene): Promise<void> {
     for (const ref of references) {
-      if (this.objects.has(ref.id) || !ref.objectKey) continue;
-      const blob = await getModelBlob(ref.objectKey);
-      if (!blob) continue;
-      const loaded = await loadModelFromFile(new File([blob], ref.name), { targetHeight: 0 });
+      if (this.objects.has(ref.id) || (!ref.objectKey && !ref.objectUrl)) continue;
+      const loaded = ref.objectUrl
+        ? await loadModelFromUrl(ref.objectUrl, { targetHeight: 0 })
+        : await this.loadStored(ref);
+      if (!loaded) continue;
       this.add(loaded.group, ref.id, scene, ref.opacity);
       this.setVisible(ref.id, ref.visible);
       this.place(ref.id, ref.transform ?? IDENTITY_TRANSFORM);
     }
+  }
+
+  /** Loads one reference object from the local blob store; null when the key no longer resolves. */
+  private async loadStored(ref: ReferenceObjectRef) {
+    const blob = ref.objectKey ? await getModelBlob(ref.objectKey) : null;
+    if (!blob) return null;
+    return loadModelFromFile(new File([blob], ref.name), { targetHeight: 0 });
   }
 
   /** Keeps scene meshes in sync with the project list: drops strays, loads missing entries. */

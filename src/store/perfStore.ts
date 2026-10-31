@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { PaneId } from './uiStore';
+import type { RayTraceState, RayTracingCapability } from '../render/renderer/rendererContext';
 
 /** Drawn frames are turned into a rate once this much time has passed. */
 export const FPS_SAMPLE_MS = 500;
@@ -14,6 +15,8 @@ let costStart = 0;
 let accumulating = false;
 /** Cost read at the frame the pass finished; keeps a filled pass from counting idle frames. */
 let frozenCostMs = 0;
+/** Ray tracing gate the 3D view reported on its last drawn frame. */
+let rayState: RayTraceState = 'inactive';
 
 /** Frames per second for `count` frames drawn within `elapsedMs`; 0 for a non-positive window. */
 export function fpsFrom(count: number, elapsedMs: number): number {
@@ -50,6 +53,16 @@ export function noteRayTracingSamples(count: number, isAccumulating: boolean, no
   reportedSamples = count;
 }
 
+/** Records the ray tracing gate the 3D view's last drawn frame used. */
+export function noteRayTraceState(state: RayTraceState): void {
+  rayState = state;
+}
+
+/** Publishes a failed path tracing probe, or clears it again. Takes effect without waiting for the next sample window. */
+export function noteRayTracingUnsupported(capability: RayTracingCapability | null): void {
+  usePerfStore.setState({ rayUnsupported3D: capability });
+}
+
 interface PerfStore {
   /** Drawn frames per second for each viewport pane. */
   fps: Record<PaneId, number>;
@@ -57,6 +70,10 @@ interface PerfStore {
   samples3D: number;
   /** Milliseconds the shown sample count took to accumulate; 0 while it rasterizes. */
   costMs3D: number;
+  /** Ray tracing gate the 3D view is behind, read on the frame it last drew. */
+  rayState3D: RayTraceState;
+  /** Probe result that stopped the display modes from offering ray tracing; null while available. */
+  rayUnsupported3D: RayTracingCapability | null;
   /** Publishes the rate and sample count of the window gathered so far and opens the next one. */
   sampleFps: (now: number) => void;
 }
@@ -66,8 +83,13 @@ export const usePerfStore = create<PerfStore>((set, get) => ({
   fps: { '2d': 0, '3d': 0 },
   samples3D: 0,
   costMs3D: 0,
+  rayState3D: 'inactive',
+  rayUnsupported3D: null,
 
   sampleFps: (now: number) => {
+    const before = get();
+    // The gate is published even before a frame window exists, so a hidden pane still explains itself.
+    if (before.rayState3D !== rayState) set({ rayState3D: rayState });
     const elapsed = now - sampleStart;
     if (sampleStart === 0 || elapsed < FPS_SAMPLE_MS) return;
     const fps: Record<PaneId, number> = {
@@ -81,7 +103,8 @@ export const usePerfStore = create<PerfStore>((set, get) => ({
     const costMs3D = reportedSamples > 0 ? Math.max(0, live - costStart) : 0;
     const prev = get();
     if (prev.fps['2d'] === fps['2d'] && prev.fps['3d'] === fps['3d']
-      && prev.samples3D === reportedSamples && prev.costMs3D === costMs3D) return;
-    set({ fps, samples3D: reportedSamples, costMs3D });
+      && prev.samples3D === reportedSamples && prev.costMs3D === costMs3D
+      && prev.rayState3D === rayState) return;
+    set({ fps, samples3D: reportedSamples, costMs3D, rayState3D: rayState });
   },
 }));

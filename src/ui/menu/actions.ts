@@ -3,17 +3,22 @@ import { isSplitLayout, useProjectStore, useSimStore, useUIStore } from '../../s
 import type { PaneId, PropTab, ViewLayout } from '../../store/stores';
 import { createStarterProject } from '../../pattern/template';
 import { projectCodec, downloadTextFile, readFileAsText } from '../../io/codec';
+import { embedProjectAssets } from '../../io/projectPackage';
 import { exportGLB, exportOBJ, exportScreenshot } from '../../io/exporter';
-import { clearRecent, listRecent, pruneOrphanBlobs, pushRecent, readAutosave, readRecent, saveAutosave, type RecentSummary } from '../../io/projectArchive';
+import { recordCanvasToWebM } from '../../io/animationExporter';
+import { clearRecent, listAutosaves, listRecent, pruneOrphanBlobs, pushRecent, readAutosave, readRecent, saveAutosave, type RecentSummary } from '../../io/projectArchive';
 import { capturePanels, PastePanelsCommand } from '../../core/command/panelClipboard';
-import { DeleteSelectionCommand } from '../../core/command/patternCommands';
+import { CompositeCommand, DeleteElementsCommand, DeleteSelectionCommand } from '../../core/command/patternCommands';
+import type { Command } from '../../core/command/command';
 import { setPanelsVisible, commitClearReferences, commitEnvironmentReset } from '../sceneCommands';
-import { importAvatarViaPicker, importEnvironmentViaPicker, importReferenceViaPicker } from '../modelImport';
+import { importAvatarViaPicker, importEnvironmentViaPicker, importReferenceViaPicker, openFilePicker } from '../modelImport';
+import { parsePatternDxf } from '../../io/dxf/reader';
+import { patternFromJson } from '../../pattern/auto/aiContract';
 import { useMenuStore } from './menuStore';
 import type { GarmentEngine, CameraPreset } from '../../core/engine/garmentEngine';
 import { renderScene } from '../../render/renderer/rendererContext';
 import type { RendererContext } from '../../render/renderer/rendererContext';
-import type { CameraProjection, Project } from '../../core/model/types';
+import type { CameraProjection, Pattern, Project } from '../../core/model/types';
 
 interface MenuActionContext {
   engineRef: MutableRefObject<GarmentEngine | null>;
@@ -32,17 +37,25 @@ export interface MenuActions {
   reopenRecent: (id: string) => void;
   refreshRecent: () => void;
   clearRecentList: () => void;
-  restoreAutosave: () => void;
+  restoreAutosave: (id?: string) => void;
   saveSnapshotNow: () => void;
   setAutoSaveSeconds: (seconds: number) => void;
   importAvatar: () => void;
   importReference: () => void;
   importEnvironment: () => void;
+  importDxf: () => void;
+  importPatternJson: () => void;
   resetEnvironment: () => void;
   clearReferences: () => void;
   exportGlb: () => void;
   exportObj: () => void;
   screenshot: () => void;
+  exportAnimation: () => void;
+  exportDxf: () => void;
+  exportPatternSvg: () => void;
+  exportPdf: () => void;
+  exportTechPack: () => void;
+  exportMarker: () => void;
   undo: () => void;
   redo: () => void;
   copySelection: () => void;
@@ -111,24 +124,57 @@ function adopt(project: Project): void {
   void pushRecent(project).then(() => refreshRecentList());
 }
 
+/** Replaces the project pattern in one undoable step. */
+function commitPatternReplace(next: Pattern, label: string): void {
+  let before: Pattern | null = null;
+  useProjectStore.getState().executeCommand({
+    label,
+    execute(ctx) { before = structuredClone(ctx.project.pattern); ctx.project.pattern = next; },
+    undo(ctx) { if (before) ctx.project.pattern = before; },
+  });
+}
+
+/** Picks a pattern file, parses it and swaps it into the project; failures alert. */
+async function importPatternFile(accept: string, parse: (text: string) => Pattern, label: string, hint: string): Promise<void> {
+  const files = await openFilePicker(accept, false);
+  const file = files?.[0];
+  if (!file) return;
+  try {
+    commitPatternReplace(parse(await readFileAsText(file)), label);
+  } catch (err) {
+    alert(hint + (err as Error).message);
+  }
+}
+
 /** Reads the stored list into the store that backs 文件 ▸ 最近. */
 export function refreshRecentList(): void {
   void listRecent().then((recent: RecentSummary[]) => useProjectStore.getState().setRecent(recent));
 }
 
-/** Writes the current project into the autosave slot. */
+/** Reads the stored snapshot list into the store that backs 文件 ▸ 自动保存. */
+export function refreshAutosaveList(): void {
+  void listAutosaves().then(list => useProjectStore.getState().setAutosaves(list));
+}
+
+/** Writes the current project into a new autosave snapshot and refreshes the snapshot list. */
 export async function writeAutosave(): Promise<void> {
   const snapshot = project();
-  await saveAutosave(snapshot);
-  useUIStore.getState().setLastAutosaveAt(new Date().toISOString());
+  const record = await saveAutosave(snapshot);
+  if (!record) return;
+  useUIStore.getState().setLastAutosaveAt(record.savedAt);
+  refreshAutosaveList();
 }
 
 /** Builds the action set; refs are read on demand so the closures stay valid across re-renders. */
 export function createMenuActions(refs: MenuActionContext): MenuActions {
   const saveToJson = (name: string) => {
-    const snapshot = project();
-    downloadTextFile(`${name}.ocproj.json`, projectCodec.encode(snapshot));
-    void pushRecent(snapshot).then(() => refreshRecentList());
+    void (async () => {
+      const plain = project();
+      const snapshot = await embedProjectAssets(plain);
+      downloadTextFile(`${name}.ocproj.json`, projectCodec.encode(snapshot));
+      await pushRecent(plain);
+      refreshRecentList();
+    })().catch(err => alert('保存工程失败：' + (err as Error).message));
   };
 
   const loadText = (text: string) => {
@@ -172,10 +218,10 @@ export function createMenuActions(refs: MenuActionContext): MenuActions {
     clearRecentList: () => {
       void clearRecent().then(refreshRecentList);
     },
-    restoreAutosave: () => {
+    restoreAutosave: (id?: string) => {
       if (!confirmDiscard()) return;
-      void readAutosave().then(record => {
-        if (!record) { alert('还没有自动保存的快照。'); return; }
+      void readAutosave(id).then(record => {
+        if (!record) { alert('该自动保存快照已不在本地存档中。'); return; }
         loadText(record.json);
       });
     },
@@ -185,6 +231,8 @@ export function createMenuActions(refs: MenuActionContext): MenuActions {
     importAvatar: () => void importAvatarViaPicker(),
     importReference: () => withEngine(refs, engine => void importReferenceViaPicker(engine)),
     importEnvironment: () => void importEnvironmentViaPicker(),
+    importDxf: () => void importPatternFile('.dxf', text => parsePatternDxf(text), '导入 DXF 版型', '导入 DXF 失败：'),
+    importPatternJson: () => void importPatternFile('.json', patternFromJson, '导入 JSON 版型', '导入 JSON 版型失败：'),
     resetEnvironment: () => commitEnvironmentReset(),
     clearReferences: () => commitClearReferences(),
 
@@ -204,6 +252,20 @@ export function createMenuActions(refs: MenuActionContext): MenuActions {
       renderScene(ctx);
       exportScreenshot(ctx.canvas, `${project().meta.name}.png`);
     },
+    exportAnimation: () => {
+      const ctx = refs.ctxRef.current;
+      if (!ctx) return;
+      alert('开始录制 5 秒动画…');
+      // The viewport keeps drawing each frame, so a paused simulation records its current state.
+      void recordCanvasToWebM(ctx.canvas, `${project().meta.name}.webm`).then(result => {
+        if (result === 'unsupported') alert('当前浏览器不支持画布录制');
+      });
+    },
+    exportDxf: () => useMenuStore.getState().openDialog('exportDxf'),
+    exportPatternSvg: () => useMenuStore.getState().openDialog('exportSvg'),
+    exportPdf: () => useMenuStore.getState().openDialog('exportPdf'),
+    exportTechPack: () => useMenuStore.getState().openDialog('exportTechPack'),
+    exportMarker: () => useMenuStore.getState().openDialog('exportMarker'),
 
     undo: () => useProjectStore.getState().undo(),
     redo: () => useProjectStore.getState().redo(),
@@ -220,10 +282,20 @@ export function createMenuActions(refs: MenuActionContext): MenuActions {
       useUIStore.getState().select(cmd.pastedPanelIds);
     },
     deleteSelection: () => {
-      const ids = selectedPanelIds();
-      if (ids.length === 0) return;
-      useProjectStore.getState().executeCommand(new DeleteSelectionCommand(ids));
-      useUIStore.getState().clearSelection();
+      const rows = useUIStore.getState().selection;
+      const panels = selectedPanelIds();
+      const elements = rows.filter(row => !panels.includes(row));
+      const cmds: Command[] = [];
+      if (panels.length > 0) cmds.push(new DeleteSelectionCommand(panels));
+      if (elements.length > 0) cmds.push(new DeleteElementsCommand(elements));
+      if (cmds.length === 0) return;
+      const cmd = cmds.length === 1 ? cmds[0]! : new CompositeCommand('删除选中', cmds);
+      try {
+        useProjectStore.getState().executeCommand(cmd);
+        useUIStore.getState().clearSelection();
+      } catch (err) {
+        alert(`删除失败：${(err as Error).message}`);
+      }
     },
     selectAllPanels: () => useUIStore.getState().select(allPanelIds()),
     clearSelection: () => useUIStore.getState().clearSelection(),

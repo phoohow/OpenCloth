@@ -15,9 +15,10 @@ export class SelectionOverlay {
     return this.ids;
   }
 
-  /** Rebuilds the overlay for these panels; an empty list clears it. Identical lists are ignored. */
+  /** Rebuilds the overlay for these panels; an empty list clears it. Identical inputs are ignored. */
   apply(scene: THREE.Scene, clothGeometry: THREE.BufferGeometry | null, panelIds: string[], triangles: Uint32Array): void {
-    const key = panelIds.join('|');
+    // The geometry id catches rebuilds that reuse the same panel list on a fresh mesh.
+    const key = `${clothGeometry?.id ?? 0}:${panelIds.join('|')}`;
     if (key === this.key) return;
     this.clear(scene);
     this.key = key;

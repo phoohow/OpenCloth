@@ -1,4 +1,4 @@
-import type { FabricAppearance, FabricPhysics } from '../model/types';
+import type { EditPreviewTier, FabricAppearance, FabricPhysics } from '../model/types';
 import { FABRIC_PHYSICS_PRESETS } from '../model/defaults';
 
 /** Scene object name marking a cloth selection overlay. */
@@ -16,3 +16,11 @@ export const FALLBACK_APPEARANCE: FabricAppearance = {
 
 /** Physics used when a panel's material record is missing. */
 export const FALLBACK_PHYSICS: FabricPhysics = structuredClone(FABRIC_PHYSICS_PRESETS.cotton);
+
+/** Mesh density the coarse edit preview rebuilds at, in centimeters per edge. */
+export const PREVIEW_COARSE_RESOLUTION_CM = 6;
+
+/** Mesh density an edit preview builds at; the full tier keeps the project's own density. */
+export function editPreviewResolutionCm(tier: EditPreviewTier, projectResolutionCm: number): number {
+  return tier === 'low' ? PREVIEW_COARSE_RESOLUTION_CM : projectResolutionCm;
+}

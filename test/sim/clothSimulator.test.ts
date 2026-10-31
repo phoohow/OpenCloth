@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { ClothSimulator } from '../../src/sim/clothSimulator';
 import type { ClothSimInput } from '../../src/sim/simTypes';
+import type { Constraint } from '../../src/sim/buffers/constraintBuilder';
+import type { FabricPhysics } from '../../src/core/model/types';
 import { FABRIC_PHYSICS_PRESETS, createDefaultProject } from '../../src/core/model/defaults';
 
 // The simulator reads the WebGPU enums while creating resources.
@@ -38,7 +40,7 @@ function fakeDevice(): { device: GPUDevice; submits: () => number; destroyedBuff
 }
 
 /** Four particles along +X; particle 2 sits closest to the pick ray. */
-function makeInput(): ClothSimInput {
+function makeInput(options: { creaseEdges?: number[]; seamConstraints?: Constraint[] } = {}): ClothSimInput {
   const positions = new Float32Array([
     0.1, 0.01, 0,
     0.3, 0.02, 0,
@@ -61,8 +63,9 @@ function makeInput(): ClothSimInput {
       positions3D: positions,
       restPositions: mesh.positions,
       physics: FABRIC_PHYSICS_PRESETS.cotton,
+      ...(options.creaseEdges ? { creaseEdges: options.creaseEdges } : {}),
     }],
-    seamConstraints: [],
+    seamConstraints: options.seamConstraints ?? [],
     pinnedIndices: [],
     particleCount: 4,
     triangleCount: 2,
@@ -146,8 +149,86 @@ describe('batched pin changes', () => {
   });
 });
 
-describe('simulator teardown', () => {
-  it('destroy releases every buffer and stops the solver', async () => {
+/** Constraint group view of the solver internals. */
+interface GroupView {
+  groups: Map<string, { batched: { count: number; batches: Constraint[][] } }>;
+  particleCount: number;
+}
+
+/** Live constraints of one solver constraint group. */
+function constraintsOf(sim: ClothSimulator, kind: string): Constraint[] {
+  return (sim as unknown as GroupView).groups.get(kind)?.batched.batches.flat() ?? [];
+}
+
+describe('fold crease constraint group', () => {
+  it('holds the creases a panel fold line produces', async () => {
+    const { sim } = await setupSimulator(makeInput({ creaseEdges: [1, 2] }));
+    const crease = constraintsOf(sim, 'crease');
+    expect(crease).toHaveLength(1);
+    expect([crease[0]!.p0, crease[0]!.p1].sort((a, b) => a - b)).toEqual([0, 3]);
+  });
+
+  it('toggles creases off and on without touching the particle layout', async () => {
+    const { sim, submits } = await setupSimulator(makeInput({ creaseEdges: [1, 2] }));
+    const submitted = submits();
+    const internals = sim as unknown as GroupView;
+
+    expect(sim.setCreaseEdges([[]])).toBe(true);
+    expect(constraintsOf(sim, 'crease')).toHaveLength(0);
+    expect(sim.setCreaseEdges([[1, 2]])).toBe(true);
+    expect(constraintsOf(sim, 'crease')).toHaveLength(1);
+    expect(internals.particleCount).toBe(4);
+    // Crease edits only upload constraints; they never submit a simulation frame.
+    expect(submits()).toBe(submitted);
+    // A panel slot count that no longer matches is rejected rather than guessed at.
+    expect(sim.setCreaseEdges([[], []])).toBe(false);
+  });
+
+  it('applies a crease stiffness change without rebuilding the solver', async () => {
+    const { sim, submits } = await setupSimulator(makeInput({ creaseEdges: [1, 2] }));
+    const submitted = submits();
+    const before = constraintsOf(sim, 'crease')[0]!.compliance;
+
+    const softened: FabricPhysics = { ...FABRIC_PHYSICS_PRESETS.cotton, creaseStiffness: 0.55 };
+    expect(sim.updateMaterialPhysics([softened], new Float32Array(12))).toBe(true);
+    expect(constraintsOf(sim, 'crease')[0]!.compliance).toBeGreaterThan(before);
+    expect(submits()).toBe(submitted);
+    expect((sim as unknown as GroupView).particleCount).toBe(4);
+
+    // An identical call leaves the group alone.
+    expect(sim.updateMaterialPhysics([softened], new Float32Array(12))).toBe(true);
+    expect(submits()).toBe(submitted);
+  });
+});
+
+describe('live seam constraint sets', () => {
+  const seam = (p0: number, p1: number, restLength: number): Constraint =>
+    ({ p0, p1, restLength, compliance: 1e-4 });
+
+  it('replaces the seam group when a dart closes', async () => {
+    const { sim } = await setupSimulator(makeInput({ seamConstraints: [seam(0, 3, 0.4)] }));
+    expect(await sim.setParticlePin(1, true)).toBe(true);
+
+    // A closing dart adds leg pairs whose rest length already pulls the legs together.
+    sim.setSeamConstraints([seam(0, 3, 0.4), seam(1, 2, 0), seam(2, 1, 0)]);
+    expect(constraintsOf(sim, 'seam')).toHaveLength(3);
+    expect(sim.getPinnedParticles()).toEqual([1]);
+
+    sim.setSeamConstraints([]);
+    expect(constraintsOf(sim, 'seam')).toHaveLength(0);
+  });
+
+  it('reopens seams on reset while a closed dart stays stitched', async () => {
+    const { sim } = await setupSimulator(makeInput({ seamConstraints: [seam(0, 3, 0.4)] }));
+    sim.setSeamConstraints([seam(0, 3, 0.4), seam(1, 2, 0)]);
+    sim.reset(new Float32Array(12));
+    expect(constraintsOf(sim, 'seam').map(c => c.restLength)).toEqual([0.4, 0]);
+    sim.setSeamProgress(1);
+    expect(constraintsOf(sim, 'seam').map(c => c.restLength)).toEqual([0, 0]);
+  });
+});
+
+describe('simulator teardown', () => {  it('destroy releases every buffer and stops the solver', async () => {
     const { device, destroyedBuffers } = fakeDevice();
     const sim = new ClothSimulator(device);
     await sim.setup(makeInput(), null, createDefaultProject().scene.simulation);

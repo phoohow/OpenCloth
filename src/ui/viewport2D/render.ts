@@ -1,7 +1,16 @@
-import type { Pattern, Vec2 } from '../../core/model/types';
-import { sampleEdge } from '../../pattern/panel/panelBuilder';
+import type { Measurement, Pattern, Seam, Vec2 } from '../../core/model/types';
+import { panelGrainLine, panelOutlineWithAllowance, sampleEdge, sampleEdgeInterval, samplePanelOutline } from '../../pattern/panel/panelBuilder';
+import { measurementValue, pointAtT } from '../../pattern/geom/edgeSample';
+import { edgeCurve } from '../../pattern/geom/bezier';
 import { computeBBox } from '../../pattern/geom/vec2';
-import { toScreen, type ViewTransform } from './viewMath';
+import { seamJoint, sewnOutline } from '../../pattern/seam/joinBlend';
+import {
+  gridStepCm, rulerLabel, rulerMinorTicks, rulerStepCm, rulerTicks, toScreen, toWorld,
+  type ViewTransform,
+} from './viewMath';
+import { parseElementNodeId, idsOfKind } from '../elementSelection';
+import { shapeFrame, type DraftState } from './tools';
+import type { SnapCandidate } from './snap';
 
 const NEAR = 1e-6;
 
@@ -11,6 +20,20 @@ export interface PreviewDrag {
   pattern: Pattern;
   /** Snapped target marker, null when snapping is off. */
   ghost: Vec2 | null;
+}
+
+/** Layer switches for drafting-only visuals; toggles never rebuild geometry. */
+export interface DisplayOptions {
+  internal: boolean;
+  darts: boolean;
+  seamAllowance: boolean;
+  notches: boolean;
+  grain: boolean;
+  annotations: boolean;
+  measurements: boolean;
+  gradingOverlay: boolean;
+  /** Sewn-flat preview of the selected seams' end joints. */
+  seamJoin: boolean;
 }
 
 /** Everything one 2D frame draws. */
@@ -24,36 +47,104 @@ export interface SceneState {
   rect: { a: Vec2; b: Vec2 } | null;
   /** Seam links only appear while the seam tool is active or an edge is selected. */
   showSeams: boolean;
+  /** In-progress tool stroke drawn as a preview layer. */
+  draft?: DraftState;
+  /** Active snap marker highlighted under the cursor. */
+  snapHint?: SnapCandidate | null;
+  display?: DisplayOptions;
+  /** Extra size-chart patterns drawn faintly behind the active one. */
+  gradingOutlines?: Array<{ label: string; polygons: Vec2[][] }>;
 }
 
 /** Full frame: background, grid, panels, point handles, seams, hover, ghost and rubber band. */
 export function drawScene(ctx: CanvasRenderingContext2D, w: number, h: number, scene: SceneState): void {
   const state = scene.preview ? { ...scene, pattern: scene.preview.pattern } : scene;
   const { pattern, view } = state;
+  const display: DisplayOptions = state.display ?? {
+    internal: true, darts: true, seamAllowance: false, notches: true, grain: true, annotations: true, measurements: true, gradingOverlay: false, seamJoin: false,
+  };
   const screen = (p: Vec2): Vec2 => toScreen(p, view, w, h);
 
   ctx.fillStyle = '#252528';
   ctx.fillRect(0, 0, w, h);
 
-  drawGrid(ctx, w, h, view);
+  drawGrid(ctx, w, h, view, gridStepCm(view.scale));
+
+  if (display.gradingOverlay) {
+    for (const size of state.gradingOutlines ?? []) {
+      ctx.strokeStyle = 'rgba(160,160,180,0.4)';
+      ctx.lineWidth = 1;
+      for (const poly of size.polygons) {
+        ctx.beginPath();
+        poly.forEach((p, i) => {
+          const s = screen(p);
+          if (i === 0) ctx.moveTo(s.x, s.y); else ctx.lineTo(s.x, s.y);
+        });
+        ctx.closePath();
+        ctx.stroke();
+      }
+    }
+  }
 
   for (const panel of Object.values(pattern.panels)) {
-    drawPanel(ctx, state, panel.id, screen);
+    drawPanel(ctx, state, panel.id, screen, display);
+  }
+
+  if (display.internal) {
+    for (const panel of Object.values(pattern.panels)) {
+      for (const lineId of panel.internalLineIds) {
+        drawInternalLine(ctx, pattern, lineId, screen);
+      }
+    }
+  }
+  if (display.darts) {
+    for (const panel of Object.values(pattern.panels)) {
+      for (const dartId of panel.dartIds) {
+        drawDart(ctx, state, pattern, dartId, screen);
+      }
+    }
+  }
+  if (display.notches) {
+    for (const notch of Object.values(pattern.notches ?? {})) {
+      drawNotch(ctx, pattern, notch, screen);
+    }
+  }
+  if (display.grain) {
+    for (const panel of Object.values(pattern.panels)) {
+      drawGrain(ctx, state, panel.id, screen);
+    }
+  }
+  if (display.annotations) {
+    for (const note of Object.values(pattern.annotations ?? {})) {
+      drawAnnotation(ctx, note.pos, note.text, note.angleDeg ?? 0, screen);
+    }
+  }
+  if (display.measurements) {
+    for (const measurement of Object.values(pattern.measurements ?? {})) {
+      drawMeasurement(ctx, pattern, measurement, screen);
+    }
   }
 
   if (state.showSeams) {
     for (const seam of Object.values(pattern.seams)) {
-      drawSeam(ctx, pattern, seam.edgeAId, seam.edgeBId, seam.flipB, screen, seam.threadColor);
+      if (seam.stitchVisible === false) continue;
+      drawSeam(ctx, pattern, seam, screen, seam.threadColor);
     }
   }
 
+  if (display.seamJoin) drawSeamJoints(ctx, state, screen);
+
+  drawElementSelection(ctx, state, screen);
+  drawDraft(ctx, state, screen);
+  drawSnapHint(ctx, state, screen);
   drawHover(ctx, state, screen);
   drawGhost(ctx, state, screen);
   drawRubberBand(ctx, state, screen);
+  drawRuler(ctx, w, h, view);
 }
 
-function drawGrid(ctx: CanvasRenderingContext2D, w: number, h: number, view: ViewTransform): void {
-  const gridCm = view.scale > 8 ? 5 : (view.scale > 3 ? 10 : 20);
+/** Grid lines at `gridCm` plus the two origin axes. */
+function drawGrid(ctx: CanvasRenderingContext2D, w: number, h: number, view: ViewTransform, gridCm: number): void {
   const step = gridCm * view.scale;
   ctx.strokeStyle = '#33333a';
   ctx.lineWidth = 1;
@@ -74,14 +165,89 @@ function drawGrid(ctx: CanvasRenderingContext2D, w: number, h: number, view: Vie
   ctx.stroke();
 }
 
+/** Pixel width of the ruler bands along the top and left canvas edges. */
+const RULER_BAND = 18;
+
+/** Ruler bands along the canvas edges, graduated in pattern centimetres. */
+function drawRuler(ctx: CanvasRenderingContext2D, w: number, h: number, view: ViewTransform): void {
+  const stepCm = rulerStepCm(view.scale);
+  const left = toWorld({ x: RULER_BAND, y: 0 }, view, w, h);
+  const right = toWorld({ x: w, y: 0 }, view, w, h);
+  const top = toWorld({ x: 0, y: RULER_BAND }, view, w, h);
+  const bottom = toWorld({ x: 0, y: h }, view, w, h);
+
+  ctx.fillStyle = '#2b2b31';
+  ctx.fillRect(0, 0, w, RULER_BAND);
+  ctx.fillRect(0, 0, RULER_BAND, h);
+
+  ctx.font = '9px sans-serif';
+  ctx.fillStyle = '#98a1b3';
+  ctx.strokeStyle = '#98a1b3';
+  ctx.lineWidth = 1;
+
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  for (const x of rulerTicks(left.x, right.x, stepCm)) {
+    const sx = Math.round(toScreen({ x, y: 0 }, view, w, h).x) + 0.5;
+    if (sx < RULER_BAND + 2) continue;
+    tick(ctx, sx, RULER_BAND, sx, RULER_BAND - 10);
+    ctx.fillText(rulerLabel(x, stepCm), sx + 2, 9);
+  }
+  for (const x of rulerMinorTicks(left.x, right.x, stepCm)) {
+    const sx = Math.round(toScreen({ x, y: 0 }, view, w, h).x) + 0.5;
+    if (sx < RULER_BAND + 2) continue;
+    tick(ctx, sx, RULER_BAND, sx, RULER_BAND - 5);
+  }
+
+  ctx.textAlign = 'right';
+  for (const y of rulerTicks(bottom.y, top.y, stepCm)) {
+    const sy = Math.round(toScreen({ x: 0, y }, view, w, h).y) + 0.5;
+    if (sy < RULER_BAND + 2) continue;
+    tick(ctx, RULER_BAND, sy, RULER_BAND - 10, sy);
+    ctx.save();
+    ctx.translate(RULER_BAND - 3, sy - 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillText(rulerLabel(y, stepCm), 0, 0);
+    ctx.restore();
+  }
+  for (const y of rulerMinorTicks(bottom.y, top.y, stepCm)) {
+    const sy = Math.round(toScreen({ x: 0, y }, view, w, h).y) + 0.5;
+    if (sy < RULER_BAND + 2) continue;
+    tick(ctx, RULER_BAND, sy, RULER_BAND - 5, sy);
+  }
+
+  ctx.strokeStyle = '#3a3a42';
+  ctx.beginPath();
+  ctx.moveTo(0, RULER_BAND + 0.5); ctx.lineTo(w, RULER_BAND + 0.5);
+  ctx.moveTo(RULER_BAND + 0.5, 0); ctx.lineTo(RULER_BAND + 0.5, h);
+  ctx.stroke();
+  ctx.fillStyle = '#2b2b31';
+  ctx.fillRect(0, 0, RULER_BAND, RULER_BAND);
+}
+
+/** One ruler tick line. */
+function tick(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number): void {
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+}
+
 function drawPanel(
   ctx: CanvasRenderingContext2D, scene: SceneState, panelId: string,
-  screen: (p: Vec2) => Vec2,
+  screen: (p: Vec2) => Vec2, display: DisplayOptions,
 ): void {
   const { pattern, selection } = scene;
   const panel = pattern.panels[panelId];
   if (!panel || !panel.visible) return;
-  const isSelected = selection.includes(panel.id);
+  const selectedEdges = new Set(idsOfKind(selection, 'edge'));
+  const selectedPoints = new Set(idsOfKind(selection, 'point'));
+  const isSelected = selection.includes(panel.id) || scene.gradingOutlines === undefined
+    && ([...selectedEdges].some(id => panel.outlineEdgeIds.includes(id))
+      || [...selectedPoints].some(id => panel.outlineEdgeIds.some(eid => {
+        const e = pattern.edges[eid];
+        return e && (e.startPointId === id || e.endPointId === id);
+      })));
 
   const outline: Vec2[] = [];
   for (const edgeId of panel.outlineEdgeIds) {
@@ -108,6 +274,57 @@ function drawPanel(
   ctx.lineWidth = isSelected ? 2.5 : 1.5;
   ctx.stroke();
 
+  // 毛边: the cutting outline the offset kernel produces, corner joins and per-edge amounts included.
+  if (display.seamAllowance && (panel.seamAllowanceCm > 0 || panel.outlineEdgeIds.some(id => pattern.edges[id]?.seamAllowanceCm !== undefined))) {
+    const rough = panelOutlineWithAllowance(pattern, panel);
+    if (rough.length >= 3) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(190,150,90,0.9)';
+      ctx.setLineDash([4, 3]);
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      rough.forEach((p, i) => {
+        const s = screen(p);
+        if (i === 0) ctx.moveTo(s.x, s.y); else ctx.lineTo(s.x, s.y);
+      });
+      ctx.closePath();
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  for (const loop of panel.holes ?? []) {
+    ctx.beginPath();
+    let first = true;
+    for (const edgeId of loop) {
+      for (const p of sampleEdge(pattern, edgeId)) {
+        const s = screen(p);
+        if (first) { ctx.moveTo(s.x, s.y); first = false; } else ctx.lineTo(s.x, s.y);
+      }
+    }
+    ctx.closePath();
+    ctx.strokeStyle = '#9aa0b0';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+
+  // Per-edge highlight while edges are selectable.
+  if (selectedEdges.size > 0 || scene.draft?.tool === 'seam') {
+    ctx.save();
+    ctx.lineWidth = 4;
+    for (const edgeId of panel.outlineEdgeIds) {
+      if (!selectedEdges.has(edgeId)) continue;
+      ctx.strokeStyle = '#ffd75e';
+      ctx.beginPath();
+      sampleEdge(pattern, edgeId).forEach((p, i) => {
+        const s = screen(p);
+        if (i === 0) ctx.moveTo(s.x, s.y); else ctx.lineTo(s.x, s.y);
+      });
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   // Panel name label at the outline center
   const bbox = computeBBox(outline);
   const center = screen({ x: (bbox.min.x + bbox.max.x) / 2, y: (bbox.min.y + bbox.max.y) / 2 });
@@ -127,21 +344,417 @@ function drawPanel(
       const point = pattern.points[pointId];
       if (!point) continue;
       const s = screen(point.pos);
+      const picked = selectedPoints.has(pointId);
       ctx.beginPath();
-      ctx.arc(s.x, s.y, isSelected ? 4 : 3, 0, Math.PI * 2);
-      ctx.fillStyle = isSelected ? '#4da6ff' : '#ccc';
+      ctx.arc(s.x, s.y, picked ? 5 : isSelected ? 4 : 3, 0, Math.PI * 2);
+      ctx.fillStyle = picked ? '#ffd75e' : isSelected ? '#4da6ff' : '#ccc';
       ctx.fill();
+    }
+  }
+
+  // Curve handles of picked points, editable in the select tool.
+  if (isSelected || selectedPoints.size > 0) {
+    for (const edgeId of panel.outlineEdgeIds) {
+      const edge = pattern.edges[edgeId];
+      if (!edge) continue;
+      const curve = edgeCurve(pattern, edge);
+      if (!curve) continue;
+      const showStart = selectedPoints.has(edge.startPointId) || isSelected;
+      const showEnd = selectedPoints.has(edge.endPointId) || isSelected;
+      for (const [show, handle, anchor] of [
+        [showStart, curve.c0, curve.p0], [showEnd, curve.c1, curve.p1],
+      ] as const) {
+        if (!show) continue;
+        const hs = screen(handle);
+        const as = screen(anchor);
+        ctx.strokeStyle = 'rgba(255,215,94,0.6)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(as.x, as.y); ctx.lineTo(hs.x, hs.y);
+        ctx.stroke();
+        ctx.fillStyle = '#ffd75e';
+        ctx.beginPath();
+        ctx.rect(hs.x - 3, hs.y - 3, 6, 6);
+        ctx.fill();
+      }
     }
   }
 }
 
+function drawInternalLine(
+  ctx: CanvasRenderingContext2D, pattern: Pattern, lineId: string, screen: (p: Vec2) => Vec2,
+): void {
+  const line = pattern.internalLines[lineId];
+  if (!line || line.points.length < 2) return;
+  const closed = Math.hypot(line.points[0].x - line.points[line.points.length - 1].x,
+    line.points[0].y - line.points[line.points.length - 1].y) < NEAR;
+  ctx.save();
+  ctx.strokeStyle = line.kind === 'fold' ? '#8ec7ff' : line.kind === 'split' ? '#c7a5ff' : '#9aa0b0';
+  ctx.lineWidth = 1.5;
+  if (line.kind !== 'split') ctx.setLineDash([5, 4]);
+  ctx.beginPath();
+  line.points.forEach((p, i) => {
+    const s = screen(p);
+    if (i === 0) ctx.moveTo(s.x, s.y); else ctx.lineTo(s.x, s.y);
+  });
+  if (closed) ctx.closePath();
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawDart(
+  ctx: CanvasRenderingContext2D, _scene: SceneState, pattern: Pattern, dartId: string, screen: (p: Vec2) => Vec2,
+): void {
+  const dart = pattern.darts[dartId];
+  if (!dart) return;
+  const tip = pattern.points[dart.tipId];
+  if (!tip) return;
+  const ts = screen(tip.pos);
+  ctx.save();
+  ctx.strokeStyle = '#ffb26b';
+  ctx.lineWidth = 1.5;
+  for (const legId of [dart.edge1Id, dart.edge2Id]) {
+    const edge = pattern.edges[legId];
+    if (!edge) continue;
+    for (const id of [edge.startPointId, edge.endPointId]) {
+      const p = pattern.points[id];
+      if (!p) continue;
+      const s = screen(p.pos);
+      ctx.beginPath();
+      ctx.setLineDash([4, 3]);
+      ctx.moveTo(s.x, s.y); ctx.lineTo(ts.x, ts.y);
+      ctx.stroke();
+    }
+  }
+  ctx.setLineDash([]);
+  ctx.fillStyle = '#ffb26b';
+  ctx.beginPath();
+  ctx.arc(ts.x, ts.y, 3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawNotch(
+  ctx: CanvasRenderingContext2D, pattern: Pattern, notch: { edgeId: string; t: number; style?: string },
+  screen: (p: Vec2) => Vec2,
+): void {
+  const pts = sampleEdge(pattern, notch.edgeId);
+  if (pts.length < 2) return;
+  const idx = Math.min(pts.length - 1, Math.max(0, Math.round(notch.t * (pts.length - 1))));
+  const p = pts[idx];
+  const s = screen(p);
+  ctx.save();
+  ctx.strokeStyle = '#ffd75e';
+  ctx.lineWidth = 1.5;
+  if (notch.style === 'drill') {
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, 2.5, 0, Math.PI * 2);
+    ctx.stroke();
+  } else {
+    ctx.beginPath();
+    ctx.moveTo(s.x - 4, s.y - 4); ctx.lineTo(s.x, s.y); ctx.lineTo(s.x + 4, s.y - 4);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawGrain(
+  ctx: CanvasRenderingContext2D, scene: SceneState, panelId: string, screen: (p: Vec2) => Vec2,
+): void {
+  const panel = scene.pattern.panels[panelId];
+  if (!panel) return;
+  const grain = panelGrainLine(panel, samplePanelOutline(scene.pattern, panel));
+  if (!grain) return;
+  const a = screen(grain[0]);
+  const b = screen(grain[1]);
+  ctx.save();
+  ctx.strokeStyle = '#7fdc9a';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+  ctx.stroke();
+  for (const [from, to] of [[a, b], [b, a]] as const) {
+    const dx = to.x - from.x, dy = to.y - from.y;
+    const l = Math.hypot(dx, dy) || 1;
+    const ux = dx / l, uy = dy / l;
+    ctx.beginPath();
+    ctx.moveTo(to.x, to.y);
+    ctx.lineTo(to.x - ux * 6 - uy * 3, to.y - uy * 6 + ux * 3);
+    ctx.moveTo(to.x, to.y);
+    ctx.lineTo(to.x - ux * 6 + uy * 3, to.y - uy * 6 - ux * 3);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+
+
+/** Dimension line with its measured value; the value is read from the geometry, not stored. */
+function drawMeasurement(
+  ctx: CanvasRenderingContext2D, pattern: Pattern, measurement: Measurement, screen: (p: Vec2) => Vec2,
+): void {
+  const a = measurement.refs.pointAId ? pattern.points[measurement.refs.pointAId]?.pos : null;
+  const b = measurement.refs.pointBId ? pattern.points[measurement.refs.pointBId]?.pos : null;
+  const raw = measurementValue(pattern, measurement);
+  if (raw === null) return;
+  const value = measurement.kind === 'angle' ? `${raw.toFixed(1)}°` : `${raw.toFixed(2)} cm`;
+  ctx.save();
+  ctx.strokeStyle = '#8ab4f8';
+  ctx.fillStyle = '#8ab4f8';
+  ctx.lineWidth = 1;
+  ctx.font = '11px sans-serif';
+  ctx.textAlign = 'center';
+
+  let mid: Vec2 | null = null;
+  if (measurement.kind === 'edgeLength' && measurement.refs.edgeId) {
+    const pts = sampleEdge(pattern, measurement.refs.edgeId);
+    mid = pts[Math.floor(pts.length / 2)] ?? null;
+    ctx.beginPath();
+    pts.forEach((p, i) => {
+      const s = screen(p);
+      if (i === 0) ctx.moveTo(s.x, s.y); else ctx.lineTo(s.x, s.y);
+    });
+    ctx.stroke();
+  } else if (a && b) {
+    const sa = screen(a);
+    const sb = screen(b);
+    ctx.beginPath();
+    ctx.moveTo(sa.x, sa.y);
+    ctx.lineTo(sb.x, sb.y);
+    ctx.stroke();
+    for (const s of [sa, sb]) {
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  }
+  if (mid) {
+    const s = screen(mid);
+    ctx.fillText(value, s.x, s.y - 6);
+  }
+  ctx.restore();
+}
+
+function drawAnnotation(
+  ctx: CanvasRenderingContext2D, pos: Vec2, text: string, angleDeg: number, screen: (p: Vec2) => Vec2,
+): void {
+  const s = screen(pos);
+  ctx.save();
+  ctx.translate(s.x, s.y);
+  ctx.rotate((-angleDeg * Math.PI) / 180);
+  ctx.fillStyle = '#cfd3dd';
+  ctx.font = '11px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(text, 0, 0);
+  ctx.restore();
+}
+
+function drawElementSelection(
+  ctx: CanvasRenderingContext2D, scene: SceneState, screen: (p: Vec2) => Vec2,
+): void {
+  const { pattern } = scene;
+  for (const row of scene.selection) {
+    const el = parseElementNodeId(row);
+    if (el?.kind === 'seam') {
+      const seam = pattern.seams[el.id];
+      if (seam && seam.stitchVisible !== false) drawSeam(ctx, pattern, seam, screen, '#ffd75e');
+    }
+    if (el?.kind === 'internal') drawInternalLine(ctx, pattern, el.id, screen);
+    if (el?.kind === 'notch') {
+      const notch = pattern.notches?.[el.id];
+      const p = notch ? pointAtT(pattern, notch.edgeId, notch.t) : null;
+      if (p) {
+        const s = screen(p);
+        ctx.strokeStyle = '#ffd75e';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, 6, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+    if (el?.kind === 'annotation') {
+      const note = pattern.annotations?.[el.id];
+      if (note) {
+        const s = screen(note.pos);
+        ctx.strokeStyle = '#ffd75e';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(s.x - 24, s.y - 10, 48, 16);
+      }
+    }
+    if (el?.kind === 'measurement') {
+      const measurement = pattern.measurements?.[el.id];
+      if (measurement) drawMeasurement(ctx, pattern, measurement, screen);
+    }
+  }
+}
+
+function drawDraft(
+  ctx: CanvasRenderingContext2D, scene: SceneState, screen: (p: Vec2) => Vec2,
+): void {
+  const draft = scene.draft;
+  if (!draft) return;
+  ctx.save();
+  ctx.strokeStyle = '#ffd75e';
+  ctx.fillStyle = '#ffd75e';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([6, 4]);
+  switch (draft.tool) {
+    case 'pen': {
+      const pts = [...draft.points, draft.cursor];
+      ctx.beginPath();
+      pts.forEach((p, i) => {
+        const s = screen(p);
+        if (i === 0) ctx.moveTo(s.x, s.y); else ctx.lineTo(s.x, s.y);
+      });
+      ctx.stroke();
+      for (const p of draft.points) {
+        const s = screen(p);
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      break;
+    }
+    case 'polyline': {
+      const pts = draft.mode === 'hole' ? [...draft.points, draft.cursor, ...draft.points] : [...draft.points, draft.cursor];
+      ctx.beginPath();
+      pts.forEach((p, i) => {
+        const s = screen(p);
+        if (i === 0) ctx.moveTo(s.x, s.y); else ctx.lineTo(s.x, s.y);
+      });
+      if (draft.mode === 'hole') ctx.closePath();
+      ctx.stroke();
+      for (const p of draft.points) {
+        const s = screen(p);
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      break;
+    }
+    case 'measure': {
+      const a = draft.pointAId ? scene.pattern.points[draft.pointAId]?.pos : null;
+      if (a) {
+        const s = screen(a);
+        const c = screen(draft.cursor);
+        ctx.beginPath();
+        ctx.moveTo(s.x, s.y);
+        ctx.lineTo(c.x, c.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.font = '11px sans-serif';
+        ctx.fillText(`${Math.hypot(draft.cursor.x - a.x, draft.cursor.y - a.y).toFixed(1)} cm`, c.x + 6, c.y - 6);
+      }
+      break;
+    }
+    case 'shape': {
+      const frame = shapeFrame(draft.start, draft.current, draft.shape, false);
+      const a = screen(frame.min);
+      const b = screen(frame.max);
+      ctx.beginPath();
+      if (draft.shape === 'rect') ctx.rect(a.x, a.y, b.x - a.x, b.y - a.y);
+      else ctx.ellipse((a.x + b.x) / 2, (a.y + b.y) / 2, Math.max(1, (b.x - a.x) / 2), Math.max(1, (b.y - a.y) / 2), 0, 0, Math.PI * 2);
+      ctx.stroke();
+      break;
+    }
+    case 'dart': {
+      // The two picked base points and the cursor tip form the dart wedge.
+      const feet = [draft.leg1, draft.leg2].flatMap(leg => {
+        const p = leg ? pointAtT(scene.pattern, leg.edgeId, leg.t) : null;
+        return p ? [p] : [];
+      });
+      const tip = screen(draft.cursor);
+      const legs = feet.map(foot => screen(foot));
+      ctx.beginPath();
+      if (legs.length > 0) {
+        ctx.moveTo(legs[0]!.x, legs[0]!.y);
+        for (let i = 1; i < legs.length; i++) ctx.lineTo(legs[i]!.x, legs[i]!.y);
+        ctx.lineTo(tip.x, tip.y);
+        ctx.closePath();
+      }
+      ctx.stroke();
+      for (const foot of legs) {
+        ctx.beginPath();
+        ctx.arc(foot.x, foot.y, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      break;
+    }
+    case 'seam': {
+      const highlighted = [draft.pickA, draft.drag ? { edgeId: draft.drag.edgeId, t0: Math.min(arcT(scene.pattern, draft.drag.edgeId, draft.drag.start), arcT(scene.pattern, draft.drag.edgeId, draft.drag.current)), t1: Math.max(arcT(scene.pattern, draft.drag.edgeId, draft.drag.start), arcT(scene.pattern, draft.drag.edgeId, draft.drag.current)) } : null]
+        .flatMap(pick => (pick ? [pick] : []));
+      ctx.setLineDash([]);
+      ctx.lineWidth = 4;
+      for (const pick of highlighted) {
+        const pts = sampleEdgeInterval(scene.pattern, pick.edgeId, pick.t0, pick.t1);
+        ctx.beginPath();
+        pts.forEach((p, i) => {
+          const s = screen(p);
+          if (i === 0) ctx.moveTo(s.x, s.y); else ctx.lineTo(s.x, s.y);
+        });
+        ctx.stroke();
+      }
+      break;
+    }
+    default:
+      break;
+  }
+  ctx.restore();
+}
+
+/** Nearest arc-length fraction of a world position on an edge. */
+function arcT(pattern: Pattern, edgeId: string, p: Vec2): number {
+  const pts = sampleEdge(pattern, edgeId);
+  if (pts.length < 2) return 0;
+  let acc = 0;
+  const total = pts.reduce((sum, q, i) => i === 0 ? sum : sum + Math.hypot(q.x - pts[i - 1].x, q.y - pts[i - 1].y), 0) || 1;
+  let bestT = 0;
+  let bestD = Infinity;
+  for (let i = 0; i < pts.length; i++) {
+    const d = Math.hypot(pts[i].x - p.x, pts[i].y - p.y);
+    if (d < bestD) { bestD = d; bestT = acc; }
+    if (i + 1 < pts.length) acc += Math.hypot(pts[i + 1].x - pts[i].x, pts[i + 1].y - pts[i].y);
+  }
+  return bestT / total;
+}
+
+function drawSnapHint(
+  ctx: CanvasRenderingContext2D, scene: SceneState, screen: (p: Vec2) => Vec2,
+): void {
+  const hint = scene.snapHint;
+  if (!hint) return;
+  const s = screen(hint.pos);
+  ctx.save();
+  const colors: Record<SnapCandidate['kind'], string> = {
+    endpoint: '#7fdc9a', intersection: '#ffd75e', midpoint: '#8ec7ff',
+    perpendicular: '#c58aff', tangent: '#5ad1c5', extension: '#ff9d5c',
+    equidistant: '#ff8fa3', grid: '#ffd75e',
+  };
+  ctx.strokeStyle = colors[hint.kind];
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  if (hint.kind === 'endpoint') ctx.rect(s.x - 4, s.y - 4, 8, 8);
+  else if (hint.kind === 'intersection') { ctx.moveTo(s.x - 5, s.y - 5); ctx.lineTo(s.x + 5, s.y + 5); ctx.moveTo(s.x - 5, s.y + 5); ctx.lineTo(s.x + 5, s.y - 5); }
+  else if (hint.kind === 'perpendicular') { ctx.moveTo(s.x - 6, s.y); ctx.lineTo(s.x + 6, s.y); ctx.moveTo(s.x, s.y - 6); ctx.lineTo(s.x, s.y + 6); }
+  else if (hint.kind === 'tangent') { ctx.moveTo(s.x, s.y - 5); ctx.lineTo(s.x + 5, s.y); ctx.lineTo(s.x, s.y + 5); ctx.lineTo(s.x - 5, s.y); ctx.closePath(); }
+  else if (hint.kind === 'extension') { ctx.moveTo(s.x - 5, s.y); ctx.lineTo(s.x, s.y - 5); ctx.lineTo(s.x + 5, s.y); ctx.closePath(); }
+  else if (hint.kind === 'equidistant') { ctx.arc(s.x, s.y, 5, 0, Math.PI * 2); ctx.moveTo(s.x + 2, s.y); ctx.arc(s.x, s.y, 2, 0, Math.PI * 2); }
+  else ctx.arc(s.x, s.y, 5, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawSeam(
-  ctx: CanvasRenderingContext2D, pattern: Pattern,
-  edgeAId: string, edgeBId: string, flipB: boolean,
+  ctx: CanvasRenderingContext2D, pattern: Pattern, seam: Seam,
   screen: (p: Vec2) => Vec2, color: string,
 ): void {
-  const ptsA = sampleEdge(pattern, edgeAId);
-  const ptsB = sampleEdge(pattern, edgeBId, flipB);
+  const ptsA = sampleEdgeInterval(pattern, seam.a.edgeId, seam.a.t0, seam.a.t1);
+  const ptsB = sampleEdgeInterval(pattern, seam.b.edgeId, seam.b.t0, seam.b.t1, seam.flip);
   if (ptsA.length === 0 || ptsB.length === 0) return;
 
   const midA = ptsA[Math.floor(ptsA.length / 2)];
@@ -165,7 +778,32 @@ function drawSeam(
   ctx.moveTo(sA.x, sA.y);
   ctx.lineTo(sB.x, sB.y);
   ctx.stroke();
+  drawSeamAnchors(ctx, pattern, seam, screen);
   ctx.restore();
+}
+
+/** Paired ticks at each side's anchor point, joined so a mis-set anchor is visible. */
+function drawSeamAnchors(
+  ctx: CanvasRenderingContext2D, pattern: Pattern, seam: Seam, screen: (p: Vec2) => Vec2,
+): void {
+  if (seam.a.anchorT === undefined || seam.b.anchorT === undefined) return;
+  const at = pointAtT(pattern, seam.a.edgeId, seam.a.anchorT);
+  const bt = pointAtT(pattern, seam.b.edgeId, seam.b.anchorT);
+  if (!at || !bt) return;
+  const sa = screen(at), sb = screen(bt);
+  ctx.setLineDash([]);
+  ctx.strokeStyle = '#ffd75e';
+  ctx.fillStyle = '#ffd75e';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(sa.x, sa.y);
+  ctx.lineTo(sb.x, sb.y);
+  ctx.stroke();
+  for (const s of [sa, sb]) {
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
 function drawHover(
@@ -217,4 +855,38 @@ function drawRubberBand(
   ctx.fill();
   ctx.stroke();
   ctx.restore();
+}
+
+/** Sewn-flat preview of each selected seam's end joints, with the join angle as a number. */
+function drawSeamJoints(ctx: CanvasRenderingContext2D, state: SceneState, screen: (p: Vec2) => Vec2): void {
+  for (const seamId of idsOfKind(state.selection, 'seam')) {
+    for (const end of ['start', 'end'] as const) {
+      const joint = seamJoint(state.pattern, seamId, end);
+      if (!joint) continue;
+
+      ctx.strokeStyle = 'rgba(120,200,255,0.7)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath();
+      for (const [i, p] of sewnOutline(state.pattern, joint).entries()) {
+        const s = screen(p);
+        if (i === 0) ctx.moveTo(s.x, s.y); else ctx.lineTo(s.x, s.y);
+      }
+      ctx.closePath();
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      const at = screen(joint.pos);
+      const flush = joint.bendDeg < 0.1 && !joint.overlap;
+      ctx.fillStyle = flush ? '#57c07a' : joint.overlap ? '#e0655a' : '#e0b341';
+      ctx.beginPath();
+      ctx.arc(at.x, at.y, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.font = '11px system-ui';
+      const note = flush ? '顺直' : joint.overlap ? `重叠 ${joint.bendDeg.toFixed(1)}°` : `弯折 ${joint.bendDeg.toFixed(1)}°`;
+      ctx.fillStyle = '#dcdce6';
+      ctx.fillText(`${joint.angleDeg.toFixed(1)}° ${note}`, at.x + 7, at.y - 6);
+    }
+  }
 }

@@ -20,11 +20,13 @@ export function FabricPhysics({ fabric }: { fabric: Fabric }) {
         onChange={v => setPhysics('修改弯曲刚度', { bendingStiffness: v })} />
       <SliderRow label="剪切刚度" min={0} max={1} step={0.01} value={fabric.physics.shearStiffness} commitOnRelease
         onChange={v => setPhysics('修改剪切刚度', { shearStiffness: v })} />
+      <SliderRow label="折痕刚度" min={0} max={1} step={0.01} value={fabric.physics.creaseStiffness ?? 0.85} commitOnRelease
+        onChange={v => setPhysics('修改折痕刚度', { creaseStiffness: v })} />
       <SliderRow label="克重" min={50} max={600} step={10} suffix="g/m²" value={fabric.physics.massPerArea} commitOnRelease
         onChange={v => setPhysics('修改克重', { massPerArea: v })} />
       <SliderRow label="阻尼" min={0} max={0.1} step={0.001} value={fabric.physics.damping} commitOnRelease
         onChange={v => setPhysics('修改阻尼', { damping: v })} />
-      <div style={styles.note}>刚度与克重按材质所属的版型片生效；阻尼是全局值，取工程中的第一个材质。</div>
+      <div style={styles.note}>刚度与克重按材质所属的版型片生效；阻尼是全局值，取工程中的第一个材质。折痕刚度作用于片内用途为「折痕」的内部线。</div>
     </Section>
   );
 }

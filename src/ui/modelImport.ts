@@ -10,7 +10,7 @@ const IMAGE_MIME: Record<string, string> = {
 };
 
 /** Opens a native picker restricted to the given extensions; resolves null on cancel. */
-function openFilePicker(accept: string, multiple: boolean): Promise<File[] | null> {
+export function openFilePicker(accept: string, multiple: boolean): Promise<File[] | null> {
   return new Promise(resolve => {
     const input = document.createElement('input');
     input.type = 'file';

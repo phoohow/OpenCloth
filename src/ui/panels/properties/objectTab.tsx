@@ -1,12 +1,15 @@
-import { useUIStore, type PropTab } from '../../../store/stores';
+import type { PropTab } from '../../../store/stores';
 import type { ObjectTransform, Project, Vec3 } from '../../../core/model/types';
 import type { SceneNode, SceneNodeKind } from '../../sceneTree';
 import {
-  AVATAR_NODE_ID, SCENE_KIND_LABELS, avatarLabel, readTransform, referenceObjectId,
+  AVATAR_NODE_ID, ENVIRONMENT_NODE_ID, SCENE_KIND_LABELS, lightObjectId, readTransform,
+  referenceObjectId, storedSceneName, writeSceneName,
 } from '../../sceneTree';
+import { parseElementNodeId } from '../../elementSelection';
+import { normalizeLights } from '../../../core/model/defaults';
 import {
-  commitTransform, patchValue, previewTransform, setAvatarDisplay,
-  setPanelsVisible, setReferencesVisible, type EngineRef,
+  commitTransform, patchValue, previewTransform, setAvatarDisplay, setEnvironmentEnabled,
+  setLightsEnabled, setPanelsVisible, setReferencesVisible, setSeamsStitchVisible, type EngineRef,
 } from '../../sceneCommands';
 import { ButtonRow, CheckRow, Hint, Row, Section, SmallButton, TextRow } from '../../widgets/propertyRows';
 import { Vec3Field } from '../../widgets/numberField';
@@ -46,6 +49,12 @@ function ObjectTab({ project, nodeId, kind, label, note, engineRef }: {
     ? (project.scene.referenceObjects ?? []).find(r => r.id === referenceObjectId(nodeId))
     : null;
   const isAvatar = nodeId === AVATAR_NODE_ID;
+  const isEnvironment = nodeId === ENVIRONMENT_NODE_ID;
+  const light = nodeId.startsWith('@light:')
+    ? normalizeLights(project.scene.lights).find(l => l.id === lightObjectId(nodeId)) ?? null
+    : null;
+  const elementId = parseElementNodeId(nodeId);
+  const seam = elementId?.kind === 'seam' ? project.pattern.seams[elementId.id] ?? null : null;
   /** Avatar and reference edits move the live object before they are committed. */
   const live = isAvatar || !!ref;
 
@@ -57,11 +66,20 @@ function ObjectTab({ project, nodeId, kind, label, note, engineRef }: {
     commitTransform(nodeId, next, engineRef);
   };
 
-  /** Viewport visibility, the same checkbox for every kind that stores it. */
-  const shown = isAvatar ? project.avatar.display !== 'hidden' : (panel?.visible ?? ref?.visible ?? true);
+  /** Viewport visibility or enable flag of the row; null when the kind has none. */
+  const shown = isAvatar ? project.avatar.display !== 'hidden'
+    : panel ? panel.visible
+    : ref ? ref.visible
+    : seam ? seam.stitchVisible
+    : light ? light.enabled
+    : isEnvironment ? project.scene.lights.iblEnabled
+    : null;
   const setShown = (value: boolean) => {
     if (panel) setPanelsVisible([panel.id], value);
     else if (ref) setReferencesVisible([ref.id], value, engineRef);
+    else if (seam) setSeamsStitchVisible([seam.id], value);
+    else if (light) setLightsEnabled([light.id], value);
+    else if (isEnvironment) setEnvironmentEnabled(value);
     else if (isAvatar) {
       const display = project.avatar.display;
       if (!value) setAvatarDisplay('hidden', engineRef);
@@ -69,36 +87,26 @@ function ObjectTab({ project, nodeId, kind, label, note, engineRef }: {
     }
   };
 
-  /** Names live on the object record, so the row edits it only where one exists. */
-  const storedName = panel?.name ?? ref?.name ?? (isAvatar ? avatarLabel(project) : null);
+  /** Command label of a rename, following the object kind. */
+  const renameLabel = kind === 'panel' ? '重命名版型片'
+    : kind === 'reference' ? '重命名参考物体'
+    : kind === 'avatar' ? '重命名模特'
+    : `重命名${SCENE_KIND_LABELS[kind]}`;
 
-  /** Renames the object record, leaving the pattern and avatar identity intact. */
+  /** Stores a custom row name; clearing it brings back the kind label. */
   const rename = (next: string) => {
-    if (panel) {
-      patchValue('重命名版型片', p => p.pattern.panels[panel.id]?.name ?? '',
-        (ctx, v) => { const target = ctx.project.pattern.panels[panel.id]; if (target) target.name = v; }, next);
-    } else if (ref) {
-      patchValue('重命名参考物体', p => (p.scene.referenceObjects ?? []).find(r => r.id === ref.id)?.name ?? '',
-        (ctx, v) => {
-          const target = (ctx.project.scene.referenceObjects ?? []).find(r => r.id === ref.id);
-          if (target) target.name = v;
-          ctx.project.scene = { ...ctx.project.scene };
-          useUIStore.getState().bumpRefObjects();
-        }, next);
-    } else if (isAvatar) {
-      patchValue('重命名模特', p => p.avatar.modelName ?? '',
-        (ctx, v) => { ctx.project.avatar.modelName = v; }, next);
-    }
+    patchValue(renameLabel,
+      p => storedSceneName(p, nodeId) ?? '',
+      (ctx, v) => writeSceneName(ctx.project, nodeId, v), next);
   };
+  const storedName = storedSceneName(project, nodeId);
 
   return (
     <>
       <Section title="对象">
-        {storedName === null
-          ? <Row label="名称">{label}</Row>
-          : <TextRow label="名称" value={storedName} onChange={rename} />}
-        {(panel || ref || isAvatar) && (
-          <CheckRow label="可见性" checked={shown} onChange={setShown} />
+        <TextRow label="名称" value={storedName ?? label} onChange={rename} />
+        {shown !== null && (
+          <CheckRow label={light || isEnvironment ? '启用' : '可见性'} checked={shown} onChange={setShown} />
         )}
         <Row label="类型">{note ? `${SCENE_KIND_LABELS[kind]} · ${note}` : SCENE_KIND_LABELS[kind]}</Row>
       </Section>

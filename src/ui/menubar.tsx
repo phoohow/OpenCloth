@@ -20,6 +20,7 @@ export function Menubar({ actions }: { actions: MenuActions }) {
 
   const project = useProjectStore(s => s.project);
   const recent = useProjectStore(s => s.recent);
+  const autosaves = useProjectStore(s => s.autosaves);
   const clipboard = useProjectStore(s => s.clipboard);
   const history = useProjectStore(s => s.history);
   const layout = useUIStore(s => s.layout);
@@ -57,9 +58,10 @@ export function Menubar({ actions }: { actions: MenuActions }) {
       panelCount: Object.keys(project.pattern.panels).length,
       referenceCount: (project.scene.referenceObjects ?? []).length,
       recent,
+      autosaves,
     };
     return buildMenus(state, actions);
-  }, [project, recent, clipboard, history, layout, focus, propTab, cameraProjection, selection,
+  }, [project, recent, autosaves, clipboard, history, layout, focus, propTab, cameraProjection, selection,
     showTemplatePanel, showScenePanel, showPropertiesPanel, showTimeline, autoSaveSeconds,
     lastAutosaveAt, actions]);
 

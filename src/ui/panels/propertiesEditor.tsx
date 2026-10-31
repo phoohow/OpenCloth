@@ -1,5 +1,6 @@
 import { useProjectStore, useUIStore, type PropTab } from '../../store/stores';
-import { buildSceneTree, findSceneNode } from '../sceneTree';
+import { buildSceneTree, elementLabel, findSceneNode, type SceneNode } from '../sceneTree';
+import { parseElementNodeId } from '../elementSelection';
 import { PROP_TAB_OPTIONS } from '../optionTables';
 import type { EngineRef } from '../sceneCommands';
 import { selectedBody } from './properties/objectTab';
@@ -33,7 +34,14 @@ export function usePropsTarget(engineRef: EngineRef): PropsTarget {
   const refObjectsVersion = useUIStore(s => s.refObjectsVersion);
 
   const nodeId = selection.length === 1 ? selection[0] : null;
-  const node = nodeId ? findSceneNode(buildSceneTree(project), nodeId) : null;
+  const element = nodeId ? parseElementNodeId(nodeId) : null;
+  // Element rows share their name with the outliner row; the tree only holds panel ids.
+  const node: SceneNode | null = element
+    ? {
+        id: nodeId!, kind: element.kind, label: elementLabel(project, element.kind, element.id),
+        icon: 'panel', hideable: false, visible: true, children: [],
+      }
+    : nodeId ? findSceneNode(buildSceneTree(project), nodeId) : null;
   const kind = node?.kind ?? null;
   const allowedTabs = tabsForKind(kind);
   const tab = allowedTabs.includes(propTab) ? propTab : allowedTabs[0];
