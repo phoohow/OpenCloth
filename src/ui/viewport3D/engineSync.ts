@@ -9,9 +9,10 @@ import {
   useProjectStore, useSimStore, useUIStore,
 } from '../../store/stores';
 import { normalizeLights, normalizeRayTracing } from '../../core/model/defaults';
+import { computeClothSignature } from '../../store/projectStore';
 import { AVATAR_NODE_ID } from '../sceneTree';
 import { rayTraceFailureLabel } from '../optionTables';
-import type { Pattern, Project } from '../../core/model/types';
+import type { CameraConfig, Pattern, Project, Vec3 } from '../../core/model/types';
 
 /** Applies the UI store's selection to the panel and avatar highlights. */
 export function syncSelectionOverlay(engine: GarmentEngine, pattern: Pattern, selection: string[]): void {
@@ -45,6 +46,7 @@ function projectSignals(state: { project: Project; clothSignature: string }) {
   const render = project.scene.render;
   return {
     cloth: state.clothSignature,
+    avatar: project.avatar.display,
     env: `${lights.iblObjectKey ?? lights.iblUrl ?? 'bundled'}:${lights.iblName ?? ''}`,
     light: JSON.stringify([normalizeLights(lights), lights.iblEnabled, lights.iblIntensity, render.toneMapping]),
     ray: JSON.stringify(normalizeRayTracing(render.rayTracing)),
@@ -75,14 +77,31 @@ export class EngineSync {
   private rebuildsInFlight = 0;
   /** Fractional physics steps carried across frames so slower speeds still slow playback. */
   private stepAccumulator = 0;
+  /** Load counter of the project the camera was last applied from. */
+  private lastLoadToken = 0;
+  /** Pending camera write; orbiting restarts it so only the settled view is stored. */
+  private cameraTimer = 0;
+  /** True while a loaded camera is being applied, which must not write itself back. */
+  private applyingCamera = false;
 
-  constructor(private engine: GarmentEngine, private ctx: RendererContext, private report: (message: string) => void) {
+  constructor(
+    private engine: GarmentEngine,
+    private ctx: RendererContext,
+    private report: (message: string) => void,
+    /** Project the engine was built from before this controller took over. */
+    builtFrom: Project,
+  ) {
     const state = useProjectStore.getState();
-    this.last = projectSignals(state);
+    this.last = projectSignals({ project: builtFrom, clothSignature: computeClothSignature(builtFrom) });
+    this.lastLoadToken = state.loadToken;
 
-    this.unsubscribes.push(useProjectStore.subscribe(state => {
-      const project = state.project;
-      const signals = projectSignals(state);
+    const handleProjectState = (next: ReturnType<typeof useProjectStore.getState>) => {
+      const project = next.project;
+      if (next.loadToken !== this.lastLoadToken) {
+        this.lastLoadToken = next.loadToken;
+        this.applyProjectCamera(project);
+      }
+      const signals = projectSignals(next);
       if (signals.cloth !== this.last.cloth) {
         this.last.cloth = signals.cloth;
         // The committed pattern supersedes any drag preview still queued.
@@ -90,6 +109,10 @@ export class EngineSync {
         this.previewApplied = false;
         this.pendingPreviewPattern = null;
         this.rebuildCloth(project);
+      }
+      if (signals.avatar !== this.last.avatar) {
+        this.last.avatar = signals.avatar;
+        this.engine.applyAvatarDisplay(project.avatar.display);
       }
       if (signals.env !== this.last.env) {
         this.last.env = signals.env;
@@ -112,7 +135,12 @@ export class EngineSync {
       }
       // Materials, panel visibility and seam threads re-read the live project every commit.
       this.applyDrawState(project);
-    }));
+    };
+    this.unsubscribes.push(useProjectStore.subscribe(handleProjectState));
+
+    const onCameraChange = () => this.scheduleCameraPersist();
+    this.ctx.controls.addEventListener('change', onCameraChange);
+    this.unsubscribes.push(() => this.ctx.controls.removeEventListener('change', onCameraChange));
 
     this.unsubscribes.push(useUIStore.subscribe((state, previous) => {
       if (state.renderMode !== previous?.renderMode) {
@@ -122,6 +150,7 @@ export class EngineSync {
       }
       if (state.cameraProjection !== previous?.cameraProjection) {
         this.engine.setProjection(state.cameraProjection);
+        this.scheduleCameraPersist();
       }
       if (state.selection !== previous?.selection) {
         syncSelectionOverlay(this.engine, useProjectStore.getState().project.pattern, state.selection);
@@ -166,6 +195,12 @@ export class EngineSync {
     }));
 
     this.raf = requestAnimationFrame(this.loop);
+    // A startup restore can land while the renderer initializes; fold it into the built scene.
+    if (state.project !== builtFrom) {
+      const alreadyApplied = state.loadToken === this.lastLoadToken;
+      handleProjectState(state);
+      if (alreadyApplied) this.applyProjectCamera(state.project);
+    }
   }
 
   /** A newer rebuild supersedes in-flight ones; stale results are dropped. */
@@ -220,17 +255,47 @@ export class EngineSync {
     this.engine.previewEditPattern({ ...project, pattern }, tier);
   }
 
-  /** Re-reads materials, visibility and seam threads from the project; all paths are signature-guarded. */
+  /** Re-reads materials, visibility and thread overlays from the project; all paths are signature-guarded. */
   private applyDrawState(project: Project): void {
     const renderMode = useUIStore.getState().renderMode;
     this.engine.applyFabrics(project, renderMode);
     this.engine.applyPanelVisibility(project);
     this.engine.applySeamStitchVisibility(project);
+    this.engine.applyTopstitchThreads(project);
     syncSelectionOverlay(this.engine, project.pattern, useUIStore.getState().selection);
   }
 
   private recover(error: unknown): void {
     if (!this.ctx.disposed) recoverWithRaster(this.ctx, error, this.report);
+  }
+
+  /** Restores the camera saved with a freshly loaded project. */
+  private applyProjectCamera(project: Project): void {
+    const camera = project.scene.camera;
+    if (!camera) return;
+    this.applyingCamera = true;
+    try {
+      if (camera.projection !== this.ctx.projection) {
+        useUIStore.getState().setCameraProjection(camera.projection);
+      }
+      this.engine.setCameraState(camera);
+    } finally {
+      this.applyingCamera = false;
+    }
+  }
+
+  /** Queues one camera write after the view settles, so orbiting does not write every frame. */
+  private scheduleCameraPersist(): void {
+    if (this.applyingCamera) return;
+    window.clearTimeout(this.cameraTimer);
+    this.cameraTimer = window.setTimeout(() => this.persistCamera(), 300);
+  }
+
+  /** Stores the settled camera in the project unless it already matches. */
+  private persistCamera(): void {
+    const camera = this.engine.getCameraState();
+    if (sameCamera(useProjectStore.getState().project.scene.camera, camera)) return;
+    useProjectStore.getState().setCamera(camera);
   }
 
   /** One animation frame: play steps, mirror engine state into the sim store, draw. */
@@ -291,7 +356,22 @@ export class EngineSync {
   dispose(): void {
     this.cancelled = true;
     cancelAnimationFrame(this.raf);
+    window.clearTimeout(this.cameraTimer);
     for (const unsubscribe of this.unsubscribes) unsubscribe();
     this.unsubscribes = [];
   }
+}
+
+/** Whether a stored camera equals the live placement. */
+function sameCamera(stored: CameraConfig | undefined, live: CameraConfig): boolean {
+  if (!stored) return false;
+  return stored.projection === live.projection
+    && stored.fovDeg === live.fovDeg
+    && stored.viewHeightMeters === live.viewHeightMeters
+    && sameVec(stored.position, live.position)
+    && sameVec(stored.target, live.target);
+}
+
+function sameVec(a: Vec3, b: Vec3): boolean {
+  return a.x === b.x && a.y === b.y && a.z === b.z;
 }

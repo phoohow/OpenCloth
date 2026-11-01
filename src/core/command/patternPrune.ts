@@ -36,4 +36,14 @@ export function prunePattern(pattern: Pattern): void {
       }
     }
   }
+  // Production marks belong to a panel; stitches also need their edge.
+  for (const [id, print] of Object.entries(pattern.prints ?? {})) {
+    if (!pattern.panels[print.panelId]) delete pattern.prints[id];
+  }
+  for (const [id, stitch] of Object.entries(pattern.topstitches ?? {})) {
+    if (!pattern.panels[stitch.panelId] || !pattern.edges[stitch.edgeId]) delete pattern.topstitches[id];
+  }
+  for (const [id, trim] of Object.entries(pattern.trims ?? {})) {
+    if (!pattern.panels[trim.panelId]) delete pattern.trims[id];
+  }
 }

@@ -9,3 +9,10 @@ export function createStarterProject(): Project {
   if (fabric) project.pattern = tShirtTemplate.generate(tShirtTemplate.defaults, fabric.id);
   return project;
 }
+
+/** New project with an empty pattern and a hidden avatar; only the default lights remain. */
+export function createBlankProject(): Project {
+  const project = createDefaultProject();
+  project.avatar = { ...project.avatar, display: 'hidden' };
+  return project;
+}

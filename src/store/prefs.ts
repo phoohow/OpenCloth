@@ -42,7 +42,7 @@ export const DEFAULT_PREFS: UiPrefs = {
   leftPanelWidth: 220,
   rightPanelWidth: 280,
   editPreview: 'off',
-  showTemplatePanel: true,
+  showTemplatePanel: false,
   showScenePanel: true,
   showPropertiesPanel: true,
   showTimeline: true,
@@ -53,7 +53,7 @@ const LAYOUTS: ViewLayout[] = ['split3d2d', 'split2d3d', '2d', '3d'];
 const PANES: PaneId[] = ['2d', '3d'];
 const RENDER_MODES: RenderMode[] = ['shaded', 'raytraced', 'wireframe', 'shadedWireframe', 'uvCheck', 'normalVis'];
 const CAMERA_PROJECTIONS: CameraProjection[] = ['perspective', 'orthographic'];
-const PROP_TABS: PropTab[] = ['object', 'material', 'physics', 'scene', 'render'];
+const PROP_TABS: PropTab[] = ['object', 'material', 'simulator', 'generator', 'render', 'project'];
 const EDIT_PREVIEW_TIERS: EditPreviewTier[] = ['off', 'low', 'full'];
 const AUTO_SAVE_SECONDS = [0, 30, 60, 300];
 /** Draggable ranges matching the divider helpers in the viewport layout. */

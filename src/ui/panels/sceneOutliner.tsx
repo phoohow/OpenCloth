@@ -1,17 +1,31 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useProjectStore, useUIStore } from '../../store/stores';
 import type { LightType } from '../../core/model/types';
-import { LIGHT_TYPES, LIGHT_TYPE_LABELS } from '../../core/model/defaults';
 import {
-  GARMENT_COLLECTION_ID, LIGHT_COLLECTION_ID, REFERENCE_COLLECTION_ID, SEAM_COLLECTION_ID,
+  DEFAULT_PRINT_SIDE_CM, LIGHT_TYPES, LIGHT_TYPE_LABELS, MAX_PRINT_BYTES,
+} from '../../core/model/defaults';
+import { AddPrintCommand } from '../../core/command/patternCommands';
+import { readImageAsPngDataUrl } from '../../io/imageData';
+import {
+  GARMENT_COLLECTION_ID, LIGHT_COLLECTION_ID, PRINT_COLLECTION_ID, REFERENCE_COLLECTION_ID,
+  SEAM_COLLECTION_ID, TOPSTITCH_COLLECTION_ID, TRIM_COLLECTION_ID,
   buildSceneTree, isCollectionVisible, lightObjectId, referenceObjectId, seamObjectId,
   type SceneNode,
 } from '../sceneTree';
 import {
   addLight, setAvatarVisible, setEnvironmentEnabled, setLightsEnabled, setPanelsVisible,
-  setReferencesVisible, setSeamsStitchVisible, type EngineRef,
+  setProductionVisible, setReferencesVisible, setSeamsStitchVisible, type EngineRef,
 } from '../sceneCommands';
+import { idsOfKind, parseElementNodeId } from '../elementSelection';
 import { Icon } from '../icons';
+import { reportActionError } from '../widgets/toast';
+
+/** Collections that group one kind of production object. */
+const PRODUCTION_COLLECTION_KINDS: Record<string, 'print' | 'topstitch' | 'trim'> = {
+  [PRINT_COLLECTION_ID]: 'print',
+  [TOPSTITCH_COLLECTION_ID]: 'topstitch',
+  [TRIM_COLLECTION_ID]: 'trim',
+};
 
 /** Hierarchical scene list: collections, objects, viewport visibility and selection. */
 export function SceneOutliner({ engineRef }: { engineRef: EngineRef }) {
@@ -23,9 +37,35 @@ export function SceneOutliner({ engineRef }: { engineRef: EngineRef }) {
   const setCollapsedOutliner = useUIStore(s => s.setCollapsedOutliner);
   const refVersion = useUIStore(s => s.refObjectsVersion);
   const [newLightType, setNewLightType] = useState<LightType>('directional');
+  const [printPanelId, setPrintPanelId] = useState<string | null>(null);
+  const printInputRef = useRef<HTMLInputElement>(null);
 
   const tree = buildSceneTree(project);
   const activeId = selection.length === 1 ? selection[0] : null;
+  const selectedPanelId = idsOfKind(selection, 'panel').find(id => !!project.pattern.panels[id]) ?? null;
+
+  /** Places a print at the centre of the selected panel, using the chosen artwork. */
+  const onPrintFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    const panelId = printPanelId;
+    setPrintPanelId(null);
+    if (!file || !panelId) return;
+    if (file.size > MAX_PRINT_BYTES) {
+      useUIStore.getState().showToast('图片超过 8 MB，请压缩后再插入');
+      return;
+    }
+    try {
+      const imageUrl = await readImageAsPngDataUrl(file);
+      useProjectStore.getState().executeCommand(new AddPrintCommand(panelId, imageUrl, {
+        imageName: file.name,
+        widthCm: DEFAULT_PRINT_SIDE_CM,
+        heightCm: DEFAULT_PRINT_SIDE_CM,
+      }));
+    } catch (err) {
+      reportActionError(err);
+    }
+  };
 
   const toggleNode = (node: SceneNode) => {
     if (node.kind === 'panel') { setPanelsVisible([node.id], !node.visible); return; }
@@ -34,6 +74,11 @@ export function SceneOutliner({ engineRef }: { engineRef: EngineRef }) {
     if (node.kind === 'light') { setLightsEnabled([lightObjectId(node.id)], !node.visible); return; }
     if (node.kind === 'environment') { setEnvironmentEnabled(!node.visible); return; }
     if (node.kind === 'seam') { setSeamsStitchVisible([seamObjectId(node.id)], !node.visible); return; }
+    if (node.kind === 'print' || node.kind === 'topstitch' || node.kind === 'trim') {
+      const element = parseElementNodeId(node.id);
+      if (element) setProductionVisible(node.kind, [element.id], !node.visible);
+      return;
+    }
     if (node.kind === 'collection') {
       const next = !isCollectionVisible(node);
       if (node.id === GARMENT_COLLECTION_ID) {
@@ -42,6 +87,12 @@ export function SceneOutliner({ engineRef }: { engineRef: EngineRef }) {
         setReferencesVisible(node.children.map(c => referenceObjectId(c.id)), next, engineRef);
       } else if (node.id === SEAM_COLLECTION_ID) {
         setSeamsStitchVisible(node.children.map(c => seamObjectId(c.id)), next);
+      } else {
+        const kind = PRODUCTION_COLLECTION_KINDS[node.id];
+        if (kind) {
+          const ids = node.children.flatMap(c => parseElementNodeId(c.id)?.id ?? []);
+          setProductionVisible(kind, ids, next);
+        }
       }
     }
   };
@@ -97,6 +148,23 @@ export function SceneOutliner({ engineRef }: { engineRef: EngineRef }) {
             ><Icon name="plus" size={10} /></button>
           </span>
         )}
+        {node.id === PRINT_COLLECTION_ID && (
+          <span style={styles.addRow}>
+            <button
+              style={{ ...styles.addBtn, ...(selectedPanelId ? null : styles.addBtnDisabled) }}
+              disabled={!selectedPanelId}
+              title={selectedPanelId
+                ? `在「${project.pattern.panels[selectedPanelId]?.name}」中心添加印花`
+                : '先在场景树选中一个版片'}
+              onClick={e => {
+                e.stopPropagation();
+                if (!selectedPanelId) return;
+                setPrintPanelId(selectedPanelId);
+                printInputRef.current?.click();
+              }}
+            ><Icon name="plus" size={10} /></button>
+          </span>
+        )}
         {node.children.length > 0 && <span style={styles.count}>{node.children.length}</span>}
       </div>,
     ];
@@ -107,12 +175,13 @@ export function SceneOutliner({ engineRef }: { engineRef: EngineRef }) {
   return (
     <div style={styles.outliner}>
       <div style={styles.header}>
-        <span style={styles.title}>场景</span>
+        <span style={styles.title}>场景树</span>
         <button style={styles.miniBtn} title={collapsed.length > 0 ? '展开全部' : '折叠全部'} onClick={toggleCollapseAll}>
           <Icon name={collapsed.length > 0 ? 'expand-all' : 'collapse-all'} size={12} />
         </button>
       </div>
       <div style={styles.body} key={`tree${refVersion}`}>{tree.children.flatMap(child => renderNode(child, 0))}</div>
+      <input ref={printInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={onPrintFile} />
     </div>
   );
 }
@@ -145,5 +214,6 @@ const styles: Record<string, React.CSSProperties> = {
     background: '#2a2a30', border: '1px solid #3a3a42', borderRadius: 3,
     color: '#bbb', cursor: 'pointer', padding: 0,
   },
+  addBtnDisabled: { color: '#555', cursor: 'default' },
   count: { fontSize: 10, color: '#777' },
 };

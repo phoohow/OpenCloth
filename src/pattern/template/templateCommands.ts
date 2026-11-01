@@ -47,7 +47,7 @@ export class ApplyTemplateCommand implements Command {
   private saved: Snapshot | null = null;
 
   constructor(private readonly template: GarmentTemplate, private readonly params: Record<string, number>) {
-    this.label = `应用${template.name}模板`;
+    this.label = `替换版型（${template.name}）`;
   }
 
   execute(ctx: ProjectContext): void {
@@ -67,7 +67,7 @@ export class AppendTemplateCommand implements Command {
   private saved: Snapshot | null = null;
 
   constructor(private readonly template: GarmentTemplate, private readonly params: Record<string, number>) {
-    this.label = `追加${template.name}模板`;
+    this.label = `追加版型（${template.name}）`;
   }
 
   execute(ctx: ProjectContext): void {

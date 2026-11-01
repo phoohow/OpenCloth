@@ -1,6 +1,6 @@
 import type { CameraPreset } from '../core/engine/garmentEngine';
 import type { CameraProjection, DenoiseModel, EditPreviewTier, RenderMode, ToneMappingMode } from '../core/model/types';
-import type { PropTab } from '../store/stores';
+import type { PropTab, DisplayMode } from '../store/stores';
 import type { IconName } from './icons';
 import type { RayTraceFailure, RayTraceState, RayTracingCapability } from '../render/renderer/rendererContext';
 
@@ -15,9 +15,10 @@ export interface PropTabOption {
 export const PROP_TAB_OPTIONS: PropTabOption[] = [
   { key: 'object', icon: 'cube', label: '对象' },
   { key: 'material', icon: 'droplet', label: '材质' },
-  { key: 'physics', icon: 'atom', label: '物理' },
-  { key: 'scene', icon: 'scene', label: '场景' },
+  { key: 'simulator', icon: 'atom', label: '模拟器' },
+  { key: 'generator', icon: 't-shirt', label: '生成器' },
   { key: 'render', icon: 'aperture', label: '渲染' },
+  { key: 'project', icon: 'folder', label: '工程' },
 ];
 
 /** One 3D camera preset: engine key, menu/rail label and the shortcut/menu id. */
@@ -54,13 +55,20 @@ export const CAMERA_PROJECTIONS: CameraProjectionOption[] = [
   { value: 'orthographic', menuId: 'cameraProjectionOrthographic', label: '正交' },
 ];
 
-/** Viewport display modes offered by the menu and the render tab. */
+/** Render modes that map to a cloth material; `DISPLAY_MODES` appends the two analysis heatmaps. */
 export const RENDER_MODES: Array<{ value: RenderMode; label: string }> = [
   { value: 'shaded', label: '光栅化' },
   { value: 'raytraced', label: '光线追踪' },
   { value: 'wireframe', label: '线框' },
   { value: 'uvCheck', label: 'UV 检查' },
   { value: 'normalVis', label: '法线可视化' },
+];
+
+/** Display modes shared by the 3D toolbar, the render tab and the phone drawer, with the heatmaps last. */
+export const DISPLAY_MODES: Array<{ value: DisplayMode; label: string }> = [
+  ...RENDER_MODES,
+  { value: 'fitHeatmap', label: '合身热图' },
+  { value: 'strainHeatmap', label: '应变热图' },
 ];
 
 /** Edit-preview tiers offered by the 3D toolbar; `prefs.ts` validates the persisted value against the same list. */

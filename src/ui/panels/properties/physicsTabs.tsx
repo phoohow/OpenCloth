@@ -26,7 +26,7 @@ export function FabricPhysics({ fabric }: { fabric: Fabric }) {
         onChange={v => setPhysics('修改克重', { massPerArea: v })} />
       <SliderRow label="阻尼" min={0} max={0.1} step={0.001} value={fabric.physics.damping} commitOnRelease
         onChange={v => setPhysics('修改阻尼', { damping: v })} />
-      <div style={styles.note}>刚度与克重按材质所属的版型片生效；阻尼是全局值，取工程中的第一个材质。折痕刚度作用于片内用途为「折痕」的内部线。</div>
+      <div style={styles.note}>刚度、克重与阻尼都按材质所属的版片生效，多片共用一份材质时一起变。折痕刚度只作用于片内用途为「折痕」的内部线。</div>
     </Section>
   );
 }
@@ -36,9 +36,9 @@ export function AvatarPhysics({ project }: { project: Project }) {
   const sim = project.scene.simulation;
   return (
     <Section title="碰撞">
-      <CheckRow label="布料与人体碰撞" checked={sim.avatarCollision}
-        onChange={v => setSimulationConfig('修改人体碰撞', { avatarCollision: v })} />
-      <div style={styles.note}>碰撞体随人体尺寸自动重建。</div>
+      <CheckRow label="布料与模特碰撞" checked={sim.avatarCollision}
+        onChange={v => setSimulationConfig('修改模特碰撞', { avatarCollision: v })} />
+      <div style={styles.note}>碰撞体随模特尺寸自动重建。</div>
     </Section>
   );
 }

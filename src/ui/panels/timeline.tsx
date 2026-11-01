@@ -3,7 +3,7 @@ import { usePerfStore, useProjectStore, useSimStore, useUIStore } from '../../st
 import { rayTraceStateLabel } from '../optionTables';
 import { Icon } from '../icons';
 
-/** Playback bar for the cloth simulation: the 3D view's frame rate or per-pixel sample count and its elapsed cost, transport buttons, speed, frame and status. */
+/** Playback bar for the cloth simulation: the 3D view's frame rate or per-pixel sample count and its elapsed cost, transport buttons, speed, frame, simulated time and status. */
 export function Timeline() {
   const isPlaying = useSimStore(s => s.isPlaying);
   const currentFrame = useSimStore(s => s.currentFrame);
@@ -20,6 +20,7 @@ export function Timeline() {
   const costMs3D = usePerfStore(s => s.costMs3D);
   const rayState3D = usePerfStore(s => s.rayState3D);
   const maxSamples = useProjectStore(s => normalizeRayTracing(s.project.scene.render.rayTracing).maxSamples);
+  const dt = useProjectStore(s => s.project.scene.simulation.dt);
   const raytraced = renderMode === 'raytraced';
   /** Gate the traced image is stuck behind; the sample count already explains a running pass. */
   const rayNote = raytraced && samples3D === 0 ? rayTraceStateLabel(rayState3D) : '';
@@ -60,8 +61,9 @@ export function Timeline() {
         </button>
         <button style={styles.btn} onClick={step} title="单步 (.)"><Icon name="step" size={12} /></button>
 
-        <div style={styles.frameInfo}>
+        <div style={styles.frameInfo} title="已模拟的帧数与累计模拟时间（帧数 × 每帧步长）">
           帧 <span style={{ color: '#4da6ff', fontWeight: 600 }}>{currentFrame}</span>
+          <span style={styles.simTime}> · 模拟时长 {costLabel(currentFrame * dt * 1000)}</span>
         </div>
 
         <div style={styles.speedControl}>
@@ -73,10 +75,6 @@ export function Timeline() {
             <option value={2}>2x</option>
           </select>
         </div>
-      </div>
-
-      <div style={styles.timelineTrack}>
-        <div style={{ ...styles.progress, width: `${Math.min(currentFrame / 300 * 100, 100)}%` }} />
       </div>
     </div>
   );
@@ -92,12 +90,13 @@ function costLabel(costMs: number): string {
 const styles: Record<string, React.CSSProperties> = {
   bar: { height: 32, background: '#202024', borderTop: '1px solid #333', display: 'flex', alignItems: 'center', padding: '0 16px', position: 'relative' },
   controls: {
-    position: 'absolute', left: '50%', top: 0, bottom: 3, transform: 'translateX(-50%)',
+    position: 'absolute', left: '50%', top: 0, bottom: 0, transform: 'translateX(-50%)',
     display: 'flex', alignItems: 'center', gap: 10,
   },
   btn: { width: 20, height: 20, background: '#2a2a30', border: '1px solid #3a3a42', borderRadius: 4, color: '#ccc', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center' },
   playBtn: { background: '#2a4a6a', borderColor: '#4da6ff', color: '#fff', width: 28 },
-  frameInfo: { fontSize: 12, color: '#aaa', minWidth: 70 },
+  frameInfo: { fontSize: 12, color: '#aaa', minWidth: 170, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' },
+  simTime: { color: '#8a94a6' },
   speedControl: { display: 'flex', alignItems: 'center', gap: 6 },
   select: { background: '#2a2a30', border: '1px solid #3a3a42', borderRadius: 3, color: '#ddd', padding: '2px 6px', fontSize: 12 },
   status: { fontSize: 12, marginLeft: 'auto' },
@@ -107,6 +106,4 @@ const styles: Record<string, React.CSSProperties> = {
   sppValue: { fontSize: 12, color: '#4da6ff', fontWeight: 600, fontVariantNumeric: 'tabular-nums' },
   sppMax: { fontSize: 12, color: '#8a94a6' },
   sppNote: { fontSize: 11, color: '#c0a060' },
-  timelineTrack: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 3, background: '#1a1a1e' },
-  progress: { height: '100%', background: '#4da6ff', transition: 'width 0.1s' },
 };

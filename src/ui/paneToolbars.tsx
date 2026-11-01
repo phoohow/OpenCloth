@@ -1,8 +1,8 @@
 import { useLayoutEffect, useRef, useState, useMemo, type ReactNode, type MutableRefObject } from 'react';
 import { createPortal } from 'react-dom';
-import { useProjectStore, useSimStore, useUIStore, usePerfStore, type ToolType } from '../store/stores';
+import { displayModeOf, useProjectStore, useSimStore, useUIStore, usePerfStore, type DisplayMode, type ToolType } from '../store/stores';
 import type { GarmentEngine, CameraPreset } from '../core/engine/garmentEngine';
-import type { CameraProjection, EditPreviewTier, RenderMode } from '../core/model/types';
+import type { CameraProjection, EditPreviewTier } from '../core/model/types';
 import {
   BreakPointCommand, BlendSeamJointCommand, CompositeCommand, ConnectPointsCommand, CreateFreeSeamCommand,
   CreateMultiSeamCommand, CreatePanelFromEdgesCommand, FilletCornersCommand,
@@ -12,27 +12,41 @@ import {
 } from '../core/command/patternCommands';
 import { placePanelsAuto } from '../pattern/auto/autoPlace';
 import { seamCandidates, type SeamCandidate, type SeamScanResult, type SeamScanSkipped } from '../pattern/auto/autoSeam';
+import { TRIM_KIND_LABELS, TRIM_KINDS } from '../core/model/defaults';
+import type { TrimKind } from '../core/model/types';
 import { validatePattern } from '../core/model/validatePattern';
 import { seamWarnings } from '../pattern/seam/seamWarnings';
 import { elementNodeId, idsOfKind, type PatternElementKind } from './elementSelection';
 import type { DisplayOptions } from './viewport2D/render';
-import { CAMERA_PRESETS, CAMERA_PROJECTIONS, EDIT_PREVIEW_TIERS, RENDER_MODES, rayTracingUnavailableReason } from './optionTables';
+import { CAMERA_PRESETS, CAMERA_PROJECTIONS, DISPLAY_MODES, EDIT_PREVIEW_TIERS, rayTracingUnavailableReason } from './optionTables';
 import { comboOf } from './menu/shortcuts';
 import { Icon, type IconName } from './icons';
 import { reportActionError } from './widgets/toast';
 
 /** One pattern or pin tool: toolbar glyph, tooltip and the tool it selects. */
-const TOOLS_2D: Array<{ key: ToolType; label: string; icon: IconName }> = [
+type ToolSpec = { key: ToolType; label: string; icon: IconName };
+
+/** Slot-wide 2D tools; the line and shape groups sit between these two blocks. */
+const TOOLS_2D: ToolSpec[] = [
   { key: 'select', label: '选择 (点击/Ctrl加选)', icon: 'select' },
   { key: 'point', label: '线上加点', icon: 'add-point' },
-  { key: 'line', label: '直线 (Enter闭合/Esc取消/Backspace退点)', icon: 'line' },
-  { key: 'curve', label: '曲线 (Ctrl+单击插入曲线点)', icon: 'curve' },
-  { key: 'rect', label: '矩形', icon: 'rect' },
-  { key: 'circle', label: '圆', icon: 'circle' },
-  { key: 'ellipse', label: '椭圆', icon: 'ellipse' },
   { key: 'internalLine', label: '内部线', icon: 'internal-line' },
   { key: 'dart', label: '省道', icon: 'dart' },
   { key: 'seam', label: '缝合', icon: 'seam' },
+  { key: 'topstitch', label: '明线 (单击轮廓边)', icon: 'topstitch' },
+];
+
+/** Line tools sharing one toolbar slot. */
+const LINE_TOOLS: ToolSpec[] = [
+  { key: 'line', label: '直线 (Enter闭合/Esc取消/Backspace退点)', icon: 'line' },
+  { key: 'curve', label: '曲线 (Ctrl+单击插入曲线点)', icon: 'curve' },
+];
+
+/** Shape tools sharing one toolbar slot. */
+const SHAPE_TOOLS: ToolSpec[] = [
+  { key: 'rect', label: '矩形', icon: 'rect' },
+  { key: 'circle', label: '圆', icon: 'circle' },
+  { key: 'ellipse', label: '椭圆', icon: 'ellipse' },
 ];
 
 /** Drafting display layers toggled without touching the model. */
@@ -41,13 +55,16 @@ type DisplayLayer = keyof DisplayOptions;
 const DISPLAY_LAYERS: Array<{ key: DisplayLayer; label: string }> = [
   { key: 'internal', label: '内部线' },
   { key: 'darts', label: '省道' },
-  { key: 'seamAllowance', label: '缝份' },
+  { key: 'seamAllowance', label: '缝份线' },
   { key: 'notches', label: '刀口' },
   { key: 'grain', label: '布纹线' },
   { key: 'annotations', label: '注释' },
   { key: 'measurements', label: '尺寸线' },
   { key: 'gradingOverlay', label: '齐码套叠' },
   { key: 'seamJoin', label: '拼接预览' },
+  { key: 'prints', label: '印花' },
+  { key: 'topstitches', label: '明线' },
+  { key: 'trims', label: '辅料' },
 ];
 
 /** Element kinds a marquee rectangle can collect, with their row labels. */
@@ -61,6 +78,9 @@ const MARQUEE_KINDS: Array<{ kind: PatternElementKind; label: string }> = [
   { kind: 'notch', label: '刀口' },
   { kind: 'annotation', label: '注释' },
   { kind: 'measurement', label: '尺寸线' },
+  { kind: 'print', label: '印花' },
+  { kind: 'topstitch', label: '明线' },
+  { kind: 'trim', label: '辅料' },
 ];
 
 /** Tools that mark production information onto existing geometry. */
@@ -119,7 +139,7 @@ const VIEW_ITEMS = CAMERA_PRESETS.map(p => ({
 
 const PROJECTION_ITEMS = CAMERA_PROJECTIONS.map(p => ({ key: p.value, label: p.label }));
 
-const RENDER_ITEMS = RENDER_MODES.map(m => ({ key: m.value, label: m.label }));
+const DISPLAY_ITEMS = DISPLAY_MODES.map(m => ({ key: m.value, label: m.label }));
 
 /** Edit-preview tiers; the coarse entry spells out the re-drape that follows the drag. */
 const EDIT_PREVIEW_ITEMS = EDIT_PREVIEW_TIERS.map(tier => ({
@@ -129,9 +149,9 @@ const EDIT_PREVIEW_ITEMS = EDIT_PREVIEW_TIERS.map(tier => ({
 }));
 
 /** Display modes with the ray tracing entry locked once the probe has rejected this GPU. */
-function renderItems(unavailable: string | null) {
-  if (!unavailable) return RENDER_ITEMS;
-  return RENDER_ITEMS.map(item => item.key === 'raytraced'
+function displayItems(unavailable: string | null) {
+  if (!unavailable) return DISPLAY_ITEMS;
+  return DISPLAY_ITEMS.map(item => item.key === 'raytraced'
     ? { ...item, label: `${item.label}（不支持）`, disabled: true, note: unavailable }
     : item);
 }
@@ -146,6 +166,8 @@ export function Toolbar2D() {
   const marqueeKinds = useUIStore(s => s.marqueeKinds);
   const setMarqueeKinds = useUIStore(s => s.setMarqueeKinds);
   const selection = useUIStore(s => s.selection);
+  const trimKind = useUIStore(s => s.trimKind);
+  const setTrimKind = useUIStore(s => s.setTrimKind);
 
   /** Runs one structure operation, arming a tool or dispatching a command for the selection. */
   const runStructure = (action: StructureAction) => {
@@ -236,9 +258,19 @@ export function Toolbar2D() {
 
   return (
     <div style={styles.bar}>
-      {TOOLS_2D.map(t => (
+      {TOOLS_2D.slice(0, 2).map(t => (
         <ToolButton key={t.key} tool={t} active={activeTool === t.key} onPick={setTool} />
       ))}
+      <ToolGroup tools={LINE_TOOLS} activeTool={activeTool} onPick={setTool} />
+      <ToolGroup tools={SHAPE_TOOLS} activeTool={activeTool} onPick={setTool} />
+      {TOOLS_2D.slice(2).map(t => (
+        <ToolButton key={t.key} tool={t} active={activeTool === t.key} onPick={setTool} />
+      ))}
+      <TrimTool
+        active={activeTool === 'trim'}
+        kind={trimKind}
+        onPick={k => { setTrimKind(k); setTool('trim'); }}
+      />
       <Dropdown
         label="结构"
         items={STRUCTURE_ITEMS.map(i => ({ key: i.key, label: `${structureChecked(i.key, activeTool) ? '✓ ' : '　'}${i.label}` }))}
@@ -249,6 +281,7 @@ export function Toolbar2D() {
         items={MARK_TOOLS.map(m => ({ key: m.key, label: `${activeTool === m.key ? '✓ ' : '　'}${m.label}` }))}
         onPick={key => setTool(key as ToolType)}
       />
+
       <CheckMenu />
       <AutoMenu />
       <div style={styles.spacer} />
@@ -266,11 +299,11 @@ export function Toolbar2D() {
         }}
       />
       <Dropdown
-        label="显示"
+        label="图层"
         items={DISPLAY_LAYERS.map(l => ({ key: l.key, label: `${displayOptions[l.key] ? '✓ ' : '　'}${l.label}` }))}
         onPick={key => setDisplayOption(key as DisplayLayer, !displayOptions[key as DisplayLayer])}
       />
-      <button style={styles.textBtn} title="适配版型范围 (F)" onClick={requestFit}>居中</button>
+      <button style={styles.textBtn} title="适配版型范围 (F)" onClick={requestFit}>适应</button>
     </div>
   );
 }
@@ -443,8 +476,8 @@ function seamEmptyHint(skipped: SeamScanSkipped): string {
 export function Toolbar3D({ engineRef }: { engineRef: MutableRefObject<GarmentEngine | null> }) {
   const activeTool = useUIStore(s => s.activeTool);
   const setTool = useUIStore(s => s.setTool);
-  const renderMode = useUIStore(s => s.renderMode);
-  const setRenderMode = useUIStore(s => s.setRenderMode);
+  const displayMode = useUIStore(displayModeOf);
+  const setDisplayMode = useUIStore(s => s.setDisplayMode);
   const projection = useUIStore(s => s.cameraProjection);
   const setCameraProjection = useUIStore(s => s.setCameraProjection);
   const editPreview = useUIStore(s => s.editPreview);
@@ -515,12 +548,12 @@ export function Toolbar3D({ engineRef }: { engineRef: MutableRefObject<GarmentEn
       />
       <Dropdown
         label="显示"
-        items={renderItems(rayUnavailable)}
-        value={renderMode}
-        onPick={key => setRenderMode(key as RenderMode)}
+        items={displayItems(rayUnavailable)}
+        value={displayMode}
+        onPick={key => setDisplayMode(key as DisplayMode)}
       />
       <Dropdown
-        label="编辑时预览"
+        label="编辑预览"
         items={EDIT_PREVIEW_ITEMS}
         value={editPreview}
         onPick={key => setEditPreview(key as EditPreviewTier)}
@@ -545,17 +578,88 @@ function ToolButton({ tool, active, onPick }: {
   );
 }
 
-function Dropdown({ label, items, value, onPick }: {
-  label: string;
-  items: Array<{ key: string; label: string; disabled?: boolean; note?: string }>;
-  value?: string;
+/** A toolbar slot holding several tools behind one dropdown. */
+function ToolGroup({ tools, activeTool, onPick }: {
+  tools: ToolSpec[];
+  activeTool: ToolType;
+  onPick: (t: ToolType) => void;
+}) {
+  const current = tools.find(t => t.key === activeTool) ?? tools[0];
+  return (
+    <ToolMenu
+      icon={current.icon}
+      title={`${current.label} (箭头切换工具)`}
+      options={tools.map(t => ({ key: t.key, label: t.label }))}
+      current={tools.some(t => t.key === activeTool) ? activeTool : ''}
+      onPick={key => onPick(key as ToolType)}
+    />
+  );
+}
+
+/** Trim tool button: the arrow lists the kinds and arms the placement tool. */
+function TrimTool({ active, kind, onPick }: {
+  active: boolean;
+  kind: TrimKind;
+  onPick: (kind: TrimKind) => void;
+}) {
+  return (
+    <ToolMenu
+      icon="trim"
+      title={`辅料：${TRIM_KIND_LABELS[kind]} (点击版片放置，箭头换类型)`}
+      options={TRIM_KINDS.map(k => ({ key: k, label: TRIM_KIND_LABELS[k] }))}
+      current={active ? kind : ''}
+      onPick={key => onPick(key as TrimKind)}
+    />
+  );
+}
+
+/** Icon button that opens a list of alternatives. */
+function ToolMenu({ icon, title, options, current, onPick }: {
+  icon: IconName;
+  title: string;
+  options: Array<{ key: string; label: string }>;
+  current: string;
   onPick: (key: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const anchorRef = useRef<HTMLDivElement>(null);
   return (
     <div ref={anchorRef} style={{ position: 'relative' }}>
-      <button style={styles.textBtn} onClick={() => setOpen(o => !o)}>{label}<Icon name="chevron-down" size={11} style={{ marginLeft: 4 }} /></button>
+      <button
+        style={{ ...styles.toolBtn, width: 34, ...(current ? styles.toolBtnActive : null) }}
+        title={title}
+        onClick={() => setOpen(o => !o)}
+      >
+        <Icon name={icon} size={15} />
+        <Icon name="chevron-down" size={8} style={{ marginLeft: 1, opacity: 0.75 }} />
+      </button>
+      <MenuPopup open={open} anchor={anchorRef} onClose={() => setOpen(false)}>
+        {options.map(o => (
+          <div
+            key={o.key}
+            style={{ ...styles.menuItem, ...(o.key === current ? styles.menuItemActive : null) }}
+            onClick={() => { onPick(o.key); setOpen(false); }}
+          >
+            {o.key === current ? '✓ ' : '　'}{o.label}
+          </div>
+        ))}
+      </MenuPopup>
+    </div>
+  );
+}
+
+function Dropdown({ label, items, value, onPick, title }: {
+  label: string;
+  items: Array<{ key: string; label: string; disabled?: boolean; note?: string }>;
+  value?: string;
+  onPick: (key: string) => void;
+  title?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const anchorRef = useRef<HTMLDivElement>(null);
+  return (
+    <div ref={anchorRef} style={{ position: 'relative' }}>
+      <button style={styles.textBtn} title={title} onClick={() => setOpen(o => !o)}>{label}<Icon name="chevron-down" size={11} style={{ marginLeft: 4 }} /></button>
       <MenuPopup open={open} anchor={anchorRef} onClose={() => setOpen(false)}>
         {items.map(item => (
           <div
@@ -615,9 +719,9 @@ const MENU_EDGE = 8;
 const MIN_PANEL_SPACE = 160;
 
 const styles: Record<string, React.CSSProperties> = {
-  bar: { height: 30, flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 2, padding: '0 6px', background: '#202024', borderBottom: '1px solid #333', overflow: 'hidden' },
+  bar: { height: 34, flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 2, padding: '0 6px', background: '#202024', borderBottom: '1px solid #333', overflowX: 'auto', overflowY: 'hidden' },
   spacer: { flex: 1 },
-  toolBtn: { width: 26, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: '1px solid transparent', borderRadius: 3, color: '#bbb', cursor: 'pointer' },
+  toolBtn: { flex: '0 0 auto', width: 26, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: '1px solid transparent', borderRadius: 3, color: '#bbb', cursor: 'pointer' },
   toolBtnActive: { background: '#2a4a6a', border: '1px solid #4da6ff', color: '#fff' },
   textBtn: { flex: '0 0 auto', whiteSpace: 'nowrap', padding: '3px 6px', background: '#2a2a30', border: '1px solid #3a3a42', borderRadius: 3, color: '#ccc', cursor: 'pointer', fontSize: 11 },
   pinCount: { flex: '0 1 auto', minWidth: 0, padding: '3px 2px', color: '#9ab', fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'default' },

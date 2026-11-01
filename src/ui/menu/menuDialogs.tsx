@@ -11,6 +11,7 @@ import { orderedSizes } from '../../pattern/grading/grading';
 import { exportMarkerSvg, exportPatternSvg } from '../../io/svgPattern';
 import { buildMarkerLayout } from '../../pattern/marker/markerLayout';
 import { buildMarkerReport, markerReportCsv } from '../../pattern/marker/markerReport';
+import { bomCsv, bomQuantityText, bomTotals, buildBom } from '../../pattern/bom';
 
 const SCOPE_ORDER: ShortcutScope[] = ['全局', '3D 视口', '2D 制版', '菜单栏'];
 
@@ -37,6 +38,7 @@ export function MenuDialogs() {
       <div style={styles.panel} onClick={e => e.stopPropagation()}>
         {dialog === 'shortcuts' ? <ShortcutsDialog />
           : dialog === 'about' ? <AboutDialog />
+          : dialog === 'exportBom' ? <BomDialog />
           : <PatternExportDialog kind={dialog} />}
         <div style={styles.footer}>
           <button style={styles.closeBtn} onClick={closeDialog}>关闭</button>
@@ -400,6 +402,66 @@ function PatternExportDialog({ kind }: { kind: ExportKind }) {
   );
 }
 
+/** Preview of the bill of materials with a CSV download. */
+function BomDialog() {
+  const closeDialog = useMenuStore(s => s.closeDialog);
+  const project = useProjectStore(s => s.project);
+  const rows = useMemo(() => buildBom(project), [project]);
+  const totals = useMemo(() => bomTotals(rows), [rows]);
+
+  const download = () => {
+    downloadTextFile(`${project.meta.name}-物料清单.csv`, bomCsv(rows), 'text/csv;charset=utf-8');
+    closeDialog();
+  };
+
+  return (
+    <>
+      <div style={styles.title}>导出物料清单</div>
+      <div style={styles.body}>
+        {rows.length === 0 ? (
+          <div style={styles.note}>当前工程没有可见的物料，请先添加版片或生产物件。</div>
+        ) : (
+          <>
+            <div style={styles.bomTable}>
+              <div style={{ ...styles.bomRow, ...styles.bomHead }}>
+                <span>类别</span>
+                <span>名称</span>
+                <span>规格</span>
+                <span>单位</span>
+                <span style={styles.bomNum}>数量</span>
+                <span style={styles.bomNum}>单价</span>
+                <span style={styles.bomNum}>金额</span>
+              </div>
+              {rows.map((row, index) => (
+                <div key={`${row.category}:${row.name}:${index}`} style={styles.bomRow}>
+                  <span style={styles.bomCell}>{row.category}</span>
+                  <span style={styles.bomCell}>{row.name}</span>
+                  <span style={styles.bomCell}>{row.spec}</span>
+                  <span style={styles.bomCell}>{row.unit}</span>
+                  <span style={{ ...styles.bomCell, ...styles.bomNum }}>{bomQuantityText(row.quantity)}</span>
+                  <span style={{ ...styles.bomCell, ...styles.bomNum }}>{row.unitPrice === null ? '—' : row.unitPrice.toFixed(2)}</span>
+                  <span style={{ ...styles.bomCell, ...styles.bomNum }}>{row.amount === null ? '—' : row.amount.toFixed(2)}</span>
+                </div>
+              ))}
+            </div>
+            <div style={styles.row}>
+              <span style={styles.rowLabel}>合计金额</span>
+              <span style={styles.rowValue}>
+                {totals.pricedRows === 0 ? '未填写单价' : `${totals.amount.toFixed(2)} 元（${totals.pricedRows} 项已定价）`}
+              </span>
+            </div>
+          </>
+        )}
+        <div style={styles.note}>CSV 带 UTF-8 编码，Excel 可直接打开；未填单价的行不参与合计。</div>
+        <div style={styles.row}>
+          <span style={styles.rowLabel} />
+          <button style={styles.exportBtn} onClick={download} disabled={rows.length === 0}>导出 CSV</button>
+        </div>
+      </div>
+    </>
+  );
+}
+
 function ShortcutsDialog() {
   return (
     <>
@@ -485,6 +547,17 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '1px 6px', fontSize: 'var(--oc-fs-micro)', color: '#cfe4ff', fontFamily: 'inherit', whiteSpace: 'nowrap',
   },
   note: { fontSize: 'var(--oc-fs-micro)', color: '#777', lineHeight: 1.6 },
+  bomTable: {
+    display: 'flex', flexDirection: 'column', gap: 2, maxHeight: '40vh', overflowY: 'auto',
+    border: '1px solid #333', borderRadius: 4, padding: '4px 8px',
+  },
+  bomRow: {
+    display: 'grid', gridTemplateColumns: '44px 1fr 1.8fr 36px 52px 52px 58px',
+    gap: 6, fontSize: 'var(--oc-fs-micro)', color: '#ccc', lineHeight: 1.5,
+  },
+  bomHead: { color: '#7d7d88', borderBottom: '1px solid #3a3a42', paddingBottom: 3 },
+  bomCell: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  bomNum: { textAlign: 'right' },
   footer: { display: 'flex', justifyContent: 'flex-end', paddingTop: 12 },
   input: {
     width: 90, padding: '3px 6px', background: '#1b1b1f', border: '1px solid #3a3a42', borderRadius: 3,

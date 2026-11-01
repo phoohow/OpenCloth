@@ -34,7 +34,7 @@ export const SHORTCUTS: ShortcutDef[] = [
   { id: 'layout2d3d', label: '2D 左 + 3D 右 分屏', combo: '4', scope: '全局' },
   { id: 'layout2d', label: '仅 2D 制版', combo: '2', scope: '全局' },
   { id: 'layout3d', label: '仅 3D 视口', combo: '1', scope: '全局' },
-  { id: 'fitView', label: '适应视图', combo: 'F', scope: '全局' },
+  { id: 'fitView', label: '适应视图', combo: 'F', scope: '2D 制版' },
   { id: 'toggleFocus', label: '在 3D 与 2D 之间切换焦点', combo: 'Tab', scope: '全局' },
 
   { id: 'drape', label: '自动着装', combo: 'Ctrl+D', scope: '全局' },

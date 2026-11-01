@@ -1,10 +1,10 @@
 import type { Pattern } from './types';
 
 /** Selectable element kinds in the 2D drafting workspace. */
-export type PatternElementKind = 'panel' | 'point' | 'edge' | 'internal' | 'dart' | 'seam' | 'notch' | 'annotation' | 'measurement';
+export type PatternElementKind = 'panel' | 'point' | 'edge' | 'internal' | 'dart' | 'seam' | 'notch' | 'annotation' | 'measurement' | 'print' | 'topstitch' | 'trim';
 
 /** Every kind addressed with the `@kind:id` element encoding. */
-export const PATTERN_ELEMENT_KINDS: PatternElementKind[] = ['panel', 'point', 'edge', 'internal', 'dart', 'seam', 'notch', 'annotation', 'measurement'];
+export const PATTERN_ELEMENT_KINDS: PatternElementKind[] = ['panel', 'point', 'edge', 'internal', 'dart', 'seam', 'notch', 'annotation', 'measurement', 'print', 'topstitch', 'trim'];
 /**
  * Untyped selection rows are opaque ids; element picks are encoded with a `@kind:`
  * prefix so the outliner, 3D overlay and mobile chips keep reading plain panel ids.
@@ -13,7 +13,7 @@ export const elementNodeId = (kind: PatternElementKind, id: string): string => `
 
 /** Kind and object id of a prefixed selection row; null for plain scene ids. */
 export function parseElementNodeId(nodeId: string): { kind: PatternElementKind; id: string } | null {
-  const m = /^@(panel|point|edge|internal|dart|seam|notch|annotation|measurement):(.+)$/.exec(nodeId);
+  const m = /^@(panel|point|edge|internal|dart|seam|notch|annotation|measurement|print|topstitch|trim):(.+)$/.exec(nodeId);
   return m ? { kind: m[1] as PatternElementKind, id: m[2] } : null;
 }
 
@@ -74,6 +74,12 @@ export function affectedPanelIds(pattern: Pattern, selection: readonly string[])
   for (const dartId of idsOfKind(selection, 'dart')) {
     for (const panel of Object.values(pattern.panels)) {
       if (panel.dartIds.includes(dartId)) panels.add(panel.id);
+    }
+  }
+  for (const kind of ['print', 'topstitch', 'trim'] as const) {
+    for (const id of idsOfKind(selection, kind)) {
+      const owner = pattern[kind === 'print' ? 'prints' : kind === 'topstitch' ? 'topstitches' : 'trims'][id]?.panelId;
+      if (owner) panels.add(owner);
     }
   }
   return [...panels];

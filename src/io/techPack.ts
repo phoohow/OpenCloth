@@ -1,10 +1,11 @@
-import type { Fabric, Measurement, Panel, Pattern, Project, Seam, SeamType, SizeDef, Vec2 } from '../core/model/types';
-import { EDGE_SEMANTIC_LABELS, SEAM_TYPE_LABELS } from '../core/model/defaults';
-import { panelOutlineWithAllowance, sampleOutline, samplePanelOutline } from '../pattern/panel/panelBuilder';
+import type { Fabric, Measurement, Pattern, Project, Seam, SeamType, SizeDef, Vec2 } from '../core/model/types';
+import { EDGE_SEMANTIC_LABELS, SEAM_TYPE_LABELS, TRIM_KIND_LABELS } from '../core/model/defaults';
+import { samplePanelOutline } from '../pattern/panel/panelBuilder';
 import { edgeIntervalLength, measurementValue } from '../pattern/geom/edgeSample';
 import { orderedSizes } from '../pattern/grading/grading';
 import { buildMarkerLayout } from '../pattern/marker/markerLayout';
-import { buildMarkerReport, polygonArea } from '../pattern/marker/markerReport';
+import { buildMarkerReport } from '../pattern/marker/markerReport';
+import { bomQuantityText, bomTotals, buildBom, panelAreas, type BomRow } from '../pattern/bom';
 import { assemblePdf, CM_PT, pdfNum, rectPath, textOps, textWidthPt } from './pdf/pdfDocument';
 
 /** Inputs of the tech pack summary and PDF; every field has a production default. */
@@ -98,6 +99,43 @@ export interface TechPackMeasurementRow {
   unit: 'cm' | 'deg';
 }
 
+/** One placed print with its size and tiling. */
+export interface TechPackPrintRow {
+  id: string;
+  name: string;
+  panelName: string;
+  widthCm: number;
+  heightCm: number;
+  angleDeg: number;
+  repeat: Vec2;
+  opacity: number;
+}
+
+/** One topstitch line group with its interval length. */
+export interface TechPackTopstitchRow {
+  id: string;
+  name: string;
+  panelName: string;
+  edge: string;
+  offsetMm: number;
+  spacingMm: number;
+  rows: number;
+  /** Stitched length of all rows, in centimetres. */
+  lengthCm: number;
+}
+
+/** One trim mark with its production count. */
+export interface TechPackTrimRow {
+  id: string;
+  name: string;
+  panelName: string;
+  kindLabel: string;
+  sizeMm: number;
+  color: string;
+  quantity: number;
+  unitPrice: number | null;
+}
+
 /** Everything the tech pack prints, computed from the live project. */
 export interface TechPackData {
   projectName: string;
@@ -108,6 +146,10 @@ export interface TechPackData {
   panels: TechPackPanelRow[];
   fabrics: TechPackFabricRow[];
   seams: TechPackSeamRow[];
+  prints: TechPackPrintRow[];
+  topstitches: TechPackTopstitchRow[];
+  trims: TechPackTrimRow[];
+  bom: BomRow[];
   marker: TechPackMarkerSummary;
   measurements: TechPackMeasurementRow[];
 }
@@ -148,22 +190,6 @@ function allowanceOf(pattern: Pattern, edgeId: string, panelId: string | undefin
   const edge = pattern.edges[edgeId];
   if (edge?.seamAllowanceCm !== undefined) return edge.seamAllowanceCm;
   return panelId ? (pattern.panels[panelId]?.seamAllowanceCm ?? 0) : 0;
-}
-
-/** Area of a polyline in square metres. */
-function outlineAreaM2(points: Vec2[]): number {
-  return points.length >= 3 ? polygonArea(points) / 10_000 : 0;
-}
-
-/** Net (seam line) and gross (cut line) area of one panel, holes removed. */
-function panelAreas(pattern: Pattern, panel: Panel): { netAreaM2: number; grossAreaM2: number } {
-  const holes = (panel.holes ?? [])
-    .map(loop => sampleOutline(pattern, loop))
-    .filter(loop => loop.length >= 3);
-  const holeArea = holes.reduce((sum, loop) => sum + outlineAreaM2(loop), 0);
-  const net = outlineAreaM2(samplePanelOutline(pattern, panel)) - holeArea;
-  const gross = outlineAreaM2(panelOutlineWithAllowance(pattern, panel)) - holeArea;
-  return { netAreaM2: Math.max(0, net), grossAreaM2: Math.max(0, gross) };
 }
 
 /** Summarises the default marker for the tech pack; failures keep the note instead of throwing. */
@@ -276,6 +302,56 @@ export function buildTechPackData(project: Project, options: TechPackOptions = {
     });
   }
 
+  const prints: TechPackPrintRow[] = Object.values(pattern.prints)
+    .filter(print => {
+      const panel = pattern.panels[print.panelId];
+      return !!panel && panel.visible !== false && print.visible !== false;
+    })
+    .map(print => ({
+      id: print.id,
+      name: print.name ?? print.imageName ?? '印花',
+      panelName: pattern.panels[print.panelId]?.name ?? '—',
+      widthCm: print.widthCm,
+      heightCm: print.heightCm,
+      angleDeg: print.angleDeg,
+      repeat: print.repeat,
+      opacity: print.opacity,
+    }));
+
+  const topstitches: TechPackTopstitchRow[] = Object.values(pattern.topstitches)
+    .filter(stitch => {
+      const panel = pattern.panels[stitch.panelId];
+      return !!panel && panel.visible !== false && stitch.visible !== false;
+    })
+    .map(stitch => ({
+      id: stitch.id,
+      name: stitch.name ?? '明线',
+      panelName: pattern.panels[stitch.panelId]?.name ?? '—',
+      edge: describeEdge(pattern, stitch.edgeId),
+      offsetMm: stitch.offsetMm,
+      spacingMm: stitch.spacingMm,
+      rows: stitch.rows,
+      lengthCm: pattern.edges[stitch.edgeId]
+        ? edgeIntervalLength(pattern, stitch.edgeId, stitch.t0, stitch.t1) * stitch.rows
+        : 0,
+    }));
+
+  const trims: TechPackTrimRow[] = Object.values(pattern.trims)
+    .filter(trim => {
+      const panel = pattern.panels[trim.panelId];
+      return !!panel && panel.visible !== false && trim.visible !== false;
+    })
+    .map(trim => ({
+      id: trim.id,
+      name: trim.name ?? TRIM_KIND_LABELS[trim.kind],
+      panelName: pattern.panels[trim.panelId]?.name ?? '—',
+      kindLabel: TRIM_KIND_LABELS[trim.kind],
+      sizeMm: trim.sizeMm,
+      color: trim.color,
+      quantity: trim.qty,
+      unitPrice: typeof trim.unitPrice === 'number' && Number.isFinite(trim.unitPrice) ? trim.unitPrice : null,
+    }));
+
   return {
     projectName: project.meta.name,
     date: options.date ?? new Date().toISOString().slice(0, 10),
@@ -285,6 +361,10 @@ export function buildTechPackData(project: Project, options: TechPackOptions = {
     panels,
     fabrics,
     seams,
+    prints,
+    topstitches,
+    trims,
+    bom: buildBom(project),
     marker: markerSummary(pattern, options),
     measurements,
   };
@@ -483,6 +563,89 @@ function renderTechPack(data: TechPackData): Uint8Array {
       allowanceText(seam),
       gatherText(seam),
     ]), name);
+  }
+
+  heading(sheet, '印花', name);
+  if (data.prints.length === 0) {
+    line(sheet, '无印花', name, { grey: 0.35 });
+  } else {
+    const columns: Column[] = [
+      { title: '版片', width: 100 },
+      { title: '印花', width: 130 },
+      { title: '尺寸 (cm)', width: 100, align: 'right' },
+      { title: '角度', width: 60, align: 'right' },
+      { title: '平铺', width: 60, align: 'right' },
+      { title: '不透明度', width: 60, align: 'right' },
+    ];
+    table(sheet, columns, data.prints.map(print => [
+      print.panelName,
+      print.name,
+      `${print.widthCm.toFixed(1)} × ${print.heightCm.toFixed(1)}`,
+      `${print.angleDeg.toFixed(1)}°`,
+      `${print.repeat.x} × ${print.repeat.y}`,
+      `${Math.round(print.opacity * 100)}%`,
+    ]), name);
+  }
+
+  heading(sheet, '明线', name);
+  if (data.topstitches.length === 0) {
+    line(sheet, '无明线', name, { grey: 0.35 });
+  } else {
+    const columns: Column[] = [
+      { title: '版片', width: 100 },
+      { title: '边', width: 130 },
+      { title: '偏移 (mm)', width: 80, align: 'right' },
+      { title: '行距 (mm)', width: 70, align: 'right' },
+      { title: '行数', width: 50, align: 'right' },
+      { title: '长度 (cm)', width: 80, align: 'right' },
+    ];
+    table(sheet, columns, data.topstitches.map(stitch => [
+      stitch.panelName, stitch.edge,
+      stitch.offsetMm.toFixed(1), stitch.spacingMm.toFixed(1), String(stitch.rows), stitch.lengthCm.toFixed(1),
+    ]), name);
+  }
+
+  heading(sheet, '辅料', name);
+  if (data.trims.length === 0) {
+    line(sheet, '无辅料', name, { grey: 0.35 });
+  } else {
+    const columns: Column[] = [
+      { title: '版片', width: 100 },
+      { title: '名称', width: 110 },
+      { title: '类型', width: 70 },
+      { title: '直径 (mm)', width: 70, align: 'right' },
+      { title: '数量', width: 50, align: 'right' },
+      { title: '单价', width: 60, align: 'right' },
+      { title: '颜色', width: 50 },
+    ];
+    table(sheet, columns, data.trims.map(trim => [
+      trim.panelName, trim.name, trim.kindLabel, trim.sizeMm.toFixed(1), String(trim.quantity),
+      trim.unitPrice === null ? '—' : trim.unitPrice.toFixed(2), trim.color,
+    ]), name);
+  }
+
+  heading(sheet, '物料清单', name);
+  if (data.bom.length === 0) {
+    line(sheet, '无物料', name, { grey: 0.35 });
+  } else {
+    const columns: Column[] = [
+      { title: '类别', width: 50 },
+      { title: '名称', width: 110 },
+      { title: '规格', width: 145 },
+      { title: '单位', width: 40 },
+      { title: '数量', width: 55, align: 'right' },
+      { title: '单价', width: 50, align: 'right' },
+      { title: '金额', width: 60, align: 'right' },
+    ];
+    table(sheet, columns, data.bom.map(row => [
+      row.category, row.name, row.spec, row.unit, bomQuantityText(row.quantity),
+      row.unitPrice === null ? '—' : row.unitPrice.toFixed(2),
+      row.amount === null ? '—' : row.amount.toFixed(2),
+    ]), name);
+    const totals = bomTotals(data.bom);
+    line(sheet, totals.pricedRows === 0
+      ? '合计：未填写单价'
+      : `合计金额：${totals.amount.toFixed(2)}（${totals.pricedRows} 项已定价）`, name, { size: 7.5, grey: 0.35, gap: 1.4 });
   }
 
   heading(sheet, '排料摘要', name);

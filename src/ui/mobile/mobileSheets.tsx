@@ -2,14 +2,14 @@ import { useEffect, type ReactNode } from 'react';
 import type { MenuActions } from '../menu/actions';
 import { AUTO_SAVE_ITEMS } from '../menu/menuModel';
 import { formatSavedAt } from '../timeFormat';
-import { CAMERA_PRESETS, CAMERA_PROJECTIONS, PROP_TAB_OPTIONS, RENDER_MODES, rayTracingUnavailableReason } from '../optionTables';
+import { CAMERA_PRESETS, CAMERA_PROJECTIONS, DISPLAY_MODES, PROP_TAB_OPTIONS, rayTracingUnavailableReason } from '../optionTables';
 import { usePropsTarget } from '../panels/propertiesEditor';
 import { Icon } from '../icons';
 import type { EngineRef } from '../sceneCommands';
-import { usePerfStore, useProjectStore, useSimStore, useUIStore } from '../../store/stores';
+import { displayModeOf, usePerfStore, useProjectStore, useSimStore, useUIStore } from '../../store/stores';
 import { SPEED_STEPS } from './mobileUi';
 import type { PropTab } from '../../store/stores';
-import type { CameraProjection, RenderMode } from '../../core/model/types';
+import type { CameraProjection } from '../../core/model/types';
 import type { CameraPreset } from '../../core/engine/garmentEngine';
 
 /** Sheets the phone shell can slide up; null keeps the viewport full screen. */
@@ -117,57 +117,57 @@ function CameraSheet({ actions, engineRef, onClose }: {
   );
 }
 
-/** Viewport display modes, the same set the desktop toolbar offers. */
+/** Viewport display modes, the same set the desktop toolbar offers minus the strain heatmap. */
 function DisplaySheet({ onClose }: { onClose: () => void }) {
-  const renderMode = useUIStore(s => s.renderMode);
-  const setRenderMode = useUIStore(s => s.setRenderMode);
+  const displayMode = useUIStore(displayModeOf);
+  const setDisplayMode = useUIStore(s => s.setDisplayMode);
   const rayUnavailable = rayTracingUnavailableReason(usePerfStore(s => s.rayUnsupported3D));
-  const fitCheck = useUIStore(s => s.fitCheck);
+  const fitOn = displayMode === 'fitHeatmap';
   const fitTightCm = useUIStore(s => s.fitTightCm);
   const fitLooseCm = useUIStore(s => s.fitLooseCm);
-  const setFitCheck = useUIStore(s => s.setFitCheck);
   const setFitThresholds = useUIStore(s => s.setFitThresholds);
   const fitStats = useSimStore(s => s.fitStats);
 
   return (
     <>
       <SheetGroup title="显示模式">
-        {RENDER_MODES.map(mode => (
+        {DISPLAY_MODES.filter(mode => mode.value !== 'strainHeatmap').map(mode => (
           <SheetButton
             key={mode.value}
             label={mode.value === 'raytraced' && rayUnavailable ? `${mode.label}（不支持）` : mode.label}
             hint={mode.value === 'raytraced' ? rayUnavailable ?? undefined : undefined}
             disabled={mode.value === 'raytraced' && !!rayUnavailable}
-            active={renderMode === mode.value}
-            onClick={() => { setRenderMode(mode.value as RenderMode); onClose(); }}
+            active={displayMode === mode.value}
+            onClick={() => { setDisplayMode(mode.value); onClose(); }}
           />
         ))}
       </SheetGroup>
-      <SheetGroup title="合身检查">
-        <SheetButton label="合身颜色" active={fitCheck} onClick={() => setFitCheck(!fitCheck)} />
-      </SheetGroup>
-      <label style={styles.rangeRow}>
-        <span>贴近阈值 {fitTightCm.toFixed(1)} cm</span>
-        <input type="range" min={0} max={3} step={0.1} value={fitTightCm}
-          onChange={e => setFitThresholds(Number(e.target.value), fitLooseCm)} />
-      </label>
-      <label style={styles.rangeRow}>
-        <span>宽松阈值 {fitLooseCm.toFixed(1)} cm</span>
-        <input type="range" min={0.5} max={8} step={0.1} value={fitLooseCm}
-          onChange={e => setFitThresholds(fitTightCm, Number(e.target.value))} />
-      </label>
-      {fitStats && (
-        <SheetNote>
-          穿透 {fitStats.penetration} · 贴近 {fitStats.tight} · 合适 {fitStats.ideal} · 宽松 {fitStats.loose}
-          ；间隙 {fitStats.minCm.toFixed(2)} / {fitStats.meanCm.toFixed(2)} / {fitStats.maxCm.toFixed(2)} cm。
-        </SheetNote>
+      {fitOn && (
+        <>
+          <label style={styles.rangeRow}>
+            <span>贴近阈值 {fitTightCm.toFixed(1)} cm</span>
+            <input type="range" min={0} max={3} step={0.1} value={fitTightCm}
+              onChange={e => setFitThresholds(Number(e.target.value), fitLooseCm)} />
+          </label>
+          <label style={styles.rangeRow}>
+            <span>宽松阈值 {fitLooseCm.toFixed(1)} cm</span>
+            <input type="range" min={0.5} max={8} step={0.1} value={fitLooseCm}
+              onChange={e => setFitThresholds(fitTightCm, Number(e.target.value))} />
+          </label>
+          {fitStats && (
+            <SheetNote>
+              穿透 {fitStats.penetration} · 贴近 {fitStats.tight} · 合适 {fitStats.ideal} · 宽松 {fitStats.loose}
+              ；间隙 {fitStats.minCm.toFixed(2)} / {fitStats.meanCm.toFixed(2)} / {fitStats.maxCm.toFixed(2)} cm。
+            </SheetNote>
+          )}
+        </>
       )}
       <SheetNote>光线追踪按渐进采样出图，布料每帧变形都会重新累计采样；手机上建议先暂停模拟再看收敛结果。</SheetNote>
     </>
   );
 }
 
-/** Material, physics, scene and render properties of the selected object. */
+/** Object, material, simulator, generator, render and project properties. */
 function PropsSheet({ engineRef }: { engineRef: EngineRef }) {
   const setPropTab = useUIStore(s => s.setPropTab);
   const target = usePropsTarget(engineRef);
@@ -231,15 +231,15 @@ function MenuSheet({ actions, onClose }: { actions: MenuActions; onClose: () => 
         <SheetButton label="撤销" hint={history.lastLabel ?? undefined} disabled={!history.canUndo} onClick={actions.undo} />
         <SheetButton label="重做" hint={history.nextLabel ?? undefined} disabled={!history.canRedo} onClick={actions.redo} />
         <SheetButton label="全选版片" disabled={panelIds.length === 0} onClick={actions.selectAllPanels} />
-        <SheetButton label="取消选择" disabled={selectedPanelCount === 0} onClick={actions.clearSelection} />
-        <SheetButton label="删除选中" disabled={selectedPanelCount === 0} onClick={actions.deleteSelection} />
+        <SheetButton label="取消选择" disabled={selection.length === 0} onClick={actions.clearSelection} />
+        <SheetButton label="删除选中" disabled={selection.length === 0} onClick={actions.deleteSelection} />
       </SheetGroup>
       <SheetGroup title="版片显示">
         <SheetButton label="显示全部版片" disabled={hiddenPanelCount === 0} onClick={actions.showAllPanels} />
         <SheetButton label="隐藏未选版片" disabled={selectedPanelCount === 0 || selectedPanelCount === panelIds.length} onClick={actions.hideUnselected} />
         <SheetButton label="隐藏选中版片" disabled={selectedPanelCount === 0} onClick={actions.hideSelected} />
       </SheetGroup>
-      <SheetGroup title="人体与场景">
+      <SheetGroup title="模特与场景">
         <SheetButton label="模特模型…" onClick={actions.importAvatar} />
         <SheetButton label="参考物体…" onClick={actions.importReference} />
         <SheetButton label="环境贴图…" onClick={actions.importEnvironment} />

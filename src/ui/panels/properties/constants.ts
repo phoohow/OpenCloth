@@ -1,6 +1,6 @@
 import type { Vec3 } from '../../../core/model/types';
 import type { PropTab } from '../../../store/stores';
-import { supportsMaterial, supportsPhysics, type SceneNodeKind } from '../../sceneTree';
+import { supportsGenerator, supportsMaterial, supportsSimulator, type SceneNodeKind } from '../../sceneTree';
 import { PROP_TAB_OPTIONS } from '../../optionTables';
 
 /** Avatar kinds the model select lists when the project has no bundled url. */
@@ -19,9 +19,10 @@ export function tabsForKind(kind: SceneNodeKind | null): PropTab[] {
   const allowed: Record<PropTab, boolean> = {
     object: isObject,
     material: kind !== null && supportsMaterial(kind),
-    physics: kind !== null && supportsPhysics(kind),
-    scene: true,
+    simulator: kind !== null && supportsSimulator(kind),
+    generator: kind !== null && supportsGenerator(kind),
     render: true,
+    project: true,
   };
   return PROP_TAB_OPTIONS.filter(t => allowed[t.key]).map(t => t.key);
 }

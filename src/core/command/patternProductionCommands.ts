@@ -1,6 +1,7 @@
 import type { Command, ProjectContext } from './command';
 import type {
-  Annotation, Measurement, MeasurementRefs, Notch, Pattern, Project, SeamAllowanceCorner, SimulationConfig, SizeDef, Vec2,
+  Annotation, Measurement, MeasurementRefs, Notch, Pattern, Print, Project, SeamAllowanceCorner,
+  SimulationConfig, SizeDef, Topstitch, Trim, TrimKind, Vec2,
 } from '../model/types';
 import { genId } from '../model/defaults';
 import { inferCollisionLayers } from '../../pattern/auto/autoLayer';
@@ -130,12 +131,12 @@ export class SetPanelGrainCommand extends SnapshotCommand {
 
 /** Places a notch along an edge at arc-length fraction t. */
 export class CreateNotchCommand extends SnapshotCommand {
-  readonly label = '创建剪口';
+  readonly label = '创建刀口';
   constructor(private edgeId: string, private t: number, private widthMm?: number, private style?: Notch['style']) { super(); }
 
   protected apply(pattern: Pattern, _ctx: ProjectContext): void {
     if (!pattern.edges[this.edgeId]) throw new Error('边不存在');
-    if (!(this.t >= 0 && this.t <= 1)) throw new Error('剪口位置需在该边范围内');
+    if (!(this.t >= 0 && this.t <= 1)) throw new Error('刀口位置需在该边范围内');
     const id = genId('notch');
     const notch: Notch = { id, edgeId: this.edgeId, t: this.t, ...(this.widthMm !== undefined ? { widthMm: this.widthMm } : {}), ...(this.style ? { style: this.style } : {}) };
     (pattern.notches ??= {})[id] = notch;
@@ -144,24 +145,24 @@ export class CreateNotchCommand extends SnapshotCommand {
 
 /** Moves a notch along its edge. */
 export class MoveNotchCommand extends SnapshotCommand {
-  readonly label = '移动剪口';
+  readonly label = '移动刀口';
   constructor(private notchId: string, private t: number) { super(); }
 
   protected apply(pattern: Pattern, _ctx: ProjectContext): void {
     const notch = pattern.notches?.[this.notchId];
-    if (!notch) throw new Error('剪口不存在');
-    if (!(this.t >= 0 && this.t <= 1)) throw new Error('剪口位置需在该边范围内');
+    if (!notch) throw new Error('刀口不存在');
+    if (!(this.t >= 0 && this.t <= 1)) throw new Error('刀口位置需在该边范围内');
     notch.t = this.t;
   }
 }
 
 /** Removes a notch. */
 export class DeleteNotchCommand extends SnapshotCommand {
-  readonly label = '删除剪口';
+  readonly label = '删除刀口';
   constructor(private notchId: string) { super(); }
 
   protected apply(pattern: Pattern, _ctx: ProjectContext): void {
-    if (!pattern.notches?.[this.notchId]) throw new Error('剪口不存在');
+    if (!pattern.notches?.[this.notchId]) throw new Error('刀口不存在');
     delete pattern.notches[this.notchId];
   }
 }
@@ -259,6 +260,213 @@ function panelForRefs(pattern: Pattern, refs: MeasurementRefs): string {
     }
   }
   return Object.keys(pattern.panels)[0] ?? '';
+}
+
+/** True when the panel outline or one of its holes holds the edge. */
+function panelOwnsEdge(pattern: Pattern, panelId: string, edgeId: string): boolean {
+  const panel = pattern.panels[panelId];
+  if (!panel) return false;
+  return panel.outlineEdgeIds.includes(edgeId) || (panel.holes ?? []).some(loop => loop.includes(edgeId));
+}
+
+function checkRange(value: number, min: number, max: number, message: string): void {
+  if (!Number.isFinite(value) || value < min || value > max) throw new Error(message);
+}
+
+// ============ Prints ============
+
+/** Fields a new print starts from, beyond the panel and image. */
+export interface PrintOptions {
+  imageName?: string;
+  center?: Vec2;
+  widthCm?: number;
+  heightCm?: number;
+  angleDeg?: number;
+  opacity?: number;
+  repeat?: Vec2;
+}
+
+/** Places an image print on a panel. */
+export class AddPrintCommand extends SnapshotCommand {
+  readonly label = '添加印花';
+  constructor(private panelId: string, private imageUrl: string, private opts: PrintOptions = {}) { super(); }
+
+  protected apply(pattern: Pattern, _ctx: ProjectContext): void {
+    if (!pattern.panels[this.panelId]) throw new Error('版片不存在');
+    if (!this.imageUrl) throw new Error('印花图片为空');
+    const widthCm = this.opts.widthCm ?? 20;
+    const heightCm = this.opts.heightCm ?? 20;
+    checkRange(widthCm, 0.1, 1000, '印花宽度需为正数');
+    checkRange(heightCm, 0.1, 1000, '印花高度需为正数');
+    const repeat = this.opts.repeat ?? { x: 1, y: 1 };
+    checkRange(repeat.x, 1, 50, '印花横向平铺次数需在 1~50 之间');
+    checkRange(repeat.y, 1, 50, '印花纵向平铺次数需在 1~50 之间');
+    const center = this.opts.center ?? { x: 0, y: 0 };
+    const id = genId('print');
+    (pattern.prints ??= {})[id] = {
+      id,
+      panelId: this.panelId,
+      imageUrl: this.imageUrl,
+      ...(this.opts.imageName ? { imageName: this.opts.imageName } : {}),
+      center: { x: center.x, y: center.y },
+      widthCm,
+      heightCm,
+      angleDeg: this.opts.angleDeg ?? 0,
+      opacity: this.opts.opacity ?? 1,
+      repeat: { x: repeat.x, y: repeat.y },
+      visible: true,
+    };
+  }
+}
+
+/** Updates a print's placement or appearance. */
+export class UpdatePrintCommand extends SnapshotCommand {
+  readonly label = '修改印花';
+  constructor(private printId: string, private patch: Partial<Omit<Print, 'id' | 'panelId'>>) { super(); }
+
+  protected apply(pattern: Pattern, _ctx: ProjectContext): void {
+    const print = pattern.prints?.[this.printId];
+    if (!print) throw new Error('印花不存在');
+    const next = { ...print, ...this.patch, center: { ...print.center }, repeat: { ...print.repeat } };
+    checkRange(next.widthCm, 0.1, 1000, '印花宽度需为正数');
+    checkRange(next.heightCm, 0.1, 1000, '印花高度需为正数');
+    checkRange(next.opacity, 0, 1, '印花不透明度需在 0~1 之间');
+    checkRange(next.repeat.x, 1, 50, '印花横向平铺次数需在 1~50 之间');
+    checkRange(next.repeat.y, 1, 50, '印花纵向平铺次数需在 1~50 之间');
+    if (this.patch.center) next.center = { ...this.patch.center };
+    if (this.patch.repeat) next.repeat = { ...this.patch.repeat };
+    Object.assign(print, next);
+  }
+}
+
+// ============ Topstitch ============
+
+/** Fields a new topstitch starts from. */
+export interface TopstitchOptions {
+  t0?: number;
+  t1?: number;
+  offsetMm?: number;
+  spacingMm?: number;
+  rows?: number;
+  color?: string;
+  stitchMm?: number;
+  gapMm?: number;
+}
+
+/** Adds a decorative stitch line along one edge of a panel. */
+export class AddTopstitchCommand extends SnapshotCommand {
+  readonly label = '添加明线';
+  constructor(private panelId: string, private edgeId: string, private opts: TopstitchOptions = {}) { super(); }
+
+  protected apply(pattern: Pattern, _ctx: ProjectContext): void {
+    if (!pattern.panels[this.panelId]) throw new Error('版片不存在');
+    if (!pattern.edges[this.edgeId]) throw new Error('边不存在');
+    if (!panelOwnsEdge(pattern, this.panelId, this.edgeId)) throw new Error('该边不属于所选版片');
+    const t0 = this.opts.t0 ?? 0;
+    const t1 = this.opts.t1 ?? 1;
+    checkRange(t0, 0, 1, '明线起点需在边范围内');
+    checkRange(t1, 0, 1, '明线终点需在边范围内');
+    if (t1 - t0 < 1e-4) throw new Error('明线区间为空');
+    const rows = this.opts.rows ?? 1;
+    checkRange(rows, 1, 5, '明线行数需在 1~5 之间');
+    checkRange(this.opts.offsetMm ?? 3, 0, 100, '明线偏移需在 0~100 mm 之间');
+    checkRange(this.opts.spacingMm ?? 4, 0.5, 50, '明线行距需为正数');
+    checkRange(this.opts.stitchMm ?? 3, 0.5, 20, '明线针距需为正数');
+    checkRange(this.opts.gapMm ?? 2, 0.5, 20, '明线空距需为正数');
+    const id = genId('topstitch');
+    (pattern.topstitches ??= {})[id] = {
+      id,
+      panelId: this.panelId,
+      edgeId: this.edgeId,
+      t0,
+      t1,
+      offsetMm: this.opts.offsetMm ?? 3,
+      spacingMm: this.opts.spacingMm ?? 4,
+      rows: Math.round(rows),
+      color: this.opts.color ?? '#d9a441',
+      stitchMm: this.opts.stitchMm ?? 3,
+      gapMm: this.opts.gapMm ?? 2,
+      visible: true,
+    };
+  }
+}
+
+/** Updates a topstitch's interval, rows or stitch pattern. */
+export class UpdateTopstitchCommand extends SnapshotCommand {
+  readonly label = '修改明线';
+  constructor(private topstitchId: string, private patch: Partial<Omit<Topstitch, 'id' | 'panelId' | 'edgeId'>>) { super(); }
+
+  protected apply(pattern: Pattern, _ctx: ProjectContext): void {
+    const stitch = pattern.topstitches?.[this.topstitchId];
+    if (!stitch) throw new Error('明线不存在');
+    const next = { ...stitch, ...this.patch };
+    checkRange(next.t0, 0, 1, '明线起点需在边范围内');
+    checkRange(next.t1, 0, 1, '明线终点需在边范围内');
+    if (next.t1 - next.t0 < 1e-4) throw new Error('明线区间为空');
+    checkRange(next.rows, 1, 5, '明线行数需在 1~5 之间');
+    checkRange(next.offsetMm, 0, 100, '明线偏移需在 0~100 mm 之间');
+    checkRange(next.spacingMm, 0.5, 50, '明线行距需为正数');
+    checkRange(next.stitchMm, 0.5, 20, '明线针距需为正数');
+    checkRange(next.gapMm, 0.5, 20, '明线空距需为正数');
+    next.rows = Math.round(next.rows);
+    Object.assign(stitch, next);
+  }
+}
+
+// ============ Trims ============
+
+/** Fields a new trim starts from. */
+export interface TrimOptions {
+  name?: string;
+  sizeMm?: number;
+  color?: string;
+  qty?: number;
+  unitPrice?: number;
+}
+
+/** Marks a trim on a panel for the bill of materials. */
+export class AddTrimCommand extends SnapshotCommand {
+  readonly label = '添加辅料';
+  constructor(private panelId: string, private kind: TrimKind, private pos: Vec2, private opts: TrimOptions = {}) { super(); }
+
+  protected apply(pattern: Pattern, _ctx: ProjectContext): void {
+    if (!pattern.panels[this.panelId]) throw new Error('版片不存在');
+    const sizeMm = this.opts.sizeMm ?? 12;
+    checkRange(sizeMm, 0.5, 200, '辅料直径需为正数');
+    const qty = this.opts.qty ?? 1;
+    if (!Number.isInteger(qty) || qty < 1 || qty > 9999) throw new Error('辅料数量需为 1~9999 的整数');
+    if (this.opts.unitPrice !== undefined) checkRange(this.opts.unitPrice, 0, 1e6, '辅料单价需为非负数');
+    const id = genId('trim');
+    (pattern.trims ??= {})[id] = {
+      id,
+      panelId: this.panelId,
+      kind: this.kind,
+      pos: { x: this.pos.x, y: this.pos.y },
+      sizeMm,
+      color: this.opts.color ?? '#b08d57',
+      qty,
+      ...(this.opts.unitPrice !== undefined ? { unitPrice: this.opts.unitPrice } : {}),
+      ...(this.opts.name ? { name: this.opts.name } : {}),
+      visible: true,
+    };
+  }
+}
+
+/** Updates a trim's kind, placement, size or count. */
+export class UpdateTrimCommand extends SnapshotCommand {
+  readonly label = '修改辅料';
+  constructor(private trimId: string, private patch: Partial<Omit<Trim, 'id' | 'panelId'>>) { super(); }
+
+  protected apply(pattern: Pattern, _ctx: ProjectContext): void {
+    const trim = pattern.trims?.[this.trimId];
+    if (!trim) throw new Error('辅料不存在');
+    const next = { ...trim, ...this.patch, pos: { ...trim.pos } };
+    checkRange(next.sizeMm, 0.5, 200, '辅料直径需为正数');
+    if (!Number.isInteger(next.qty) || next.qty < 1 || next.qty > 9999) throw new Error('辅料数量需为 1~9999 的整数');
+    if (next.unitPrice !== undefined) checkRange(next.unitPrice, 0, 1e6, '辅料单价需为非负数');
+    if (this.patch.pos) next.pos = { ...this.patch.pos };
+    Object.assign(trim, next);
+  }
 }
 
 // ============ Size chart ============

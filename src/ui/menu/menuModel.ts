@@ -1,9 +1,8 @@
 import { comboOf } from './shortcuts';
 import { menuSep, type MenuEntry, type MenuLeaf, type TopMenu } from './menuTypes';
 import type { MenuActions } from './actions';
-import { CAMERA_PRESETS, CAMERA_PROJECTIONS, PROP_TAB_OPTIONS } from '../optionTables';
+import { PROP_TAB_OPTIONS } from '../optionTables';
 import { formatSavedAt } from '../timeFormat';
-import type { CameraProjection } from '../../core/model/types';
 import type { PaneId, PropTab, ViewLayout } from '../../store/stores';
 import { isSplitLayout } from '../../store/stores';
 import type { RecentSummary, AutosaveSummary } from '../../io/projectArchive';
@@ -16,8 +15,6 @@ export interface MenuState {
   layout: ViewLayout;
   focus: PaneId;
   propTab: PropTab;
-  /** Projection the 3D viewport renders with; marks the active 视图 ▸ 投影 row. */
-  cameraProjection: CameraProjection;
   showTemplatePanel: boolean;
   showScenePanel: boolean;
   showPropertiesPanel: boolean;
@@ -30,7 +27,7 @@ export interface MenuState {
   redoLabel: string | null;
   hasClipboard: boolean;
   selectedPanelCount: number;
-  hiddenPanelCount: number;
+  selectionCount: number;
   panelCount: number;
   referenceCount: number;
   recent: RecentSummary[];
@@ -135,6 +132,7 @@ export function buildMenus(state: MenuState, actions: MenuActions): TopMenu[] {
           leaf('exportSvg', 'SVG 平面图…', actions.exportPatternSvg),
           leaf('exportPdf', 'PDF 图纸…', actions.exportPdf),
           leaf('exportTechPack', '工艺单…', actions.exportTechPack),
+          leaf('exportBom', '物料清单…', actions.exportBom),
           leaf('exportMarker', '排料图…', actions.exportMarker),
         ]),
       ],
@@ -154,38 +152,12 @@ export function buildMenus(state: MenuState, actions: MenuActions): TopMenu[] {
         leaf('pastePanels', '粘贴版片', actions.pasteClipboard,
           { accel: comboOf('pastePanels'), disabled: !state.hasClipboard }),
         leaf('deleteSelection', '删除选中', actions.deleteSelection,
-          { accel: comboOf('deleteSelection'), disabled: state.selectedPanelCount === 0 }),
+          { accel: comboOf('deleteSelection'), disabled: state.selectionCount === 0 }),
         menuSep(),
         leaf('selectAll', '全选版片', actions.selectAllPanels,
           { accel: comboOf('selectAll'), disabled: state.panelCount === 0 }),
         leaf('clearSelection', '取消选择', actions.clearSelection,
-          { accel: comboOf('clearSelection'), disabled: state.selectedPanelCount === 0 }),
-      ],
-    },
-    {
-      id: 'view',
-      label: '视图',
-      mnemonic: 'V',
-      entries: [
-        group('layout', '布局', layoutGroup),
-        group('camera', '视角', CAMERA_PRESETS.map(item => leaf(
-          item.menuId,
-          item.label,
-          () => actions.camera(item.value),
-          { accel: comboOf(item.menuId) },
-        ))),
-        group('cameraProjection', '投影', CAMERA_PROJECTIONS.map(item => leaf(
-          item.menuId,
-          item.label,
-          () => actions.cameraProjection(item.value),
-          { checked: state.cameraProjection === item.value },
-        ))),
-        leaf('fitView', '适应视图', actions.fitView, { accel: comboOf('fitView') }),
-        menuSep(),
-        leaf('showAllPanels', '显示全部版片', actions.showAllPanels, { disabled: state.hiddenPanelCount === 0 }),
-        leaf('hideUnselected', '隐藏未选版片', actions.hideUnselected,
-          { disabled: state.selectedPanelCount === 0 || state.selectedPanelCount === state.panelCount }),
-        leaf('hideSelected', '隐藏选中版片', actions.hideSelected, { disabled: state.selectedPanelCount === 0 }),
+          { accel: comboOf('clearSelection'), disabled: state.selectionCount === 0 }),
       ],
     },
     {
@@ -194,7 +166,7 @@ export function buildMenus(state: MenuState, actions: MenuActions): TopMenu[] {
       mnemonic: 'W',
       entries: [
         leaf('templatePanel', '模板库面板', actions.toggleTemplatePanel, { checked: state.showTemplatePanel }),
-        leaf('scenePanel', '场景大纲', actions.toggleScenePanel, { checked: state.showScenePanel }),
+        leaf('scenePanel', '场景树', actions.toggleScenePanel, { checked: state.showScenePanel }),
         leaf('propertiesPanel', '属性编辑器', actions.togglePropertiesPanel, { checked: state.showPropertiesPanel }),
         leaf('timeline', '时间轴', actions.toggleTimeline, { checked: state.showTimeline }),
         menuSep(),
@@ -205,6 +177,12 @@ export function buildMenus(state: MenuState, actions: MenuActions): TopMenu[] {
           { checked: state.propTab === item.key, disabled: !state.showPropertiesPanel },
         )),
       ],
+    },
+    {
+      id: 'view',
+      label: '视图',
+      mnemonic: 'V',
+      entries: layoutGroup,
     },
     {
       id: 'help',

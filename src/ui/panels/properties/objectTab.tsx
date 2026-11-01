@@ -9,16 +9,17 @@ import { parseElementNodeId } from '../../elementSelection';
 import { normalizeLights } from '../../../core/model/defaults';
 import {
   commitTransform, patchValue, previewTransform, setAvatarDisplay, setEnvironmentEnabled,
-  setLightsEnabled, setPanelsVisible, setReferencesVisible, setSeamsStitchVisible, type EngineRef,
+  setLightsEnabled, setPanelsVisible, setProductionVisible, setReferencesVisible, setSeamsStitchVisible,
+  type EngineRef,
 } from '../../sceneCommands';
 import { ButtonRow, CheckRow, Hint, Row, Section, SmallButton, TextRow } from '../../widgets/propertyRows';
 import { Vec3Field } from '../../widgets/numberField';
 import { degVec, radVec } from './constants';
 import { styles } from './styles';
 import { MaterialTab, panelFabric } from './materialTab';
-import { ObjectData } from './objectDataSections';
+import { GeneratorData, ObjectData, PanelManageRows, PanelMeshData } from './objectDataSections';
 import { AvatarPhysics, FabricPhysics } from './physicsTabs';
-import { RenderTab, SceneTab } from './sceneRenderTabs';
+import { ProjectTab, RenderTab } from './sceneRenderTabs';
 
 /** Property panel for the tab of one selected scene object. */
 export function selectedBody(tab: PropTab, project: Project, nodeId: string, node: SceneNode, engineRef: EngineRef) {
@@ -27,15 +28,22 @@ export function selectedBody(tab: PropTab, project: Project, nodeId: string, nod
       return <ObjectTab project={project} nodeId={nodeId} kind={node.kind} label={node.label} note={node.note} engineRef={engineRef} />;
     case 'material':
       return <MaterialTab project={project} panelId={nodeId} engineRef={engineRef} />;
-    case 'physics': {
+    case 'simulator': {
       if (node.kind === 'avatar') return <AvatarPhysics project={project} />;
       const fabric = panelFabric(project, nodeId);
-      return fabric ? <FabricPhysics fabric={fabric} /> : <Hint>此对象没有关联面料。</Hint>;
+      return (
+        <>
+          {fabric ? <FabricPhysics fabric={fabric} /> : <Hint>此对象没有关联面料。</Hint>}
+          <PanelMeshData project={project} panelId={nodeId} />
+        </>
+      );
     }
+    case 'generator':
+      return <GeneratorData project={project} nodeId={nodeId} kind={node.kind} engineRef={engineRef} />;
     case 'render':
       return <RenderTab project={project} />;
     default:
-      return <SceneTab project={project} />;
+      return <ProjectTab project={project} engineRef={engineRef} />;
   }
 }
 
@@ -55,6 +63,10 @@ function ObjectTab({ project, nodeId, kind, label, note, engineRef }: {
     : null;
   const elementId = parseElementNodeId(nodeId);
   const seam = elementId?.kind === 'seam' ? project.pattern.seams[elementId.id] ?? null : null;
+  const production = elementId?.kind === 'print' ? project.pattern.prints?.[elementId.id] ?? null
+    : elementId?.kind === 'topstitch' ? project.pattern.topstitches?.[elementId.id] ?? null
+    : elementId?.kind === 'trim' ? project.pattern.trims?.[elementId.id] ?? null
+    : null;
   /** Avatar and reference edits move the live object before they are committed. */
   const live = isAvatar || !!ref;
 
@@ -71,6 +83,7 @@ function ObjectTab({ project, nodeId, kind, label, note, engineRef }: {
     : panel ? panel.visible
     : ref ? ref.visible
     : seam ? seam.stitchVisible
+    : production ? production.visible !== false
     : light ? light.enabled
     : isEnvironment ? project.scene.lights.iblEnabled
     : null;
@@ -78,7 +91,10 @@ function ObjectTab({ project, nodeId, kind, label, note, engineRef }: {
     if (panel) setPanelsVisible([panel.id], value);
     else if (ref) setReferencesVisible([ref.id], value, engineRef);
     else if (seam) setSeamsStitchVisible([seam.id], value);
-    else if (light) setLightsEnabled([light.id], value);
+    else if (production && elementId) {
+      const kind = elementId.kind;
+      if (kind === 'print' || kind === 'topstitch' || kind === 'trim') setProductionVisible(kind, [production.id], value);
+    } else if (light) setLightsEnabled([light.id], value);
     else if (isEnvironment) setEnvironmentEnabled(value);
     else if (isAvatar) {
       const display = project.avatar.display;
@@ -88,7 +104,7 @@ function ObjectTab({ project, nodeId, kind, label, note, engineRef }: {
   };
 
   /** Command label of a rename, following the object kind. */
-  const renameLabel = kind === 'panel' ? '重命名版型片'
+  const renameLabel = kind === 'panel' ? '重命名版片'
     : kind === 'reference' ? '重命名参考物体'
     : kind === 'avatar' ? '重命名模特'
     : `重命名${SCENE_KIND_LABELS[kind]}`;
@@ -108,6 +124,7 @@ function ObjectTab({ project, nodeId, kind, label, note, engineRef }: {
         {shown !== null && (
           <CheckRow label={light || isEnvironment ? '启用' : '可见性'} checked={shown} onChange={setShown} />
         )}
+        {panel && <PanelManageRows panel={panel} />}
         <Row label="类型">{note ? `${SCENE_KIND_LABELS[kind]} · ${note}` : SCENE_KIND_LABELS[kind]}</Row>
       </Section>
       {transform && (
@@ -126,7 +143,7 @@ function ObjectTab({ project, nodeId, kind, label, note, engineRef }: {
               position: { x: 0, y: 0, z: 0 }, rotationEuler: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 },
             }, engineRef, '复位变换')}>复位变换</SmallButton>
           </ButtonRow>
-          {!live && <div style={styles.note}>版型片变换在松手后重建布料并重置模拟。</div>}
+          {!live && <div style={styles.note}>版片变换在松手后重建布料并重置模拟。</div>}
         </Section>
       )}
       <ObjectData project={project} nodeId={nodeId} kind={kind} engineRef={engineRef} />

@@ -19,7 +19,7 @@ export { generateShirt, DEFAULT_SHIRT_PARAMS, shirtTemplate } from './shirtTempl
 export { generateSkirt, DEFAULT_SKIRT_PARAMS, skirtTemplate } from './skirtTemplate';
 export { generateDress, DEFAULT_DRESS_PARAMS, dressTemplate } from './dressTemplate';
 export { generateSleeves, DEFAULT_SLEEVE_PARAMS, sleeveTemplate } from './sleeveTemplate';
-export { createStarterProject } from './starterProject';
+export { createStarterProject, createBlankProject } from './starterProject';
 export { PatternBuilder } from './templateKit';
 export { layoutRows, appendPattern, offsetPanel } from './patternLayout';
 export { type GarmentTemplate, type ParamField } from './garmentTemplate';

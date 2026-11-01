@@ -2,25 +2,29 @@ import { useState } from 'react';
 import { useProjectStore, useSimStore, useUIStore } from '../../../store/stores';
 import type {
   Annotation, Avatar, Dart, EdgeSemantic, EdgeType, InternalLine, LightType, Measurement,
-  Notch, Panel, Pattern, PatternEdge, PatternPoint, Project, SceneLight, Seam, SeamType, Vec2,
+  Notch, Panel, Pattern, PatternEdge, PatternPoint, Print, Project, SceneLight, Seam, SeamType,
+  Topstitch, Trim, TrimKind, Vec2,
 } from '../../../core/model/types';
 import {
-  AddSizeCommand, ApplySizeCommand, DeleteAnnotationCommand, DeleteMeasurementCommand, DeleteNotchCommand,
+  AddSizeCommand, ApplySizeCommand, DeleteAnnotationCommand, DeleteElementsCommand,
+  DeleteMeasurementCommand, DeleteNotchCommand,
   FilletCornersCommand, MovePointsCommand, ReorderSizesCommand, RemoveSizeCommand, RenameSizeCommand,
   resolveSize, ScalePanelCommand, SetArcParamsCommand, SetBaseSizeCommand, SetEdgeAngleCommand,
   SetEdgeLengthCommand, SetPanelGrainCommand, SetPanelMeshResolutionCommand, SetPointGradingCommand,
-  SetPointsGradingCommand, TransferDartCommand,
+  SetPointsGradingCommand, TransferDartCommand, UpdatePrintCommand, UpdateTopstitchCommand,
+  UpdateTrimCommand,
 } from '../../../core/command/patternCommands';
 import type { Command } from '../../../core/command/command';
 import {
-  BUNDLED_AVATARS, LIGHT_TYPES, LIGHT_TYPE_LABELS, SEAM_TYPES, SEAM_TYPE_LABELS, normalizeLights,
+  BUNDLED_AVATARS, LIGHT_TYPES, LIGHT_TYPE_LABELS, SEAM_TYPES, SEAM_TYPE_LABELS,
+  TRIM_KINDS, TRIM_KIND_LABELS, normalizeLights,
 } from '../../../core/model/defaults';
 import { edgeLength, measurementValue } from '../../../pattern/geom/edgeSample';
 import { arcSpan } from '../../../pattern/geom/arc';
 import { gradingPasteMap, orderedSizes } from '../../../pattern/grading/grading';
 import { seamJoint, type SeamJointEnd } from '../../../pattern/seam/joinBlend';
 import type { SceneNodeKind } from '../../sceneTree';
-import { idsOfKind } from '../../elementSelection';
+import { elementNodeId, idsOfKind } from '../../elementSelection';
 import {
   edgeLabel, lightObjectId, panelSizeCm, referenceObjectId, seamObjectId, seamPanelNames,
 } from '../../sceneTree';
@@ -51,7 +55,7 @@ export function ObjectData({ project, nodeId, kind, engineRef }: {
   project: Project; nodeId: string; kind: SceneNodeKind; engineRef: EngineRef;
 }) {
   switch (kind) {
-    case 'panel': return <PanelData project={project} panelId={nodeId} engineRef={engineRef} />;
+    case 'panel': return <PanelData project={project} panelId={nodeId} />;
     case 'avatar': return <AvatarData project={project} engineRef={engineRef} />;
     case 'reference': return <ReferenceData project={project} nodeId={nodeId} engineRef={engineRef} />;
     case 'light': return <LightData project={project} nodeId={nodeId} />;
@@ -65,15 +69,18 @@ export function ObjectData({ project, nodeId, kind, engineRef }: {
     case 'notch': return <NotchData project={project} nodeId={nodeId} />;
     case 'annotation': return <AnnotationData project={project} nodeId={nodeId} />;
     case 'measurement': return <MeasurementData project={project} nodeId={nodeId} />;
+    case 'print': return <PrintData project={project} nodeId={nodeId} />;
+    case 'topstitch': return <TopstitchData project={project} nodeId={nodeId} />;
+    case 'trim': return <TrimData project={project} nodeId={nodeId} />;
     default: return <Hint>这个对象类型没有额外的属性。</Hint>;
   }
 }
 
-function PanelData({ project, panelId, engineRef }: { project: Project; panelId: string; engineRef: EngineRef }) {
+function PanelData({ project, panelId }: { project: Project; panelId: string }) {
   const [keepRatio, setKeepRatio] = useState(true);
   const [cornerRadius, setCornerRadius] = useState(1);
   const panel = project.pattern.panels[panelId];
-  if (!panel) return <Hint>版型片已删除。</Hint>;
+  if (!panel) return <Hint>版片已删除。</Hint>;
   const size = panelSizeCm(project.pattern, panelId);
 
   /** Replaces the panel record and rebuilds the views keyed on the pattern. */
@@ -130,6 +137,10 @@ function PanelData({ project, panelId, engineRef }: { project: Project; panelId:
         <Row label="轮廓边">{panel.outlineEdgeIds.length}</Row>
         <Row label="省道">{panel.dartIds.length}</Row>
         <Row label="内部线">{panel.internalLineIds.length}</Row>
+        <SliderRow label="缝份量（本片默认）" min={0} max={2} step={0.05} suffix="cm" value={panel.seamAllowanceCm} commitOnRelease
+          onChange={v => setPanel('修改缝份量', { seamAllowanceCm: v })} />
+        <Row label="对称">{panel.symmetry ? `轴 ${panel.symmetry.axisEdgeId}` : '无'}</Row>
+        <Row label="镂空">{(panel.holes ?? []).length}</Row>
       </Section>
       <Section title="尺寸">
         <Row label="轮廓">{size ? `${size.width.toFixed(2)} × ${size.height.toFixed(2)} cm` : '—'}</Row>
@@ -151,32 +162,7 @@ function PanelData({ project, panelId, engineRef }: { project: Project; panelId:
         </Row>
         <div style={styles.note}>尺寸按包围盒等比或拉伸缩放，控制柄、圆弧圆心与半径、内部线、省尖和注释一起跟随。圆弧边只能等比缩放；与其它片共用顶点的片需先断开。倒圆角会把尖角变成弧，之后再点只处理剩下的尖角。</div>
       </Section>
-      <Section title="模拟">
-        <SliderRow label="缝份量" min={0} max={2} step={0.05} suffix="cm" value={panel.seamAllowanceCm} commitOnRelease
-          onChange={v => setPanel('修改缝份量', { seamAllowanceCm: v })} />
-        <Row label="网格密度">
-          <NumberField value={panel.meshResolutionCm} step={0.5} precision={2} min={0.5} max={10} suffix="cm" title="逐片网格密度；修改只重建当前片"
-            onCommit={v => {
-              try {
-                useProjectStore.getState().executeCommand(new SetPanelMeshResolutionCommand(panelId, v));
-              } catch (err) {
-                reportActionError(err);
-              }
-            }} />
-        </Row>
-        <Row label="碰撞层">
-          <NumberField value={panel.collisionLayer ?? 0} step={1} precision={0} min={0} max={9} title="0 为最内层；层差越大，自碰撞把外层推得越远"
-            onCommit={v => setPanel('修改碰撞层', { collisionLayer: Math.round(v) })} />
-        </Row>
-        <div style={styles.note}>布料自碰撞开启时，碰撞层 0 为最内层，层差每加 1 按「层间距」额外分开一段距离。</div>
-      </Section>
-      <Section title="着装">
-        <Row label="方式">{panel.drape ? `环绕 ${drapeRegionLabel(panel.drape.region)}` : '自动推断'}</Row>
-        {panel.placement && <Row label="手动放置">平面摆放</Row>}
-      </Section>
       <Section title="生产">
-        <CheckRow label="锁定" checked={panel.locked} onChange={v => setPanel(v ? '锁定版片' : '解锁版片', { locked: v })} />
-        <TextRow label="分组" value={panel.groupId ?? ''} onChange={v => setPanel('修改版片分组', { ...(v ? { groupId: v } : { groupId: undefined }) })} />
         <SliderRow label="布纹线角度" min={-180} max={180} step={1} suffix="°" value={panel.grainAngleDeg ?? 0} commitOnRelease
           onChange={v => setGrain({ angleDeg: v })} />
         <Row label="布纹线位置">
@@ -191,12 +177,88 @@ function PanelData({ project, panelId, engineRef }: { project: Project; panelId:
           <NumberField value={panel.grainLengthCm ?? 0} step={0.5} precision={2} suffix="cm" title="0 为按轮廓自动"
             onCommit={v => setGrain({ lengthCm: v })} />
         </Row>
-        <Row label="对称">{panel.symmetry ? `轴 ${panel.symmetry.axisEdgeId}` : '无'}</Row>
-        <Row label="镂空">{(panel.holes ?? []).length}</Row>
       </Section>
-      <SizeChart project={project} engineRef={engineRef} />
     </>
   );
+}
+
+/** Lock and group rows of one panel, shown inside the object block. */
+export function PanelManageRows({ panel }: { panel: Panel }) {
+  /** Replaces the panel record and rebuilds the views keyed on the pattern. */
+  const setPanel = (label: string, patch: Partial<Panel>) => patchValue(
+    label,
+    p => p.pattern.panels[panel.id],
+    (ctx, value) => {
+      ctx.project.pattern.panels[panel.id] = { ...value };
+    },
+    { ...panel, ...patch },
+  );
+
+  return (
+    <>
+      <CheckRow label="锁定" checked={panel.locked} onChange={v => setPanel(v ? '锁定版片' : '解锁版片', { locked: v })} />
+      <TextRow label="分组" value={panel.groupId ?? ''} onChange={v => setPanel('修改版片分组', { ...(v ? { groupId: v } : { groupId: undefined }) })} />
+    </>
+  );
+}
+
+/** Grid density and collision layer of one panel. */
+export function PanelMeshData({ project, panelId }: { project: Project; panelId: string }) {
+  const panel = project.pattern.panels[panelId];
+  if (!panel) return <Hint>版片已删除。</Hint>;
+
+  /** Replaces the panel record; the mesh rebuild follows the geometry signature. */
+  const setPanel = (label: string, patch: Partial<Panel>) => patchValue(
+    label,
+    p => p.pattern.panels[panelId],
+    (ctx, value) => {
+      ctx.project.pattern.panels[panelId] = { ...value };
+    },
+    { ...panel, ...patch },
+  );
+
+  return (
+    <Section title="布料网格">
+      <Row label="网格密度">
+        <NumberField value={panel.meshResolutionCm} step={0.5} precision={2} min={0.5} max={10} suffix="cm" title="逐片网格密度；修改只重建当前片"
+          onCommit={v => {
+            try {
+              useProjectStore.getState().executeCommand(new SetPanelMeshResolutionCommand(panelId, v));
+            } catch (err) {
+              reportActionError(err);
+            }
+          }} />
+      </Row>
+      <Row label="碰撞层">
+        <NumberField value={panel.collisionLayer ?? 0} step={1} precision={0} min={0} max={9} title="0 为最内层；层差越大，自碰撞把外层推得越远"
+          onCommit={v => setPanel('修改碰撞层', { collisionLayer: Math.round(v) })} />
+      </Row>
+      <div style={styles.note}>布料自碰撞开启时，碰撞层 0 为最内层，层差每加 1 按「层间距」额外分开一段距离。</div>
+    </Section>
+  );
+}
+
+/** Drape placement of one panel. */
+function PanelDrapeData({ project, panelId }: { project: Project; panelId: string }) {
+  const panel = project.pattern.panels[panelId];
+  if (!panel) return <Hint>版片已删除。</Hint>;
+  return (
+    <Section title="着装">
+      <Row label="方式">{panel.drape ? `环绕 ${drapeRegionLabel(panel.drape.region)}` : '自动推断'}</Row>
+      {panel.placement && <Row label="手动放置">平面摆放</Row>}
+    </Section>
+  );
+}
+
+/** Generator settings of the selected object: drape placement, or the avatar model. */
+export function GeneratorData({ project, nodeId, kind, engineRef }: {
+  project: Project; nodeId: string; kind: SceneNodeKind; engineRef: EngineRef;
+}) {
+  switch (kind) {
+    case 'panel': return <PanelDrapeData project={project} panelId={nodeId} />;
+    case 'avatar': return <AvatarModelData project={project} engineRef={engineRef} />;
+    default: return <Hint>这个对象没有生成器设置。</Hint>;
+  }
 }
 
 const drapeRegionLabel = (region: 'torso' | 'arm' | 'leg' | 'neck'): string =>
@@ -213,31 +275,10 @@ function AvatarData({ project, engineRef }: { project: Project; engineRef: Engin
     { ...avatar, ...patch },
   );
 
-  const bundled = BUNDLED_AVATARS.find(b => b.url === avatar.glbUrl);
-  const modelValue = avatar.source === 'procedural'
-    ? PROCEDURAL_MODEL
-    : bundled ? bundled.url : CUSTOM_MODEL;
-  const modelOptions = [
-    ...(avatar.source === 'glb' && !bundled ? [{ value: CUSTOM_MODEL, label: `自定义：${avatar.modelName ?? '模型'}` }] : []),
-    ...BUNDLED_AVATARS.map(b => ({ value: b.url, label: b.label })),
-    { value: PROCEDURAL_MODEL, label: '程序人台' },
-  ];
-
-  /** Selecting a bundled model also adopts the measurements that fit its mesh. */
-  const chooseModel = (value: string) => {
-    if (value === PROCEDURAL_MODEL) setAvatar('恢复程序人台', { source: 'procedural' });
-    else if (value !== CUSTOM_MODEL) {
-      const model = BUNDLED_AVATARS.find(b => b.url === value);
-      if (model) setAvatar('切换模特', {
-        source: 'glb', glbUrl: value, modelName: undefined, params: { ...model.params },
-      });
-    }
-  };
-
   return (
     <>
-      <Section title="人体">
-        <SelectRow label="显示效果" value={avatar.display === 'translucent' ? 'translucent' : 'solid'}
+      <Section title="体型">
+        <SelectRow label="模特外观" value={avatar.display === 'translucent' ? 'translucent' : 'solid'}
           options={[{ value: 'solid', label: '实体' }, { value: 'translucent', label: '半透明' }]}
           onChange={v => setAvatarDisplay(v === 'translucent' ? 'translucent' : 'visible', engineRef)} />
         <SliderRow label="身高" min={140} max={200} step={1} suffix="cm" value={avatar.params.heightCm} commitOnRelease
@@ -272,15 +313,51 @@ function AvatarData({ project, engineRef }: { project: Project; engineRef: Engin
             ))}
           </ButtonRow>
         </Row>
-        <div style={styles.note}>尺寸改动会重建人体、布料与模拟状态。</div>
-      </Section>
-      <Section title="模特">
-        <SelectRow label="模特" value={modelValue} options={modelOptions} onChange={chooseModel} />
-        <ButtonRow>
-          <SmallButton disabled={!engineRef.current} onClick={() => engineRef.current && void importAvatarViaPicker()}>导入模特</SmallButton>
-        </ButtonRow>
+        <div style={styles.note}>尺寸改动会重建模特、布料与模拟状态。</div>
       </Section>
     </>
+  );
+}
+
+/** Model source of the avatar; selecting a bundled model also adopts its measurements. */
+function AvatarModelData({ project, engineRef }: { project: Project; engineRef: EngineRef }) {
+  const avatar = project.avatar;
+  const bundled = BUNDLED_AVATARS.find(b => b.url === avatar.glbUrl);
+  const modelValue = avatar.source === 'procedural'
+    ? PROCEDURAL_MODEL
+    : bundled ? bundled.url : CUSTOM_MODEL;
+  const modelOptions = [
+    ...(avatar.source === 'glb' && !bundled ? [{ value: CUSTOM_MODEL, label: `自定义：${avatar.modelName ?? '模型'}` }] : []),
+    ...BUNDLED_AVATARS.map(b => ({ value: b.url, label: b.label })),
+    { value: PROCEDURAL_MODEL, label: '程序模特' },
+  ];
+
+  /** Replaces the avatar record so the 3D view rebuilds the body. */
+  const setAvatar = (label: string, patch: Partial<Avatar>) => patchValue(
+    label,
+    p => p.avatar,
+    (ctx, value) => { ctx.project.avatar = { ...value }; },
+    { ...avatar, ...patch },
+  );
+
+  /** Selecting a bundled model also adopts the measurements that fit its mesh. */
+  const chooseModel = (value: string) => {
+    if (value === PROCEDURAL_MODEL) setAvatar('恢复程序模特', { source: 'procedural' });
+    else if (value !== CUSTOM_MODEL) {
+      const model = BUNDLED_AVATARS.find(b => b.url === value);
+      if (model) setAvatar('切换模特', {
+        source: 'glb', glbUrl: value, modelName: undefined, params: { ...model.params },
+      });
+    }
+  };
+
+  return (
+    <Section title="模型来源">
+      <SelectRow label="模型" value={modelValue} options={modelOptions} onChange={chooseModel} />
+      <ButtonRow>
+        <SmallButton disabled={!engineRef.current} onClick={() => engineRef.current && void importAvatarViaPicker()}>导入模特</SmallButton>
+      </ButtonRow>
+    </Section>
   );
 }
 
@@ -374,7 +451,7 @@ function LightData({ project, nodeId }: { project: Project; nodeId: string }) {
 function SeamData({ project, nodeId }: { project: Project; nodeId: string }) {
   const seamId = seamObjectId(nodeId);
   const seam = project.pattern.seams[seamId];
-  if (!seam) return <Hint>缝线已删除。</Hint>;
+  if (!seam) return <Hint>缝纫线已删除。</Hint>;
   const [nameA, nameB] = seamPanelNames(project, seam);
 
   /** Replaces the seam record; pairing changes rebuild the cloth. */
@@ -429,7 +506,7 @@ function SeamData({ project, nodeId }: { project: Project; nodeId: string }) {
           </>
         )}
         <ColorRow label="线色" value={seam.threadColor} onChange={v => setSeam('修改线色', { threadColor: v })} />
-        <div style={styles.note}>区间、对位点与缝型改动都只重排约束，粒子布局不变时不重建布料、不重置模拟；缩缝比例改写该缝的静止长度。对位点需甲乙两侧同时给定才会参与配对。</div>
+        <div style={styles.note}>区间、对位点与缝型改动都只重排约束，顶点布局不变时不重建布料、不重置模拟；缩缝比例改写该缝的静止长度。对位点需甲乙两侧同时给定才会参与配对。</div>
       </Section>
       <Section title="接角">
         <JointRow project={project} seamId={seamId} end="start" />
@@ -504,14 +581,14 @@ function CameraData({ engineRef }: { engineRef: EngineRef }) {
         <SliderRow label="视野角" min={20} max={90} step={1} suffix="°" value={camera.fovDeg}
           onChange={v => { engine.setCameraState({ fovDeg: v }); }} commitOnRelease={false} />
       )}
-      <div style={styles.note}>视角预设在 3D 窗格上方的「视角」下拉里；机位与视野属于视口状态，不写入工程文件，只有名称随工程保存。</div>
+      <div style={styles.note}>视角预设在 3D 窗格上方的「视角」下拉里；机位、目标、视野与相机类型随工程保存，打开工程时恢复。</div>
     </Section>
   );
 }
 
 /** Pattern object behind an `@kind:id` element row. */
 function useElement(_project: Project, nodeId: string) {
-  const m = /^@(point|edge|internal|dart|notch|annotation|measurement):(.+)$/.exec(nodeId);
+  const m = /^@(point|edge|internal|dart|notch|annotation|measurement|print|topstitch|trim):(.+)$/.exec(nodeId);
   if (!m) return null;
   return { kind: m[1], id: m[2] };
 }
@@ -658,7 +735,7 @@ function EdgeData({ project, nodeId }: { project: Project; nodeId: string }) {
       <SelectRow label="语义" value={edge.semantic ?? 'free'}
         options={EDGE_SEMANTIC_OPTIONS as { value: EdgeSemantic; label: string }[]}
         onChange={v => setEdge('修改边语义', { semantic: v })} />
-      <SliderRow label="缝份" min={0} max={2} step={0.05} suffix="cm"
+      <SliderRow label="缝份（此边）" min={0} max={2} step={0.05} suffix="cm"
         value={edge.seamAllowanceCm ?? 0}
         commitOnRelease
         onChange={v => setEdge('修改边缝份', { seamAllowanceCm: v })} />
@@ -875,8 +952,162 @@ function MeasurementData({ project, nodeId }: { project: Project; nodeId: string
   );
 }
 
+/** Artwork print placed on a panel; the placement drives both the 2D rectangle and the 3D composite. */
+function PrintData({ project, nodeId }: { project: Project; nodeId: string }) {
+  const el = useElement(project, nodeId);
+  const print = el?.kind === 'print' ? project.pattern.prints?.[el.id] : null;
+  if (!print) return <Hint>印花已删除。</Hint>;
+  const panelName = project.pattern.panels[print.panelId]?.name ?? '—';
+
+  const run = (cmd: Command) => {
+    try {
+      useProjectStore.getState().executeCommand(cmd);
+    } catch (err) {
+      reportActionError(err);
+    }
+  };
+  const set = (patch: Partial<Omit<Print, 'id' | 'panelId'>>) => run(new UpdatePrintCommand(print.id, patch));
+
+  return (
+    <Section title="印花">
+      <Row label="版片">{panelName}</Row>
+      <Row label="图片">{print.imageName ?? '已载入'}</Row>
+      <Row label="宽 × 高">
+        <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <NumberField value={print.widthCm} step={0.5} precision={2} min={0.1} max={1000} suffix="cm" title="印花宽度"
+            onCommit={v => set({ widthCm: v })} />
+          <NumberField value={print.heightCm} step={0.5} precision={2} min={0.1} max={1000} suffix="cm" title="印花高度"
+            onCommit={v => set({ heightCm: v })} />
+        </span>
+      </Row>
+      <SliderRow label="角度" min={-180} max={180} step={1} suffix="°" value={print.angleDeg} commitOnRelease
+        onChange={v => set({ angleDeg: v })} />
+      <SliderRow label="不透明度" min={0} max={1} step={0.01} value={print.opacity} commitOnRelease
+        onChange={v => set({ opacity: v })} />
+      <Row label="平铺">
+        <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <NumberField value={print.repeat.x} step={1} precision={0} min={1} max={50} suffix="次" title="横向平铺次数"
+            onCommit={v => set({ repeat: { ...print.repeat, x: v } })} />
+          <NumberField value={print.repeat.y} step={1} precision={0} min={1} max={50} suffix="次" title="纵向平铺次数"
+            onCommit={v => set({ repeat: { ...print.repeat, y: v } })} />
+        </span>
+      </Row>
+      <Row label="位置">
+        <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <NumberField value={print.center.x} step={0.5} precision={2} suffix="cm" title="相对版片外接框中心的横向偏移"
+            onCommit={v => set({ center: { ...print.center, x: v } })} />
+          <NumberField value={print.center.y} step={0.5} precision={2} suffix="cm" title="相对版片外接框中心的纵向偏移"
+            onCommit={v => set({ center: { ...print.center, y: v } })} />
+        </span>
+      </Row>
+      <ButtonRow>
+        <SmallButton onClick={() => run(new DeleteElementsCommand([elementNodeId('print', print.id)]))}>删除印花</SmallButton>
+      </ButtonRow>
+      <div style={styles.note}>位置相对版片外接框中心；角度逆时针为正。2D 虚线框标出印花范围，3D 按版片 UV 把图案裁进面料底色。</div>
+    </Section>
+  );
+}
+
+/** Decorative stitch line offset inward from one panel edge. */
+function TopstitchData({ project, nodeId }: { project: Project; nodeId: string }) {
+  const el = useElement(project, nodeId);
+  const stitch = el?.kind === 'topstitch' ? project.pattern.topstitches?.[el.id] : null;
+  if (!stitch) return <Hint>明线已删除。</Hint>;
+  const panelName = project.pattern.panels[stitch.panelId]?.name ?? '—';
+  const edge = project.pattern.edges[stitch.edgeId];
+
+  const run = (cmd: Command) => {
+    try {
+      useProjectStore.getState().executeCommand(cmd);
+    } catch (err) {
+      reportActionError(err);
+    }
+  };
+  const set = (patch: Partial<Omit<Topstitch, 'id' | 'panelId' | 'edgeId'>>) =>
+    run(new UpdateTopstitchCommand(stitch.id, patch));
+
+  return (
+    <Section title="明线">
+      <Row label="版片">{panelName}</Row>
+      <Row label="所在边">{edge ? edgeLabel(project.pattern, stitch.edgeId) : '边已删除'}</Row>
+      <SliderRow label="起点" min={0} max={1} step={0.01} value={stitch.t0} commitOnRelease
+        onChange={v => set({ t0: Math.min(v, stitch.t1 - 0.01) })} />
+      <SliderRow label="终点" min={0} max={1} step={0.01} value={stitch.t1} commitOnRelease
+        onChange={v => set({ t1: Math.max(v, stitch.t0 + 0.01) })} />
+      <SliderRow label="偏移" min={0} max={20} step={0.5} suffix="mm" value={stitch.offsetMm} commitOnRelease
+        onChange={v => set({ offsetMm: v })} />
+      <Row label="行数">
+        <NumberField value={stitch.rows} step={1} precision={0} min={1} max={5} title="平行行数，逐行向版片内侧递增"
+          onCommit={v => set({ rows: Math.round(v) })} />
+      </Row>
+      <SliderRow label="行距" min={0.5} max={20} step={0.5} suffix="mm" value={stitch.spacingMm} commitOnRelease
+        onChange={v => set({ spacingMm: v })} />
+      <ColorRow label="线色" value={stitch.color} onChange={v => set({ color: v })} />
+      <SliderRow label="针距" min={0.5} max={20} step={0.5} suffix="mm" value={stitch.stitchMm} commitOnRelease
+        onChange={v => set({ stitchMm: v })} />
+      <SliderRow label="空距" min={0.5} max={20} step={0.5} suffix="mm" value={stitch.gapMm} commitOnRelease
+        onChange={v => set({ gapMm: v })} />
+      <ButtonRow>
+        <SmallButton onClick={() => run(new DeleteElementsCommand([elementNodeId('topstitch', stitch.id)]))}>删除明线</SmallButton>
+      </ButtonRow>
+      <div style={styles.note}>明线沿边向版片内侧偏移，2D 按针距与空距画虚线；同一条边可叠多行，线长按区间长度与行数计入物料清单。</div>
+    </Section>
+  );
+}
+
+/** Button, eyelet, rivet or snap mark recorded for the bill of materials. */
+function TrimData({ project, nodeId }: { project: Project; nodeId: string }) {
+  const el = useElement(project, nodeId);
+  const trim = el?.kind === 'trim' ? project.pattern.trims?.[el.id] : null;
+  if (!trim) return <Hint>辅料已删除。</Hint>;
+  const panelName = project.pattern.panels[trim.panelId]?.name ?? '—';
+
+  const run = (cmd: Command) => {
+    try {
+      useProjectStore.getState().executeCommand(cmd);
+    } catch (err) {
+      reportActionError(err);
+    }
+  };
+  const set = (patch: Partial<Omit<Trim, 'id' | 'panelId'>>) => run(new UpdateTrimCommand(trim.id, patch));
+
+  return (
+    <Section title="辅料">
+      <Row label="版片">{panelName}</Row>
+      <SelectRow label="类型" value={trim.kind}
+        options={TRIM_KINDS.map(kind => ({ value: kind, label: TRIM_KIND_LABELS[kind] }))}
+        onChange={v => set({ kind: v as TrimKind })} />
+      <Row label="直径">
+        <NumberField value={trim.sizeMm} step={0.5} precision={1} min={0.5} max={200} suffix="mm" title="辅料直径"
+          onCommit={v => set({ sizeMm: v })} />
+      </Row>
+      <ColorRow label="颜色" value={trim.color} onChange={v => set({ color: v })} />
+      <Row label="数量">
+        <NumberField value={trim.qty} step={1} precision={0} min={1} max={9999} title="这个标记代表的件数"
+          onCommit={v => set({ qty: Math.round(v) })} />
+      </Row>
+      <Row label="单价">
+        <NumberField value={trim.unitPrice ?? 0} step={0.1} precision={2} min={0} suffix="元" title="填 0 表示不计价"
+          onCommit={v => set({ unitPrice: v > 0 ? v : undefined })} />
+      </Row>
+      <Row label="位置">
+        <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <NumberField value={trim.pos.x} step={0.5} precision={2} suffix="cm" title="X 坐标"
+            onCommit={v => set({ pos: { ...trim.pos, x: v } })} />
+          <NumberField value={trim.pos.y} step={0.5} precision={2} suffix="cm" title="Y 坐标"
+            onCommit={v => set({ pos: { ...trim.pos, y: v } })} />
+        </span>
+      </Row>
+      <ButtonRow>
+        <SmallButton onClick={() => run(new DeleteElementsCommand([elementNodeId('trim', trim.id)]))}>删除辅料</SmallButton>
+      </ButtonRow>
+      <div style={styles.note}>辅料只在 2D 与物料清单中出现，不生成 3D 实体；数量按这个标记的件数计入，填了单价才计算金额。</div>
+    </Section>
+  );
+}
+
 /** Project size chart rows; edits keep the base flag unique and ids stable. */
-function SizeChart({ project, engineRef }: { project: Project; engineRef: EngineRef }) {
+export function SizeChart({ project, engineRef }: { project: Project; engineRef: EngineRef }) {
   const order = orderedSizes(project);
 
   const exec = (cmd: Command) => useProjectStore.getState().executeCommand(cmd);

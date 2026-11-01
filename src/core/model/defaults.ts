@@ -1,7 +1,7 @@
 import type {
   Project, Pattern, Fabric, Avatar, AvatarParams, SceneConfig, ObjectTransform,
   FabricPresetKey, FabricPhysics, FabricAppearance, RayTracingConfig, DenoiseModel,
-  LightType, SceneLight, LightConfig, Vec3, SeamType, EdgeSemantic,
+  LightType, SceneLight, LightConfig, Vec3, SeamType, EdgeSemantic, TrimKind,
 } from './types';
 import { vec2, vec3 } from './types';
 
@@ -39,10 +39,34 @@ export const FABRIC_PHYSICS_PRESETS: Record<FabricPresetKey, FabricPhysics> = {
 
 /** Surface shading per fabric preset. */
 export const FABRIC_APPEARANCE_PRESETS: Record<FabricPresetKey, FabricAppearance> = {
-  cotton: { baseColor: '#e8e4d8', metallic: 0, roughness: 0.85, normalScale: 0.5, sheenColor: '#fff8ee', sheenIntensity: 0.15, maps: {}, uvTiling: vec2(1, 1), uvOffset: vec2(0, 0) },
-  silk: { baseColor: '#d4a574', metallic: 0, roughness: 0.35, normalScale: 0.3, sheenColor: '#ffe8cc', sheenIntensity: 0.6, maps: {}, uvTiling: vec2(1, 1), uvOffset: vec2(0, 0) },
-  denim: { baseColor: '#3a5a8c', metallic: 0, roughness: 0.9, normalScale: 0.8, sheenColor: '#6a8cbc', sheenIntensity: 0.1, maps: {}, uvTiling: vec2(1, 1), uvOffset: vec2(0, 0) },
-  knit: { baseColor: '#b85450', metallic: 0, roughness: 0.95, normalScale: 1.0, sheenColor: '#d88884', sheenIntensity: 0.25, maps: {}, uvTiling: vec2(1, 1), uvOffset: vec2(0, 0) },
+  cotton: {
+    baseColor: '#e8e4d8', metallic: 0, roughness: 0.85, normalScale: 0.5,
+    sheenColor: '#fff8ee', sheenIntensity: 0.15, sheenRoughness: 0.6,
+    transmission: 0, thickness: 0.4, clearcoat: 0, clearcoatRoughness: 0.5,
+    anisotropy: 0, iridescence: 0,
+    maps: {}, uvTiling: vec2(1, 1), uvOffset: vec2(0, 0),
+  },
+  silk: {
+    baseColor: '#d4a574', metallic: 0, roughness: 0.35, normalScale: 0.3,
+    sheenColor: '#ffe8cc', sheenIntensity: 0.6, sheenRoughness: 0.25,
+    transmission: 0.06, thickness: 0.15, clearcoat: 0.15, clearcoatRoughness: 0.3,
+    anisotropy: 0.35, iridescence: 0,
+    maps: {}, uvTiling: vec2(1, 1), uvOffset: vec2(0, 0),
+  },
+  denim: {
+    baseColor: '#3a5a8c', metallic: 0, roughness: 0.9, normalScale: 0.8,
+    sheenColor: '#6a8cbc', sheenIntensity: 0.1, sheenRoughness: 0.8,
+    transmission: 0, thickness: 1, clearcoat: 0, clearcoatRoughness: 0.5,
+    anisotropy: 0, iridescence: 0,
+    maps: {}, uvTiling: vec2(1, 1), uvOffset: vec2(0, 0),
+  },
+  knit: {
+    baseColor: '#b85450', metallic: 0, roughness: 0.95, normalScale: 1.0,
+    sheenColor: '#d88884', sheenIntensity: 0.25, sheenRoughness: 0.9,
+    transmission: 0, thickness: 0.6, clearcoat: 0, clearcoatRoughness: 0.5,
+    anisotropy: 0, iridescence: 0,
+    maps: {}, uvTiling: vec2(1, 1), uvOffset: vec2(0, 0),
+  },
 };
 
 /** Display names of the fabric presets, in the order the UI lists them. */
@@ -81,6 +105,9 @@ export function createEmptyPattern(): Pattern {
     notches: {},
     annotations: {},
     measurements: {},
+    prints: {},
+    topstitches: {},
+    trims: {},
   };
 }
 
@@ -99,9 +126,9 @@ const FEMALE_PARAMS: AvatarParams = { heightCm: 170, chestCm: 92, waistCm: 70, h
 
 /** Bundled body meshes, first entry is the default. */
 export const BUNDLED_AVATARS: BundledAvatar[] = [
-  { url: '/models/human-body-f.glb', label: '女性人体', params: FEMALE_PARAMS },
-  { url: '/models/human-body-pro.glb', label: '专业人体', params: MALE_PARAMS },
-  { url: '/models/human-body.glb', label: '标准人体', params: MALE_PARAMS },
+  { url: '/models/human-body-f.glb', label: '女性模特', params: FEMALE_PARAMS },
+  { url: '/models/human-body-pro.glb', label: '专业模特', params: MALE_PARAMS },
+  { url: '/models/human-body.glb', label: '标准模特', params: MALE_PARAMS },
 ];
 
 /** Bundled body mesh used by a fresh project. */
@@ -151,6 +178,23 @@ export const SEAM_TYPE_LABELS: Record<SeamType, string> = {
 
 /** Every seam type, in select order. */
 export const SEAM_TYPES: SeamType[] = ['normal', 'gather', 'free'];
+
+/** Display names of the trim kinds, in select order. */
+export const TRIM_KIND_LABELS: Record<TrimKind, string> = {
+  button: '纽扣',
+  eyelet: '气眼',
+  rivet: '铆钉',
+  snap: '按扣',
+};
+
+/** Every trim kind, in select order. */
+export const TRIM_KINDS: TrimKind[] = ['button', 'eyelet', 'rivet', 'snap'];
+
+/** Side of a newly placed print, in centimetres. */
+export const DEFAULT_PRINT_SIDE_CM = 12;
+
+/** Largest artwork file the print tools accept. */
+export const MAX_PRINT_BYTES = 8 * 1024 * 1024;
 
 /** Display names of the outline edge roles, shared by the outliner and the tech pack. */
 export const EDGE_SEMANTIC_LABELS: Record<EdgeSemantic, string> = {

@@ -33,8 +33,10 @@ export {
   SetPanelGrainCommand, CreateNotchCommand, MoveNotchCommand, DeleteNotchCommand,
   CreateAnnotationCommand, UpdateAnnotationCommand, DeleteAnnotationCommand,
   CreateMeasurementCommand, DeleteMeasurementCommand,
+  AddPrintCommand, UpdatePrintCommand, AddTopstitchCommand, UpdateTopstitchCommand,
+  AddTrimCommand, UpdateTrimCommand,
   AddSizeCommand, RenameSizeCommand, RemoveSizeCommand, SetBaseSizeCommand, ReorderSizesCommand,
-  type AnnotationOptions,
+  type AnnotationOptions, type PrintOptions, type TopstitchOptions, type TrimOptions,
 } from './patternProductionCommands';
 export {
   SetPointGradingCommand, SetPointsGradingCommand, ApplySizeCommand,

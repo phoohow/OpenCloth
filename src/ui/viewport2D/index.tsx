@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import type { Pattern, Vec2 } from '../../core/model/types';
+import type { Pattern, Print, Vec2 } from '../../core/model/types';
 import { sampleEdge, samplePanelOutline } from '../../pattern/panel/panelBuilder';
 import { pointAtT } from '../../pattern/geom/edgeSample';
 import { is2DFocus, isSplitLayout, useProjectStore, useUIStore, noteDrawnFrame, type ToolType, type ViewLayout } from '../../store/stores';
 import {
-  AddPointOnEdgeCommand, MovePanelsCommand, MovePointsCommand,
+  AddPointOnEdgeCommand, AddTopstitchCommand, AddTrimCommand, CompositeCommand,
+  MovePanelsCommand, MovePointsCommand, UpdatePrintCommand, UpdateTrimCommand,
   panelMoveGeometry, pointMoveGeometry, previewMove, type MoveGeometry,
 } from '../../core/command/patternCommands';
 import {
@@ -14,7 +15,7 @@ import { AddInternalLineCommand, CreateDartCommand, OutlineHoleCommand, OutlineS
 import { CreateFreeSeamCommand } from '../../core/command/patternSeamCommands';
 import { SetPointHandleCommand } from '../../core/command/patternEditCommands';
 import { CreateAnnotationCommand, CreateMeasurementCommand, CreateNotchCommand, MoveNotchCommand } from '../../core/command/patternProductionCommands';
-import { elementNodeId, idsOfKind, type PatternElementKind } from '../elementSelection';
+import { elementNodeId, idsOfKind, parseElementNodeId, type PatternElementKind } from '../elementSelection';
 import { orderedSizes, sizeOutlines } from '../../pattern/grading/grading';
 import {
   elementsInRect, nearestEdgeSegment, nearestPointWithinRadius, panelIdOfEdge, panelsOfPoint,
@@ -24,8 +25,11 @@ import { snapToGrid, type ViewTransform } from './viewMath';
 import { collectSnapCandidates, constrainAngle, findSnapAtPattern, type SnapCandidate } from './snap';
 import { drawScene, type PreviewDrag, type DisplayOptions } from './render';
 import {
-  DEFAULT_DART_INTAKE_CM, orderedDartLegs, shapeFrame, type DraftState, type PolylineMode,
+  DEFAULT_DART_INTAKE_CM, orderedDartLegs, printCenter, printFrame, shapeFrame,
+  type DraftState, type PolylineMode,
 } from './tools';
+import { MAX_PRINT_BYTES } from '../../core/model/defaults';
+import { readImageAsPngDataUrl } from '../../io/imageData';
 import { useCanvasView } from './useCanvasView';
 import { useNudgeSession } from './useNudgeSession';
 import { ViewportHint } from '../widgets/viewportHint';
@@ -43,6 +47,9 @@ type Drag =
   | { kind: 'shape'; shape: 'rect' | 'circle' | 'ellipse'; start: Vec2; current: Vec2 }
   | { kind: 'seamdrag'; edgeId: string; start: Vec2 }
   | { kind: 'notch'; notchId: string; edgeId: string; t: number }
+  | { kind: 'printmove'; printId: string; startCenter: Vec2; startWorld: Vec2; center: Vec2 }
+  | { kind: 'printresize'; printId: string; size: { widthCm: number; heightCm: number } }
+  | { kind: 'trimmove'; trimId: string; startPos: Vec2; startWorld: Vec2; pos: Vec2 }
   | { kind: 'rect'; startWorld: Vec2 };
 
 const HIT_RADIUS_PX = 8;
@@ -55,6 +62,20 @@ function previewNotch(pattern: Pattern, notchId: string, t: number): Pattern {
   return { ...pattern, notches: { ...pattern.notches, [notchId]: { ...notch, t } } };
 }
 
+/** Pattern copy with one print's placement replaced, for the drag preview. */
+function previewPrint(pattern: Pattern, printId: string, patch: Partial<Print>): Pattern {
+  const print = pattern.prints?.[printId];
+  if (!print) return pattern;
+  return { ...pattern, prints: { ...pattern.prints, [printId]: { ...print, ...patch } } };
+}
+
+/** Pattern copy with one trim moved, for the drag preview. */
+function previewTrim(pattern: Pattern, trimId: string, pos: Vec2): Pattern {
+  const trim = pattern.trims?.[trimId];
+  if (!trim) return pattern;
+  return { ...pattern, trims: { ...pattern.trims, [trimId]: { ...trim, pos } } };
+}
+
 /** Text a newly placed annotation carries before the user edits it. */
 const DEFAULT_ANNOTATION_TEXT = '标注';
 
@@ -64,11 +85,14 @@ const CURSOR_TOOLS = new Set<ToolType>(['line', 'curve', 'internalLine', 'split'
 /** Marks a plain click selects inside a panel body, after edges and before the panel fill. */
 const MARK_KINDS: PatternElementKind[] = ['seam', 'dart', 'internal', 'measurement'];
 
+/** Production objects that win over the panel outline; trims first because their symbols are small. */
+const PRODUCTION_KINDS: PatternElementKind[] = ['trim', 'print', 'topstitch'];
+
 /** Zoom readout with the gestures the current layout allows. */
 const statusHint = (layout: ViewLayout, scale: number): string =>
   isSplitLayout(layout)
     ? `2D 制版 · 缩放 ${scale.toFixed(1)}x · 单击选片/拖点移动 · F适应 · 快捷键需点击聚焦本窗格`
-    : `2D 制版 · 缩放 ${scale.toFixed(1)}x · 单击选片/Ctrl加选/空白拖框选 · 拖点或拖动版型片（0.5cm吸附，Alt自由）· 右键输入长度角度或精确位移 · Delete删除/方向键微调 · 点工具单击边加点 · 滚轮定点缩放 · F或双击空白适应 · 中键或空格平移`;
+    : `2D 制版 · 缩放 ${scale.toFixed(1)}x · 单击选片/Ctrl加选/空白拖框选 · 拖点或拖动版片（0.5cm吸附，Alt自由）· 右键输入长度角度或精确位移 · Delete删除/方向键微调 · 点工具单击边加点 · 滚轮定点缩放 · F或双击空白适应 · 中键或空格平移`;
 
 /** 2D drafting canvas: draws the pattern and turns pointer and keyboard input into pattern edits. */
 export function Viewport2D() {
@@ -83,6 +107,8 @@ export function Viewport2D() {
   const dragRef = useRef<Drag | null>(null);
   const draftRef = useRef<DraftState>(null);
   draftRef.current = draft;
+  const printInputRef = useRef<HTMLInputElement>(null);
+  const pendingPrintRef = useRef<string | null>(null);
   const [view, setView] = useState<ViewTransform>({ offsetX: 0, offsetY: 0, scale: 4 });
 
   const project = useProjectStore(s => s.project);
@@ -91,6 +117,8 @@ export function Viewport2D() {
   const layout = useUIStore(s => s.layout);
   const displayOptions = useUIStore(s => s.displayOptions);
   const editPreview = useUIStore(s => s.editPreview);
+  const repaintToken = useUIStore(s => s.repaintToken);
+  const trimKind = useUIStore(s => s.trimKind);
 
   const pattern = project.pattern;
   const selectedPanelIds = useMemo(
@@ -153,11 +181,12 @@ export function Viewport2D() {
       pattern, view, selection, hoverPointId, preview, rect: rectWorld,
       showSeams: activeTool === 'seam' || idsOfKind(selection, 'seam').length > 0 || idsOfKind(selection, 'edge').length > 0,
       draft, snapHint, display: displayOptions as DisplayOptions, gradingOutlines,
+      onPrintImageReady: () => useUIStore.getState().requestRepaint(),
     });
     noteDrawnFrame('2d', performance.now());
   }, [pattern, view, selection, hoverPointId, preview, rectWorld, activeTool, draft, snapHint, displayOptions, gradingOutlines]);
 
-  useEffect(() => { render(); }, [render]);
+  useEffect(() => { render(); }, [render, repaintToken]);
 
   // Tool switches clear any in-progress stroke.
   useEffect(() => { setDraft(null); setSnapHint(null); }, [activeTool]);
@@ -252,6 +281,37 @@ export function Viewport2D() {
     return null;
   }, [pattern, view.scale]);
 
+  /** Corner handle of a selected print, used to scale it. */
+  const pickPrintHandle = useCallback((world: Vec2): string | null => {
+    const radius = HIT_RADIUS_PX / view.scale;
+    for (const printId of idsOfKind(selection, 'print')) {
+      const print = pattern.prints?.[printId];
+      if (!print?.visible) continue;
+      const frame = printFrame(pattern, print);
+      if (frame?.some(corner => Math.hypot(corner.x - world.x, corner.y - world.y) <= radius)) return printId;
+    }
+    return null;
+  }, [pattern, selection, view.scale]);
+
+  /** Swaps the artwork of the print that was double-clicked. */
+  const onPrintFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    const printId = pendingPrintRef.current;
+    pendingPrintRef.current = null;
+    if (!file || !printId) return;
+    if (file.size > MAX_PRINT_BYTES) {
+      useUIStore.getState().showToast('图片超过 8 MB，请压缩后再插入');
+      return;
+    }
+    try {
+      const imageUrl = await readImageAsPngDataUrl(file);
+      useProjectStore.getState().executeCommand(new UpdatePrintCommand(printId, { imageUrl, imageName: file.name }));
+    } catch (err) {
+      reportActionError(err);
+    }
+  };
+
   /**
    * Right-click numeric input: a length and angle while a pen stroke is open, otherwise an
    * exact dx/dy displacement of the selection.
@@ -311,6 +371,31 @@ export function Viewport2D() {
 
     const radius = HIT_RADIUS_PX / view.scale;
     const pos = draftWorld(world, e.altKey);
+
+    if (activeTool === 'topstitch') {
+      const hit = pickEdge(world);
+      if (!hit) return;
+      const panelId = panelIdOfEdge(pattern, hit.edgeId);
+      if (!panelId) return;
+      const execute = useProjectStore.getState().executeCommand;
+      try {
+        execute(new AddTopstitchCommand(panelId, hit.edgeId));
+      } catch (err) {
+        reportActionError(err);
+      }
+      return;
+    }
+
+    if (activeTool === 'trim') {
+      const panelId = pickPanel(world);
+      if (!panelId) return;
+      try {
+        useProjectStore.getState().executeCommand(new AddTrimCommand(panelId, trimKind, pos));
+      } catch (err) {
+        reportActionError(err);
+      }
+      return;
+    }
 
     if (activeTool === 'line' || activeTool === 'curve') {
       setDraft(d => {
@@ -489,6 +574,44 @@ export function Viewport2D() {
       return;
     }
 
+    const printId = pickPrintHandle(world);
+    if (printId) {
+      const print = pattern.prints?.[printId];
+      if (print) {
+        dragRef.current = { kind: 'printresize', printId, size: { widthCm: print.widthCm, heightCm: print.heightCm } };
+        e.currentTarget.setPointerCapture(e.pointerId);
+      }
+      return;
+    }
+
+    // Trims, prints and topstitches sit inside the panel, so they are picked before the outline.
+    const productionRow = pickElements(pattern, world, radius, PRODUCTION_KINDS);
+    if (productionRow) {
+      const additive = e.ctrlKey || e.metaKey || e.shiftKey;
+      if (additive) {
+        useUIStore.getState().toggleSelection(productionRow);
+        return;
+      }
+      useUIStore.getState().select([productionRow]);
+      const element = parseElementNodeId(productionRow);
+      if (element?.kind === 'trim') {
+        const trim = pattern.trims?.[element.id];
+        if (trim && !pattern.panels[trim.panelId]?.locked) {
+          dragRef.current = { kind: 'trimmove', trimId: element.id, startPos: trim.pos, startWorld: world, pos: trim.pos };
+          e.currentTarget.setPointerCapture(e.pointerId);
+        }
+      } else if (element?.kind === 'print') {
+        const print = pattern.prints?.[element.id];
+        if (print && !pattern.panels[print.panelId]?.locked) {
+          dragRef.current = {
+            kind: 'printmove', printId: element.id, startCenter: print.center, startWorld: world, center: print.center,
+          };
+          e.currentTarget.setPointerCapture(e.pointerId);
+        }
+      }
+      return;
+    }
+
     const edgeHit = pickEdge(world);
     if (edgeHit && pattern.edges[edgeHit.edgeId]) {
       const row = elementNodeId('edge', edgeHit.edgeId);
@@ -589,6 +712,43 @@ export function Viewport2D() {
       return;
     }
 
+    if (drag.kind === 'printmove') {
+      const center = {
+        x: drag.startCenter.x + world.x - drag.startWorld.x,
+        y: drag.startCenter.y + world.y - drag.startWorld.y,
+      };
+      drag.center = center;
+      setPreview({ pattern: previewPrint(pattern, drag.printId, { center }), ghost: null });
+      return;
+    }
+
+    if (drag.kind === 'printresize') {
+      const print = pattern.prints?.[drag.printId];
+      if (!print) return;
+      const center = printCenter(pattern, print);
+      if (!center) return;
+      const rad = (print.angleDeg * Math.PI) / 180;
+      const cos = Math.cos(rad), sin = Math.sin(rad);
+      const dx = world.x - center.x, dy = world.y - center.y;
+      // Invert the rotation so the drag reads as half-width and half-height in the rectangle frame.
+      const localX = dx * cos + dy * sin;
+      const localY = -dx * sin + dy * cos;
+      const size = { widthCm: Math.max(0.1, Math.abs(localX) * 2), heightCm: Math.max(0.1, Math.abs(localY) * 2) };
+      drag.size = size;
+      setPreview({ pattern: previewPrint(pattern, drag.printId, size), ghost: null });
+      return;
+    }
+
+    if (drag.kind === 'trimmove') {
+      const pos = {
+        x: drag.startPos.x + world.x - drag.startWorld.x,
+        y: drag.startPos.y + world.y - drag.startWorld.y,
+      };
+      drag.pos = pos;
+      setPreview({ pattern: previewTrim(pattern, drag.trimId, pos), ghost: null });
+      return;
+    }
+
     if (drag.kind === 'move') {
       const raw: Vec2 = { x: world.x - drag.startWorld.x, y: world.y - drag.startWorld.y };
       let offset = raw;
@@ -645,6 +805,36 @@ export function Viewport2D() {
       if (before !== undefined && Math.abs(before - drag.t) > 1e-6) {
         commitNudge();
         useProjectStore.getState().executeCommand(new MoveNotchCommand(drag.notchId, drag.t));
+      }
+      return;
+    }
+
+    if (drag.kind === 'printmove') {
+      setPreview(null);
+      const print = pattern.prints?.[drag.printId];
+      if (print && (drag.center.x !== drag.startCenter.x || drag.center.y !== drag.startCenter.y)) {
+        commitNudge();
+        useProjectStore.getState().executeCommand(new UpdatePrintCommand(drag.printId, { center: drag.center }));
+      }
+      return;
+    }
+
+    if (drag.kind === 'printresize') {
+      setPreview(null);
+      const print = pattern.prints?.[drag.printId];
+      if (print && (Math.abs(drag.size.widthCm - print.widthCm) > 1e-6 || Math.abs(drag.size.heightCm - print.heightCm) > 1e-6)) {
+        commitNudge();
+        useProjectStore.getState().executeCommand(new UpdatePrintCommand(drag.printId, drag.size));
+      }
+      return;
+    }
+
+    if (drag.kind === 'trimmove') {
+      setPreview(null);
+      const trim = pattern.trims?.[drag.trimId];
+      if (trim && (drag.pos.x !== drag.startPos.x || drag.pos.y !== drag.startPos.y)) {
+        commitNudge();
+        useProjectStore.getState().executeCommand(new UpdateTrimCommand(drag.trimId, { pos: drag.pos }));
       }
       return;
     }
@@ -713,6 +903,14 @@ export function Viewport2D() {
     }
     const world = eventWorld(e);
     if (!world) return;
+    const row = pickElements(pattern, world, HIT_RADIUS_PX / view.scale, ['print']);
+    const element = row ? parseElementNodeId(row) : null;
+    const print = element?.kind === 'print' ? pattern.prints?.[element.id] : null;
+    if (print) {
+      pendingPrintRef.current = print.id;
+      printInputRef.current?.click();
+      return;
+    }
     if (!pickPanel(world)) fitToPattern();
   };
 
@@ -742,6 +940,35 @@ export function Viewport2D() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [commitPen, commitPolyline]);
 
+  // R turns the selected prints by 15°, Shift+R turns them back.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      const ui = useUIStore.getState();
+      if (!is2DFocus(ui.layout, ui.focus)) return;
+      if (e.key !== 'r' && e.key !== 'R') return;
+      const prints = useProjectStore.getState().project.pattern.prints ?? {};
+      const commands = idsOfKind(ui.selection, 'print').flatMap(id => {
+        const print = prints[id];
+        if (!print) return [];
+        const angle = (((print.angleDeg + (e.shiftKey ? -15 : 15)) % 360) + 360) % 360;
+        return [new UpdatePrintCommand(id, { angleDeg: angle })];
+      });
+      if (commands.length === 0) return;
+      e.preventDefault();
+      try {
+        useProjectStore.getState().executeCommand(
+          commands.length === 1 ? commands[0]! : new CompositeCommand('旋转印花', commands),
+        );
+      } catch (err) {
+        reportActionError(err);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
   const dragging = dragRef.current?.kind === 'move' || dragRef.current?.kind === 'rect';
   const cursor = isPanning || (preview && dragRef.current?.kind === 'move')
     ? 'grabbing'
@@ -749,7 +976,7 @@ export function Viewport2D() {
       ? 'grab'
       : hoverPointId
         ? 'grab'
-        : activeTool === 'select' || activeTool === 'point'
+        : activeTool === 'select' || activeTool === 'point' || activeTool === 'topstitch' || activeTool === 'trim'
           ? 'crosshair'
           : dragging ? 'crosshair' : 'default';
 
@@ -764,6 +991,7 @@ export function Viewport2D() {
         onDoubleClick={handleDoubleClick}
         onContextMenu={e => e.preventDefault()}
       />
+      <input ref={printInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={onPrintFile} />
       <ViewportHint>{statusHint(layout, view.scale)}</ViewportHint>
     </div>
   );

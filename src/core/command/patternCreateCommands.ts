@@ -3,7 +3,6 @@ import type { ArcGeom, Panel, Pattern, PatternEdge, PointKind, Vec2 } from '../m
 import { genId, DEFAULT_MESH_RESOLUTION_CM } from '../model/defaults';
 import { setEdgeCurve } from '../../pattern/geom/bezier';
 import { arcFromThreePoints } from '../../pattern/geom/arc';
-import { computeBBox } from '../../pattern/geom/vec2';
 import { samplePanelOutline } from '../../pattern/panel/panelBuilder';
 import { SnapshotCommand } from './patternSnapshot';
 
@@ -89,10 +88,6 @@ export function placeRight(pattern: Pattern, min: Vec2, _max: Vec2): Vec2 {
   return { x: maxX + PLACE_GAP_CM - min.x, y: 0 };
 }
 
-function translate(pts: Vec2[], d: Vec2): Vec2[] {
-  return pts.map(p => ({ x: p.x + d.x, y: p.y + d.y }));
-}
-
 /** Creates a panel from a closed outline of at least three authored points. */
 export class CreatePanelFromPointsCommand extends SnapshotCommand {
   readonly label = '创建多边形版片';
@@ -100,9 +95,7 @@ export class CreatePanelFromPointsCommand extends SnapshotCommand {
 
   protected apply(pattern: Pattern, ctx: ProjectContext): void {
     if (this.points.length < 3) throw new Error('轮廓至少需要 3 个点');
-    const bbox = computeBBox(this.points);
-    const pts = translate(this.points, placeRight(pattern, bbox.min, bbox.max));
-    const edgeIds = addClosedLineOutline(pattern, pts);
+    const edgeIds = addClosedLineOutline(pattern, this.points);
     makePanel(pattern, ctx, this.opts, edgeIds);
   }
 }
@@ -114,10 +107,7 @@ export class CreateRectCommand extends SnapshotCommand {
 
   protected apply(pattern: Pattern, ctx: ProjectContext): void {
     if (this.w <= 0 || this.h <= 0) throw new Error('矩形宽高需为正数');
-    const min = { x: this.center.x - this.w / 2, y: this.center.y - this.h / 2 };
-    const max = { x: this.center.x + this.w / 2, y: this.center.y + this.h / 2 };
-    const d = placeRight(pattern, min, max);
-    const c = { x: this.center.x + d.x, y: this.center.y + d.y };
+    const c = this.center;
     const corners = [
       { x: c.x - this.w / 2, y: c.y - this.h / 2 },
       { x: c.x + this.w / 2, y: c.y - this.h / 2 },
@@ -136,9 +126,7 @@ export class CreateCircleCommand extends SnapshotCommand {
 
   protected apply(pattern: Pattern, ctx: ProjectContext): void {
     if (this.r <= 0) throw new Error('圆半径需为正数');
-    const d = placeRight(pattern, { x: this.center.x - this.r, y: this.center.y - this.r },
-      { x: this.center.x + this.r, y: this.center.y + this.r });
-    const c = { x: this.center.x + d.x, y: this.center.y + d.y };
+    const c = this.center;
     const at = (deg: number): Vec2 => {
       const a = (deg * Math.PI) / 180;
       return { x: c.x + this.r * Math.cos(a), y: c.y + this.r * Math.sin(a) };
@@ -163,9 +151,7 @@ export class CreateEllipseCommand extends SnapshotCommand {
 
   protected apply(pattern: Pattern, ctx: ProjectContext): void {
     if (this.rx <= 0 || this.ry <= 0) throw new Error('椭圆半轴需为正数');
-    const d = placeRight(pattern, { x: this.center.x - this.rx, y: this.center.y - this.ry },
-      { x: this.center.x + this.rx, y: this.center.y + this.ry });
-    const c = { x: this.center.x + d.x, y: this.center.y + d.y };
+    const c = this.center;
     const k = 0.5522847498;
     const vertices = [
       { x: c.x + this.rx, y: c.y },

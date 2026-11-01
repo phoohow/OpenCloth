@@ -85,7 +85,7 @@ export function pasteOffset(clip: PanelClipboard): Vec2 {
 
 /** Inserts a fresh copy of the clipboard; undo removes exactly the ids it created. */
 export class PastePanelsCommand implements Command {
-  readonly label = '粘贴版型片';
+  readonly label = '粘贴版片';
   /** Panel ids created by the last execute, for selection after paste. */
   pastedPanelIds: string[] = [];
   private created = { points: [] as string[], edges: [] as string[], darts: [] as string[], lines: [] as string[], seams: [] as string[] };

@@ -1,5 +1,5 @@
 import { genId } from './defaults';
-import type { Fabric, Panel, Project } from './types';
+import type { Fabric, Panel, Print, Project } from './types';
 
 /** Material record behind a panel; null when its reference dangles. */
 export function fabricForPanel(project: Project, panelId: string): Fabric | null {
@@ -61,4 +61,49 @@ export function fabricSlotPlan(project: Project, panelIds: string[]): FabricSlot
     slotForPanel.push(slot);
   }
   return { fabrics, slotForPanel };
+}
+
+/** Prints one panel draws in the viewport and composites into 3D, in insertion order. */
+export function panelPrints(project: Project, panelId: string): Print[] {
+  return Object.values(project.pattern.prints ?? {}).filter(
+    print => print.panelId === panelId && print.visible !== false,
+  );
+}
+
+/** One cloth material slot: a fabric record and, for a printed panel, its own composed texture. */
+export interface ClothMaterialSlot {
+  fabric: Fabric | null;
+  /** Panel whose prints the slot composites; null when the slot is shared by a fabric. */
+  panelId: string | null;
+}
+
+/** Stable identity of a material slot, so live appearance edits can reuse the material. */
+export function clothMaterialSlotKey(slot: ClothMaterialSlot): string {
+  return `${slot.fabric?.id ?? 'missing'}${slot.panelId ? `@${slot.panelId}` : ''}`;
+}
+
+/**
+ * Material slots for a panel sequence: one per distinct record plus one per printed panel,
+ * so a panel carrying prints gets its own composed texture while the rest stay shared.
+ */
+export function clothMaterialSlotPlan(
+  project: Project, panelIds: string[],
+): { slots: ClothMaterialSlot[]; slotForPanel: number[] } {
+  const slots: ClothMaterialSlot[] = [];
+  const indexOf = new Map<string, number>();
+  const slotForPanel: number[] = [];
+  for (const panelId of panelIds) {
+    const fabric = fabricForPanel(project, panelId);
+    const printed = panelPrints(project, panelId).length > 0;
+    const slot: ClothMaterialSlot = { fabric, panelId: printed ? panelId : null };
+    const key = clothMaterialSlotKey(slot);
+    let index = indexOf.get(key);
+    if (index === undefined) {
+      index = slots.length;
+      slots.push(slot);
+      indexOf.set(key, index);
+    }
+    slotForPanel.push(index);
+  }
+  return { slots, slotForPanel };
 }

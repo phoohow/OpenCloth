@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import { Menubar } from './menubar';
-import { LeftPanel } from './panels/leftPanel';
+import { LeftPanel, TemplateRail } from './panels/leftPanel';
 import { RightPanel } from './panels/rightPanel';
 import { Timeline } from './panels/timeline';
 import { Viewport3D } from './viewport3D';
@@ -10,15 +10,13 @@ import { isMobileUi } from './mobile/mobileUi';
 import { PaneDivider } from './paneDivider';
 import { Toolbar2D, Toolbar3D } from './paneToolbars';
 import { ToastHost } from './widgets/toast';
-import { createMenuActions, refreshAutosaveList, refreshRecentList, shortcutActions, writeAutosave } from './menu/actions';
+import { createMenuActions, refreshAutosaveList, refreshRecentList, restoreAutosaveOnStartup, shortcutActions, writeAutosave } from './menu/actions';
 import { menuOwnsKeyboard } from './menu/menuStore';
 import { SHORTCUTS, matchShortcut } from './menu/shortcuts';
 import type { MenuActions } from './menu/actions';
-import {
-  useUIStore, is3DFocus, isSplitLayout, leftPaneOf, isRightPanelShown,
+import { useUIStore, is3DFocus, isSplitLayout, leftPaneOf, isRightPanelShown,
   FPS_SAMPLE_MS, usePerfStore, type PaneId,
 } from '../store/stores';
-import { readAutosave } from '../io/projectArchive';
 import type { GarmentEngine } from '../core/engine/garmentEngine';
 import type { RendererContext } from '../render/renderer/rendererContext';
 import {
@@ -37,7 +35,6 @@ interface ShellProps {
 /** Picks the desktop or the phone shell and owns what the two share. */
 export function App() {
   const autoSaveSeconds = useUIStore(s => s.autoSaveSeconds);
-  const setLastAutosaveAt = useUIStore(s => s.setLastAutosaveAt);
   const engineRef = useRef<GarmentEngine | null>(null);
   const ctxRef = useRef<RendererContext | null>(null);
   const projectInputRef = useRef<HTMLInputElement | null>(null);
@@ -77,14 +74,12 @@ export function App() {
     return () => window.removeEventListener('keydown', handler);
   }, [runShortcut]);
 
-  // Local archive is read once so 文件 ▸ 最近 and the autosave stamp start populated.
+  // Local archive is read once so 文件 ▸ 最近 populates and the last session is restored.
   useEffect(() => {
     refreshRecentList();
     refreshAutosaveList();
-    void readAutosave().then(record => {
-      if (record) setLastAutosaveAt(record.savedAt);
-    });
-  }, [setLastAutosaveAt]);
+    restoreAutosaveOnStartup();
+  }, []);
 
   useEffect(() => {
     if (autoSaveSeconds <= 0) return undefined;
@@ -186,7 +181,7 @@ function DesktopShell({ actions, engineRef, onEngineReady, ready }: ShellProps) 
     <div style={styles.root}>
       <Menubar actions={actions} />
       <div style={styles.body} ref={bodyRef}>
-        {showTemplatePanel && <LeftPanel />}
+        {showTemplatePanel ? <LeftPanel /> : <TemplateRail />}
         {showTemplatePanel && <PaneDivider axis="x" onDrag={applyLeftPanelDrag} />}
         {/* Reversing the row swaps the panes without remounting either viewport. */}
         <div

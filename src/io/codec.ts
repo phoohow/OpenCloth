@@ -25,6 +25,13 @@ export function normalizeFabrics(fabrics: Record<string, Fabric>): Record<string
     fabric.appearance.maps ??= {};
     fabric.appearance.uvTiling ??= { x: 1, y: 1 };
     fabric.appearance.uvOffset ??= { x: 0, y: 0 };
+    fabric.appearance.transmission ??= 0;
+    fabric.appearance.thickness ??= 0.4;
+    fabric.appearance.clearcoat ??= 0;
+    fabric.appearance.clearcoatRoughness ??= 0.5;
+    fabric.appearance.anisotropy ??= 0;
+    fabric.appearance.iridescence ??= 0;
+    fabric.appearance.sheenRoughness ??= 0.4;
   }
   return fabrics;
 }
@@ -34,8 +41,33 @@ export function normalizePattern(pattern: Pattern): Pattern {
   pattern.notches ??= {} as Record<string, Notch>;
   pattern.annotations ??= {};
   pattern.measurements ??= {};
+  pattern.prints ??= {};
+  pattern.topstitches ??= {};
+  pattern.trims ??= {};
   for (const panel of Object.values(pattern.panels ?? {})) {
     panel.holes ??= [];
+  }
+  // Drop marks whose owner no longer exists.
+  for (const [id, print] of Object.entries(pattern.prints)) {
+    print.repeat ??= { x: 1, y: 1 };
+    print.opacity ??= 1;
+    print.angleDeg ??= 0;
+    print.visible ??= true;
+    if (!pattern.panels[print.panelId]) delete pattern.prints[id];
+  }
+  for (const [id, stitch] of Object.entries(pattern.topstitches)) {
+    stitch.rows ??= 1;
+    stitch.spacingMm ??= 4;
+    stitch.stitchMm ??= 3;
+    stitch.gapMm ??= 2;
+    stitch.visible ??= true;
+    if (!pattern.panels[stitch.panelId] || !pattern.edges[stitch.edgeId]) delete pattern.topstitches[id];
+  }
+  for (const [id, trim] of Object.entries(pattern.trims)) {
+    trim.qty ??= 1;
+    trim.sizeMm ??= 12;
+    trim.visible ??= true;
+    if (!pattern.panels[trim.panelId]) delete pattern.trims[id];
   }
   return pattern;
 }

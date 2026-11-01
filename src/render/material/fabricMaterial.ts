@@ -13,31 +13,59 @@ const MAP_COLOR_SPACE: Record<FabricMapSlot, THREE.ColorSpace> = {
 /** Map handles per material, so replacing a texture frees the one it replaced. */
 const materialMaps = new WeakMap<THREE.MeshPhysicalMaterial, Map<FabricMapSlot, FabricTextureHandle>>();
 
-/** Creates a sheened physical material for a fabric appearance. */
-export function createFabricMaterial(app: FabricAppearance): THREE.MeshPhysicalMaterial {
+/** Creates a sheened physical material for a fabric appearance, optionally over a composed print texture. */
+export function createFabricMaterial(app: FabricAppearance, composite: THREE.Texture | null = null): THREE.MeshPhysicalMaterial {
   const mat = new THREE.MeshPhysicalMaterial({ color: new THREE.Color(app.baseColor), side: THREE.DoubleSide });
-  applyFabricAppearance(mat, app);
+  applyFabricAppearance(mat, app, composite);
   return mat;
 }
 
-/** Writes a fabric appearance onto an existing material, so live edits keep the same instance. */
-export function applyFabricAppearance(mat: THREE.MeshPhysicalMaterial, app: FabricAppearance): void {
+/**
+ * Writes a fabric appearance onto an existing material, so live edits keep the same instance.
+ * A composed print texture replaces the albedo slot and already holds the base colour.
+ */
+export function applyFabricAppearance(
+  mat: THREE.MeshPhysicalMaterial, app: FabricAppearance, composite: THREE.Texture | null = null,
+): void {
   const handles = mapHandles(mat);
-  bindMap(mat, handles, 'albedo', app);
   bindMap(mat, handles, 'normal', app);
   bindMap(mat, handles, 'roughness', app);
   bindMap(mat, handles, 'metallic', app);
 
   const maps = app.maps ?? {};
-  // A map supplies the channel value; the scalar is the factor used only without a map.
-  mat.color.set(maps.albedo ? 0xffffff : app.baseColor);
+  if (composite) {
+    releaseMap(handles, mat, 'albedo');
+    mat.map = composite;
+    mat.color.set(0xffffff);
+  } else {
+    bindMap(mat, handles, 'albedo', app);
+    // A map supplies the channel value; the scalar is the factor used only without a map.
+    mat.color.set(maps.albedo ? 0xffffff : app.baseColor);
+  }
   mat.metalness = maps.metallic ? 1 : app.metallic;
   mat.roughness = maps.roughness ? 1 : app.roughness;
   mat.sheen = app.sheenIntensity;
   mat.sheenColor.set(app.sheenColor);
-  mat.sheenRoughness = 0.4;
+  mat.sheenRoughness = app.sheenRoughness;
+  mat.transmission = app.transmission;
+  mat.thickness = app.thickness;
+  mat.clearcoat = app.clearcoat;
+  mat.clearcoatRoughness = app.clearcoatRoughness;
+  mat.anisotropy = app.anisotropy;
+  mat.iridescence = app.iridescence;
   mat.normalScale.set(app.normalScale, app.normalScale);
   mat.needsUpdate = true;
+}
+
+/** Drops one bound map slot, releasing the texture at its last handle. */
+function releaseMap(
+  handles: Map<FabricMapSlot, FabricTextureHandle>, mat: THREE.MeshPhysicalMaterial, slot: FabricMapSlot,
+): void {
+  const current = handles.get(slot);
+  if (!current) return;
+  current.release();
+  handles.delete(slot);
+  setMap(mat, slot, null);
 }
 
 /** Handles of one material, releasing every texture when the material is disposed. */
@@ -100,8 +128,15 @@ function setMap(mat: THREE.MeshPhysicalMaterial, slot: FabricMapSlot, texture: T
   }
 }
 
+/** Whether a render mode draws the fabric appearance instead of a diagnostic layer. */
+export function modeUsesFabric(mode: RenderMode): boolean {
+  return mode === 'shaded' || mode === 'shadedWireframe' || mode === 'raytraced';
+}
+
 /** Builds the material a render mode shows the cloth with. */
-export function createMaterialForMode(app: FabricAppearance, mode: RenderMode): THREE.Material {
+export function createMaterialForMode(
+  app: FabricAppearance, mode: RenderMode, composite: THREE.Texture | null = null,
+): THREE.Material {
   switch (mode) {
     case 'wireframe': {
       const m = new THREE.MeshBasicMaterial({ color: 0x66ccff, wireframe: true, side: THREE.DoubleSide });
@@ -134,7 +169,7 @@ export function createMaterialForMode(app: FabricAppearance, mode: RenderMode): 
     case 'raytraced':
     case 'shaded':
     default:
-      return createFabricMaterial(app);
+      return createFabricMaterial(app, composite);
   }
 }
 

@@ -344,6 +344,18 @@ function removeElement(pattern: Pattern, kind: PatternElementKind, id: string): 
       if (!pattern.measurements?.[id]) return false;
       delete pattern.measurements[id];
       return true;
+    case 'print':
+      if (!pattern.prints?.[id]) return false;
+      delete pattern.prints[id];
+      return true;
+    case 'topstitch':
+      if (!pattern.topstitches?.[id]) return false;
+      delete pattern.topstitches[id];
+      return true;
+    case 'trim':
+      if (!pattern.trims?.[id]) return false;
+      delete pattern.trims[id];
+      return true;
     case 'seam':
       if (!pattern.seams[id]) return false;
       delete pattern.seams[id];

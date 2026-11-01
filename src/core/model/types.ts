@@ -238,6 +238,74 @@ export interface Measurement {
   refs: MeasurementRefs;
 }
 
+/** Image artwork placed on a panel and composited into its 3D base colour. */
+export interface Print {
+  id: string;
+  /** Custom display name overriding the generic row label. */
+  name?: string;
+  panelId: string;
+  /** Data URL of the artwork, stored inside the project file. */
+  imageUrl: string;
+  /** File name shown in the outliner and the bill of materials. */
+  imageName?: string;
+  /** Rectangle centre relative to the panel outline bounding-box centre, in cm. */
+  center: Vec2;
+  widthCm: number;
+  heightCm: number;
+  /** Rotation about the centre, counter-clockwise, in degrees. */
+  angleDeg: number;
+  /** Blend strength over the fabric colour, 0..1. */
+  opacity: number;
+  /** Tile counts across width and height; 1 does not tile. */
+  repeat: Vec2;
+  visible: boolean;
+}
+
+/** Decorative stitch line offset inward from a panel edge. */
+export interface Topstitch {
+  id: string;
+  /** Custom display name overriding the generic row label. */
+  name?: string;
+  panelId: string;
+  edgeId: string;
+  /** Interval bounds as arc-length fractions along the edge. */
+  t0: number;
+  t1: number;
+  /** Distance from the edge line toward the panel inside, in millimetres. */
+  offsetMm: number;
+  /** Distance between rows, in millimetres. */
+  spacingMm: number;
+  /** Number of parallel rows, 1..5. */
+  rows: number;
+  color: string;
+  /** Stitch length and gap of the drawn dash pattern, in millimetres. */
+  stitchMm: number;
+  gapMm: number;
+  visible: boolean;
+}
+
+/** Sewing trim kinds recorded on a panel. */
+export type TrimKind = 'button' | 'eyelet' | 'rivet' | 'snap';
+
+/** One trim mark with its production count. */
+export interface Trim {
+  id: string;
+  /** Custom display name overriding the generic row label. */
+  name?: string;
+  panelId: string;
+  kind: TrimKind;
+  /** Centre in absolute pattern coordinates, in cm. */
+  pos: Vec2;
+  /** Diameter in millimetres. */
+  sizeMm: number;
+  color: string;
+  /** Pieces this mark stands for; the bill of materials multiplies by it. */
+  qty: number;
+  /** Unit price, used by the bill of materials when present. */
+  unitPrice?: number;
+  visible: boolean;
+}
+
 // ============ Seams ============
 
 /** How the two edges of a seam are joined. */
@@ -285,6 +353,9 @@ export interface Pattern {
   notches: Record<string, Notch>;
   annotations: Record<string, Annotation>;
   measurements: Record<string, Measurement>;
+  prints: Record<string, Print>;
+  topstitches: Record<string, Topstitch>;
+  trims: Record<string, Trim>;
 }
 
 // ============ Fabric ============
@@ -313,6 +384,20 @@ export interface FabricAppearance {
   normalScale: number;
   sheenColor: string;
   sheenIntensity: number;
+  /** Light passing through the fabric, 0..1. */
+  transmission: number;
+  /** Thickness used by transmission, in millimetres. */
+  thickness: number;
+  /** Clear coat layer strength, 0..1. */
+  clearcoat: number;
+  /** Clear coat roughness, 0..1. */
+  clearcoatRoughness: number;
+  /** Stretched-highlight strength for satin and brushed surfaces, 0..1. */
+  anisotropy: number;
+  /** Thin-film iridescence strength, 0..1. */
+  iridescence: number;
+  /** Sheen highlight spread, 0..1. */
+  sheenRoughness: number;
   maps: FabricMaps;
   uvTiling: Vec2;
   uvOffset: Vec2;
@@ -511,13 +596,26 @@ export interface ReferenceObjectRef {
   transform?: ObjectTransform;
 }
 
+/** Saved viewport camera placement: orbit target, eye position and lens framing. */
+export interface CameraConfig {
+  position: Vec3;
+  target: Vec3;
+  /** Vertical field of view in degrees; meaningful while the projection is perspective. */
+  fovDeg: number;
+  projection: CameraProjection;
+  /** World height the orthographic frustum spans in meters; meaningful while orthographic. */
+  viewHeightMeters: number;
+}
+
 /** Everything around the garment: lighting, rendering, solving and reference objects. */
 export interface SceneConfig {
   lights: LightConfig;
   render: RenderConfig;
   simulation: SimulationConfig;
   referenceObjects?: ReferenceObjectRef[];
-  /** Outliner display name of the viewport camera; its pose stays viewport state. */
+  /** Saved camera placement, restored when the project opens. */
+  camera?: CameraConfig;
+  /** Outliner display name of the viewport camera. */
   cameraName?: string;
 }
 

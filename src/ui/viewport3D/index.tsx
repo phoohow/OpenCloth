@@ -24,7 +24,7 @@ const statusHint = (layout: ViewLayout): string => {
   if (isMobileUi()) return MOBILE_VIEWPORT_HINT;
   return isSplitLayout(layout)
     ? '3D 试衣 · 拖拽旋转 · 滚轮缩放 · 双击选片 · 快捷键需点击聚焦本窗格'
-    : '3D 试衣 · 拖拽旋转 · 滚轮缩放 · 右键平移 · Alt+点击打PIN · Alt+Shift+点击取消PIN · 双击选择版型片 · 小键盘 2/8/4/6/0/5 正视/后视/左视/右视/仰视/俯视，1/3/7/9 四个 45° 侧视 · Esc取消选中';
+    : '3D 试衣 · 拖拽旋转 · 滚轮缩放 · 右键平移 · Alt+点击打PIN · Alt+Shift+点击取消PIN · 双击选择版片 · 小键盘 2/8/4/6/0/5 正视/后视/左视/右视/仰视/俯视，1/3/7/9 四个 45° 侧视 · Esc取消选中';
 };
 
 /** 3D fitting viewport: owns the renderer context, the garment engine and their store sync. */
@@ -86,9 +86,15 @@ export function Viewport3D({ onEngineReady }: Viewport3DProps) {
         engineRef.current = null;
         return;
       }
-      // The first view is the front preset, framed on the whole scene box.
-      engine.setProjection(useUIStore.getState().cameraProjection);
-      engine.setCameraPreset('front');
+      // A stored camera wins; otherwise the front preset frames the whole scene box.
+      const savedCamera = initial.scene.camera;
+      const projection = savedCamera?.projection ?? useUIStore.getState().cameraProjection;
+      engine.setProjection(projection);
+      if (projection !== useUIStore.getState().cameraProjection) {
+        useUIStore.getState().setCameraProjection(projection);
+      }
+      if (savedCamera) engine.setCameraState(savedCamera);
+      else engine.setCameraPreset('front');
       syncSelectionOverlay(engine, initial.pattern, useUIStore.getState().selection);
       useSimStore.getState().bumpPins();
       try {
@@ -100,7 +106,7 @@ export function Viewport3D({ onEngineReady }: Viewport3DProps) {
       onEngineReady?.(engine, ctx);
 
       // Store sync and the frame loop live in the controller from here on.
-      sync = new EngineSync(engine, ctx, setRenderError);
+      sync = new EngineSync(engine, ctx, setRenderError, initial);
 
       // Resize handling
       const ro = new ResizeObserver(() => {

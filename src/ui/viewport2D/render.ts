@@ -1,4 +1,4 @@
-import type { Measurement, Pattern, Seam, Vec2 } from '../../core/model/types';
+import type { Measurement, Pattern, Print, Seam, Topstitch, Trim, Vec2 } from '../../core/model/types';
 import { panelGrainLine, panelOutlineWithAllowance, sampleEdge, sampleEdgeInterval, samplePanelOutline } from '../../pattern/panel/panelBuilder';
 import { measurementValue, pointAtT } from '../../pattern/geom/edgeSample';
 import { edgeCurve } from '../../pattern/geom/bezier';
@@ -8,8 +8,8 @@ import {
   gridStepCm, rulerLabel, rulerMinorTicks, rulerStepCm, rulerTicks, toScreen, toWorld,
   type ViewTransform,
 } from './viewMath';
-import { parseElementNodeId, idsOfKind } from '../elementSelection';
-import { shapeFrame, type DraftState } from './tools';
+import { elementNodeId, parseElementNodeId, idsOfKind } from '../elementSelection';
+import { panelFrame, printCenter, printFrame, shapeFrame, topstitchRows, trimRadiusCm, type DraftState } from './tools';
 import type { SnapCandidate } from './snap';
 
 const NEAR = 1e-6;
@@ -34,6 +34,12 @@ export interface DisplayOptions {
   gradingOverlay: boolean;
   /** Sewn-flat preview of the selected seams' end joints. */
   seamJoin: boolean;
+  /** Print artwork rectangles. */
+  prints: boolean;
+  /** Topstitch rows. */
+  topstitches: boolean;
+  /** Trim symbols. */
+  trims: boolean;
 }
 
 /** Everything one 2D frame draws. */
@@ -54,6 +60,8 @@ export interface SceneState {
   display?: DisplayOptions;
   /** Extra size-chart patterns drawn faintly behind the active one. */
   gradingOutlines?: Array<{ label: string; polygons: Vec2[][] }>;
+  /** Called once a print image finishes decoding; the pane repaints to drop the placeholder. */
+  onPrintImageReady?: () => void;
 }
 
 /** Full frame: background, grid, panels, point handles, seams, hover, ghost and rubber band. */
@@ -62,6 +70,7 @@ export function drawScene(ctx: CanvasRenderingContext2D, w: number, h: number, s
   const { pattern, view } = state;
   const display: DisplayOptions = state.display ?? {
     internal: true, darts: true, seamAllowance: false, notches: true, grain: true, annotations: true, measurements: true, gradingOverlay: false, seamJoin: false,
+    prints: true, topstitches: true, trims: true,
   };
   const screen = (p: Vec2): Vec2 => toScreen(p, view, w, h);
 
@@ -90,6 +99,12 @@ export function drawScene(ctx: CanvasRenderingContext2D, w: number, h: number, s
     drawPanel(ctx, state, panel.id, screen, display);
   }
 
+  if (display.prints) {
+    for (const print of Object.values(pattern.prints ?? {})) {
+      drawPrint(ctx, state, print, screen, view.scale);
+    }
+  }
+
   if (display.internal) {
     for (const panel of Object.values(pattern.panels)) {
       for (const lineId of panel.internalLineIds) {
@@ -114,6 +129,16 @@ export function drawScene(ctx: CanvasRenderingContext2D, w: number, h: number, s
       drawGrain(ctx, state, panel.id, screen);
     }
   }
+  if (display.topstitches) {
+    for (const stitch of Object.values(pattern.topstitches ?? {})) {
+      drawTopstitch(ctx, pattern, stitch, screen, view.scale);
+    }
+  }
+  if (display.trims) {
+    for (const trim of Object.values(pattern.trims ?? {})) {
+      drawTrim(ctx, pattern, trim, screen, view.scale);
+    }
+  }
   if (display.annotations) {
     for (const note of Object.values(pattern.annotations ?? {})) {
       drawAnnotation(ctx, note.pos, note.text, note.angleDeg ?? 0, screen);
@@ -134,7 +159,7 @@ export function drawScene(ctx: CanvasRenderingContext2D, w: number, h: number, s
 
   if (display.seamJoin) drawSeamJoints(ctx, state, screen);
 
-  drawElementSelection(ctx, state, screen);
+  drawElementSelection(ctx, state, screen, view.scale);
   drawDraft(ctx, state, screen);
   drawSnapHint(ctx, state, screen);
   drawHover(ctx, state, screen);
@@ -168,6 +193,10 @@ function drawGrid(ctx: CanvasRenderingContext2D, w: number, h: number, view: Vie
 /** Pixel width of the ruler bands along the top and left canvas edges. */
 const RULER_BAND = 18;
 
+/** Tick lengths measured inward from the band edge; the labels fill the space left before them. */
+const RULER_MAJOR_TICK = 7;
+const RULER_MINOR_TICK = 4;
+
 /** Ruler bands along the canvas edges, graduated in pattern centimetres. */
 function drawRuler(ctx: CanvasRenderingContext2D, w: number, h: number, view: ViewTransform): void {
   const stepCm = rulerStepCm(view.scale);
@@ -185,35 +214,41 @@ function drawRuler(ctx: CanvasRenderingContext2D, w: number, h: number, view: Vi
   ctx.strokeStyle = '#98a1b3';
   ctx.lineWidth = 1;
 
-  ctx.textAlign = 'left';
+  ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
+  // Value labels sit above their tick, resting on the line just below them.
+  const labelBaseline = RULER_BAND - RULER_MAJOR_TICK - 2;
   for (const x of rulerTicks(left.x, right.x, stepCm)) {
     const sx = Math.round(toScreen({ x, y: 0 }, view, w, h).x) + 0.5;
     if (sx < RULER_BAND + 2) continue;
-    tick(ctx, sx, RULER_BAND, sx, RULER_BAND - 10);
-    ctx.fillText(rulerLabel(x, stepCm), sx + 2, 9);
+    tick(ctx, sx, RULER_BAND, sx, RULER_BAND - RULER_MAJOR_TICK);
+    const label = rulerLabel(x, stepCm);
+    // Skip a label the corner square would bite into.
+    if (sx - ctx.measureText(label).width / 2 >= RULER_BAND) ctx.fillText(label, sx, labelBaseline);
   }
   for (const x of rulerMinorTicks(left.x, right.x, stepCm)) {
     const sx = Math.round(toScreen({ x, y: 0 }, view, w, h).x) + 0.5;
     if (sx < RULER_BAND + 2) continue;
-    tick(ctx, sx, RULER_BAND, sx, RULER_BAND - 5);
+    tick(ctx, sx, RULER_BAND, sx, RULER_BAND - RULER_MINOR_TICK);
   }
 
-  ctx.textAlign = 'right';
   for (const y of rulerTicks(bottom.y, top.y, stepCm)) {
     const sy = Math.round(toScreen({ x: 0, y }, view, w, h).y) + 0.5;
     if (sy < RULER_BAND + 2) continue;
-    tick(ctx, RULER_BAND, sy, RULER_BAND - 10, sy);
+    tick(ctx, RULER_BAND, sy, RULER_BAND - RULER_MAJOR_TICK, sy);
+    const label = rulerLabel(y, stepCm);
+    if (sy - ctx.measureText(label).width / 2 < RULER_BAND) continue;
+    // Rotated to read upwards and centred on the tick, left of it inside the band.
     ctx.save();
-    ctx.translate(RULER_BAND - 3, sy - 2);
+    ctx.translate(9, sy);
     ctx.rotate(-Math.PI / 2);
-    ctx.fillText(rulerLabel(y, stepCm), 0, 0);
+    ctx.fillText(label, 0, 0);
     ctx.restore();
   }
   for (const y of rulerMinorTicks(bottom.y, top.y, stepCm)) {
     const sy = Math.round(toScreen({ x: 0, y }, view, w, h).y) + 0.5;
     if (sy < RULER_BAND + 2) continue;
-    tick(ctx, RULER_BAND, sy, RULER_BAND - 5, sy);
+    tick(ctx, RULER_BAND, sy, RULER_BAND - RULER_MINOR_TICK, sy);
   }
 
   ctx.strokeStyle = '#3a3a42';
@@ -489,6 +524,160 @@ function drawGrain(
 
 
 
+/** Decoded print artworks, keyed by their data URL. */
+const printImageCache = new Map<string, HTMLImageElement>();
+const printImageLoading = new Set<string>();
+const printImageFailed = new Set<string>();
+
+/** Decoded image for a data URL; starts the decode on first use and reports completion once. */
+function loadPrintImage(url: string, onReady?: () => void): HTMLImageElement | null {
+  if (!url || printImageFailed.has(url)) return null;
+  const cached = printImageCache.get(url);
+  if (cached) return cached.complete ? cached : null;
+  if (printImageLoading.has(url)) return null;
+  printImageLoading.add(url);
+  const image = new Image();
+  image.onload = () => {
+    printImageCache.set(url, image);
+    printImageLoading.delete(url);
+    onReady?.();
+  };
+  image.onerror = () => {
+    printImageLoading.delete(url);
+    printImageFailed.add(url);
+    onReady?.();
+  };
+  image.src = url;
+  return null;
+}
+
+/** Print artwork clipped to its rotated rectangle, tiled by `repeat`, plus its frame. */
+function drawPrint(
+  ctx: CanvasRenderingContext2D, scene: SceneState, print: Print,
+  screen: (p: Vec2) => Vec2, scale: number,
+): void {
+  const panel = scene.pattern.panels[print.panelId];
+  if (!panel?.visible || !print.visible) return;
+  const frame = printFrame(scene.pattern, print);
+  const center = printCenter(scene.pattern, print);
+  if (!frame || !center) return;
+
+  const corners = frame.map(screen);
+  const selected = scene.selection.includes(elementNodeId('print', print.id));
+  const opacity = Math.min(1, Math.max(0, print.opacity));
+
+  // The owning panel's bounding box, so artwork running past the outline is still attributable.
+  const owner = panelFrame(scene.pattern, print.panelId);
+  if (owner) {
+    const a = screen(owner.min), b = screen(owner.max);
+    ctx.save();
+    ctx.strokeStyle = 'rgba(160,160,180,0.28)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 4]);
+    ctx.strokeRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y));
+    ctx.restore();
+  }
+
+  ctx.save();
+  ctx.beginPath();
+  corners.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+  ctx.closePath();
+  ctx.clip();
+  ctx.globalAlpha = opacity;
+
+  const image = loadPrintImage(print.imageUrl, scene.onPrintImageReady);
+  if (!image) {
+    ctx.fillStyle = 'rgba(140,145,170,0.22)';
+    ctx.fill();
+  } else {
+    const cols = Math.max(1, Math.round(print.repeat.x));
+    const rows = Math.max(1, Math.round(print.repeat.y));
+    const cellW = print.widthCm / cols;
+    const cellH = print.heightCm / rows;
+    const rad = (print.angleDeg * Math.PI) / 180;
+    const cos = Math.cos(rad), sin = Math.sin(rad);
+    // Pattern centimetres (y up) to screen pixels (y down), rotated counter-clockwise on screen.
+    const a = scale * cos, b = -scale * sin, c = scale * sin, d = scale * cos;
+    const s = screen(center);
+    ctx.translate(s.x, s.y);
+    ctx.transform(a, b, c, d, 0, 0);
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        ctx.drawImage(image, -print.widthCm / 2 + col * cellW, -print.heightCm / 2 + row * cellH, cellW, cellH);
+      }
+    }
+  }
+  ctx.restore();
+
+  drawPrintOutline(ctx, corners, selected);
+}
+
+/** Print frame; the selected state adds corner handles for scaling. */
+function drawPrintOutline(ctx: CanvasRenderingContext2D, corners: Vec2[], selected: boolean): void {
+  ctx.save();
+  ctx.strokeStyle = selected ? '#ffd75e' : 'rgba(140,190,255,0.8)';
+  ctx.lineWidth = selected ? 2 : 1;
+  ctx.setLineDash(selected ? [] : [4, 3]);
+  ctx.beginPath();
+  corners.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+  ctx.closePath();
+  ctx.stroke();
+  if (selected) {
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#ffd75e';
+    for (const p of corners) ctx.fillRect(p.x - 3, p.y - 3, 6, 6);
+  }
+  ctx.restore();
+}
+
+/** Topstitch rows drawn as dashes at the stitch length and gap of the record. */
+function drawTopstitch(
+  ctx: CanvasRenderingContext2D, pattern: Pattern, stitch: Topstitch,
+  screen: (p: Vec2) => Vec2, scale: number,
+): void {
+  const panel = pattern.panels[stitch.panelId];
+  if (!panel?.visible || !stitch.visible) return;
+  const rows = topstitchRows(pattern, stitch);
+  if (rows.length === 0) return;
+  ctx.save();
+  ctx.strokeStyle = stitch.color;
+  ctx.lineWidth = 1.2;
+  ctx.setLineDash([Math.max(1, (stitch.stitchMm / 10) * scale), Math.max(0.5, (stitch.gapMm / 10) * scale)]);
+  for (const line of rows) {
+    ctx.beginPath();
+    line.forEach((p, i) => {
+      const s = screen(p);
+      if (i === 0) ctx.moveTo(s.x, s.y); else ctx.lineTo(s.x, s.y);
+    });
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** Trim symbol at its record position; the diameter follows `sizeMm`. */
+function drawTrim(
+  ctx: CanvasRenderingContext2D, pattern: Pattern, trim: Trim,
+  screen: (p: Vec2) => Vec2, scale: number,
+): void {
+  const panel = pattern.panels[trim.panelId];
+  if (!panel?.visible || !trim.visible) return;
+  const s = screen(trim.pos);
+  const r = Math.max(2, trimRadiusCm(trim) * scale);
+  ctx.save();
+  ctx.strokeStyle = trim.color;
+  ctx.fillStyle = trim.color;
+  ctx.lineWidth = 1.2;
+  if (trim.kind === 'rivet') {
+    ctx.fillRect(s.x - r, s.y - r, r * 2, r * 2);
+  } else {
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
+    if (trim.kind === 'eyelet') ctx.stroke();
+    else ctx.fill();
+  }
+  ctx.restore();
+}
+
 /** Dimension line with its measured value; the value is read from the geometry, not stored. */
 function drawMeasurement(
   ctx: CanvasRenderingContext2D, pattern: Pattern, measurement: Measurement, screen: (p: Vec2) => Vec2,
@@ -551,7 +740,7 @@ function drawAnnotation(
 }
 
 function drawElementSelection(
-  ctx: CanvasRenderingContext2D, scene: SceneState, screen: (p: Vec2) => Vec2,
+  ctx: CanvasRenderingContext2D, scene: SceneState, screen: (p: Vec2) => Vec2, scale: number,
 ): void {
   const { pattern } = scene;
   for (const row of scene.selection) {
@@ -561,6 +750,40 @@ function drawElementSelection(
       if (seam && seam.stitchVisible !== false) drawSeam(ctx, pattern, seam, screen, '#ffd75e');
     }
     if (el?.kind === 'internal') drawInternalLine(ctx, pattern, el.id, screen);
+    if (el?.kind === 'print') {
+      const print = pattern.prints?.[el.id];
+      const frame = print?.visible ? printFrame(pattern, print) : null;
+      if (frame) drawPrintOutline(ctx, frame.map(screen), true);
+    }
+    if (el?.kind === 'topstitch') {
+      const stitch = pattern.topstitches?.[el.id];
+      if (stitch?.visible) {
+        for (const line of topstitchRows(pattern, stitch)) {
+          const s = screen(line[Math.floor(line.length / 2)] ?? line[0]!);
+          ctx.save();
+          ctx.strokeStyle = '#ffd75e';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.arc(s.x, s.y, 5, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+    }
+    if (el?.kind === 'trim') {
+      const trim = pattern.trims?.[el.id];
+      if (trim?.visible) {
+        const s = screen(trim.pos);
+        const r = Math.max(4, trimRadiusCm(trim) * scale) + 3;
+        ctx.save();
+        ctx.strokeStyle = '#ffd75e';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
     if (el?.kind === 'notch') {
       const notch = pattern.notches?.[el.id];
       const p = notch ? pointAtT(pattern, notch.edgeId, notch.t) : null;

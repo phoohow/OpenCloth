@@ -10,7 +10,9 @@ export const AVATAR_OVERLAY_NAME = 'avatarSelectionOverlay';
 /** Appearance used when a panel's material record is missing. */
 export const FALLBACK_APPEARANCE: FabricAppearance = {
   baseColor: '#cccccc', metallic: 0, roughness: 0.8, normalScale: 0.5,
-  sheenColor: '#ffffff', sheenIntensity: 0.2, maps: {},
+  sheenColor: '#ffffff', sheenIntensity: 0.2, sheenRoughness: 0.4,
+  transmission: 0, thickness: 0.4, clearcoat: 0, clearcoatRoughness: 0.5,
+  anisotropy: 0, iridescence: 0, maps: {},
   uvTiling: { x: 1, y: 1 }, uvOffset: { x: 0, y: 0 },
 };
 

@@ -1,12 +1,21 @@
 import { create } from 'zustand';
-import type { CameraProjection, EditPreviewTier, Pattern, RenderMode, Vec2 } from '../core/model/types';
+import type { CameraProjection, EditPreviewTier, Pattern, RenderMode, TrimKind, Vec2 } from '../core/model/types';
 import type { PatternElementKind } from '../core/model/elementRef';
 import { pickPrefs, readPrefs, writePrefs } from './prefs';
 
 /** 2D drafting and 3D fitting tools; each pane owns a subset. */
-export type ToolType = 'select' | 'point' | 'line' | 'curve' | 'internalLine' | 'dart' | 'seam' | 'pin' | 'unpin' | 'rect' | 'circle' | 'ellipse' | 'split' | 'hole' | 'notch' | 'annotation' | 'measure';
+export type ToolType = 'select' | 'point' | 'line' | 'curve' | 'internalLine' | 'dart' | 'seam' | 'pin' | 'unpin' | 'rect' | 'circle' | 'ellipse' | 'split' | 'hole' | 'notch' | 'annotation' | 'measure' | 'topstitch' | 'trim';
 /** Properties-editor tabs, one icon in the right-hand rail. Identity and data share `object`. */
-export type PropTab = 'object' | 'material' | 'physics' | 'scene' | 'render';
+export type PropTab = 'object' | 'material' | 'simulator' | 'generator' | 'render' | 'project';
+/** Viewport display-mode value: a render mode or one of the two cloth analysis heatmaps. */
+export type DisplayMode = RenderMode | 'fitHeatmap' | 'strainHeatmap';
+
+/** Display-mode value the viewport controls show: the active heatmap, otherwise the render mode. */
+export function displayModeOf(state: { renderMode: RenderMode; fitCheck: boolean; strainCheck: boolean }): DisplayMode {
+  if (state.fitCheck) return 'fitHeatmap';
+  if (state.strainCheck) return 'strainHeatmap';
+  return state.renderMode;
+}
 /** How the viewport area divides between panes. */
 export type ViewLayout = 'split3d2d' | 'split2d3d' | '2d' | '3d';
 /** Id of one viewport pane. */
@@ -72,6 +81,10 @@ interface UIStore {
   cameraProjection: CameraProjection;
   /** Bumped to fit the pattern into the 2D pane. */
   fitToken: number;
+  /** Bumped when a print image finishes decoding, so the 2D pane repaints. */
+  repaintToken: number;
+  /** Trim kind the 2D trim tool places. */
+  trimKind: TrimKind;
   /** Layer switches for drafting-only visuals; toggles stay out of the undo history. */
   displayOptions: {
     internal: boolean;
@@ -83,6 +96,9 @@ interface UIStore {
     measurements: boolean;
     gradingOverlay: boolean;
     seamJoin: boolean;
+    prints: boolean;
+    topstitches: boolean;
+    trims: boolean;
   };
   /** Bumped after reference-object list changes so panels re-read the engine list. */
   refObjectsVersion: number;
@@ -138,9 +154,12 @@ interface UIStore {
   toggleOutliner: (id: string) => void;
   setCollapsedOutliner: (ids: string[]) => void;
   setPropTab: (t: PropTab) => void;
+  setDisplayMode: (m: DisplayMode) => void;
   setRenderMode: (m: RenderMode) => void;
   setCameraProjection: (p: CameraProjection) => void;
   requestFit: () => void;
+  requestRepaint: () => void;
+  setTrimKind: (k: TrimKind) => void;
   bumpRefObjects: () => void;
   toggleTemplatePanel: () => void;
   toggleScenePanel: () => void;
@@ -173,6 +192,8 @@ export const useUIStore = create<UIStore>((set, get) => ({
   renderMode: prefs.renderMode,
   cameraProjection: prefs.cameraProjection,
   fitToken: 0,
+  repaintToken: 0,
+  trimKind: 'button',
   refObjectsVersion: 0,
   marqueeKinds: ['panel'],
   editPreview: prefs.editPreview,
@@ -186,6 +207,7 @@ export const useUIStore = create<UIStore>((set, get) => ({
   gradingClipboard: null,
   displayOptions: {
     internal: true, darts: true, seamAllowance: false, notches: true, grain: true, annotations: true, measurements: true, gradingOverlay: false, seamJoin: false,
+    prints: true, topstitches: true, trims: true,
   },
   showTemplatePanel: prefs.showTemplatePanel,
   showScenePanel: prefs.showScenePanel,
@@ -231,9 +253,21 @@ export const useUIStore = create<UIStore>((set, get) => ({
   })),
   setCollapsedOutliner: (ids) => set({ collapsedOutliner: ids }),
   setPropTab: (t) => set({ propTab: t }),
+  // Heatmaps replace the cloth material, and the path tracer hides that overlay, so analysis modes stay on the raster path.
+  setDisplayMode: (m) => {
+    if (m === 'fitHeatmap') {
+      set(s => ({ fitCheck: true, strainCheck: false, renderMode: s.renderMode === 'raytraced' ? 'shaded' : s.renderMode }));
+    } else if (m === 'strainHeatmap') {
+      set(s => ({ strainCheck: true, fitCheck: false, renderMode: s.renderMode === 'raytraced' ? 'shaded' : s.renderMode }));
+    } else {
+      set({ renderMode: m, fitCheck: false, strainCheck: false });
+    }
+  },
   setRenderMode: (m) => set({ renderMode: m }),
   setCameraProjection: (p) => set({ cameraProjection: p }),
   requestFit: () => set(s => ({ fitToken: s.fitToken + 1 })),
+  requestRepaint: () => set(s => ({ repaintToken: s.repaintToken + 1 })),
+  setTrimKind: (k) => set({ trimKind: k }),
   bumpRefObjects: () => set(s => ({ refObjectsVersion: s.refObjectsVersion + 1 })),
   toggleTemplatePanel: () => set(s => ({ showTemplatePanel: !s.showTemplatePanel })),
   toggleScenePanel: () => set(s => ({ showScenePanel: !s.showScenePanel })),

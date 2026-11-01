@@ -1,5 +1,5 @@
 import type { Avatar, Project, RenderMode } from '../model/types';
-import { fabricForPanel } from '../model/fabric';
+import { fabricForPanel, panelPrints } from '../model/fabric';
 import { FALLBACK_PHYSICS } from './clothConstants';
 
 /**
@@ -32,7 +32,28 @@ export function appearanceSignature(panelIds: string[], project: Project, mode: 
     const fabric = fabricForPanel(project, id);
     return fabric ? JSON.stringify(fabric.appearance) : '-';
   });
-  return `${mode}|${perPanel.join(',')}`;
+  return `${mode}|${perPanel.join(',')}|${printSignature(panelIds, project)}`;
+}
+
+/** Visible prints of every panel, as one comparable string. */
+export function printSignature(panelIds: string[], project: Project): string {
+  if (panelIds.length === 0) return '';
+  return panelIds.map(id => JSON.stringify(panelPrints(project, id).map(printKey))).join(',');
+}
+
+/** Fields of a print the composed texture reads; the image URL is reduced to a short key. */
+function printKey(print: { id: string; imageUrl: string; center: { x: number; y: number }; widthCm: number; heightCm: number; angleDeg: number; opacity: number; repeat: { x: number; y: number } }): unknown[] {
+  return [
+    print.id, urlKey(print.imageUrl), print.center.x, print.center.y,
+    print.widthCm, print.heightCm, print.angleDeg, print.opacity, print.repeat.x, print.repeat.y,
+  ];
+}
+
+/** Short key of a data URL, so signatures stay small while still tracking image replacement. */
+function urlKey(url: string): string {
+  let hash = 0;
+  for (let i = 0; i < url.length; i++) hash = (hash * 31 + url.charCodeAt(i)) | 0;
+  return `${url.length}:${hash}`;
 }
 
 /** Material physics of every panel, as one comparable string. */
@@ -95,7 +116,7 @@ export function panelGeometrySignature(project: Project, panelId: string): strin
   }))].map(pointId => JSON.stringify(pattern.points[pointId] ?? pointId));
   return JSON.stringify([
     panel.outlineEdgeIds, panel.holes ?? [], panel.seamAllowanceCm, panel.meshResolutionCm,
-    panel.visible, panel.locked, panel.collisionLayer ?? 0, edges, points,
+    panel.visible, panel.collisionLayer ?? 0, edges, points,
     project.scene.simulation.meshResolutionCm ?? null,
   ]);
 }

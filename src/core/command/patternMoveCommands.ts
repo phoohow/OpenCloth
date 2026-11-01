@@ -28,7 +28,7 @@ export class MovePointsCommand implements Command {
 
 /** Translates whole panels as rigid bodies: outline, curves, darts and internal lines. */
 export class MovePanelsCommand implements Command {
-  readonly label = '移动版型片';
+  readonly label = '移动版片';
   private records: MoveRecord[] = [];
 
   /**

@@ -2,7 +2,8 @@ import type { ObjectTransform, Panel, Pattern, Project, SceneLight, Seam } from 
 import { PATTERN_ELEMENT_KINDS } from '../core/model/elementRef';
 import { elementNodeId, parseElementNodeId } from './elementSelection';
 import {
-  BUNDLED_AVATARS, EDGE_SEMANTIC_LABELS, IDENTITY_TRANSFORM, LIGHT_TYPE_LABELS, SEAM_TYPE_LABELS, normalizeLights,
+  BUNDLED_AVATARS, EDGE_SEMANTIC_LABELS, IDENTITY_TRANSFORM, LIGHT_TYPE_LABELS, SEAM_TYPE_LABELS,
+  TRIM_KIND_LABELS, normalizeLights,
 } from '../core/model/defaults';
 import type { IconName } from './icons';
 
@@ -10,7 +11,8 @@ import type { IconName } from './icons';
 export type SceneNodeKind =
   | 'scene' | 'collection' | 'panel' | 'avatar' | 'reference'
   | 'light' | 'environment' | 'camera' | 'seam'
-  | 'point' | 'edge' | 'internal' | 'dart' | 'notch' | 'annotation' | 'measurement';
+  | 'point' | 'edge' | 'internal' | 'dart' | 'notch' | 'annotation' | 'measurement'
+  | 'print' | 'topstitch' | 'trim';
 
 /** Kinds addressed with the `@kind:id` element encoding. */
 export const ELEMENT_NODE_KINDS: SceneNodeKind[] = PATTERN_ELEMENT_KINDS.filter(k => k !== 'panel');
@@ -25,13 +27,17 @@ export const GARMENT_COLLECTION_ID = '@collection:garment';
 export const REFERENCE_COLLECTION_ID = '@collection:reference';
 export const LIGHT_COLLECTION_ID = '@collection:light';
 export const SEAM_COLLECTION_ID = '@collection:seam';
+export const PRINT_COLLECTION_ID = '@collection:print';
+export const TOPSTITCH_COLLECTION_ID = '@collection:topstitch';
+export const TRIM_COLLECTION_ID = '@collection:trim';
 
 /** Chinese name of each row kind, shared by the outliner and the properties panel. */
 export const SCENE_KIND_LABELS: Record<SceneNodeKind, string> = {
-  scene: '场景', collection: '集合', panel: '版型片', avatar: '模特', reference: '参考物体',
+  scene: '场景', collection: '集合', panel: '版片', avatar: '模特', reference: '参考物体',
   light: '光源', environment: '环境光', camera: '相机', seam: '缝纫线',
   point: '点', edge: '边', internal: '内部线', dart: '省道',
   notch: '刀口', annotation: '注释', measurement: '尺寸线',
+  print: '印花', topstitch: '明线', trim: '辅料',
 };
 
 /** Outliner icon of one light type. */
@@ -118,6 +124,12 @@ export function elementLabel(project: Project, kind: SceneNodeKind, id: string):
       return note ? note.name ?? (note.text || SCENE_KIND_LABELS.annotation) : SCENE_KIND_LABELS.annotation;
     }
     case 'measurement': return pattern.measurements?.[id]?.name ?? SCENE_KIND_LABELS.measurement;
+    case 'print': return pattern.prints?.[id]?.name ?? SCENE_KIND_LABELS.print;
+    case 'topstitch': return pattern.topstitches?.[id]?.name ?? SCENE_KIND_LABELS.topstitch;
+    case 'trim': {
+      const trim = pattern.trims?.[id];
+      return trim?.name ?? TRIM_KIND_LABELS[trim?.kind ?? 'button'];
+    }
     default: return SCENE_KIND_LABELS[kind];
   }
 }
@@ -137,6 +149,9 @@ export function storedSceneName(project: Project, nodeId: string): string | null
       case 'notch': return pattern.notches?.[element.id]?.name ?? null;
       case 'annotation': return pattern.annotations?.[element.id]?.name ?? null;
       case 'measurement': return pattern.measurements?.[element.id]?.name ?? null;
+      case 'print': return pattern.prints?.[element.id]?.name ?? null;
+      case 'topstitch': return pattern.topstitches?.[element.id]?.name ?? null;
+      case 'trim': return pattern.trims?.[element.id]?.name ?? null;
     }
   }
   const panel = project.pattern.panels[nodeId];
@@ -204,6 +219,21 @@ export function writeSceneName(project: Project, nodeId: string, name: string): 
       case 'measurement': {
         const measurement = pattern.measurements?.[element.id];
         if (measurement) measurement.name = optional;
+        return;
+      }
+      case 'print': {
+        const print = pattern.prints?.[element.id];
+        if (print) print.name = optional;
+        return;
+      }
+      case 'topstitch': {
+        const stitch = pattern.topstitches?.[element.id];
+        if (stitch) stitch.name = optional;
+        return;
+      }
+      case 'trim': {
+        const trim = pattern.trims?.[element.id];
+        if (trim) trim.name = optional;
         return;
       }
     }
@@ -297,6 +327,21 @@ export function patternElementChildren(project: Project, panelId: string): Scene
   return rows;
 }
 
+/** One top-level collection of production objects; each row notes the panel it sits on. */
+function productionCollection(
+  project: Project, kind: 'print' | 'topstitch' | 'trim', collectionId: string, icon: IconName,
+  items: Array<{ id: string; label: string; panelId: string; visible: boolean }>,
+): SceneNode {
+  return {
+    id: collectionId, kind: 'collection', label: SCENE_KIND_LABELS[kind], icon: 'folder',
+    hideable: true, visible: items.length > 0 && items.every(item => item.visible),
+    children: items.map(item => ({
+      id: elementNodeId(kind, item.id), kind, label: item.label,
+      note: project.pattern.panels[item.panelId]?.name, icon, hideable: true, visible: item.visible, children: [],
+    })),
+  };
+}
+
 /** Outline vertices of a panel, in outline order without duplicates. */
 function panelPointIds(pattern: Pattern, panel: Panel): string[] {
   const out: string[] = [];
@@ -357,6 +402,24 @@ export function buildSceneTree(project: Project): SceneNode {
     })),
   };
 
+  const prints = productionCollection(project, 'print', PRINT_COLLECTION_ID, 'print',
+    Object.values(project.pattern.prints ?? {}).map((print, i) => ({
+      id: print.id, label: print.name ?? `${SCENE_KIND_LABELS.print} ${i + 1}`,
+      panelId: print.panelId, visible: print.visible !== false,
+    })));
+
+  const topstitches = productionCollection(project, 'topstitch', TOPSTITCH_COLLECTION_ID, 'topstitch',
+    Object.values(project.pattern.topstitches ?? {}).map((stitch, i) => ({
+      id: stitch.id, label: stitch.name ?? `${SCENE_KIND_LABELS.topstitch} ${i + 1}`,
+      panelId: stitch.panelId, visible: stitch.visible !== false,
+    })));
+
+  const trims = productionCollection(project, 'trim', TRIM_COLLECTION_ID, 'trim',
+    Object.values(project.pattern.trims ?? {}).map((trim, i) => ({
+      id: trim.id, label: trim.name ?? `${TRIM_KIND_LABELS[trim.kind]} ${i + 1}`,
+      panelId: trim.panelId, visible: trim.visible !== false,
+    })));
+
   const avatar: SceneNode = {
     id: AVATAR_NODE_ID,
     kind: 'avatar',
@@ -388,7 +451,7 @@ export function buildSceneTree(project: Project): SceneNode {
   const light: SceneNode = {
     id: LIGHT_COLLECTION_ID,
     kind: 'collection',
-    label: '灯光',
+    label: '光源',
     icon: 'folder',
     hideable: false,
     visible: true,
@@ -405,7 +468,7 @@ export function buildSceneTree(project: Project): SceneNode {
       })),
       {
         id: ENVIRONMENT_NODE_ID, kind: 'environment',
-        label: project.scene.lights.iblLabel ?? '环境光', note: 'HDRI',
+        label: project.scene.lights.iblLabel ?? '环境光', note: '环境光',
         icon: 'environment', hideable: true, visible: project.scene.lights.iblEnabled, children: [],
       },
     ],
@@ -423,7 +486,7 @@ export function buildSceneTree(project: Project): SceneNode {
     icon: 'scene',
     hideable: false,
     visible: true,
-    children: [garment, stitchLines, avatar, reference, light, camera],
+    children: [garment, stitchLines, prints, topstitches, trims, avatar, reference, light, camera],
   };
 }
 
@@ -448,7 +511,7 @@ export function seamLabel(project: Project, seam: Seam): string {
 export function avatarLabel(project: Project): string {
   const { avatar } = project;
   if (avatar.name) return avatar.name;
-  if (avatar.source === 'procedural') return '程序人台';
+  if (avatar.source === 'procedural') return '程序模特';
   return avatar.modelName ?? BUNDLED_AVATARS.find(b => b.url === avatar.glbUrl)?.label ?? '外部模型';
 }
 
@@ -462,8 +525,13 @@ export function supportsMaterial(kind: SceneNodeKind): boolean {
   return kind === 'panel';
 }
 
-/** Rows that expose simulation properties. */
-export function supportsPhysics(kind: SceneNodeKind): boolean {
+/** Rows that expose simulation settings. */
+export function supportsSimulator(kind: SceneNodeKind): boolean {
+  return kind === 'panel' || kind === 'avatar';
+}
+
+/** Rows that expose generator settings. */
+export function supportsGenerator(kind: SceneNodeKind): boolean {
   return kind === 'panel' || kind === 'avatar';
 }
 

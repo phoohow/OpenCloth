@@ -125,6 +125,7 @@ export function generateTShirt(params: TShirtParams = DEFAULT_TSHIRT_PARAMS, fab
     const panel = builder.panel({
       name,
       edges: [edgeCuff, innerRight, capFrontHalf, capBackHalf, innerLeft],
+      drape: { region: 'arm', side: name.includes('左') ? 'left' : 'right', rowWrap: true, pinTop: false },
     });
     return { panel, capFrontHalf, capBackHalf, innerRight, innerLeft };
   }

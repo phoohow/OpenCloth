@@ -8,15 +8,32 @@ import { Icon } from '../icons';
 /** Template library; pattern tools live above the 2D pane and scene objects on the right. */
 export function LeftPanel() {
   const width = useUIStore(s => s.leftPanelWidth);
+  const toggle = useUIStore(s => s.toggleTemplatePanel);
   return (
     <div style={{ ...styles.panel, width }}>
-      <div style={styles.header}>模板</div>
+      <div style={styles.header}>
+        <span style={{ flex: 1 }}>模板库</span>
+        <button style={styles.collapseBtn} onClick={toggle} title="收起模板库">
+          <Icon name="chevron-right" size={11} style={{ color: '#888', transform: 'rotate(180deg)' }} />
+        </button>
+      </div>
       <div style={styles.content}>
         {GARMENT_TEMPLATES.map(template => (
           <TemplateCard key={template.key} template={template} />
         ))}
       </div>
     </div>
+  );
+}
+
+/** Collapsed template library: a rail that expands the panel when clicked. */
+export function TemplateRail() {
+  const toggle = useUIStore(s => s.toggleTemplatePanel);
+  return (
+    <button style={styles.rail} onClick={toggle} title="展开模板库">
+      <Icon name="chevron-right" size={11} style={{ color: '#4da6ff' }} />
+      <span style={styles.railLabel}>模板库</span>
+    </button>
   );
 }
 
@@ -65,14 +82,22 @@ function TemplateCard({ template }: { template: GarmentTemplate }) {
             ))}
           </div>
           <div style={styles.fieldActions}>
-            <button style={styles.actionBtn} onClick={() => executeCommand(new ApplyTemplateCommand(template, params))}>
-              应用
+            <button
+              style={styles.actionBtn}
+              title="会清空当前版型，再按模板重新生成"
+              onClick={() => executeCommand(new ApplyTemplateCommand(template, params))}
+            >
+              替换版型
             </button>
-            <button style={styles.actionBtn} onClick={() => executeCommand(new AppendTemplateCommand(template, params))}>
-              追加
+            <button
+              style={styles.actionBtn}
+              title="保留已有版片，把模板的片排在右侧"
+              onClick={() => executeCommand(new AppendTemplateCommand(template, params))}
+            >
+              追加版型
             </button>
           </div>
-          <div style={styles.fieldHint}>应用会替换当前版型，追加保留已有版型片。</div>
+          <div style={styles.fieldHint}>「替换版型」会清空当前版型；「追加版型」保留已有版片。</div>
         </div>
       )}
     </div>
@@ -82,6 +107,9 @@ function TemplateCard({ template }: { template: GarmentTemplate }) {
 const styles: Record<string, React.CSSProperties> = {
   panel: { flex: '0 0 auto', background: '#202024', borderRight: '1px solid #333', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' },
   header: { height: 30, flex: '0 0 auto', display: 'flex', alignItems: 'center', padding: '0 10px', fontSize: 12, color: '#4da6ff', borderBottom: '1px solid #333', letterSpacing: 1 },
+  collapseBtn: { width: 20, height: 20, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  rail: { flex: '0 0 auto', width: 24, height: '100%', background: '#202024', border: 'none', borderRight: '1px solid #333', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, paddingTop: 8, paddingLeft: 0, paddingRight: 0 },
+  railLabel: { writingMode: 'vertical-rl', fontSize: 12, color: '#9ab', letterSpacing: 3 },
   content: { flex: 1, overflowY: 'auto', padding: 8 },
   templateCard: { margin: '4px 0', background: '#2a2a30', border: '1px solid #3a3a42', borderRadius: 4, overflow: 'hidden' },
   templateHead: { display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px', background: 'transparent', border: 'none', color: '#ccc', cursor: 'pointer', textAlign: 'left' },

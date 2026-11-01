@@ -4,7 +4,7 @@ import { parseElementNodeId } from '../elementSelection';
 import { PROP_TAB_OPTIONS } from '../optionTables';
 import type { EngineRef } from '../sceneCommands';
 import { selectedBody } from './properties/objectTab';
-import { RenderTab, SceneTab } from './properties/sceneRenderTabs';
+import { ProjectTab, RenderTab } from './properties/sceneRenderTabs';
 import { tabsForKind } from './properties/constants';
 import { styles } from './properties/styles';
 import { Icon } from '../icons';
@@ -44,12 +44,14 @@ export function usePropsTarget(engineRef: EngineRef): PropsTarget {
     : nodeId ? findSceneNode(buildSceneTree(project), nodeId) : null;
   const kind = node?.kind ?? null;
   const allowedTabs = tabsForKind(kind);
-  const tab = allowedTabs.includes(propTab) ? propTab : allowedTabs[0];
+  // With no object selected the editor opens on the project overview, not on the first rail tab.
+  const fallbackTab = kind === null ? 'project' : allowedTabs[0];
+  const tab = allowedTabs.includes(propTab) ? propTab : fallbackTab;
 
-  // A tab other than "场景" / "渲染" is selectable only with one resolved object.
+  // A tab other than "工程" / "渲染" is selectable only with one resolved object.
   const body = node && nodeId
     ? selectedBody(tab, project, nodeId, node, engineRef)
-    : tab === 'render' ? <RenderTab project={project} /> : <SceneTab project={project} />;
+    : tab === 'render' ? <RenderTab project={project} /> : <ProjectTab project={project} engineRef={engineRef} />;
 
   return {
     nodeId,

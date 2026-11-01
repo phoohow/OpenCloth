@@ -2,10 +2,16 @@ import * as THREE from 'three/webgpu';
 import type { Project, SimulationConfig, FabricPhysics, ObjectTransform, RenderMode, Vec3, CameraProjection, ReferenceObjectRef, EditPreviewTier } from '../model/types';
 import { buildPanelMesh, type PanelMesh } from '../../pattern/panel/panelBuilder';
 import { DEFAULT_MESH_RESOLUTION_CM } from '../model/defaults';
-import { fabricForPanel, fabricSlotPlan } from '../model/fabric';
+import { fabricForPanel, clothMaterialSlotKey, clothMaterialSlotPlan, panelPrints, type ClothMaterialSlot } from '../model/fabric';
 import { ClothSimulator, type ClothSimInput } from '../../sim/clothSimulator';
 import type { ParticlePickHit } from '../../sim/picking';
-import { ClothMeshManager, applyFabricAppearance, createMaterialForMode } from '../../render/material/fabricMaterial';
+import {
+  ClothMeshManager, applyFabricAppearance, createMaterialForMode, modeUsesFabric,
+} from '../../render/material/fabricMaterial';
+import {
+  createCompositeTexture, panelPrintFrame, printPlacement,
+  type CompositeTextureHandle, type PrintPlacement,
+} from '../../render/material/printTexture';
 import type { RendererContext } from '../../render/renderer/rendererContext';
 import {
   isOrthographic, setCameraProjection, syncOrthoFrustum, viewportAspect, rendererDevice,
@@ -18,6 +24,7 @@ import { EnvironmentStage } from './environmentStage';
 import { PinMarkers } from './pinMarkers';
 import { ReferenceStage, type ReferenceObject } from './referenceStage';
 import { SeamThreads } from './seamThreads';
+import { TopstitchThreads, topstitchSegments } from './topstitchThreads';
 import { SelectionOverlay } from './selectionOverlay';
 import { DressingController } from './dressingController';
 import { appearanceSignature, avatarBodySignature, clothLayoutFingerprint, constraintSignature, geometrySignatures, physicsSignature, visibilitySignature, type ClothGroupRange } from './clothSignatures';
@@ -58,6 +65,9 @@ export class GarmentEngine {
   private picker: ClothPicker;
   private pinMarkers = new PinMarkers();
   private seamThreads = new SeamThreads();
+  private topstitchThreads = new TopstitchThreads();
+  /** Composed panel textures of the printed pieces, one per printing panel. */
+  private printTextures = new Map<string, CompositeTextureHandle>();
 
   /** Simulation input covering every panel, rebuilt by `mergePanelMeshes`. */
   private mergedInput: ClothSimInput | null = null;
@@ -113,6 +123,8 @@ export class GarmentEngine {
   private appliedConstraints = '';
   /** Seam pair count the thread overlay was last built for; -1 when it is not attached. */
   private threadedPairCount = -1;
+  /** Signature of the topstitch records and merged layout the overlay was built for. */
+  private appliedTopstitches = '';
 
   /** Translucent clone of the selected panels' triangles. */
   private selection = new SelectionOverlay();
@@ -170,7 +182,8 @@ export class GarmentEngine {
     }
     const next = geometrySignatures(project);
     const previous = this.appliedGeometry;
-    if (previous.size === 0) {
+    // An empty pattern has no merged input, so a full build is the only way to drop the drawn cloth.
+    if (previous.size === 0 || next.size === 0) {
       await this.buildFromProject(project);
       return;
     }
@@ -301,6 +314,8 @@ export class GarmentEngine {
   private async buildCloth(project: Project): Promise<void> {
     const scene = this.rendererCtx.scene;
     this.clearCloth();
+    // The merge runs once the avatar is ready; until then no cloth exists to draw overlays on.
+    this.mergedInput = null;
     this.nonFiniteReported = false;
     this.panelMeshes.clear();
     this.selection.clear(scene);
@@ -311,7 +326,6 @@ export class GarmentEngine {
     await this.references.ensure(project.scene.referenceObjects ?? [], scene);
 
     const panelIds = Object.keys(project.pattern.panels);
-    if (panelIds.length === 0) return;
 
     // Global mesh density from the simulation settings overrides per-panel resolution.
     for (const panelId of panelIds) {
@@ -319,6 +333,7 @@ export class GarmentEngine {
       if (mesh) this.panelMeshes.set(panelId, mesh);
     }
 
+    // Merging with an empty pattern clears the stale seam pairs so no threads can be redrawn.
     this.mergedInput = this.mergePanelMeshes(project);
     if (!this.mergedInput || this.mergedInput.particleCount === 0) return;
     this.createRenderMesh(project);
@@ -384,6 +399,7 @@ export class GarmentEngine {
     const input = this.mergedInput;
     if (!input) return;
     const mode = project.scene.render.mode;
+    this.clearPrintTextures();
 
     const manager = new ClothMeshManager(
       input.positions,
@@ -401,7 +417,9 @@ export class GarmentEngine {
     this.fitCountdown = 0;
     this.strainCountdown = 0;
     this.threadedPairCount = -1;
+    this.appliedTopstitches = '';
     this.applySeamStitchVisibility(project);
+    this.applyTopstitchThreads(project);
   }
 
   /** Takes the cloth render mesh the scene shows right now out of it and frees its buffers. */
@@ -411,6 +429,7 @@ export class GarmentEngine {
       this.fitOverlay.dispose();
       this.fitOverlay = null;
     }
+    this.clearPrintTextures();
     const previous = this.clothMeshes.get(MERGED_MESH_KEY);
     if (!previous) return;
     this.rendererCtx.scene.remove(previous.mesh);
@@ -423,12 +442,21 @@ export class GarmentEngine {
     return this.mergedInput?.panels.map(panel => panel.panelId) ?? [];
   }
 
-  /** Binds one material per distinct material record, with a geometry group per panel. */
+  /**
+   * Binds one material per material slot, with a geometry group per panel. A printed panel gets
+   * its own slot so its composed texture can be drawn into a material of its own.
+   */
   private bindClothMaterials(project: Project, mode: RenderMode): void {
     const merged = this.clothMeshes.get(MERGED_MESH_KEY);
     if (!merged || !this.mergedInput) return;
-    const plan = fabricSlotPlan(project, this.clothPanelIds());
-    const materials = plan.fabrics.map(fabric => createMaterialForMode(fabric?.appearance ?? FALLBACK_APPEARANCE, mode));
+    const plan = clothMaterialSlotPlan(project, this.clothPanelIds());
+    const printable = modeUsesFabric(mode);
+    const materials = plan.slots.map(slot => {
+      const app = slot.fabric?.appearance ?? FALLBACK_APPEARANCE;
+      const composite = slot.panelId && printable ? this.printTexture(project, slot.panelId) : null;
+      return createMaterialForMode(app, mode, composite?.texture ?? null);
+    });
+    this.prunePrintTextures(plan.slots);
 
     let indexStart = 0;
     const ranges: ClothGroupRange[] = this.mergedInput.panels.map((panel, i) => {
@@ -442,7 +470,7 @@ export class GarmentEngine {
     this.fitOverlay?.setSlotCount(materials.length);
     this.clothGroupRanges = ranges;
     merged.addGroups(ranges);
-    this.clothSlots = plan.fabrics.map(fabric => fabric?.id ?? null);
+    this.clothSlots = plan.slots.map(clothMaterialSlotKey);
     this.clothMaterialMode = mode;
     this.appliedAppearance = appearanceSignature(this.clothPanelIds(), project, mode);
     this.appliedVisibility = visibilitySignature(ranges, project);
@@ -480,6 +508,7 @@ export class GarmentEngine {
   private updateHeatmapVisibility(): void {
     const on = this.fitVisible || this.strainVisible;
     this.fitOverlay?.setVisible(on);
+    this.topstitchThreads.setVisible(!on);
     const merged = this.clothMeshes.get(MERGED_MESH_KEY);
     if (merged) merged.mesh.visible = !on;
   }
@@ -542,6 +571,11 @@ export class GarmentEngine {
    * changes size, which is what closing a dart does.
    */
   applySeamStitchVisibility(project: Project): void {
+    if (!this.mergedInput) {
+      this.threadedPairCount = 0;
+      this.seamThreads.detach(this.rendererCtx.scene);
+      return;
+    }
     const pairs = this.cloth.seamPairs;
     const positions = this.lastGoodPositions.length === this.mergedPositions.length && this.mergedPositions.length > 0
       ? this.lastGoodPositions
@@ -553,6 +587,66 @@ export class GarmentEngine {
     }
     this.seamThreads.setSeams(project.pattern.seams);
     this.seamThreads.update(pairs, positions);
+  }
+
+  /**
+   * Rebuilds the topstitch overlay when its records or the merged layout change; otherwise moves
+   * it onto the positions the cloth currently holds.
+   */
+  applyTopstitchThreads(project: Project): void {
+    const input = this.mergedInput;
+    if (!input) return;
+    const positions = this.lastGoodPositions.length === this.mergedPositions.length && this.mergedPositions.length > 0
+      ? this.lastGoodPositions
+      : this.mergedPositions;
+    const signature = topstitchSignature(project, input);
+    if (signature !== this.appliedTopstitches) {
+      this.appliedTopstitches = signature;
+      this.topstitchThreads.attach(this.rendererCtx.scene, topstitchSegments(project, input.panels), positions);
+      return;
+    }
+    this.topstitchThreads.update(positions);
+  }
+
+  /** UV placements of a panel's visible prints; empty while its mesh is missing. */
+  private printPlacements(project: Project, panelId: string): PrintPlacement[] {
+    const mesh = this.panelMeshes.get(panelId);
+    if (!mesh) return [];
+    const frame = panelPrintFrame(project.pattern, panelId, mesh.positions2D);
+    if (!frame) return [];
+    return panelPrints(project, panelId).map(print => printPlacement(print, frame));
+  }
+
+  /** Composed texture of one printed panel, created on first use. */
+  private printTexture(project: Project, panelId: string): CompositeTextureHandle | null {
+    const existing = this.printTextures.get(panelId);
+    if (existing) return existing;
+    const mesh = this.panelMeshes.get(panelId);
+    const frame = mesh ? panelPrintFrame(project.pattern, panelId, mesh.positions2D) : null;
+    if (!frame) return null;
+    const handle = createCompositeTexture(
+      fabricForPanel(project, panelId)?.appearance ?? FALLBACK_APPEARANCE,
+      this.printPlacements(project, panelId),
+      { x: frame.max.x - frame.min.x, y: frame.max.y - frame.min.y },
+    );
+    this.printTextures.set(panelId, handle);
+    return handle;
+  }
+
+  /** Drops composed textures of panels that no longer print. */
+  private prunePrintTextures(slots: ClothMaterialSlot[]): void {
+    const printed = new Set(slots.flatMap(slot => slot.panelId ? [slot.panelId] : []));
+    for (const [panelId, handle] of this.printTextures) {
+      if (printed.has(panelId)) continue;
+      handle.dispose();
+      this.printTextures.delete(panelId);
+    }
+  }
+
+  /** Frees every composed print texture. */
+  private clearPrintTextures(): void {
+    for (const handle of this.printTextures.values()) handle.dispose();
+    this.printTextures.clear();
   }
 
   /**
@@ -568,16 +662,23 @@ export class GarmentEngine {
     const appearance = appearanceSignature(this.clothPanelIds(), project, target);
     if (appearance !== this.appliedAppearance) {
       this.appliedAppearance = appearance;
-      const plan = fabricSlotPlan(project, this.clothPanelIds());
+      const plan = clothMaterialSlotPlan(project, this.clothPanelIds());
       const materials = Array.isArray(merged.mesh.material) ? merged.mesh.material : [merged.mesh.material];
-      const sameSlots = plan.fabrics.length === this.clothSlots.length
-        && plan.fabrics.every((fabric, i) => (fabric?.id ?? null) === this.clothSlots[i]);
-      if (sameSlots && materials.length === plan.fabrics.length) {
-        plan.fabrics.forEach((fabric, i) => {
+      const keys = plan.slots.map(clothMaterialSlotKey);
+      const sameSlots = keys.length === this.clothSlots.length
+        && keys.every((key, i) => key === this.clothSlots[i]);
+      if (sameSlots && materials.length === plan.slots.length) {
+        plan.slots.forEach((slot, i) => {
           const material = materials[i];
-          if (material instanceof THREE.MeshPhysicalMaterial) {
-            applyFabricAppearance(material, fabric?.appearance ?? FALLBACK_APPEARANCE);
+          if (!(material instanceof THREE.MeshPhysicalMaterial)) return;
+          const app = slot.fabric?.appearance ?? FALLBACK_APPEARANCE;
+          const composite = slot.panelId ? this.printTextures.get(slot.panelId) : null;
+          if (composite) {
+            composite.redraw(app, this.printPlacements(project, slot.panelId!));
+            applyFabricAppearance(material, app, composite.texture);
+            return;
           }
+          applyFabricAppearance(material, app);
         });
       } else {
         this.bindClothMaterials(project, target);
@@ -656,6 +757,7 @@ export class GarmentEngine {
       if (this.lastGoodPositions.length !== positions.length) this.lastGoodPositions = new Float32Array(positions.length);
       this.lastGoodPositions.set(positions);
       this.seamThreads.update(this.cloth.seamPairs, positions);
+      this.topstitchThreads.update(positions);
       this.pinMarkers.sync(this.simulator.getReadbackPositions());
     } finally {
       this.stepping = false;
@@ -671,6 +773,7 @@ export class GarmentEngine {
     // The render mesh follows the initial positions in the same frame.
     this.clothMeshes.get(MERGED_MESH_KEY)?.resetTo(this.mergedPositions);
     this.seamThreads.update(this.cloth.seamPairs, this.mergedPositions);
+    this.topstitchThreads.update(this.mergedPositions);
     this.pinMarkers.sync(this.mergedPositions);
   }
 
@@ -869,6 +972,8 @@ export class GarmentEngine {
   /** Removes and disposes the cloth meshes, seam threads, simulator and dressing run. */
   private clearCloth(): void {
     this.seamThreads.detach(this.rendererCtx.scene);
+    this.topstitchThreads.detach(this.rendererCtx.scene);
+    this.clearPrintTextures();
     this.dressing.reset();
     this.simulator?.destroy();
     this.simulator = null;
@@ -892,6 +997,7 @@ export class GarmentEngine {
     this.appliedPhysics = '';
     this.appliedConstraints = '';
     this.threadedPairCount = -1;
+    this.appliedTopstitches = '';
     this.simReady = false;
   }
 
@@ -934,6 +1040,17 @@ function mergedRestPositions(input: ClothSimInput): Float32Array {
     rest.set(panel.restPositions, panel.vertexOffset * 3);
   }
   return rest;
+}
+
+/** Topstitch records plus the merged layout the segment indices point into. */
+function topstitchSignature(project: Project, input: ClothSimInput): string {
+  const stitches = Object.values(project.pattern.topstitches ?? {}).map(stitch => JSON.stringify([
+    stitch.id, stitch.panelId, stitch.edgeId, stitch.t0, stitch.t1, stitch.offsetMm, stitch.spacingMm,
+    stitch.rows, stitch.color, stitch.stitchMm, stitch.gapMm, stitch.visible !== false,
+    project.pattern.panels[stitch.panelId]?.visible !== false,
+  ]));
+  const panels = input.panels.map(panel => `${panel.panelId}@${panel.vertexOffset}x${panel.mesh.vertexCount}`);
+  return JSON.stringify([stitches, panels]);
 }
 
 /** Index of the first non-finite readback component, or -1 when every position is finite. */

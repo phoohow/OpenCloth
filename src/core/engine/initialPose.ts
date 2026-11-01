@@ -20,23 +20,28 @@ export function flatRestPositions(mesh: PanelMesh): Float32Array {
   return rest;
 }
 
-/** Panel's posed 3D positions, wrapped around the body unless a placement pins it flat. */
+/**
+ * Panel's posed 3D positions: wrapped around the body only for a panel with an explicit drape,
+ * otherwise laid flat at its pattern coordinates with Z = 0.
+ */
 export function posedPositions3D(mesh: PanelMesh, panel: Panel, landmarks: BodyLandmarks): Float32Array {
   const positions = panel.placement
     ? flatPanelPositions(mesh, panel.placement)
-    : drapePositions(mesh, panel, landmarks);
+    : panel.drape
+      ? drapePositions(mesh, panel, landmarks)
+      : flatRestPositions(mesh);
   applyObjectTransform(positions, panel.transform ?? IDENTITY_TRANSFORM);
   return positions;
 }
 
-/** Unsewn start pose: hanging panels stay where they drape, laid-out panels float off the body. */
+/** Unsewn start pose: wrapped panels slide off the body, flat panels stay on their coordinates. */
 export function initialPositions3D(positions3D: Float32Array, panel: Panel): Float32Array {
-  return panel.placement ? positions3D : explodeOffBody(positions3D);
+  return panel.placement || !panel.drape ? positions3D : explodeOffBody(positions3D);
 }
 
 /** Particle indices of the top band a hanging panel is basted from. */
 export function topBandParticles(mesh: PanelMesh, panel: Panel): number[] {
-  if (panel.placement || !resolveDrape(panel).pinTop) return [];
+  if (panel.placement || !panel.drape || !resolveDrape(panel).pinTop) return [];
   let miny = Infinity, maxy = -Infinity;
   for (let i = 0; i < mesh.vertexCount; i++) {
     const y = mesh.positions2D[i * 2 + 1];

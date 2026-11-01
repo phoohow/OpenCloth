@@ -26,7 +26,6 @@ export function Menubar({ actions }: { actions: MenuActions }) {
   const layout = useUIStore(s => s.layout);
   const focus = useUIStore(s => s.focus);
   const propTab = useUIStore(s => s.propTab);
-  const cameraProjection = useUIStore(s => s.cameraProjection);
   const selection = useUIStore(s => s.selection);
   const showTemplatePanel = useUIStore(s => s.showTemplatePanel);
   const showScenePanel = useUIStore(s => s.showScenePanel);
@@ -41,7 +40,6 @@ export function Menubar({ actions }: { actions: MenuActions }) {
       layout,
       focus,
       propTab,
-      cameraProjection,
       showTemplatePanel,
       showScenePanel,
       showPropertiesPanel,
@@ -54,16 +52,16 @@ export function Menubar({ actions }: { actions: MenuActions }) {
       redoLabel: history.nextLabel,
       hasClipboard: clipboard !== null,
       selectedPanelCount: selection.filter(id => !!project.pattern.panels[id]).length,
-      hiddenPanelCount: Object.values(project.pattern.panels).filter(p => !p.visible).length,
+      selectionCount: selection.length,
       panelCount: Object.keys(project.pattern.panels).length,
       referenceCount: (project.scene.referenceObjects ?? []).length,
       recent,
       autosaves,
     };
     return buildMenus(state, actions);
-  }, [project, recent, autosaves, clipboard, history, layout, focus, propTab, cameraProjection, selection,
-    showTemplatePanel, showScenePanel, showPropertiesPanel, showTimeline, autoSaveSeconds,
-    lastAutosaveAt, actions]);
+  }, [project, recent, autosaves, clipboard, history, layout, focus, propTab, selection,
+    showTemplatePanel, showScenePanel, showPropertiesPanel, showTimeline,
+    autoSaveSeconds, lastAutosaveAt, actions]);
 
   // A click anywhere outside the bar closes the open dropdown.
   useEffect(() => {

@@ -70,7 +70,7 @@ function applyPanelVisibility(ctx: ProjectContext, ids: string[], values: boolea
 export function setPanelsVisible(panelIds: string[], visible: boolean): void {
   const before = panelIds.map(id => project().pattern.panels[id]?.visible ?? true);
   useProjectStore.getState().executeCommand({
-    label: visible ? '显示版型片' : '隐藏版型片',
+    label: visible ? '显示版片' : '隐藏版片',
     execute: ctx => applyPanelVisibility(ctx, panelIds, panelIds.map(() => visible)),
     undo: ctx => applyPanelVisibility(ctx, panelIds, before),
   });
@@ -104,11 +104,11 @@ function applyAvatarDisplay(ctx: ProjectContext, display: AvatarDisplay, engineR
 
 /** Switches the avatar between shown and hidden in the viewport. */
 export function setAvatarVisible(visible: boolean, engineRef: EngineRef): void {
-  setAvatarDisplay(visible ? 'visible' : 'hidden', engineRef, visible ? '显示人体' : '隐藏人体');
+  setAvatarDisplay(visible ? 'visible' : 'hidden', engineRef, visible ? '显示模特' : '隐藏模特');
 }
 
 /** Sets the avatar's viewport display mode. */
-export function setAvatarDisplay(display: AvatarDisplay, engineRef: EngineRef, label = '修改人体显示'): void {
+export function setAvatarDisplay(display: AvatarDisplay, engineRef: EngineRef, label = '修改模特显示'): void {
   patchValue(
     label,
     p => p.avatar.display,
@@ -191,7 +191,7 @@ export function commitAvatarModel(objectKey: string, modelName: string): void {
     p => p.avatar,
     (ctx, v) => { ctx.project.avatar = { ...v }; },
     {
-      ...current.avatar, source: 'glb', glbObjectKey: objectKey, modelName,
+      ...current.avatar, source: 'glb', glbObjectKey: objectKey, modelName, display: 'visible',
       glbUrl: undefined, heightCm: current.avatar.params.heightCm,
     },
   );
@@ -337,5 +337,34 @@ function applySeamStitch(ctx: ProjectContext, seamIds: string[], values: boolean
   seamIds.forEach((id, i) => {
     const seam = ctx.project.pattern.seams[id];
     if (seam) seam.stitchVisible = values[i];
+  });
+}
+
+/** Production object kinds that carry their own visibility flag. */
+type ProductionKind = 'print' | 'topstitch' | 'trim';
+
+/** Pattern collection backing one production object kind. */
+function productionRecords(
+  pattern: Project['pattern'], kind: ProductionKind,
+): Record<string, { visible: boolean }> {
+  return kind === 'print' ? pattern.prints : kind === 'topstitch' ? pattern.topstitches : pattern.trims;
+}
+
+function applyProductionVisibility(
+  ctx: ProjectContext, kind: ProductionKind, ids: string[], values: boolean[],
+): void {
+  const records = productionRecords(ctx.project.pattern, kind);
+  ids.forEach((id, i) => { records[id].visible = values[i]; });
+}
+
+/** Sets viewport visibility of print, topstitch and trim records as one undoable step. */
+export function setProductionVisible(kind: ProductionKind, ids: string[], visible: boolean): void {
+  if (ids.length === 0) return;
+  const records = productionRecords(project().pattern, kind);
+  const before = ids.map(id => records[id]?.visible ?? true);
+  useProjectStore.getState().executeCommand({
+    label: visible ? '显示生产物件' : '隐藏生产物件',
+    execute: ctx => applyProductionVisibility(ctx, kind, ids, ids.map(() => visible)),
+    undo: ctx => applyProductionVisibility(ctx, kind, ids, before),
   });
 }

@@ -2,6 +2,17 @@ import type { Pattern, Vec2 } from '../../core/model/types';
 import { sampleEdge, sampleEdgeInterval } from '../../pattern/panel/panelBuilder';
 import { pointAtT } from '../../pattern/geom/edgeSample';
 import { elementNodeId, type PatternElementKind } from '../../core/model/elementRef';
+import { printFrame, topstitchRows, trimRadiusCm } from './tools';
+
+/** One element's hit geometry: sampled points, whether it encloses an area, and its pick padding. */
+interface ElementGeometry {
+  id: string;
+  points: Vec2[];
+  /** Closed outlines also hit-tested by containing the target. */
+  closed?: boolean;
+  /** Radius in cm a pick may miss the sampled point by, for symbols drawn with a size. */
+  radius?: number;
+}
 
 /** Axis-aligned bounds in world centimeters. */
 export interface Rect { min: Vec2; max: Vec2 }
@@ -148,7 +159,9 @@ export function pickElements(
   let best: { row: string; distance: number } | null = null;
   for (const kind of kinds) {
     for (const element of elementGeometry(pattern, kind)) {
-      const distance = distanceToPolyline(element.points, target);
+      const distance = element.closed && pointInPolygon(element.points, target)
+        ? 0
+        : Math.max(0, distanceToPolyline(element.points, target) - (element.radius ?? 0));
       if (distance > radius || (best && best.distance <= distance)) continue;
       best = { row: elementNodeId(kind, element.id), distance };
     }
@@ -172,7 +185,7 @@ function distanceToPolyline(points: readonly Vec2[], target: Vec2): number {
  * Sampled polylines of every element of one kind, in object-id order. Panels list their outline
  * corners; the marquee rule and the pick rule both read this, so they stay in step.
  */
-function elementGeometry(pattern: Pattern, kind: PatternElementKind): Array<{ id: string; points: Vec2[] }> {
+function elementGeometry(pattern: Pattern, kind: PatternElementKind): ElementGeometry[] {
   switch (kind) {
     case 'panel':
       return Object.values(pattern.panels).map(panel => ({
@@ -210,6 +223,21 @@ function elementGeometry(pattern: Pattern, kind: PatternElementKind): Array<{ id
       });
     case 'annotation':
       return Object.values(pattern.annotations ?? {}).map(note => ({ id: note.id, points: [note.pos] }));
+    case 'print':
+      return Object.values(pattern.prints ?? {})
+        .filter(print => print.visible)
+        .map(print => {
+          const frame = printFrame(pattern, print);
+          return frame ? { id: print.id, points: [...frame, frame[0]!], closed: true } : { id: print.id, points: [] };
+        });
+    case 'topstitch':
+      return Object.values(pattern.topstitches ?? {})
+        .filter(stitch => stitch.visible)
+        .map(stitch => ({ id: stitch.id, points: topstitchRows(pattern, stitch).flat() }));
+    case 'trim':
+      return Object.values(pattern.trims ?? {})
+        .filter(trim => trim.visible)
+        .map(trim => ({ id: trim.id, points: [trim.pos], radius: trimRadiusCm(trim) }));
     case 'measurement':
       return Object.values(pattern.measurements ?? {}).map(measurement => {
         const a = measurement.refs.pointAId && pattern.points[measurement.refs.pointAId];

@@ -10,6 +10,8 @@ import {
   CreateAnnotationCommand, UpdateAnnotationCommand, DeleteAnnotationCommand,
   CreateMeasurementCommand, DeleteMeasurementCommand,
   AddSizeCommand, RenameSizeCommand, RemoveSizeCommand, SetBaseSizeCommand, ReorderSizesCommand,
+  AddPrintCommand, UpdatePrintCommand, AddTopstitchCommand, UpdateTopstitchCommand,
+  AddTrimCommand, UpdateTrimCommand, DeleteSelectionCommand,
 } from '../../../src/core/command/patternCommands';
 import { ctxOf, addSquare } from './fixtures';
 import { SetGlobalMeshResolutionCommand } from '../../../src/core/command/patternProductionCommands';
@@ -121,6 +123,134 @@ describe('production pattern edits', () => {
     undoPattern(ctx, new DeleteMeasurementCommand(id));
     cmd.undo(ctx);
     expect(Object.keys(ctx.project.pattern.measurements)).toHaveLength(0);
+  });
+});
+
+describe('print / topstitch / trim commands', () => {
+  const image = 'data:image/png;base64,AAAA';
+
+  it('adds and edits a print, then restores the pattern on undo', () => {
+    const { ctx, panelId } = fresh();
+    const add = new AddPrintCommand(panelId, image, {
+      imageName: 'logo.png', widthCm: 12, heightCm: 8, center: { x: 3, y: -2 },
+    });
+    const before = structuredClone(ctx.project.pattern);
+    add.execute(ctx);
+    expect(validatePattern(ctx.project.pattern)).toEqual([]);
+    const id = Object.keys(ctx.project.pattern.prints)[0]!;
+    const print = ctx.project.pattern.prints[id];
+    expect(print.panelId).toBe(panelId);
+    expect(print.imageUrl).toBe(image);
+    expect(print.imageName).toBe('logo.png');
+    expect(print.center).toEqual({ x: 3, y: -2 });
+    expect(print.repeat).toEqual({ x: 1, y: 1 });
+    expect(print.visible).toBe(true);
+
+    const update = new UpdatePrintCommand(id, { angleDeg: 30, opacity: 0.6, repeat: { x: 2, y: 3 } });
+    update.execute(ctx);
+    expect(ctx.project.pattern.prints[id].angleDeg).toBe(30);
+    expect(ctx.project.pattern.prints[id].opacity).toBe(0.6);
+    expect(ctx.project.pattern.prints[id].repeat).toEqual({ x: 2, y: 3 });
+    expect(ctx.project.pattern.prints[id].center).toEqual({ x: 3, y: -2 });
+
+    update.undo(ctx);
+    add.undo(ctx);
+    expect(ctx.project.pattern).toEqual(before);
+  });
+
+  it('rejects prints with a missing panel, empty image or invalid placement', () => {
+    const { ctx, panelId } = fresh();
+    expect(() => new AddPrintCommand('missing', image).execute(ctx)).toThrow(/版片不存在/);
+    expect(() => new AddPrintCommand(panelId, '').execute(ctx)).toThrow(/图片为空/);
+    expect(() => new AddPrintCommand(panelId, image, { widthCm: 0 }).execute(ctx)).toThrow(/宽度/);
+    expect(() => new AddPrintCommand(panelId, image, { repeat: { x: 0, y: 1 } }).execute(ctx)).toThrow(/平铺次数/);
+
+    new AddPrintCommand(panelId, image).execute(ctx);
+    const id = Object.keys(ctx.project.pattern.prints)[0]!;
+    expect(() => new UpdatePrintCommand(id, { opacity: 1.5 }).execute(ctx)).toThrow(/不透明度/);
+    expect(ctx.project.pattern.prints[id].opacity).toBe(1);
+  });
+
+  it('adds and edits a topstitch on an edge of its panel', () => {
+    const { ctx, panelId, edgeId } = fresh();
+    const add = new AddTopstitchCommand(panelId, edgeId, {
+      t0: 0.2, t1: 0.9, offsetMm: 6, spacingMm: 5, rows: 2, color: '#123456',
+    });
+    const before = structuredClone(ctx.project.pattern);
+    add.execute(ctx);
+    expect(validatePattern(ctx.project.pattern)).toEqual([]);
+    const id = Object.keys(ctx.project.pattern.topstitches)[0]!;
+    const stitch = ctx.project.pattern.topstitches[id];
+    expect(stitch.panelId).toBe(panelId);
+    expect(stitch.edgeId).toBe(edgeId);
+    expect(stitch.t0).toBe(0.2);
+    expect(stitch.t1).toBe(0.9);
+    expect(stitch.offsetMm).toBe(6);
+    expect(stitch.rows).toBe(2);
+    expect(stitch.color).toBe('#123456');
+
+    const update = new UpdateTopstitchCommand(id, { rows: 3, spacingMm: 4 });
+    update.execute(ctx);
+    expect(ctx.project.pattern.topstitches[id].rows).toBe(3);
+    update.undo(ctx);
+    add.undo(ctx);
+    expect(ctx.project.pattern).toEqual(before);
+  });
+
+  it('rejects topstitches on foreign edges or out-of-range intervals', () => {
+    const { ctx, panelId, edgeId } = fresh();
+    addSquare(ctx.project.pattern, 'other', 20, 0, 10);
+    const foreignEdge = ctx.project.pattern.panels['other_panel'].outlineEdgeIds[0]!;
+    expect(() => new AddTopstitchCommand(panelId, foreignEdge).execute(ctx)).toThrow(/不属于/);
+    expect(() => new AddTopstitchCommand(panelId, edgeId, { rows: 6 }).execute(ctx)).toThrow(/行数/);
+    expect(() => new AddTopstitchCommand(panelId, edgeId, { t0: 0.9, t1: 0.9 }).execute(ctx)).toThrow(/区间/);
+  });
+
+  it('adds and edits a trim with quantity and unit price', () => {
+    const { ctx, panelId } = fresh();
+    const add = new AddTrimCommand(panelId, 'button', { x: 5, y: 5 }, {
+      name: '门襟扣', sizeMm: 12, qty: 6, unitPrice: 1.25,
+    });
+    const before = structuredClone(ctx.project.pattern);
+    add.execute(ctx);
+    expect(validatePattern(ctx.project.pattern)).toEqual([]);
+    const id = Object.keys(ctx.project.pattern.trims)[0]!;
+    const trim = ctx.project.pattern.trims[id];
+    expect(trim.panelId).toBe(panelId);
+    expect(trim.kind).toBe('button');
+    expect(trim.pos).toEqual({ x: 5, y: 5 });
+    expect(trim.qty).toBe(6);
+    expect(trim.unitPrice).toBe(1.25);
+
+    const update = new UpdateTrimCommand(id, { qty: 8, unitPrice: 1.5 });
+    update.execute(ctx);
+    expect(ctx.project.pattern.trims[id].qty).toBe(8);
+    expect(ctx.project.pattern.trims[id].unitPrice).toBe(1.5);
+    expect(() => new UpdateTrimCommand(id, { qty: 0 }).execute(ctx)).toThrow(/数量/);
+
+    update.undo(ctx);
+    add.undo(ctx);
+    expect(ctx.project.pattern).toEqual(before);
+  });
+
+  it('deleting a panel cascades to its prints, topstitches and trims', () => {
+    const { ctx, panelId, edgeId } = fresh();
+    new AddPrintCommand(panelId, image).execute(ctx);
+    new AddTopstitchCommand(panelId, edgeId).execute(ctx);
+    new AddTrimCommand(panelId, 'button', { x: 2, y: 2 }).execute(ctx);
+    expect(Object.keys(ctx.project.pattern.prints)).toHaveLength(1);
+    expect(Object.keys(ctx.project.pattern.topstitches)).toHaveLength(1);
+    expect(Object.keys(ctx.project.pattern.trims)).toHaveLength(1);
+
+    const before = structuredClone(ctx.project.pattern);
+    const cmd = new DeleteSelectionCommand([panelId]);
+    cmd.execute(ctx);
+    expect(ctx.project.pattern.prints).toEqual({});
+    expect(ctx.project.pattern.topstitches).toEqual({});
+    expect(ctx.project.pattern.trims).toEqual({});
+
+    cmd.undo(ctx);
+    expect(ctx.project.pattern).toEqual(before);
   });
 });
 

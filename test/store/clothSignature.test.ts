@@ -343,20 +343,20 @@ describe('computeClothSignature default classification for new fields', () => {
     });
   });
 
-  it('currently counts draw-only production markings and lock state', () => {
-    expectRebuild(project => {
+  it('ignores draw-only production markings and lock state', () => {
+    expectNoRebuild(project => {
       project.pattern.panels.panel_a.locked = true;
     });
-    expectRebuild(project => {
+    expectNoRebuild(project => {
       project.pattern.notches.n1.t = 0.4;
     });
-    expectRebuild(project => {
+    expectNoRebuild(project => {
       project.pattern.annotations.a1.text = '新备注';
     });
-    expectRebuild(project => {
+    expectNoRebuild(project => {
       project.pattern.measurements.m1.refs.pointBId = 'p2';
     });
-    expectRebuild(project => {
+    expectNoRebuild(project => {
       project.pattern.seams.seam_1.threadColor = '#ff0000';
     });
   });

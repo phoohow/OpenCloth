@@ -19,6 +19,19 @@ function sampleProject(): { project: Project; pattern: Pattern } {
   pattern.measurements['m_dist'] = { id: 'm_dist', panelId: 'front', kind: 'distance', refs: { pointAId: 'front_p0', pointBId: 'front_p1' } };
   pattern.measurements['m_angle'] = { id: 'm_angle', panelId: 'front', kind: 'angle', refs: { pointAId: 'front_p0', pointBId: 'front_p1' } };
   pattern.measurements['m_missing'] = { id: 'm_missing', panelId: 'front', kind: 'distance', refs: { pointAId: 'nope', pointBId: 'front_p1' } };
+  pattern.prints['pr_logo'] = {
+    id: 'pr_logo', panelId: 'front', imageUrl: 'data:image/png;base64,AAAA', imageName: '徽标.png',
+    center: { x: 0, y: 0 }, widthCm: 8, heightCm: 6, angleDeg: 15, opacity: 0.8,
+    repeat: { x: 2, y: 1 }, visible: true,
+  };
+  pattern.topstitches['ts_hem'] = {
+    id: 'ts_hem', panelId: 'front', edgeId: 'front_e1', t0: 0, t1: 1, offsetMm: 3, spacingMm: 4,
+    rows: 2, color: '#d9a441', stitchMm: 3, gapMm: 2, visible: true,
+  };
+  pattern.trims['tr_button'] = {
+    id: 'tr_button', panelId: 'front', kind: 'button', pos: { x: 0, y: 0 }, sizeMm: 12,
+    color: '#111111', qty: 5, unitPrice: 0.8, visible: true,
+  };
 
   const project = createDefaultProject('测试工程');
   project.pattern = pattern;
@@ -135,6 +148,37 @@ describe('buildTechPackData', () => {
     expect(data.measurements.some(row => row.id === 'm_missing')).toBe(false);
   });
 
+  it('lists prints, topstitches and trims and reuses them in the bill of materials', () => {
+    const { project } = sampleProject();
+    const data = buildTechPackData(project, {});
+    expect(data.prints).toHaveLength(1);
+    expect(data.prints[0]).toMatchObject({
+      id: 'pr_logo', name: '徽标.png', panelName: '前片', widthCm: 8, heightCm: 6,
+      angleDeg: 15, repeat: { x: 2, y: 1 }, opacity: 0.8,
+    });
+    expect(data.topstitches).toHaveLength(1);
+    expect(data.topstitches[0]!.edge).toBe('自由边');
+    expect(data.topstitches[0]!.lengthCm).toBeCloseTo(120, 6);
+    expect(data.trims).toHaveLength(1);
+    expect(data.trims[0]!.kindLabel).toBe('纽扣');
+    expect(data.trims[0]!.quantity).toBe(5);
+    expect(data.trims[0]!.unitPrice).toBe(0.8);
+
+    expect(data.bom.map(row => row.category)).toEqual(['面料', '印花', '明线', '辅料']);
+    expect(data.bom.find(row => row.category === '印花')!.quantity).toBe(2);
+    expect(data.bom.find(row => row.category === '明线')!.quantity).toBeCloseTo(1.2, 6);
+    expect(data.bom.find(row => row.category === '辅料')!.amount).toBe(4);
+  });
+
+  it('leaves the production tables empty when nothing was placed', () => {
+    const project = createDefaultProject();
+    const data = buildTechPackData(project, {});
+    expect(data.prints).toEqual([]);
+    expect(data.topstitches).toEqual([]);
+    expect(data.trims).toEqual([]);
+    expect(data.bom).toEqual([]);
+  });
+
   it('reports an empty project without laying out a marker', () => {
     const project = createDefaultProject();
     const data = buildTechPackData(project, {});
@@ -175,7 +219,10 @@ describe('buildTechPackPdf', () => {
     expect(pdf).toContain('/F2');
     expect(pdf).toContain('/Count 1');
     const text = decodedText(pdf);
-    for (const label of ['工艺单', '工程名', '尺码表', '版片', '材质', '缝合清单', '排料摘要', '版片测量']) {
+    for (const label of [
+      '工艺单', '工程名', '尺码表', '版片', '材质', '缝合清单', '印花', '明线', '辅料', '物料清单',
+      '排料摘要', '版片测量',
+    ]) {
       expect(text).toContain(label);
     }
     expect(text).toContain('测试工程');

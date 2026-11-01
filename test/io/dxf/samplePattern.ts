@@ -44,6 +44,7 @@ export function buildSamplePattern(): Pattern {
   const pattern: Pattern = {
     points: {}, edges: {}, darts: {}, internalLines: {}, panels: {}, seams: {},
     notches: {}, annotations: {}, measurements: {},
+    prints: {}, topstitches: {}, trims: {},
   };
 
   const frontEdges = addLoop(pattern, 'front', [

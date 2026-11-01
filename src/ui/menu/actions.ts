@@ -1,7 +1,7 @@
 import type { MutableRefObject } from 'react';
 import { isSplitLayout, useProjectStore, useSimStore, useUIStore } from '../../store/stores';
 import type { PaneId, PropTab, ViewLayout } from '../../store/stores';
-import { createStarterProject } from '../../pattern/template';
+import { createBlankProject } from '../../pattern/template';
 import { projectCodec, downloadTextFile, readFileAsText } from '../../io/codec';
 import { embedProjectAssets } from '../../io/projectPackage';
 import { exportGLB, exportOBJ, exportScreenshot } from '../../io/exporter';
@@ -26,6 +26,9 @@ interface MenuActionContext {
   /** Hidden file input owned by the app; 打开… routes through it. */
   projectInputRef: MutableRefObject<HTMLInputElement | null>;
 }
+
+/** Guards the startup restore against React's double effect run. */
+let startupRestoreStarted = false;
 
 /** Everything the menu bar and the shortcut handler can invoke, built once with the engine refs. */
 export interface MenuActions {
@@ -56,6 +59,7 @@ export interface MenuActions {
   exportPdf: () => void;
   exportTechPack: () => void;
   exportMarker: () => void;
+  exportBom: () => void;
   undo: () => void;
   redo: () => void;
   copySelection: () => void;
@@ -165,6 +169,23 @@ export async function writeAutosave(): Promise<void> {
   refreshAutosaveList();
 }
 
+/** Restores the newest autosave once per page load so a reload keeps the last session. */
+export function restoreAutosaveOnStartup(): void {
+  if (startupRestoreStarted) return;
+  startupRestoreStarted = true;
+  if (useUIStore.getState().autoSaveSeconds <= 0) return;
+  void readAutosave().then(record => {
+    if (!record) return;
+    useUIStore.getState().setLastAutosaveAt(record.savedAt);
+    if (useProjectStore.getState().history.canUndo) return;
+    try {
+      adopt(projectCodec.decode(record.json));
+    } catch {
+      // A corrupt snapshot leaves the starter project in place.
+    }
+  });
+}
+
 /** Builds the action set; refs are read on demand so the closures stay valid across re-renders. */
 export function createMenuActions(refs: MenuActionContext): MenuActions {
   const saveToJson = (name: string) => {
@@ -188,7 +209,9 @@ export function createMenuActions(refs: MenuActionContext): MenuActions {
   return {
     newProject: () => {
       if (!confirmDiscard()) return;
-      adopt(createStarterProject());
+      adopt(createBlankProject());
+      // Snapshot the blank project so a reload restores it instead of the previous session.
+      if (useUIStore.getState().autoSaveSeconds > 0) void writeAutosave();
     },
     openProject: () => refs.projectInputRef.current?.click(),
     openProjectFile: (file: File) => {
@@ -266,6 +289,7 @@ export function createMenuActions(refs: MenuActionContext): MenuActions {
     exportPdf: () => useMenuStore.getState().openDialog('exportPdf'),
     exportTechPack: () => useMenuStore.getState().openDialog('exportTechPack'),
     exportMarker: () => useMenuStore.getState().openDialog('exportMarker'),
+    exportBom: () => useMenuStore.getState().openDialog('exportBom'),
 
     undo: () => useProjectStore.getState().undo(),
     redo: () => useProjectStore.getState().redo(),

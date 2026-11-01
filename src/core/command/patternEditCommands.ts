@@ -1,6 +1,7 @@
 import type { Command, ProjectContext } from './command';
 import type {
-  Annotation, Dart, InternalLine, Measurement, Notch, Panel, Pattern, PatternEdge, PatternPoint, Seam, Vec2,
+  Annotation, Dart, InternalLine, Measurement, Notch, Panel, Pattern, PatternEdge, PatternPoint, Print, Seam,
+  Topstitch, Trim, Vec2,
 } from '../model/types';
 import { genId } from '../model/defaults';
 import { SnapshotCommand } from './patternSnapshot';
@@ -217,13 +218,16 @@ function arcFractionAt(arc: { center: Vec2; radius: number; startAngle: number; 
 
 /** Deletes selected panels with their edges, points, darts and internal lines. */
 export class DeleteSelectionCommand implements Command {
-  readonly label = '删除版型片';
+  readonly label = '删除版片';
   private saved: {
     panels: Panel[]; edges: PatternEdge[]; points: PatternPoint[];
     darts: Dart[]; lines: InternalLine[]; seams: Seam[];
     notches: Notch[];
     annotations: Annotation[];
     measurements: Measurement[];
+    prints: Print[];
+    topstitches: Topstitch[];
+    trims: Trim[];
   } | null = null;
 
   /** @param panelIds selected panel ids */
@@ -234,7 +238,7 @@ export class DeleteSelectionCommand implements Command {
     const panels = this.panelIds
       .map(id => pattern.panels[id])
       .filter((p): p is Panel => !!p);
-    if (panels.length === 0) throw new Error('没有可删除的版型片');
+    if (panels.length === 0) throw new Error('没有可删除的版片');
 
     const deleting = new Set(panels.map(p => p.id));
     const edgeIds = new Set<string>();
@@ -252,10 +256,10 @@ export class DeleteSelectionCommand implements Command {
     for (const panel of Object.values(pattern.panels)) {
       if (deleting.has(panel.id)) continue;
       for (const eid of [...panel.outlineEdgeIds, ...(panel.holes ?? []).flat()]) {
-        if (edgeIds.has(eid)) throw new Error('所选版型片与其他版型片共用边，无法删除');
+        if (edgeIds.has(eid)) throw new Error('所选版片与其他版片共用边，无法删除');
         const e = pattern.edges[eid];
         if (e && (pointIds.has(e.startPointId) || pointIds.has(e.endPointId))) {
-          throw new Error('所选版型片与其他版型片共用点，无法删除');
+          throw new Error('所选版片与其他版片共用点，无法删除');
         }
       }
     }
@@ -283,6 +287,11 @@ export class DeleteSelectionCommand implements Command {
       notches: Object.values(pattern.notches ?? {}).filter(n => edgeIds.has(n.edgeId)),
       annotations: Object.values(pattern.annotations ?? {}).filter(a => deleting.has(a.panelId)),
       measurements: Object.values(pattern.measurements ?? {}).filter(m => deleting.has(m.panelId)),
+      prints: Object.values(pattern.prints ?? {}).filter(p => deleting.has(p.panelId)),
+      topstitches: Object.values(pattern.topstitches ?? {}).filter(
+        s => deleting.has(s.panelId) || edgeIds.has(s.edgeId),
+      ),
+      trims: Object.values(pattern.trims ?? {}).filter(t => deleting.has(t.panelId)),
     };
 
     for (const id of deleting) delete pattern.panels[id];
@@ -294,6 +303,9 @@ export class DeleteSelectionCommand implements Command {
     for (const n of this.saved.notches) delete pattern.notches![n.id];
     for (const a of this.saved.annotations) delete pattern.annotations![a.id];
     for (const m of this.saved.measurements) delete pattern.measurements![m.id];
+    for (const p of this.saved.prints) delete pattern.prints![p.id];
+    for (const s of this.saved.topstitches) delete pattern.topstitches![s.id];
+    for (const t of this.saved.trims) delete pattern.trims![t.id];
   }
 
   undo(ctx: ProjectContext): void {
@@ -309,9 +321,15 @@ export class DeleteSelectionCommand implements Command {
     pattern.notches ??= {};
     pattern.annotations ??= {};
     pattern.measurements ??= {};
+    pattern.prints ??= {};
+    pattern.topstitches ??= {};
+    pattern.trims ??= {};
     for (const n of saved.notches) pattern.notches[n.id] = n;
     for (const a of saved.annotations) pattern.annotations[a.id] = a;
     for (const m of saved.measurements) pattern.measurements[m.id] = m;
+    for (const p of saved.prints) pattern.prints[p.id] = p;
+    for (const s of saved.topstitches) pattern.topstitches[s.id] = s;
+    for (const t of saved.trims) pattern.trims[t.id] = t;
     this.saved = null;
   }
 

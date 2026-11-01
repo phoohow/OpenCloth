@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Project } from '../core/model/types';
+import type { CameraConfig, Project } from '../core/model/types';
 import type { PanelClipboard } from '../core/command/panelClipboard';
 import type { RecentSummary, AutosaveSummary } from '../io/projectArchive';
 import { CommandHistory, type Command } from '../core/command/command';
@@ -17,10 +17,14 @@ interface ProjectStore {
   recent: RecentSummary[];
   /** Autosave snapshots shown under 文件 ▸ 自动保存. */
   autosaves: AutosaveSummary[];
+  /** Increments on every loaded project, so the viewport can reapply its saved camera. */
+  loadToken: number;
   executeCommand: (cmd: Command) => void;
   undo: () => void;
   redo: () => void;
   loadProject: (project: Project) => void;
+  /** Stores the viewport camera without touching the undo history. */
+  setCamera: (camera: CameraConfig) => void;
   setClipboard: (clip: PanelClipboard | null) => void;
   setRecent: (recent: RecentSummary[]) => void;
   setAutosaves: (autosaves: AutosaveSummary[]) => void;
@@ -34,11 +38,16 @@ interface ProjectStore {
 
 /**
  * One comparable string over everything a cloth rebuild reads: the pattern minus
- * draw-only flags and names, the avatar fields that shape the body (display, name and
- * transform sync to the scene without a rebuild) and the global mesh resolution.
+ * draw-only flags, names and production markings, the avatar fields that shape the body
+ * (display, name and transform sync to the scene without a rebuild) and the global mesh
+ * resolution.
  */
 export function computeClothSignature(project: Project): string {
-  const drawOnly = new Set(['display', 'visible', 'stitchVisible', 'name']);
+  const drawOnly = new Set([
+    'display', 'visible', 'stitchVisible', 'name', 'locked',
+    'notches', 'annotations', 'measurements', 'threadColor',
+    'prints', 'topstitches', 'trims',
+  ]);
   const pattern = JSON.stringify(project.pattern, (key, value) => (drawOnly.has(key) ? undefined : value));
   const body = avatarBodySignature(project.avatar);
   return `${pattern}|${body}|${project.scene.simulation.meshResolutionCm ?? null}`;
@@ -62,6 +71,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
     clipboard: null,
     recent: [],
     autosaves: [],
+    loadToken: 0,
 
     executeCommand(cmd) {
       const { project, history } = get();
@@ -84,7 +94,17 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
 
     loadProject(project) {
       get().history.clear();
-      set({ project, clipboard: null, clothSignature: computeClothSignature(project) });
+      set({
+        project,
+        clipboard: null,
+        clothSignature: computeClothSignature(project),
+        loadToken: get().loadToken + 1,
+      });
+    },
+
+    setCamera(camera) {
+      const { project } = get();
+      set({ project: { ...project, scene: { ...project.scene, camera } } });
     },
 
     setClipboard: (clip) => set({ clipboard: clip }),

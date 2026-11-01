@@ -16,13 +16,13 @@ import {
 
 // ===== Material tab ("材质") =====
 
-/** Texture slots of the appearance block, in display order. */
-const MAP_SLOTS: Array<{ slot: FabricMapSlot; label: string }> = [
-  { slot: 'albedo', label: '基础色贴图' },
-  { slot: 'normal', label: '法线贴图' },
-  { slot: 'roughness', label: '粗糙度贴图' },
-  { slot: 'metallic', label: '金属度贴图' },
-];
+/** Texture slots of the appearance block. */
+const MAP_SLOT_LABELS: Record<FabricMapSlot, string> = {
+  albedo: '基础色贴图',
+  normal: '法线贴图',
+  roughness: '粗糙度贴图',
+  metallic: '金属度贴图',
+};
 
 /** Fabric assigned to a panel row. */
 export function panelFabric(project: Project, panelId: string): Fabric | undefined {
@@ -51,7 +51,7 @@ export function MaterialTab({ project, panelId, engineRef }: {
   const fabric = panel ? project.fabrics[panel.fabricId] : undefined;
   /** Fabric type the + button creates from. */
   const [newPreset, setNewPreset] = useState<FabricPresetKey>('cotton');
-  if (!panel) return <Hint>版型片已删除。</Hint>;
+  if (!panel) return <Hint>版片已删除。</Hint>;
 
   /** Runs a material command and re-binds the cloth without restarting the simulation. */
   const run = (cmd: Command) => {
@@ -91,12 +91,26 @@ export function MaterialTab({ project, panelId, engineRef }: {
   };
   const maps = fabric?.appearance.maps ?? {};
 
+  /** One texture slot row; it sits directly under the parameter it modulates. */
+  const mapRow = (slot: FabricMapSlot) => (
+    <FileRow
+      label={MAP_SLOT_LABELS[slot]}
+      name={maps.fileNames?.[slot] || (maps[slot] ? '已设置' : '未设置')}
+      accept="image/*"
+      pickLabel="选择图片"
+      clearLabel="清除"
+      clearDisabled={!maps[slot]}
+      onPick={file => void pickMap(slot, file)}
+      onClear={() => clearMap(slot)}
+    />
+  );
+
   return (
     <>
       <Section title="材质槽">
         <SlotRow label="名称">
           {fabric
-            ? <InlineText value={fabric.name} title="改名对所有使用此材质的版型片生效" onChange={rename} />
+            ? <InlineText value={fabric.name} title="改名对所有使用此材质的版片生效" onChange={rename} />
             : <InlineText value="" disabled placeholder="未指定" onChange={() => {}} />}
           <PopupSelect
             title="换用其他材质"
@@ -110,22 +124,22 @@ export function MaterialTab({ project, panelId, engineRef }: {
             onClick={() => run(new AssignFabricCommand([panelId], ''))}
           ><Icon name="minus" size={12} /></IconButton>
         </SlotRow>
-        <Row label="引用次数">
+        <Row label="使用片数">
           <ValueButton
             disabled={users <= 1}
-            title={users > 1 ? `被 ${users} 个版型片引用，点击复制为独立材质` : undefined}
+            title={users > 1 ? `被 ${users} 个版片使用，点击复制为独立材质` : undefined}
             onClick={() => run(new DetachFabricCommand([panelId], project, panelId))}
           >{users}</ValueButton>
         </Row>
-        <SlotRow label="材质模型">
+        <SlotRow label="面料类型">
           <FlexSelect<FabricPresetKey>
             value={newPreset}
             options={FABRIC_PRESET_KEYS.map(k => ({ value: k, label: FABRIC_PRESET_LABELS[k] }))}
             onChange={setNewPreset}
-            title="新增材质使用的面料类型"
+            title="新建材质使用的面料类型"
           />
           <IconButton
-            title="按所选面料新建独立材质并赋给当前版型片"
+            title="按所选面料新建独立材质并赋给当前版片"
             onClick={() => run(new AddFabricCommand([panelId], project, newPreset))}
           ><Icon name="plus" size={12} /></IconButton>
         </SlotRow>
@@ -133,35 +147,40 @@ export function MaterialTab({ project, panelId, engineRef }: {
       {fabric ? (
         <Section title="外观">
           <ColorRow label="基础色" value={fabric.appearance.baseColor} onChange={v => appearance({ baseColor: v })} />
+          {mapRow('albedo')}
           <SliderRow label="粗糙度" min={0} max={1} step={0.01} value={fabric.appearance.roughness}
             onChange={v => appearance({ roughness: v })} />
+          {mapRow('roughness')}
           <SliderRow label="金属度" min={0} max={1} step={0.01} value={fabric.appearance.metallic}
             onChange={v => appearance({ metallic: v })} />
+          {mapRow('metallic')}
+          <SliderRow label="法线强度" min={0} max={2} step={0.05} value={fabric.appearance.normalScale}
+            onChange={v => appearance({ normalScale: v })} />
+          {mapRow('normal')}
           <SliderRow label="光泽强度" min={0} max={1} step={0.01} value={fabric.appearance.sheenIntensity}
             onChange={v => appearance({ sheenIntensity: v })} />
           <ColorRow label="光泽色" value={fabric.appearance.sheenColor} onChange={v => appearance({ sheenColor: v })} />
-          <SliderRow label="法线强度" min={0} max={2} step={0.05} value={fabric.appearance.normalScale}
-            onChange={v => appearance({ normalScale: v })} />
-          {MAP_SLOTS.map(({ slot, label }) => (
-            <FileRow
-              key={slot}
-              label={label}
-              name={maps.fileNames?.[slot] || (maps[slot] ? '已设置' : '未设置')}
-              accept="image/*"
-              pickLabel="选择图片"
-              clearLabel="清除"
-              clearDisabled={!maps[slot]}
-              onPick={file => void pickMap(slot, file)}
-              onClear={() => clearMap(slot)}
-            />
-          ))}
+          <SliderRow label="光泽粗糙度" min={0} max={1} step={0.01} value={fabric.appearance.sheenRoughness}
+            onChange={v => appearance({ sheenRoughness: v })} />
+          <SliderRow label="透光" min={0} max={1} step={0.01} value={fabric.appearance.transmission}
+            onChange={v => appearance({ transmission: v })} />
+          <SliderRow label="厚度" min={0} max={5} step={0.01} suffix="mm" value={fabric.appearance.thickness}
+            onChange={v => appearance({ thickness: v })} />
+          <SliderRow label="清漆" min={0} max={1} step={0.01} value={fabric.appearance.clearcoat}
+            onChange={v => appearance({ clearcoat: v })} />
+          <SliderRow label="清漆粗糙度" min={0} max={1} step={0.01} value={fabric.appearance.clearcoatRoughness}
+            onChange={v => appearance({ clearcoatRoughness: v })} />
+          <SliderRow label="各向异性" min={0} max={1} step={0.01} value={fabric.appearance.anisotropy}
+            onChange={v => appearance({ anisotropy: v })} />
+          <SliderRow label="虹彩" min={0} max={1} step={0.01} value={fabric.appearance.iridescence}
+            onChange={v => appearance({ iridescence: v })} />
           <Vec2Field label="平铺" value={fabric.appearance.uvTiling} step={0.1} precision={2} min={0.01}
             title="UV 平铺次数，最小 0.01" onCommit={v => appearance({ uvTiling: v })} />
           <Vec2Field label="偏移" value={fabric.appearance.uvOffset} step={0.1} precision={2}
             title="UV 偏移" onCommit={v => appearance({ uvOffset: v })} />
         </Section>
       ) : (
-        <Hint>这个版型片还没有材质，点右侧下拉换用一个，或用「＋」建一个。</Hint>
+        <Hint>这个版片还没有材质，点右侧下拉换用一个，或用「＋」建一个。</Hint>
       )}
     </>
   );
