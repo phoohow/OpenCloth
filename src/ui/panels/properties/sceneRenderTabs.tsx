@@ -81,59 +81,59 @@ export function RenderTab({ project }: { project: Project }) {
             : { value: m.value, label: m.label })}
           onChange={v => setDisplayMode(v)} />
         {rayUnavailable && <div style={styles.note}>本机 WebGPU 跑不了光线追踪：{rayUnavailable}。</div>}
-        {fitCheck && (
-          <>
-            <SliderRow label="贴近阈值" min={0} max={3} step={0.1} suffix="cm" value={fitTightCm}
-              onChange={v => setFitThresholds(v, fitLooseCm)} />
-            <SliderRow label="宽松阈值" min={0.5} max={8} step={0.1} suffix="cm" value={fitLooseCm}
-              onChange={v => setFitThresholds(fitTightCm, v)} />
-            {fitStats && (
-              <>
-                <Row label="顶点">{fitStats.vertices}</Row>
-                <Row label="穿透 / 贴近 / 合适 / 宽松">
-                  {fitStats.penetration} / {fitStats.tight} / {fitStats.ideal} / {fitStats.loose}
-                </Row>
-                <Row label="最小 / 平均 / 最大">
-                  {fitStats.minCm.toFixed(2)} / {fitStats.meanCm.toFixed(2)} / {fitStats.maxCm.toFixed(2)} cm
-                </Row>
-                <button
-                  style={styles.action}
-                  onClick={() => downloadTextFile(
-                    `${project.meta.name}-合身报告.csv`,
-                    '\ufeff' + fitReportCsv(project.meta.name, fitStats, { tightCm: fitTightCm, looseCm: fitLooseCm }),
-                    'text/csv;charset=utf-8',
-                  )}
-                >导出合身报告 CSV</button>
-              </>
-            )}
-            <div style={styles.note}>合身热图按布料顶点到模特碰撞体的间隙着色：红色穿透、橙色贴近、绿色合适、蓝色宽松；切回其他显示模式即恢复面料材质。</div>
-          </>
-        )}
-        {strainCheck && (
-          <>
-            <SliderRow label="色标下限" min={-1} max={0} step={0.05} value={strainMin}
-              onChange={v => setStrainRange(v, strainMax)} />
-            <SliderRow label="色标上限" min={0} max={1} step={0.05} value={strainMax}
-              onChange={v => setStrainRange(strainMin, v)} />
-            {strainStats && (
-              <>
-                <Row label="最小 / 最大 / 平均应变">
-                  {strainStats.min.toFixed(4)} / {strainStats.max.toFixed(4)} / {strainStats.meanAbs.toFixed(4)}
-                </Row>
-                <button
-                  style={styles.action}
-                  onClick={() => downloadTextFile(
-                    `${project.meta.name}-应变报告.csv`,
-                    '\ufeff' + strainReportCsv(project.meta.name, strainStats, { min: strainMin, max: strainMax }),
-                    'text/csv;charset=utf-8',
-                  )}
-                >导出应变报告 CSV</button>
-              </>
-            )}
-            <div style={styles.note}>应变热图按每个顶点相邻边的长度变化着色：蓝色受压缩、白色无变形、红色被拉伸。基准取平坦版型，色标范围由上下限控制；与合身热图互斥。</div>
-          </>
-        )}
       </Section>
+      {fitCheck && (
+        <Section title="合身热图">
+          <SliderRow label="贴近阈值" min={0} max={3} step={0.1} suffix="cm" value={fitTightCm}
+            onChange={v => setFitThresholds(v, fitLooseCm)} />
+          <SliderRow label="宽松阈值" min={0.5} max={8} step={0.1} suffix="cm" value={fitLooseCm}
+            onChange={v => setFitThresholds(fitTightCm, v)} />
+          {fitStats && (
+            <>
+              <Row label="顶点">{fitStats.vertices}</Row>
+              <Row label="穿透 / 贴近 / 合适 / 宽松">
+                {fitStats.penetration} / {fitStats.tight} / {fitStats.ideal} / {fitStats.loose}
+              </Row>
+              <Row label="最小 / 平均 / 最大">
+                {fitStats.minCm.toFixed(2)} / {fitStats.meanCm.toFixed(2)} / {fitStats.maxCm.toFixed(2)} cm
+              </Row>
+              <button
+                style={styles.action}
+                onClick={() => downloadTextFile(
+                  `${project.meta.name}-合身报告.csv`,
+                  '\ufeff' + fitReportCsv(project.meta.name, fitStats, { tightCm: fitTightCm, looseCm: fitLooseCm }),
+                  'text/csv;charset=utf-8',
+                )}
+              >导出合身报告 CSV</button>
+            </>
+          )}
+          <div style={styles.note}>合身热图按布料顶点到模特碰撞体的间隙着色：红色穿透、橙色贴近、绿色合适、蓝色宽松；切回其他显示模式即恢复面料材质。</div>
+        </Section>
+      )}
+      {strainCheck && (
+        <Section title="应变热图">
+          <SliderRow label="色标下限" min={-1} max={0} step={0.05} value={strainMin}
+            onChange={v => setStrainRange(v, strainMax)} />
+          <SliderRow label="色标上限" min={0} max={1} step={0.05} value={strainMax}
+            onChange={v => setStrainRange(strainMin, v)} />
+          {strainStats && (
+            <>
+              <Row label="最小 / 最大 / 平均应变">
+                {strainStats.min.toFixed(4)} / {strainStats.max.toFixed(4)} / {strainStats.meanAbs.toFixed(4)}
+              </Row>
+              <button
+                style={styles.action}
+                onClick={() => downloadTextFile(
+                  `${project.meta.name}-应变报告.csv`,
+                  '\ufeff' + strainReportCsv(project.meta.name, strainStats, { min: strainMin, max: strainMax }),
+                  'text/csv;charset=utf-8',
+                )}
+              >导出应变报告 CSV</button>
+            </>
+          )}
+          <div style={styles.note}>应变热图按每个顶点相邻边的长度变化着色：蓝色受压缩、白色无变形、红色被拉伸。基准取平坦版型，色标范围由上下限控制；与合身热图互斥。</div>
+        </Section>
+      )}
       {displayMode === 'raytraced' && (
         <>
           <Section title="光线追踪">

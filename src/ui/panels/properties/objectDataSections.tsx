@@ -30,7 +30,7 @@ import {
 } from '../../sceneTree';
 import {
   commitEnvironmentReset, commitReferenceOpacity, patchLight, patchValue, removeLight, removeReference,
-  setAvatarDisplay, type EngineRef,
+  type EngineRef,
 } from '../../sceneCommands';
 import { importAvatarViaPicker, importEnvironmentViaPicker } from '../../modelImport';
 import { ButtonRow, CheckRow, ColorRow, Hint, InlineText, PopupSelect, Row, Section, SelectRow, SliderRow, SmallButton, TextRow } from '../../widgets/propertyRows';
@@ -56,7 +56,7 @@ export function ObjectData({ project, nodeId, kind, engineRef }: {
 }) {
   switch (kind) {
     case 'panel': return <PanelData project={project} panelId={nodeId} />;
-    case 'avatar': return <AvatarData project={project} engineRef={engineRef} />;
+    case 'avatar': return <AvatarData project={project} />;
     case 'reference': return <ReferenceData project={project} nodeId={nodeId} engineRef={engineRef} />;
     case 'light': return <LightData project={project} nodeId={nodeId} />;
     case 'seam': return <SeamData project={project} nodeId={nodeId} />;
@@ -153,14 +153,17 @@ function PanelData({ project, panelId }: { project: Project; panelId: string }) 
           </span>
         </Row>
         <CheckRow label="等比缩放" checked={keepRatio} onChange={setKeepRatio} />
-        <Row label="倒圆角">
+        <div style={styles.note}>尺寸按包围盒等比或拉伸缩放，控制柄、圆弧圆心与半径、内部线、省尖和注释一起跟随。圆弧边只能等比缩放；与其它片共用顶点的片需先断开。</div>
+      </Section>
+      <Section title="倒圆角">
+        <Row label="半径">
           <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <NumberField value={cornerRadius} step={0.5} precision={2} suffix="cm" title="圆角半径"
               onCommit={v => setCornerRadius(v)} />
             <SmallButton onClick={roundCorners} title="给该片当前所有尖角倒成切弧">倒圆角</SmallButton>
           </span>
         </Row>
-        <div style={styles.note}>尺寸按包围盒等比或拉伸缩放，控制柄、圆弧圆心与半径、内部线、省尖和注释一起跟随。圆弧边只能等比缩放；与其它片共用顶点的片需先断开。倒圆角会把尖角变成弧，之后再点只处理剩下的尖角。</div>
+        <div style={styles.note}>倒圆角把当前所有尖角切成圆弧；之后再点只处理剩下的尖角。</div>
       </Section>
       <Section title="生产">
         <SliderRow label="布纹线角度" min={-180} max={180} step={1} suffix="°" value={panel.grainAngleDeg ?? 0} commitOnRelease
@@ -218,23 +221,27 @@ export function PanelMeshData({ project, panelId }: { project: Project; panelId:
   );
 
   return (
-    <Section title="布料网格">
-      <Row label="网格密度">
-        <NumberField value={panel.meshResolutionCm} step={0.5} precision={2} min={0.5} max={10} suffix="cm" title="逐片网格密度；修改只重建当前片"
-          onCommit={v => {
-            try {
-              useProjectStore.getState().executeCommand(new SetPanelMeshResolutionCommand(panelId, v));
-            } catch (err) {
-              reportActionError(err);
-            }
-          }} />
-      </Row>
-      <Row label="碰撞层">
-        <NumberField value={panel.collisionLayer ?? 0} step={1} precision={0} min={0} max={9} title="0 为最内层；层差越大，自碰撞把外层推得越远"
-          onCommit={v => setPanel('修改碰撞层', { collisionLayer: Math.round(v) })} />
-      </Row>
-      <div style={styles.note}>布料自碰撞开启时，碰撞层 0 为最内层，层差每加 1 按「层间距」额外分开一段距离。</div>
-    </Section>
+    <>
+      <Section title="布料网格">
+        <Row label="网格密度">
+          <NumberField value={panel.meshResolutionCm} step={0.5} precision={2} min={0.5} max={10} suffix="cm" title="逐片网格密度；修改只重建当前片"
+            onCommit={v => {
+              try {
+                useProjectStore.getState().executeCommand(new SetPanelMeshResolutionCommand(panelId, v));
+              } catch (err) {
+                reportActionError(err);
+              }
+            }} />
+        </Row>
+      </Section>
+      <Section title="碰撞">
+        <Row label="碰撞层">
+          <NumberField value={panel.collisionLayer ?? 0} step={1} precision={0} min={0} max={9} title="0 为最内层；层差越大，自碰撞把外层推得越远"
+            onCommit={v => setPanel('修改碰撞层', { collisionLayer: Math.round(v) })} />
+        </Row>
+        <div style={styles.note}>布料自碰撞开启时，碰撞层 0 为最内层，层差每加 1 按「层间距」额外分开一段距离。</div>
+      </Section>
+    </>
   );
 }
 
@@ -257,14 +264,14 @@ export function GeneratorData({ project, nodeId, kind, engineRef }: {
   switch (kind) {
     case 'panel': return <PanelDrapeData project={project} panelId={nodeId} />;
     case 'avatar': return <AvatarModelData project={project} engineRef={engineRef} />;
-    default: return <Hint>这个对象没有生成器设置。</Hint>;
+    default: return <Hint>这个对象没有生成设置。</Hint>;
   }
 }
 
 const drapeRegionLabel = (region: 'torso' | 'arm' | 'leg' | 'neck'): string =>
   ({ torso: '躯干', arm: '手臂', leg: '腿', neck: '领口' }[region]);
 
-function AvatarData({ project, engineRef }: { project: Project; engineRef: EngineRef }) {
+function AvatarData({ project }: { project: Project }) {
   const avatar = project.avatar;
 
   /** Replaces the avatar record so the 3D view rebuilds the body. */
@@ -278,9 +285,6 @@ function AvatarData({ project, engineRef }: { project: Project; engineRef: Engin
   return (
     <>
       <Section title="体型">
-        <SelectRow label="模特外观" value={avatar.display === 'translucent' ? 'translucent' : 'solid'}
-          options={[{ value: 'solid', label: '实体' }, { value: 'translucent', label: '半透明' }]}
-          onChange={v => setAvatarDisplay(v === 'translucent' ? 'translucent' : 'visible', engineRef)} />
         <SliderRow label="身高" min={140} max={200} step={1} suffix="cm" value={avatar.params.heightCm} commitOnRelease
           onChange={v => setAvatar('修改身高', { params: { ...avatar.params, heightCm: v } })} />
         <SliderRow label="胸围" min={60} max={140} step={1} suffix="cm" value={avatar.params.chestCm} commitOnRelease
@@ -289,6 +293,8 @@ function AvatarData({ project, engineRef }: { project: Project; engineRef: Engin
           onChange={v => setAvatar('修改腰围', { params: { ...avatar.params, waistCm: v } })} />
         <SliderRow label="臀围" min={60} max={150} step={1} suffix="cm" value={avatar.params.hipCm} commitOnRelease
           onChange={v => setAvatar('修改臀围', { params: { ...avatar.params, hipCm: v } })} />
+      </Section>
+      <Section title="姿态">
         <SliderRow label="手臂外展" min={0} max={90} step={1} suffix="°" value={toDeg(avatar.params.poseArmAngleRad ?? 0.12)} commitOnRelease
           onChange={v => setAvatar('修改手臂外展', { params: { ...avatar.params, poseArmAngleRad: toRad(v) } })} />
         <SliderRow label="腿部开合" min={0} max={45} step={1} suffix="°" value={toDeg(avatar.params.poseLegSpreadRad ?? 0)} commitOnRelease
@@ -313,7 +319,7 @@ function AvatarData({ project, engineRef }: { project: Project; engineRef: Engin
             ))}
           </ButtonRow>
         </Row>
-        <div style={styles.note}>尺寸改动会重建模特、布料与模拟状态。</div>
+        <div style={styles.note}>体型与姿态改动都会重建模特、布料与模拟状态。</div>
       </Section>
     </>
   );
@@ -418,32 +424,37 @@ function LightData({ project, nodeId }: { project: Project; nodeId: string }) {
           <Vec3Field label="目标" value={light.target} step={0.05} precision={2} suffix="m"
             onCommit={v => set('修改光源目标', { target: v })} />
         )}
-        {punctual && (
-          <SliderRow label="照射距离" min={0} max={20} step={0.5} suffix="m" value={light.distance} commitOnRelease
-            onChange={v => set('修改光源距离', { distance: v })} />
+        {light.type === 'directional' && (
+          <div style={styles.note}>方向光的位置只决定照射方向，光线平行射向目标点。</div>
         )}
-        {light.type === 'spot' && (
-          <>
-            <SliderRow label="锥角" min={1} max={120} step={1} suffix="°" value={light.coneAngleDeg} commitOnRelease
-              onChange={v => set('修改聚光灯锥角', { coneAngleDeg: v })} />
-            <SliderRow label="边缘柔化" min={0} max={1} step={0.05} value={light.penumbra} commitOnRelease
-              onChange={v => set('修改聚光灯边缘', { penumbra: v })} />
-          </>
-        )}
-        {light.type === 'area' && (
-          <>
-            <SliderRow label="宽度" min={0.05} max={10} step={0.05} suffix="m" value={light.width} commitOnRelease
-              onChange={v => set('修改面积光宽度', { width: v })} />
-            <SliderRow label="高度" min={0.05} max={10} step={0.05} suffix="m" value={light.height} commitOnRelease
-              onChange={v => set('修改面积光高度', { height: v })} />
-          </>
-        )}
-        <div style={styles.note}>
-          {light.type === 'directional'
-            ? '方向光的位置只决定照射方向，光线平行射向目标点。'
-            : '强度按平方反比衰减，距离 0 表示不限距离。'}
-        </div>
       </Section>
+      {light.type !== 'directional' && (
+        <Section title="照射范围">
+          {punctual && (
+            <SliderRow label="照射距离" min={0} max={20} step={0.5} suffix="m" value={light.distance} commitOnRelease
+              onChange={v => set('修改光源距离', { distance: v })} />
+          )}
+          {light.type === 'spot' && (
+            <>
+              <SliderRow label="锥角" min={1} max={120} step={1} suffix="°" value={light.coneAngleDeg} commitOnRelease
+                onChange={v => set('修改聚光灯锥角', { coneAngleDeg: v })} />
+              <SliderRow label="边缘柔化" min={0} max={1} step={0.05} value={light.penumbra} commitOnRelease
+                onChange={v => set('修改聚光灯边缘', { penumbra: v })} />
+            </>
+          )}
+          {light.type === 'area' && (
+            <>
+              <SliderRow label="宽度" min={0.05} max={10} step={0.05} suffix="m" value={light.width} commitOnRelease
+                onChange={v => set('修改面积光宽度', { width: v })} />
+              <SliderRow label="高度" min={0.05} max={10} step={0.05} suffix="m" value={light.height} commitOnRelease
+                onChange={v => set('修改面积光高度', { height: v })} />
+            </>
+          )}
+          <div style={styles.note}>
+            {punctual ? '强度按平方反比衰减，距离 0 表示不限距离。' : '强度按平方反比衰减。'}
+          </div>
+        </Section>
+      )}
     </>
   );
 }

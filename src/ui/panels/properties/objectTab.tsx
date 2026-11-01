@@ -12,7 +12,7 @@ import {
   setLightsEnabled, setPanelsVisible, setProductionVisible, setReferencesVisible, setSeamsStitchVisible,
   type EngineRef,
 } from '../../sceneCommands';
-import { ButtonRow, CheckRow, Hint, Row, Section, SmallButton, TextRow } from '../../widgets/propertyRows';
+import { ButtonRow, CheckRow, Hint, Row, Section, SelectRow, SmallButton, TextRow } from '../../widgets/propertyRows';
 import { Vec3Field } from '../../widgets/numberField';
 import { degVec, radVec } from './constants';
 import { styles } from './styles';
@@ -123,6 +123,11 @@ function ObjectTab({ project, nodeId, kind, label, note, engineRef }: {
         <TextRow label="名称" value={storedName ?? label} onChange={rename} />
         {shown !== null && (
           <CheckRow label={light || isEnvironment ? '启用' : '可见性'} checked={shown} onChange={setShown} />
+        )}
+        {isAvatar && (
+          <SelectRow label="外观" value={project.avatar.display === 'translucent' ? 'translucent' : 'solid'}
+            options={[{ value: 'solid', label: '实体' }, { value: 'translucent', label: '半透明' }]}
+            onChange={v => setAvatarDisplay(v === 'translucent' ? 'translucent' : 'visible', engineRef)} />
         )}
         {panel && <PanelManageRows panel={panel} />}
         <Row label="类型">{note ? `${SCENE_KIND_LABELS[kind]} · ${note}` : SCENE_KIND_LABELS[kind]}</Row>

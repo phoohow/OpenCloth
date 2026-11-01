@@ -14,11 +14,11 @@ export interface PropTabOption {
 /** Properties-editor tabs in rail order; `prefs.ts` validates the persisted value against the same list. */
 export const PROP_TAB_OPTIONS: PropTabOption[] = [
   { key: 'object', icon: 'cube', label: '对象' },
-  { key: 'material', icon: 'droplet', label: '材质' },
-  { key: 'simulator', icon: 'atom', label: '模拟器' },
-  { key: 'generator', icon: 't-shirt', label: '生成器' },
-  { key: 'render', icon: 'aperture', label: '渲染' },
-  { key: 'project', icon: 'folder', label: '工程' },
+  { key: 'material', icon: 'swatch', label: '材质' },
+  { key: 'simulator', icon: 'waves', label: '模拟' },
+  { key: 'generator', icon: 'sparkles', label: '生成' },
+  { key: 'render', icon: 'image', label: '渲染' },
+  { key: 'project', icon: 'briefcase', label: '工程' },
 ];
 
 /** One 3D camera preset: engine key, menu/rail label and the shortcut/menu id. */
