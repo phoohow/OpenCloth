@@ -1,8 +1,10 @@
-import type { Pattern, Panel } from '../../core/model/types';
-import { vec2 } from '../../core/model/types';
+import type { PanelDrape, Pattern, Vec2 } from '../../core/model/types';
 import { PatternBuilder } from './templateKit';
-import { offsetPanel } from './patternLayout';
+import { layoutRows } from './patternLayout';
+import { frontArc, backArc } from './drapeArcs';
 import { cm, defineTemplate } from './garmentTemplate';
+import { addBodice, addSleeve, capHeightForArmhole } from './panelShapes';
+import { sampleEdge } from '../panel/panelBuilder';
 
 /** Body measurements of a T-shirt, in centimeters. */
 export interface TShirtParams {
@@ -16,147 +18,119 @@ export interface TShirtParams {
 
 export const DEFAULT_TSHIRT_PARAMS: TShirtParams = {
   chestCm: 96,
-  lengthCm: 68,
+  lengthCm: 64,
   sleeveLengthCm: 20,
   shoulderCm: 42,
   neckWidthCm: 18,
   neckDepthCm: 8,
 };
 
-/** Builds a T-shirt pattern: front panel, back panel and two sleeves. */
+/** Shoulder drop from the neck seam to the shoulder tip, a flat line reads as a plank. */
+const SHOULDER_SLOPE_CM = 4.5;
+
+/** Back neck drop as a share of the front drop. */
+const BACK_NECK_SHARE = 0.3;
+
+/** Builds a T-shirt pattern: front panel, back panel and two short sleeves. */
 export function generateTShirt(params: TShirtParams = DEFAULT_TSHIRT_PARAMS, fabricId = 'fabric_default'): Pattern {
   const builder = new PatternBuilder(fabricId);
   const { chestCm, lengthCm, sleeveLengthCm, shoulderCm, neckWidthCm, neckDepthCm } = params;
 
-  const halfChest = chestCm / 4;
+  const halfWidth = chestCm / 4;
   const halfShoulder = shoulderCm / 2;
-  const halfNeck = neckWidthCm / 2;
-
-  // ===== Front panel =====
-  // Outline points, counter-clockwise from the left hem
-  const fHemLeft = builder.point(-halfChest, 0);
-  const fHemRight = builder.point(halfChest, 0);
-  const fUnderarmRight = builder.point(halfChest, lengthCm * 0.75);
-  const fShoulderRight = builder.point(halfShoulder, lengthCm);
-  const fNeckRight = builder.point(halfNeck, lengthCm);
-  const fNeckBottom = builder.point(0, lengthCm - neckDepthCm);
-  const fNeckLeft = builder.point(-halfNeck, lengthCm);
-  const fShoulderLeft = builder.point(-halfShoulder, lengthCm);
-  const fUnderarmLeft = builder.point(-halfChest, lengthCm * 0.75);
-
-  const fEdgeHem = builder.line(fHemLeft, fHemRight, 'hem');
-  const fEdgeSideRight = builder.line(fHemRight, fUnderarmRight, 'sideSeam');
-  const fEdgeArmRight = builder.bezier(fUnderarmRight, fShoulderRight,
-    vec2(halfChest, lengthCm * 0.88), vec2(halfShoulder + 2, lengthCm * 0.92), 'armhole');
-  const fEdgeShoulderRight = builder.line(fShoulderRight, fNeckRight, 'shoulder');
-  const fEdgeNeckRight = builder.bezier(fNeckRight, fNeckBottom,
-    vec2(halfNeck * 0.5, lengthCm - 1), vec2(halfNeck * 0.4, lengthCm - neckDepthCm + 1), 'neckline');
-  const fEdgeNeckLeft = builder.bezier(fNeckBottom, fNeckLeft,
-    vec2(-halfNeck * 0.4, lengthCm - neckDepthCm + 1), vec2(-halfNeck * 0.5, lengthCm - 1), 'neckline');
-  const fEdgeShoulderLeft = builder.line(fNeckLeft, fShoulderLeft, 'shoulder');
-  const fEdgeArmLeft = builder.bezier(fShoulderLeft, fUnderarmLeft,
-    vec2(-halfShoulder - 2, lengthCm * 0.92), vec2(-halfChest, lengthCm * 0.88), 'armhole');
-  const fEdgeSideLeft = builder.line(fUnderarmLeft, fHemLeft, 'sideSeam');
-
-  const front = builder.panel({
-    name: '前片',
-    edges: [fEdgeHem, fEdgeSideRight, fEdgeArmRight, fEdgeShoulderRight,
-      fEdgeNeckRight, fEdgeNeckLeft, fEdgeShoulderLeft, fEdgeArmLeft, fEdgeSideLeft],
-    drape: { region: 'torso', plumb: true },
-  });
-
-  // ===== Back panel =====
-  const bHemLeft = builder.point(-halfChest, 0);
-  const bHemRight = builder.point(halfChest, 0);
-  const bUnderarmRight = builder.point(halfChest, lengthCm * 0.75);
-  const bShoulderRight = builder.point(halfShoulder, lengthCm);
-  const bNeckRight = builder.point(halfNeck, lengthCm);
-  const bNeckBottom = builder.point(0, lengthCm - neckDepthCm * 0.4);
-  const bNeckLeft = builder.point(-halfNeck, lengthCm);
-  const bShoulderLeft = builder.point(-halfShoulder, lengthCm);
-  const bUnderarmLeft = builder.point(-halfChest, lengthCm * 0.75);
-
-  const bEdgeHem = builder.line(bHemLeft, bHemRight, 'hem');
-  const bEdgeSideRight = builder.line(bHemRight, bUnderarmRight, 'sideSeam');
-  const bEdgeArmRight = builder.bezier(bUnderarmRight, bShoulderRight,
-    vec2(halfChest, lengthCm * 0.88), vec2(halfShoulder + 2, lengthCm * 0.92), 'armhole');
-  const bEdgeShoulderRight = builder.line(bShoulderRight, bNeckRight, 'shoulder');
-  const bEdgeNeckRight = builder.bezier(bNeckRight, bNeckBottom,
-    vec2(halfNeck * 0.5, lengthCm - 0.5), vec2(halfNeck * 0.3, lengthCm - neckDepthCm * 0.4 + 0.5), 'neckline');
-  const bEdgeNeckLeft = builder.bezier(bNeckBottom, bNeckLeft,
-    vec2(-halfNeck * 0.3, lengthCm - neckDepthCm * 0.4 + 0.5), vec2(-halfNeck * 0.5, lengthCm - 0.5), 'neckline');
-  const bEdgeShoulderLeft = builder.line(bNeckLeft, bShoulderLeft, 'shoulder');
-  const bEdgeArmLeft = builder.bezier(bShoulderLeft, bUnderarmLeft,
-    vec2(-halfShoulder - 2, lengthCm * 0.92), vec2(-halfChest, lengthCm * 0.88), 'armhole');
-  const bEdgeSideLeft = builder.line(bUnderarmLeft, bHemLeft, 'sideSeam');
-
-  const back = builder.panel({
-    name: '后片',
-    edges: [bEdgeHem, bEdgeSideRight, bEdgeArmRight, bEdgeShoulderRight,
-      bEdgeNeckRight, bEdgeNeckLeft, bEdgeShoulderLeft, bEdgeArmLeft, bEdgeSideLeft],
-    drape: { region: 'torso', startDeg: 270, sweepDeg: -180, plumb: true },
-  });
-
-  // ===== Sleeves =====
-  // Sleeve round sized off the chest.
+  // Armhole depth is a share of the chest, measured down from the shoulder tip.
+  const armholeDepth = Math.min(chestCm * 0.205, lengthCm * 0.38);
+  const underarmAt = (lengthCm - SHOULDER_SLOPE_CM - armholeDepth) / lengthCm;
+  // A sleeve is cut as a tube, so its flat width is the arm girth plus ease.
   const sleeveWidth = chestCm * 0.32;
-  const sleeveCapHeight = Math.min(9, sleeveLengthCm * 0.45);
-  const sleeveShaft = sleeveLengthCm - sleeveCapHeight;
 
-  interface SleeveParts { panel: Panel; capFrontHalf: string; capBackHalf: string; innerRight: string; innerLeft: string; }
+  const front = addBodice(builder, {
+    name: '前片',
+    halfWidthCm: halfWidth,
+    halfShoulderCm: halfShoulder,
+    lengthCm,
+    neckHalfWidthCm: neckWidthCm / 2,
+    neckDepthCm,
+    underarmAt,
+    shoulderSlopeCm: SHOULDER_SLOPE_CM,
+    drape: { region: 'torso', ...frontArc(180), plumb: true },
+  });
 
-  function makeSleeve(name: string): SleeveParts {
-    const cuffLeft = builder.point(-sleeveWidth / 2, 0);
-    const cuffRight = builder.point(sleeveWidth / 2, 0);
-    const underarmRight = builder.point(sleeveWidth / 2, sleeveShaft);
-    const crown = builder.point(0, sleeveShaft + sleeveCapHeight);
-    const underarmLeft = builder.point(-sleeveWidth / 2, sleeveShaft);
+  const back = addBodice(builder, {
+    name: '后片',
+    halfWidthCm: halfWidth,
+    halfShoulderCm: halfShoulder,
+    lengthCm,
+    neckHalfWidthCm: neckWidthCm / 2,
+    neckDepthCm: neckDepthCm * BACK_NECK_SHARE,
+    underarmAt,
+    shoulderSlopeCm: SHOULDER_SLOPE_CM,
+    drape: { region: 'torso', ...backArc(180), plumb: true },
+  });
 
-    const edgeCuff = builder.line(cuffLeft, cuffRight, 'hem');
-    const innerRight = builder.line(cuffRight, underarmRight, 'sideSeam');
-    const capFrontHalf = builder.bezier(underarmRight, crown,
-      vec2(sleeveWidth / 2, sleeveShaft + sleeveCapHeight * 0.6),
-      vec2(sleeveWidth * 0.18, sleeveShaft + sleeveCapHeight * 0.98), 'sleeveCap');
-    const capBackHalf = builder.bezier(crown, underarmLeft,
-      vec2(-sleeveWidth * 0.18, sleeveShaft + sleeveCapHeight * 0.98),
-      vec2(-sleeveWidth / 2, sleeveShaft + sleeveCapHeight * 0.6), 'sleeveCap');
-    const innerLeft = builder.line(underarmLeft, cuffLeft, 'sideSeam');
+  // The cap arc must match the armhole arc, so the cap height follows from the armhole length.
+  const armholeArc = arcLength(sampleEdge(builder.pattern, front.armholeRight));
+  const capHeight = capHeightForArmhole(sleeveWidth, armholeArc, Math.max(sleeveLengthCm - 4, 8));
+  const sleeveShaft = Math.max(sleeveLengthCm - capHeight, 2);
 
-    const panel = builder.panel({
-      name,
-      edges: [edgeCuff, innerRight, capFrontHalf, capBackHalf, innerLeft],
-      drape: { region: 'arm', side: name.includes('左') ? 'left' : 'right', rowWrap: true, pinTop: false },
-    });
-    return { panel, capFrontHalf, capBackHalf, innerRight, innerLeft };
-  }
+  const sleeveDrape = (side: 'left' | 'right'): PanelDrape => ({
+    region: 'arm',
+    side,
+    rowWrap: true,
+    pinTop: false,
+    // The cap crown joins the shoulder tip, which sits one slope below the neck seam.
+    anchor: 'shoulderTop',
+    anchorOffsetCm: -SHOULDER_SLOPE_CM,
+    // A cap row only covers the arc its own fabric is long, so the cap narrows toward the
+    // outer side of the arm and keeps its rest length instead of stretching around it.
+    startDeg: side === 'left' ? 0 : -180,
+    sweepDeg: 360,
+  });
 
-  const sleeveL = makeSleeve('左袖');
-  const sleeveR = makeSleeve('右袖');
+  const sleeveL = addSleeve(builder, {
+    name: '左袖',
+    widthCm: sleeveWidth,
+    lengthCm: sleeveShaft,
+    capHeightCm: capHeight,
+    side: 'left',
+    drape: sleeveDrape('left'),
+  });
 
-  // ===== 2D layout =====
-  // Sleeves outboard, front and back side by side, all centered on the origin with a gap.
-  const gapCm = 4;
-  const bodyX = halfChest + gapCm / 2;
-  const sleeveX = bodyX + halfChest + gapCm + sleeveWidth / 2;
-  offsetPanel(builder.pattern, front, -bodyX, 0);
-  offsetPanel(builder.pattern, back, bodyX, 0);
-  offsetPanel(builder.pattern, sleeveL.panel, -sleeveX, 0);
-  offsetPanel(builder.pattern, sleeveR.panel, sleeveX, 0);
+  const sleeveR = addSleeve(builder, {
+    name: '右袖',
+    widthCm: sleeveWidth,
+    lengthCm: sleeveShaft,
+    capHeightCm: capHeight,
+    side: 'right',
+    drape: sleeveDrape('right'),
+  });
 
-  // ===== Seams =====
-  builder.seam(fEdgeShoulderRight, bEdgeShoulderRight);
-  builder.seam(fEdgeShoulderLeft, bEdgeShoulderLeft);
-  builder.seam(fEdgeSideRight, bEdgeSideRight);
-  builder.seam(fEdgeSideLeft, bEdgeSideLeft);
+  layoutRows(builder.pattern, [[sleeveL.panel, front.panel, back.panel, sleeveR.panel]]);
 
-  builder.seam(sleeveR.capFrontHalf, fEdgeArmRight, { type: 'gather' });
-  builder.seam(sleeveR.capBackHalf, bEdgeArmRight, { type: 'gather' });
-  builder.seam(sleeveL.capFrontHalf, fEdgeArmLeft, { type: 'gather' });
-  builder.seam(sleeveL.capBackHalf, bEdgeArmLeft, { type: 'gather' });
-  builder.seam(sleeveR.innerRight, sleeveR.innerLeft, { flipB: true });
-  builder.seam(sleeveL.innerRight, sleeveL.innerLeft, { flipB: true });
+  // Shoulder and side seams join matching ends.
+  builder.seam(front.shoulderRight, back.shoulderRight);
+  builder.seam(front.shoulderLeft, back.shoulderLeft);
+  builder.seam(front.sideRight, back.sideRight);
+  builder.seam(front.sideLeft, back.sideLeft);
+
+  // The armhole runs underarm to shoulder, the cap left half runs crown to underarm.
+  builder.seam(sleeveR.capRight, front.armholeRight);
+  builder.seam(sleeveR.capLeft, back.armholeRight, { flipB: true });
+  builder.seam(sleeveL.capRight, front.armholeLeft);
+  builder.seam(sleeveL.capLeft, back.armholeLeft, { flipB: true });
+  builder.seam(sleeveR.seamRight, sleeveR.seamLeft, { flipB: true });
+  builder.seam(sleeveL.seamRight, sleeveL.seamLeft, { flipB: true });
 
   return builder.pattern;
+}
+
+/** Length along a sampled outline edge, in centimeters. */
+function arcLength(points: Vec2[]): number {
+  let sum = 0;
+  for (let i = 1; i < points.length; i++) {
+    sum += Math.hypot(points[i]!.x - points[i - 1]!.x, points[i]!.y - points[i - 1]!.y);
+  }
+  return sum;
 }
 
 export const tShirtTemplate = defineTemplate({

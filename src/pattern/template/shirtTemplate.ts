@@ -111,9 +111,9 @@ export function generateShirt(params: ShirtParams = DEFAULT_SHIRT_PARAMS, fabric
   builder.seam(front.sideLeft, back.sideLeft);
 
   builder.seam(sleeveR.capRight, front.armholeRight, { type: 'gather' });
-  builder.seam(sleeveR.capLeft, back.armholeRight, { type: 'gather' });
+  builder.seam(sleeveR.capLeft, back.armholeRight, { type: 'gather', flipB: true });
   builder.seam(sleeveL.capRight, front.armholeLeft, { type: 'gather' });
-  builder.seam(sleeveL.capLeft, back.armholeLeft, { type: 'gather' });
+  builder.seam(sleeveL.capLeft, back.armholeLeft, { type: 'gather', flipB: true });
   builder.seam(sleeveR.seamRight, sleeveR.seamLeft, { flipB: true });
   builder.seam(sleeveL.seamRight, sleeveL.seamLeft, { flipB: true });
 

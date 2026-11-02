@@ -1,4 +1,4 @@
-import type { Panel, PanelDrape } from '../../core/model/types';
+import type { Panel, PanelDrape, Vec2 } from '../../core/model/types';
 import { vec2 } from '../../core/model/types';
 import type { PatternBuilder } from './templateKit';
 
@@ -31,6 +31,8 @@ export interface BodiceOptions {
   neckDepthCm: number;
   /** Underarm height as a fraction of the panel length. */
   underarmAt?: number;
+  /** Drop of the shoulder tip below the neck seam, which a flat shoulder line omits. */
+  shoulderSlopeCm?: number;
   drape: PanelDrape;
   seamAllowanceCm?: number;
 }
@@ -38,21 +40,27 @@ export interface BodiceOptions {
 /** Adds a front or back bodice panel: hem, side seams, curved armholes, shoulders and one neckline edge. */
 export function addBodice(builder: PatternBuilder, o: BodiceOptions): BodiceEdges {
   const top = o.lengthCm;
-  const underarmY = top * (o.underarmAt ?? 0.75);
+  const shoulderY = top - (o.shoulderSlopeCm ?? 0);
+  const underarmY = shoulderY - Math.max(shoulderY - top * (o.underarmAt ?? 0.75), 0.5);
+  const armholeH = shoulderY - underarmY;
   const halfNeck = o.neckHalfWidthCm;
   const hemL = builder.point(-o.halfWidthCm, 0);
   const hemR = builder.point(o.halfWidthCm, 0);
   const underarmR = builder.point(o.halfWidthCm, underarmY);
-  const shoulderR = builder.point(o.halfShoulderCm, top);
+  const shoulderR = builder.point(o.halfShoulderCm, shoulderY);
   const neckR = builder.point(halfNeck, top);
   const neckL = builder.point(-halfNeck, top);
-  const shoulderL = builder.point(-o.halfShoulderCm, top);
+  const shoulderL = builder.point(-o.halfShoulderCm, shoulderY);
   const underarmL = builder.point(-o.halfWidthCm, underarmY);
+  // The armhole bulges out under the arm, then turns in under the shoulder tip.
+  const armholeOut = armholeH * 0.62;
+  const armholeIn = armholeH * 0.1;
 
   const hem = builder.line(hemL, hemR, 'hem');
   const sideRight = builder.line(hemR, underarmR, 'sideSeam');
   const armholeRight = builder.bezier(underarmR, shoulderR,
-    vec2(o.halfWidthCm, top * 0.88), vec2(o.halfShoulderCm + 2, top * 0.92), 'armhole');
+    vec2(o.halfWidthCm, underarmY + armholeOut),
+    vec2(o.halfShoulderCm + 1.5, shoulderY - armholeIn), 'armhole');
   const shoulderRight = builder.line(shoulderR, neckR, 'shoulder');
   // One cubic carries the whole neck opening, dropping about neckDepthCm at the center.
   const neckline = builder.bezier(neckR, neckL,
@@ -60,7 +68,8 @@ export function addBodice(builder: PatternBuilder, o: BodiceOptions): BodiceEdge
     vec2(-halfNeck * 0.55, top - o.neckDepthCm * (4 / 3)), 'neckline');
   const shoulderLeft = builder.line(neckL, shoulderL, 'shoulder');
   const armholeLeft = builder.bezier(shoulderL, underarmL,
-    vec2(-o.halfShoulderCm - 2, top * 0.92), vec2(-o.halfWidthCm, top * 0.88), 'armhole');
+    vec2(-o.halfShoulderCm - 1.5, shoulderY - armholeIn),
+    vec2(-o.halfWidthCm, underarmY + armholeOut), 'armhole');
   const sideLeft = builder.line(underarmL, hemL, 'sideSeam');
 
   const panel = builder.panel({
@@ -94,6 +103,8 @@ export interface SleeveOptions {
   side: 'left' | 'right';
   /** Hem width; full width when absent. */
   cuffCm?: number;
+  /** Wrap override; defaults to a row-wrapped arm draped from the shoulder hinge. */
+  drape?: PanelDrape;
   seamAllowanceCm?: number;
 }
 
@@ -120,11 +131,56 @@ export function addSleeve(builder: PatternBuilder, o: SleeveOptions): SleeveEdge
   const panel = builder.panel({
     name: o.name,
     edges: [hem, seamRight, capRight, capLeft, seamLeft],
-    drape: { region: 'arm', side: o.side, rowWrap: true, pinTop: false },
+    drape: o.drape ?? { region: 'arm', side: o.side, rowWrap: true, pinTop: false },
     seamAllowanceCm: o.seamAllowanceCm ?? 1,
   });
 
   return { panel, hem, seamRight, capRight, capLeft, seamLeft };
+}
+
+/** Arc length of the sleeve cap `addSleeve` draws for the given flat width and cap height. */
+export function sleeveCapArcCm(widthCm: number, capHeightCm: number): number {
+  const half = widthCm / 2;
+  const curve: Vec2[] = [
+    { x: half, y: 0 },
+    { x: half, y: capHeightCm * 0.55 },
+    { x: widthCm * 0.12, y: capHeightCm * 0.95 },
+    { x: 0, y: capHeightCm },
+  ];
+  return 2 * cubicLength(curve);
+}
+
+/**
+ * Cap height whose half cap arc matches the armhole arc it is sewn to. Each cap half is one
+ * armhole's seam, so a set-in sleeve needs equal arc lengths there or the stitches have to gather
+ * or stretch.
+ */
+export function capHeightForArmhole(widthCm: number, armholeArcCm: number, maxCapCm: number): number {
+  let lo = 0.5;
+  let hi = Math.max(maxCapCm, lo + 1);
+  for (let i = 0; i < 32; i++) {
+    const mid = (lo + hi) / 2;
+    // `sleeveCapArcCm` measures the whole cap, which two armholes are sewn to.
+    if (sleeveCapArcCm(widthCm, mid) / 2 < armholeArcCm) lo = mid; else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+
+/** Length of a cubic Bezier polyline, sampled densely enough for drafting armpits and caps. */
+function cubicLength([p0, c0, c1, p3]: Vec2[], steps = 24): number {
+  let sum = 0;
+  let px = p0.x;
+  let py = p0.y;
+  for (let i = 1; i <= steps; i++) {
+    const t = i / steps;
+    const mt = 1 - t;
+    const x = mt * mt * mt * p0.x + 3 * mt * mt * t * c0.x + 3 * mt * t * t * c1.x + t * t * t * p3.x;
+    const y = mt * mt * mt * p0.y + 3 * mt * mt * t * c0.y + 3 * mt * t * t * c1.y + t * t * t * p3.y;
+    sum += Math.hypot(x - px, y - py);
+    px = x;
+    py = y;
+  }
+  return sum;
 }
 
 /** Skirt or dress panel plus its named outline edges. */

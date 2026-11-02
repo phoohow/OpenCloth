@@ -2,7 +2,9 @@ import type { Pattern, Panel, SeamAllowanceCorner, Vec2 } from '../../core/model
 import { DEFAULT_MESH_RESOLUTION_CM } from '../../core/model/defaults';
 import { hasSelfIntersection, offsetOutlinePerEdge, offsetPolygonStyled, safeOffsetPolygon } from '../geom/offset';
 import { computeBBox, ensureCCW } from '../geom/vec2';
-import { triangulatePolygon, refineMesh, extractBoundaryEdges, type TriangleMesh } from '../triangulate/triangulate';
+import {
+  triangulatePolygon, refineMesh, extractBoundaryEdges, resampleClosedOutline, type TriangleMesh,
+} from '../triangulate/triangulate';
 import { sampleEdge } from '../geom/edgeSample';
 
 export { sampleEdge, sampleEdgeInterval, pointAtT, edgeLength, edgeIntervalLength } from '../geom/edgeSample';
@@ -20,7 +22,7 @@ export interface PanelMesh {
   triangleCount: number;
   /** Boundary edge vertex index pairs, used for seam constraint generation */
   boundaryEdges: Array<[number, number]>;
-  /** Pattern edge ID to particle indices of its sampled vertices */
+  /** Pattern edge ID to the boundary vertices along it, ordered from its start to its end */
   edgeVertexMap: Map<string, number[]>;
 }
 
@@ -92,16 +94,17 @@ export function buildPanelMesh(pattern: Pattern, panelId: string, resolutionCm?:
   const panel = pattern.panels[panelId];
   if (!panel) return null;
 
-  const outline = panelOutlineWithAllowance(pattern, panel);
+  const resolution = resolutionCm ?? panel.meshResolutionCm ?? DEFAULT_MESH_RESOLUTION_CM;
+  const outline = resampleClosedOutline(panelOutlineWithAllowance(pattern, panel), resolution);
   if (outline.length < 3) return null;
 
   const holes = (panel.holes ?? [])
-    .map(loop => sampleOutline(pattern, loop))
+    .map(loop => resampleClosedOutline(sampleOutline(pattern, loop), resolution))
     .filter(loop => loop.length >= 3);
 
   let mesh: TriangleMesh = triangulatePolygon(outline, holes);
 
-  mesh = refineMesh(mesh, resolutionCm ?? panel.meshResolutionCm ?? DEFAULT_MESH_RESOLUTION_CM);
+  mesh = refineMesh(mesh, resolution);
 
   const bbox = computeBBox(outline);
   const uvs = generateUVs(mesh.positions, bbox);
@@ -192,8 +195,9 @@ export function panelGrainLine(panel: Panel, outline: Vec2[]): Vec2[] | null {
 }
 
 /**
- * Maps pattern edge IDs to the mesh vertex indices sampled from each edge. Seam allowance
- * pushes the mesh boundary outward, so each sample snaps to its nearest boundary vertex.
+ * Maps pattern edge IDs to the mesh boundary vertices lying along each edge. Every boundary
+ * vertex joins the edge whose sampled polyline it sits closest to and the run is ordered along
+ * that edge, so seams cover the full length of an edge instead of its endpoints only.
  */
 function buildEdgeVertexMap(
   pattern: Pattern,
@@ -202,36 +206,107 @@ function buildEdgeVertexMap(
   boundaryEdges: Array<[number, number]>,
 ): Map<string, number[]> {
   const map = new Map<string, number[]>();
-  const candidates = new Set<number>();
+  const boundary = new Set<number>();
   for (const [a, b] of boundaryEdges) {
-    candidates.add(a);
-    candidates.add(b);
+    boundary.add(a);
+    boundary.add(b);
   }
-  const list = Array.from(candidates);
-  const posArr = mesh.positions;
 
-  const nearestVertex = (p: Vec2): number => {
-    let best = list[0] ?? -1;
-    let bestDist = Infinity;
-    for (const i of list) {
-      const d = Math.hypot(posArr[i * 2] - p.x, posArr[i * 2 + 1] - p.y);
-      if (d < bestDist) { bestDist = d; best = i; }
+  const tracks = [...panel.outlineEdgeIds, ...(panel.holes ?? []).flat()].map(
+    edgeId => new EdgeTrack(edgeId, sampleEdge(pattern, edgeId)),
+  );
+  for (const track of tracks) map.set(track.edgeId, []);
+  if (tracks.length === 0) return map;
+
+  const assignments = tracks.map(() => [] as Array<{ vertex: number; t: number }>);
+  for (const vertex of boundary) {
+    const p: Vec2 = { x: mesh.positions[vertex * 2]!, y: mesh.positions[vertex * 2 + 1]! };
+    let bestTrack = -1;
+    let best = { d: Infinity, t: 0 };
+    for (let k = 0; k < tracks.length; k++) {
+      const track = tracks[k]!;
+      if (!track.near(p)) continue;
+      const hit = track.project(p);
+      if (hit.d < best.d) { best = hit; bestTrack = k; }
     }
-    return best;
-  };
-
-  for (const edgeId of [...panel.outlineEdgeIds, ...(panel.holes ?? []).flat()]) {
-    const pts = sampleEdge(pattern, edgeId);
-    const indices: number[] = [];
-    for (const p of pts) {
-      const vi = nearestVertex(p);
-      if (vi >= 0 && (indices.length === 0 || indices[indices.length - 1] !== vi)) {
-        indices.push(vi);
+    if (bestTrack >= 0) assignments[bestTrack]!.push({ vertex, t: best.t });
+    else {
+      // Vertices outside every margin still belong to the closest edge.
+      let fallback = 0;
+      let near = { d: Infinity, t: 0 };
+      for (let k = 0; k < tracks.length; k++) {
+        const hit = tracks[k]!.project(p);
+        if (hit.d < near.d) { near = hit; fallback = k; }
       }
+      assignments[fallback]!.push({ vertex, t: near.t });
     }
-    map.set(edgeId, indices);
+  }
+
+  for (let k = 0; k < tracks.length; k++) {
+    const ordered = assignments[k]!.sort((a, b) => a.t - b.t).map(a => a.vertex);
+    map.set(tracks[k]!.edgeId, ordered);
   }
   return map;
+}
+
+/** Margin a boundary vertex may sit outside an edge's bounding box, in centimetres. */
+const TRACK_MARGIN_CM = 6;
+
+/** A sampled pattern edge that boundary vertices are assigned to. */
+class EdgeTrack {
+  readonly edgeId: string;
+  private readonly points: Vec2[];
+  /** Cumulative chord length at each sample. */
+  private readonly arc: number[];
+  private readonly minX: number;
+  private readonly maxX: number;
+  private readonly minY: number;
+  private readonly maxY: number;
+
+  constructor(edgeId: string, points: Vec2[]) {
+    this.edgeId = edgeId;
+    this.points = points;
+    this.arc = [0];
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (let i = 0; i < points.length; i++) {
+      const p = points[i]!;
+      if (i > 0) {
+        const prev = points[i - 1]!;
+        this.arc.push(this.arc[i - 1]! + Math.hypot(p.x - prev.x, p.y - prev.y));
+      }
+      if (p.x < minX) minX = p.x;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.y > maxY) maxY = p.y;
+    }
+    this.minX = minX - TRACK_MARGIN_CM;
+    this.maxX = maxX + TRACK_MARGIN_CM;
+    this.minY = minY - TRACK_MARGIN_CM;
+    this.maxY = maxY + TRACK_MARGIN_CM;
+  }
+
+  /** True when `p` falls inside the edge's bounding box plus the assignment margin. */
+  near(p: Vec2): boolean {
+    return p.x >= this.minX && p.x <= this.maxX && p.y >= this.minY && p.y <= this.maxY;
+  }
+
+  /** Distance to the polyline and the arc length of the closest point on it. */
+  project(p: Vec2): { d: number; t: number } {
+    const pts = this.points;
+    if (pts.length === 0) return { d: Infinity, t: 0 };
+    if (pts.length === 1) return { d: Math.hypot(pts[0]!.x - p.x, pts[0]!.y - p.y), t: 0 };
+    let best = { d: Infinity, t: 0 };
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1]!, b = pts[i]!;
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const len2 = dx * dx + dy * dy;
+      const k = len2 > 0 ? Math.min(1, Math.max(0, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2)) : 0;
+      const qx = a.x + dx * k, qy = a.y + dy * k;
+      const d = Math.hypot(p.x - qx, p.y - qy);
+      if (d < best.d) best = { d, t: this.arc[i - 1]! + Math.hypot(qx - a.x, qy - a.y) };
+    }
+    return best;
+  }
 }
 
 /**

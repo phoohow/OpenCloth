@@ -77,7 +77,7 @@ export class MergedCloth {
       const mesh = panelMeshes.get(panelId)!;
       const panel = project.pattern.panels[panelId];
       const posed = posedPositions3D(mesh, panel, landmarks.resolve(project.avatar.params));
-      const start = initialPositions3D(posed, panel);
+      const start = initialPositions3D(posed, panel, mesh);
 
       for (const local of topBandParticles(mesh, panel)) pinnedIndices.push(vertexOffset + local);
 
@@ -265,7 +265,12 @@ export class MergedCloth {
     return constraints;
   }
 
-  /** Pairs two vertex runs by normalized position and records one closing constraint per pair. */
+  /**
+   * Pairs two vertex runs at equal arc-length fractions and records one closing constraint per
+   * pair. Pairing by distance along the seam instead of by index keeps a shorter edge from
+   * bunching its vertices against the long edge's corners. Every vertex of both runs ends up
+   * paired, so a closed seam has no unstitched stretch left to open into a gap.
+   */
   private stitchRun(
     vertsA: number[],
     vertsB: number[],
@@ -278,12 +283,33 @@ export class MergedCloth {
     tearFactor: number | undefined,
     constraints: Constraint[],
   ): void {
-    const n = Math.max(vertsA.length, vertsB.length);
-    for (let i = 0; i < n; i++) {
-      const ia = vertsA[Math.min(Math.floor(i * vertsA.length / n), vertsA.length - 1)];
-      const ib = vertsB[Math.min(Math.floor(i * vertsB.length / n), vertsB.length - 1)];
-      if (ia === undefined || ib === undefined) continue;
-      const p0 = ia + offA, p1 = ib + offB;
+    const fractionsA = arcFractions(this.positions, vertsA, offA);
+    const fractionsB = arcFractions(this.positions, vertsB, offB);
+    const pairs: Array<[number, number]> = [];
+    const seen = new Set<string>();
+    const addPair = (ia: number, ib: number): void => {
+      const key = `${ia}_${ib}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      pairs.push([ia, ib]);
+    };
+
+    // Shared fractions first, so both runs advance together along the seam.
+    const steps = Math.max(fractionsA.length, fractionsB.length);
+    let ia = 0;
+    let ib = 0;
+    for (let i = 0; i < steps; i++) {
+      const f = steps === 1 ? 0 : i / (steps - 1);
+      ia = nearestFraction(fractionsA, f, ia);
+      ib = nearestFraction(fractionsB, f, ib);
+      addPair(ia, ib);
+    }
+    // The uneven run has leftover vertices; each of them still needs a stitch.
+    for (let i = 0; i < fractionsA.length; i++) addPair(i, nearestFraction(fractionsB, fractionsA[i]!, 0));
+    for (let j = 0; j < fractionsB.length; j++) addPair(nearestFraction(fractionsA, fractionsB[j]!, 0), j);
+
+    for (const [pairA, pairB] of pairs) {
+      const p0 = vertsA[pairA]! + offA, p1 = vertsB[pairB]! + offB;
       const gap = distance(this.positions, p0, p1);
       this.seamPairs.push({ p0, p1, open: gap, seamId, ...(dartId ? { dartId } : {}) });
       constraints.push({
@@ -292,6 +318,28 @@ export class MergedCloth {
       });
     }
   }
+}
+
+/** Arc-length fraction of every vertex along a run, from 0 at its first vertex to 1 at its last. */
+function arcFractions(positions: Float32Array, vertices: number[], offset: number): number[] {
+  if (vertices.length === 0) return [];
+  if (vertices.length === 1) return [0];
+  const acc = [0];
+  for (let i = 1; i < vertices.length; i++) {
+    acc.push(acc[i - 1]! + distance(positions, offset + vertices[i - 1]!, offset + vertices[i]!));
+  }
+  const total = acc[acc.length - 1]! || 1;
+  return acc.map(value => value / total);
+}
+
+/** Index of the fraction closest to `target`, searching forward from `from` to stay monotone. */
+function nearestFraction(fractions: number[], target: number, from: number): number {
+  let best = Math.min(Math.max(from, 0), fractions.length - 1);
+  for (let i = best + 1; i < fractions.length; i++) {
+    if (Math.abs(fractions[i]! - target) <= Math.abs(fractions[best]! - target)) best = i;
+    else break;
+  }
+  return best;
 }
 
 /**
