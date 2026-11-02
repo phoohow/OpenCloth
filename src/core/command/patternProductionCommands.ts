@@ -49,7 +49,7 @@ export class AutoAssignCollisionLayersCommand extends SnapshotCommand {
 
 /** Applies one mesh edge length to every panel and records it as the project default. */
 export class SetGlobalMeshResolutionCommand extends SnapshotCommand {
-  readonly label = '修改全局网格边长';
+  readonly label = '修改网格边长';
   private beforeSimulation: SimulationConfig | null = null;
   constructor(private cm: number) { super(); }
 

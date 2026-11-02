@@ -215,7 +215,7 @@ function PatternExportDialog({ kind }: { kind: ExportKind }) {
         {kind === 'exportMarker' ? (
           <>
             <div style={styles.row}>
-              <span style={styles.rowLabel}>面料幅宽（cm）</span>
+              <span style={styles.rowLabel}>面料幅宽 (cm)</span>
               <input
                 style={styles.input} type="number" min="1" step="1" value={fabricWidth}
                 onChange={e => setFabricWidth(e.target.value)}
@@ -229,7 +229,7 @@ function PatternExportDialog({ kind }: { kind: ExportKind }) {
               />
             </div>
             <div style={styles.row}>
-              <span style={styles.rowLabel}>片间距（cm）</span>
+              <span style={styles.rowLabel}>片间距 (cm)</span>
               <input
                 style={styles.input} type="number" min="0" step="0.5" value={gap}
                 onChange={e => setGap(e.target.value)}
@@ -261,7 +261,7 @@ function PatternExportDialog({ kind }: { kind: ExportKind }) {
               </select>
             </div>
             <div style={styles.row}>
-              <span style={styles.rowLabel}>面料单价（元/m）</span>
+              <span style={styles.rowLabel}>面料单价 (元/m)</span>
               <input
                 style={styles.input} type="number" min="0" step="0.1" placeholder="选填"
                 value={price} onChange={e => setPrice(e.target.value)}
@@ -299,14 +299,14 @@ function PatternExportDialog({ kind }: { kind: ExportKind }) {
         ) : kind === 'exportTechPack' ? (
           <>
             <div style={styles.row}>
-              <span style={styles.rowLabel}>面料幅宽（cm）</span>
+              <span style={styles.rowLabel}>面料幅宽 (cm)</span>
               <input
                 style={styles.input} type="number" min="1" step="1" value={techWidth}
                 onChange={e => setTechWidth(e.target.value)}
               />
             </div>
             <div style={styles.row}>
-              <span style={styles.rowLabel}>面料单价（元/m）</span>
+              <span style={styles.rowLabel}>面料单价 (元/m)</span>
               <input
                 style={styles.input} type="number" min="0" step="0.1" placeholder="选填"
                 value={techPrice} onChange={e => setTechPrice(e.target.value)}
@@ -333,7 +333,7 @@ function PatternExportDialog({ kind }: { kind: ExportKind }) {
             </div>
             {sizeScope === 'chart' && (
               <div style={styles.row}>
-                <span style={styles.rowLabel}>码间距（cm）</span>
+                <span style={styles.rowLabel}>码间距 (cm)</span>
                 <input
                   style={styles.input} type="number" min="1" step="1" value={sizeGap}
                   onChange={e => setSizeGap(e.target.value)}
@@ -373,7 +373,7 @@ function PatternExportDialog({ kind }: { kind: ExportKind }) {
             ) : (
               <>
                 <div style={styles.row}>
-                  <span style={styles.rowLabel}>重叠（cm）</span>
+                  <span style={styles.rowLabel}>重叠 (cm)</span>
                   <input
                     style={styles.input} type="number" min="0" step="0.5" value={pdfOverlap}
                     onChange={e => setPdfOverlap(e.target.value)}

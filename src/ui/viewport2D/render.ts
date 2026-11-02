@@ -1,5 +1,5 @@
-import type { Measurement, Pattern, Print, Seam, Topstitch, Trim, Vec2 } from '../../core/model/types';
-import { panelGrainLine, panelOutlineWithAllowance, sampleEdge, sampleEdgeInterval, samplePanelOutline } from '../../pattern/panel/panelBuilder';
+import type { Measurement, Panel, Pattern, Print, Seam, Topstitch, Trim, Vec2 } from '../../core/model/types';
+import { buildPanelMesh, panelGrainLine, panelOutlineWithAllowance, sampleEdge, sampleEdgeInterval, samplePanelOutline, type PanelMesh } from '../../pattern/panel/panelBuilder';
 import { measurementValue, pointAtT } from '../../pattern/geom/edgeSample';
 import { edgeCurve } from '../../pattern/geom/bezier';
 import { computeBBox } from '../../pattern/geom/vec2';
@@ -40,6 +40,8 @@ export interface DisplayOptions {
   topstitches: boolean;
   /** Trim symbols. */
   trims: boolean;
+  /** Triangulated simulation mesh drawn over the cut pieces. */
+  wireframe: boolean;
 }
 
 /** Everything one 2D frame draws. */
@@ -70,7 +72,7 @@ export function drawScene(ctx: CanvasRenderingContext2D, w: number, h: number, s
   const { pattern, view } = state;
   const display: DisplayOptions = state.display ?? {
     internal: true, darts: true, seamAllowance: false, notches: true, grain: true, annotations: true, measurements: true, gradingOverlay: false, seamJoin: false,
-    prints: true, topstitches: true, trims: true,
+    prints: true, topstitches: true, trims: true, wireframe: false,
   };
   const screen = (p: Vec2): Vec2 => toScreen(p, view, w, h);
 
@@ -268,6 +270,61 @@ function tick(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number,
   ctx.stroke();
 }
 
+/** Wireframe overlay resolution: coarser than the simulation mesh so the pane stays interactive. */
+const WIREFRAME_RESOLUTION_CM = 2.5;
+
+/** Panel meshes kept between frames, keyed by panel id and invalidated by a geometry hash. */
+const wireframeCache = new Map<string, { hash: number; mesh: PanelMesh | null }>();
+
+/** Triangulated mesh of one panel, rebuilt only when its outline or holes change. */
+function wireframeMesh(pattern: Pattern, panel: Panel, outline: Vec2[]): PanelMesh | null {
+  const hash = meshHash(pattern, panel, outline);
+  const cached = wireframeCache.get(panel.id);
+  if (cached && cached.hash === hash) return cached.mesh;
+  const mesh = buildPanelMesh(pattern, panel.id, WIREFRAME_RESOLUTION_CM);
+  wireframeCache.set(panel.id, { hash, mesh });
+  return mesh;
+}
+
+/** FNV-1a hash of the panel outline and hole points at 0.01 cm precision. */
+function meshHash(pattern: Pattern, panel: Panel, outline: Vec2[]): number {
+  let hash = 2166136261;
+  const mix = (value: number): void => {
+    hash = Math.imul(hash ^ (value & 0xffff), 16777619);
+    hash = Math.imul(hash ^ ((value >> 16) & 0xffff), 16777619);
+  };
+  mix(outline.length);
+  for (const p of outline) { mix(Math.round(p.x * 100)); mix(Math.round(p.y * 100)); }
+  for (const loop of panel.holes ?? []) {
+    for (const edgeId of loop) {
+      for (const p of sampleEdge(pattern, edgeId)) { mix(Math.round(p.x * 100)); mix(Math.round(p.y * 100)); }
+    }
+  }
+  return hash;
+}
+
+/** Triangle edges of a panel mesh, drawn over its filled outline. */
+function drawWireframe(ctx: CanvasRenderingContext2D, mesh: PanelMesh, screen: (p: Vec2) => Vec2): void {
+  const { positions2D, indices, vertexCount } = mesh;
+  const sx = new Float32Array(vertexCount);
+  const sy = new Float32Array(vertexCount);
+  for (let i = 0; i < vertexCount; i++) {
+    const s = screen({ x: positions2D[i * 2]!, y: positions2D[i * 2 + 1]! });
+    sx[i] = s.x;
+    sy[i] = s.y;
+  }
+  ctx.beginPath();
+  for (let t = 0; t < indices.length; t += 3) {
+    const a = indices[t]!, b = indices[t + 1]!, c = indices[t + 2]!;
+    ctx.moveTo(sx[a]!, sy[a]!); ctx.lineTo(sx[b]!, sy[b]!);
+    ctx.moveTo(sx[b]!, sy[b]!); ctx.lineTo(sx[c]!, sy[c]!);
+    ctx.moveTo(sx[c]!, sy[c]!); ctx.lineTo(sx[a]!, sy[a]!);
+  }
+  ctx.strokeStyle = 'rgba(140,200,255,0.35)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+}
+
 function drawPanel(
   ctx: CanvasRenderingContext2D, scene: SceneState, panelId: string,
   screen: (p: Vec2) => Vec2, display: DisplayOptions,
@@ -308,6 +365,11 @@ function drawPanel(
   ctx.strokeStyle = isSelected ? '#4da6ff' : '#9aa0b0';
   ctx.lineWidth = isSelected ? 2.5 : 1.5;
   ctx.stroke();
+
+  if (display.wireframe) {
+    const mesh = wireframeMesh(pattern, panel, outline);
+    if (mesh) drawWireframe(ctx, mesh, screen);
+  }
 
   // 毛边: the cutting outline the offset kernel produces, corner joins and per-edge amounts included.
   if (display.seamAllowance && (panel.seamAllowanceCm > 0 || panel.outlineEdgeIds.some(id => pattern.edges[id]?.seamAllowanceCm !== undefined))) {

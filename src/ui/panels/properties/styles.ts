@@ -7,6 +7,11 @@ export const styles: Record<string, React.CSSProperties> = {
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
   },
   note: { fontSize: 'var(--oc-fs-note)', color: '#777', lineHeight: 1.5, margin: '5px 2px 1px' },
+  sizeRow: {
+    display: 'flex', alignItems: 'center', gap: 4, padding: '4px 0',
+    borderTop: '1px solid #2e2e35', fontSize: 'var(--oc-fs-micro)',
+  },
+  sizeLabel: { color: '#999', flex: '0 0 auto', minWidth: 'var(--oc-w-field-label)', textAlign: 'right' },
   action: {
     alignSelf: 'flex-start', margin: '2px', padding: '3px 10px', background: '#2a2a30',
     border: '1px solid #4a4a54', borderRadius: 3, color: '#ddd', cursor: 'pointer',

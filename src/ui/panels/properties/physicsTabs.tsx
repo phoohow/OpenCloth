@@ -22,7 +22,7 @@ export function FabricPhysics({ fabric }: { fabric: Fabric }) {
         onChange={v => setPhysics('修改剪切刚度', { shearStiffness: v })} />
       <SliderRow label="折痕刚度" min={0} max={1} step={0.01} value={fabric.physics.creaseStiffness ?? 0.85} commitOnRelease
         onChange={v => setPhysics('修改折痕刚度', { creaseStiffness: v })} />
-      <SliderRow label="克重" min={50} max={600} step={10} suffix="g/m²" value={fabric.physics.massPerArea} commitOnRelease
+      <SliderRow label="克重" min={50} max={600} step={10} unit="g/m²" value={fabric.physics.massPerArea} commitOnRelease
         onChange={v => setPhysics('修改克重', { massPerArea: v })} />
       <SliderRow label="阻尼" min={0} max={0.1} step={0.001} value={fabric.physics.damping} commitOnRelease
         onChange={v => setPhysics('修改阻尼', { damping: v })} />

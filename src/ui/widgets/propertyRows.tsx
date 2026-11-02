@@ -29,8 +29,11 @@ export function Row({ label, children }: { label: string; children?: ReactNode }
   );
 }
 
-/** Slider with a numeric readout; `commitOnRelease` keeps the drag local for edits that rebuild. */
-export function SliderRow({ label, min, max, step, value, onChange, commitOnRelease, suffix }: {
+/**
+ * Slider with a typable value field: label and field on the head line, slider full width below.
+ * `commitOnRelease` keeps the drag local for edits that rebuild.
+ */
+export function SliderRow({ label, min, max, step, value, onChange, commitOnRelease, unit }: {
   label: string;
   min: number;
   max: number;
@@ -38,28 +41,55 @@ export function SliderRow({ label, min, max, step, value, onChange, commitOnRele
   value: number;
   onChange: (v: number) => void;
   commitOnRelease?: boolean;
-  suffix?: string;
+  /** Unit appended to the label as `名称 (单位)`. */
+  unit?: string;
 }) {
   const [draft, setDraft] = useState<number | null>(null);
+  const [text, setText] = useState<string | null>(null);
   const shown = draft ?? value;
   const decimals = step < 0.01 ? 3 : (step < 1 ? 2 : 0);
-  const commit = () => {
+  const clamp = (v: number) => Math.min(max, Math.max(min, v));
+  /** Snap to the slider's grid so the field and the thumb cannot disagree. */
+  const snap = (v: number) => clamp(Number((Math.round(v / step) * step).toFixed(Math.max(decimals, 0))));
+
+  const commitDraft = () => {
     if (draft !== null) { onChange(draft); setDraft(null); }
   };
+
+  const commitText = () => {
+    if (text === null) return;
+    const parsed = Number.parseFloat(text);
+    setText(null);
+    if (!Number.isFinite(parsed)) return;
+    const next = snap(parsed);
+    if (next !== value) onChange(next);
+  };
+
   return (
     <div style={styles.sliderRow}>
       <div style={styles.sliderHead}>
-        <span>{label}</span>
-        <span>{shown.toFixed(decimals)}{suffix ? ` ${suffix}` : ''}</span>
+        <span style={styles.label}>{unit ? `${label} (${unit})` : label}</span>
+        <span style={styles.sliderField}>
+          <input
+            type="text" inputMode="decimal" spellCheck={false} style={styles.sliderNum}
+            value={text ?? shown.toFixed(decimals)} onChange={e => setText(e.target.value)}
+            onBlur={commitText}
+            onKeyDown={e => {
+              e.stopPropagation();
+              if (e.key === 'Enter') e.currentTarget.blur(); else if (e.key === 'Escape') setText(null);
+            }}
+            title={`${label}${unit ? ` (${unit})` : ''}，可直接输入数值`}
+          />
+        </span>
       </div>
       <input
-        type="range" min={min} max={max} step={step} value={shown} style={{ width: '100%' }}
+        type="range" min={min} max={max} step={step} value={shown} style={styles.range}
         onChange={e => {
-          const v = parseFloat(e.target.value);
+          const v = Number.parseFloat(e.target.value);
           if (commitOnRelease) setDraft(v); else onChange(v);
         }}
-        onPointerUp={commitOnRelease ? commit : undefined}
-        onKeyUp={commitOnRelease ? commit : undefined}
+        onPointerUp={commitOnRelease ? commitDraft : undefined}
+        onKeyUp={commitOnRelease ? commitDraft : undefined}
       />
     </div>
   );
@@ -112,14 +142,14 @@ export function SlotRow({ label, children }: { label?: string; children: ReactNo
   );
 }
 
-/** File slot row: the chosen file's name, a picker and a clear button. */
-export function FileRow({ label, name, accept, pickLabel, clearLabel, clearDisabled, onPick, onClear }: {
+/** File slot row: a read-only file name field, then add and clear icon buttons. */
+export function FileRow({ label, name, accept, pickTitle, clearTitle, clearDisabled, onPick, onClear }: {
   label: string;
-  /** Shown file name, or the unset placeholder. */
+  /** File name in the read-only field; empty when no file is set. */
   name: string;
   accept: string;
-  pickLabel: string;
-  clearLabel: string;
+  pickTitle: string;
+  clearTitle: string;
   clearDisabled?: boolean;
   onPick: (file: File) => void;
   onClear: () => void;
@@ -128,7 +158,7 @@ export function FileRow({ label, name, accept, pickLabel, clearLabel, clearDisab
   return (
     <div style={styles.fileRow}>
       <span style={styles.label}>{label}</span>
-      <span style={styles.fileName} title={name}>{name}</span>
+      <input style={styles.fileName} value={name} title={name} readOnly />
       <input
         ref={inputRef}
         type="file"
@@ -140,8 +170,8 @@ export function FileRow({ label, name, accept, pickLabel, clearLabel, clearDisab
           if (file) onPick(file);
         }}
       />
-      <button style={styles.fileBtn} onClick={() => inputRef.current?.click()}>{pickLabel}</button>
-      <button style={styles.fileBtn} onClick={onClear} disabled={clearDisabled}>{clearLabel}</button>
+      <IconButton title={pickTitle} onClick={() => inputRef.current?.click()}><Icon name="plus" size={12} /></IconButton>
+      <IconButton title={clearTitle} onClick={onClear} disabled={clearDisabled}><Icon name="minus" size={12} /></IconButton>
     </div>
   );
 }
@@ -263,12 +293,13 @@ export function ButtonRow({ children }: { children: ReactNode }) {
   return <div style={styles.btnRow}>{children}</div>;
 }
 
-/** Small action button. */
-export function SmallButton({ children, onClick, disabled, title }: {
-  children: ReactNode; onClick: () => void; disabled?: boolean; title?: string;
+/** Small action button; `compact` keeps its content width instead of filling the row. */
+export function SmallButton({ children, onClick, disabled, title, compact }: {
+  children: ReactNode; onClick: () => void; disabled?: boolean; title?: string; compact?: boolean;
 }) {
   return (
-    <button style={styles.smallBtn} onClick={onClick} disabled={disabled} title={title}>{children}</button>
+    <button style={compact ? { ...styles.smallBtn, flex: '0 0 auto', padding: '2px 7px' } : styles.smallBtn}
+      onClick={onClick} disabled={disabled} title={title}>{children}</button>
   );
 }
 
@@ -289,10 +320,17 @@ const styles: Record<string, React.CSSProperties> = {
   sectionTitle: { fontWeight: 600 },
   sectionBody: { padding: '4px 7px 7px' },
   row: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, minHeight: 'var(--oc-h-row)', fontSize: 'var(--oc-fs-micro)', color: '#ccc' },
-  label: { color: '#999', flex: '0 0 auto' },
+  label: { color: '#999', flex: '0 0 auto', minWidth: 'var(--oc-w-field-label)', textAlign: 'right' },
   value: { color: '#ddd', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-  sliderRow: { padding: '5px 0 7px' },
-  sliderHead: { display: 'flex', justifyContent: 'space-between', fontSize: 'var(--oc-fs-micro)', color: '#aaa', marginBottom: 4 },
+  sliderRow: { padding: '5px 0 7px', fontSize: 'var(--oc-fs-micro)', color: '#aaa' },
+  sliderHead: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginBottom: 4 },
+  range: { width: '100%' },
+  sliderField: { position: 'relative', flex: '0 0 auto', width: '5em', height: 'var(--oc-h-control)' },
+  sliderNum: {
+    width: '100%', height: '100%', background: '#1d1d22',
+    border: '1px solid #3a3a42', borderRadius: 3, color: '#ddd', padding: '0 4px',
+    fontSize: 'var(--oc-fs-micro)', textAlign: 'right', fontVariantNumeric: 'tabular-nums',
+  },
   select: {
     background: '#2a2a30', border: '1px solid #3a3a42', borderRadius: 3, color: '#ddd',
     padding: '2px 4px', minHeight: 'var(--oc-h-control)', fontSize: 'var(--oc-fs-micro)',
@@ -307,15 +345,11 @@ const styles: Record<string, React.CSSProperties> = {
   slotFill: { flex: '1 1 auto', minWidth: 0 },
   fileRow: { display: 'flex', alignItems: 'center', gap: 4, minHeight: 'var(--oc-h-slot)', fontSize: 'var(--oc-fs-micro)', color: '#ccc' },
   fileName: {
-    flex: '1 1 auto', minWidth: 0, color: '#ddd', textAlign: 'right',
-    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+    flex: '1 1 auto', minWidth: 0, background: '#1d1d22', border: '1px solid #3a3a42',
+    borderRadius: 3, color: '#ddd', padding: '2px 5px', height: 'var(--oc-h-control)',
+    fontSize: 'var(--oc-fs-micro)', overflow: 'hidden', textOverflow: 'ellipsis',
   },
   fileInput: { display: 'none' },
-  fileBtn: {
-    flex: '0 0 auto', height: 'var(--oc-h-row)', padding: '0 6px', background: '#2a2a30',
-    border: '1px solid #3a3a42', borderRadius: 3, color: '#ccc', cursor: 'pointer',
-    fontSize: 'var(--oc-fs-micro)', whiteSpace: 'nowrap',
-  },
   iconBtn: {
     flex: '0 0 auto', height: 'var(--oc-h-row)', padding: '0 4px', display: 'inline-flex', alignItems: 'center',
     justifyContent: 'center', background: '#2a2a30', border: '1px solid #3a3a42',

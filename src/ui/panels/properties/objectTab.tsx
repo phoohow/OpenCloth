@@ -134,10 +134,10 @@ function ObjectTab({ project, nodeId, kind, label, note, engineRef }: {
       </Section>
       {transform && (
         <Section title="变换">
-          <Vec3Field label="位置" value={transform.position} step={0.01} precision={2} suffix="m"
+          <Vec3Field label="位置" value={transform.position} step={0.01} precision={2} unit="m"
             onPreview={live ? v => previewTransform(nodeId, { ...transform, position: v }, engineRef) : undefined}
             onCommit={v => setPart('position', v)} />
-          <Vec3Field label="旋转" value={degVec(transform.rotationEuler)} step={0.5} precision={1} suffix="°"
+          <Vec3Field label="旋转" value={degVec(transform.rotationEuler)} step={0.5} precision={1} unit="°"
             onPreview={live ? v => previewTransform(nodeId, { ...transform, rotationEuler: radVec(v) }, engineRef) : undefined}
             onCommit={v => setPart('rotationEuler', radVec(v))} />
           <Vec3Field label="缩放" value={transform.scale} step={0.01} precision={3} min={0.01} max={20}

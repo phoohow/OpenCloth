@@ -99,6 +99,8 @@ interface UIStore {
     prints: boolean;
     topstitches: boolean;
     trims: boolean;
+    /** Triangulated simulation mesh drawn over the cut pieces. */
+    wireframe: boolean;
   };
   /** Bumped after reference-object list changes so panels re-read the engine list. */
   refObjectsVersion: number;
@@ -207,7 +209,7 @@ export const useUIStore = create<UIStore>((set, get) => ({
   gradingClipboard: null,
   displayOptions: {
     internal: true, darts: true, seamAllowance: false, notches: true, grain: true, annotations: true, measurements: true, gradingOverlay: false, seamJoin: false,
-    prints: true, topstitches: true, trims: true,
+    prints: true, topstitches: true, trims: true, wireframe: false,
   },
   showTemplatePanel: prefs.showTemplatePanel,
   showScenePanel: prefs.showScenePanel,

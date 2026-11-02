@@ -12,8 +12,6 @@ interface NumberFieldProps {
   max?: number;
   /** Axis letter shown at the left of the cell. */
   axis?: keyof typeof AXIS_COLOR;
-  /** Unit suffix appended to the displayed value. */
-  suffix?: string;
   title?: string;
   /** Called while dragging, before the value is committed. */
   onPreview?: (v: number) => void;
@@ -21,7 +19,7 @@ interface NumberFieldProps {
 }
 
 /** Scrub-drag number cell that turns into a text field on click, like Blender's properties. */
-export function NumberField({ value, step, precision = 3, min, max, axis, suffix, title, onPreview, onCommit }: NumberFieldProps) {
+export function NumberField({ value, step, precision = 3, min, max, axis, title, onPreview, onCommit }: NumberFieldProps) {
   const [draft, setDraft] = useState<number | null>(null);
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState('');
@@ -29,7 +27,7 @@ export function NumberField({ value, step, precision = 3, min, max, axis, suffix
 
   const clamp = (v: number) => Math.min(max ?? Infinity, Math.max(min ?? -Infinity, v));
   const shown = clamp(draft ?? value);
-  const fmt = (v: number) => `${v.toFixed(precision)}${suffix ? ` ${suffix}` : ''}`;
+  const fmt = (v: number) => v.toFixed(precision);
 
   const commit = (v: number) => {
     const next = clamp(v);
@@ -109,18 +107,19 @@ interface Vec3FieldProps {
   precision?: number;
   min?: number;
   max?: number;
-  suffix?: string;
+  /** Unit appended to the row label as `名称 (单位)`. */
+  unit?: string;
   onPreview?: (v: Vec3) => void;
   onCommit: (v: Vec3) => void;
 }
 
 /** Three axis cells editing one vector. */
-export function Vec3Field({ label, value, step, precision, min, max, suffix, onPreview, onCommit }: Vec3FieldProps) {
+export function Vec3Field({ label, value, step, precision, min, max, unit, onPreview, onCommit }: Vec3FieldProps) {
   const axes: Array<keyof typeof AXIS_COLOR> = ['X', 'Y', 'Z'];
   const withAxis = (axis: keyof typeof AXIS_COLOR, v: number): Vec3 => ({ ...value, [axis.toLowerCase()]: v });
   return (
     <div style={styles.vecRow}>
-      <span style={styles.vecLabel}>{label}</span>
+      <span style={styles.vecLabel}>{unit ? `${label} (${unit})` : label}</span>
       <div style={styles.vecCells}>
         {axes.map(a => (
           <NumberField
@@ -131,7 +130,6 @@ export function Vec3Field({ label, value, step, precision, min, max, suffix, onP
             precision={precision}
             min={min}
             max={max}
-            suffix={suffix}
             onPreview={v => onPreview?.(withAxis(a, v))}
             onCommit={v => onCommit(withAxis(a, v))}
           />

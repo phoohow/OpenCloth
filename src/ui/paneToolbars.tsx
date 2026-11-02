@@ -65,6 +65,7 @@ const DISPLAY_LAYERS: Array<{ key: DisplayLayer; label: string }> = [
   { key: 'prints', label: '印花' },
   { key: 'topstitches', label: '明线' },
   { key: 'trims', label: '辅料' },
+  { key: 'wireframe', label: '网格线' },
 ];
 
 /** Element kinds a marquee rectangle can collect, with their row labels. */

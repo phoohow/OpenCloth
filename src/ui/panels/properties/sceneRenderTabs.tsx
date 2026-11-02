@@ -31,24 +31,24 @@ export function ProjectTab({ project, engineRef }: { project: Project; engineRef
         <Row label="参考物">{refs.length}</Row>
       </Section>
       <Section title="全局模拟">
-        <SliderRow label="重力" min={-20} max={0} step={0.1} suffix="m/s²" value={sim.gravity.y}
+        <SliderRow label="重力" min={-20} max={0} step={0.1} unit="m/s²" value={sim.gravity.y}
           onChange={v => setSimulationConfig('修改重力', { gravity: { ...sim.gravity, y: v } })} />
         <SliderRow label="风速" min={0} max={20} step={0.5} value={sim.wind.speed}
           onChange={v => setSimulationConfig('修改风速', { wind: { ...sim.wind, speed: v } })} />
         <SliderRow label="迭代次数" min={1} max={15} step={1} value={sim.constraintIterations}
           onChange={v => setSimulationConfig('修改迭代次数', { constraintIterations: Math.round(v) })} />
-        <SliderRow label="全局网格边长" min={0.5} max={10} step={0.5} suffix="cm"
+        <SliderRow label="网格边长" min={0.5} max={10} step={0.5} unit="cm"
           value={sim.meshResolutionCm ?? DEFAULT_MESH_RESOLUTION_CM} commitOnRelease
           onChange={v => setGlobalMeshResolution(v)} />
         <CheckRow label="布料自碰撞" checked={sim.selfCollision !== false}
           onChange={v => setSimulationConfig('修改布料自碰撞', { selfCollision: v })} />
-        <SliderRow label="布料厚度（cm）" min={0} max={1} step={0.05}
+        <SliderRow label="布料厚度" min={0} max={1} step={0.05} unit="cm"
           value={sim.clothThicknessCm ?? DEFAULT_CLOTH_THICKNESS_CM}
           onChange={v => setSimulationConfig('修改布料厚度', { clothThicknessCm: v })} />
-        <SliderRow label="层间距（cm）" min={0} max={2} step={0.1}
+        <SliderRow label="层间距" min={0} max={2} step={0.1} unit="cm"
           value={sim.layerSpacingCm ?? DEFAULT_LAYER_SPACING_CM}
           onChange={v => setSimulationConfig('修改层间距', { layerSpacingCm: v })} />
-        <div style={styles.note}>全局网格边长在松手后把全部版片的网格密度设为该值并重建布料；之后可在单片的「布料网格」区块单独调整。布料厚度同时抬高模特与地面的碰撞距离；层间距按相邻版片的「碰撞层」差值加大分离距离，0 为最内层。</div>
+        <div style={styles.note}>网格边长在松手后把全部版片的网格密度设为该值并重建布料；之后可在单片的「布料网格」区块单独调整。布料厚度同时抬高模特与地面的碰撞距离；层间距按相邻版片的「碰撞层」差值加大分离距离，0 为最内层。</div>
       </Section>
       <SizeChart project={project} engineRef={engineRef} />
     </>
@@ -84,9 +84,9 @@ export function RenderTab({ project }: { project: Project }) {
       </Section>
       {fitCheck && (
         <Section title="合身热图">
-          <SliderRow label="贴近阈值" min={0} max={3} step={0.1} suffix="cm" value={fitTightCm}
+          <SliderRow label="贴近阈值" min={0} max={3} step={0.1} unit="cm" value={fitTightCm}
             onChange={v => setFitThresholds(v, fitLooseCm)} />
-          <SliderRow label="宽松阈值" min={0.5} max={8} step={0.1} suffix="cm" value={fitLooseCm}
+          <SliderRow label="宽松阈值" min={0.5} max={8} step={0.1} unit="cm" value={fitLooseCm}
             onChange={v => setFitThresholds(fitTightCm, v)} />
           {fitStats && (
             <>
@@ -139,7 +139,7 @@ export function RenderTab({ project }: { project: Project }) {
           <Section title="光线追踪">
             <SliderRow label="最大弹射次数" min={1} max={16} step={1} value={ray.maxBounces}
               onChange={v => setRayTracingConfig('修改光追弹射次数', { maxBounces: v })} />
-            <SliderRow label="每帧路径预算" min={50} max={1000} step={10} suffix="k"
+            <SliderRow label="每帧路径预算" min={50} max={1000} step={10} unit="k"
               value={ray.frameBudget / 1000}
               onChange={v => setRayTracingConfig('修改光追每帧预算', { frameBudget: Math.round(v * 1000) })} />
             <SliderRow label="最大采样数" min={8} max={1024} step={1} value={ray.maxSamples}

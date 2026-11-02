@@ -95,10 +95,10 @@ export function MaterialTab({ project, panelId, engineRef }: {
   const mapRow = (slot: FabricMapSlot) => (
     <FileRow
       label={MAP_SLOT_LABELS[slot]}
-      name={maps.fileNames?.[slot] || (maps[slot] ? '已设置' : '未设置')}
+      name={maps.fileNames?.[slot] ?? ''}
       accept="image/*"
-      pickLabel="选择图片"
-      clearLabel="清除"
+      pickTitle="选择图片"
+      clearTitle="清除"
       clearDisabled={!maps[slot]}
       onPick={file => void pickMap(slot, file)}
       onClear={() => clearMap(slot)}
@@ -164,7 +164,7 @@ export function MaterialTab({ project, panelId, engineRef }: {
             onChange={v => appearance({ sheenRoughness: v })} />
           <SliderRow label="透光" min={0} max={1} step={0.01} value={fabric.appearance.transmission}
             onChange={v => appearance({ transmission: v })} />
-          <SliderRow label="厚度" min={0} max={5} step={0.01} suffix="mm" value={fabric.appearance.thickness}
+          <SliderRow label="厚度" min={0} max={5} step={0.01} unit="mm" value={fabric.appearance.thickness}
             onChange={v => appearance({ thickness: v })} />
           <SliderRow label="清漆" min={0} max={1} step={0.01} value={fabric.appearance.clearcoat}
             onChange={v => appearance({ clearcoat: v })} />
