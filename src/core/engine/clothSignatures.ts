@@ -1,5 +1,6 @@
 import type { Avatar, Project, RenderMode } from '../model/types';
 import { fabricForPanel, panelPrints } from '../model/fabric';
+import { panelGeometrySignature } from '../../pattern/panel/panelMeshSignature';
 import { FALLBACK_PHYSICS } from './clothConstants';
 
 /**
@@ -88,44 +89,11 @@ export function constraintSignature(project: Project): string {
   return JSON.stringify([seams, darts, panels]);
 }
 
-/**
- * Everything one panel's mesh build reads: outline and hole geometry, per-edge and panel
- * seam allowance, mesh density and the points the panel owns. The solver-side collision layer
- * rides along, so a layer edit re-merges the input the running solver reads it from.
- */
-export function panelGeometrySignature(project: Project, panelId: string): string {
-  const panel = project.pattern.panels[panelId];
-  if (!panel) return '';
-  const pattern = project.pattern;
-  const ids = [
-    ...panel.outlineEdgeIds,
-    ...(panel.holes ?? []).flat(),
-    ...panel.dartIds.flatMap(dartId => {
-      const dart = pattern.darts[dartId];
-      return dart ? [dart.tipId, dart.edge1Id, dart.edge2Id] : [];
-    }),
-  ];
-  const edges = ids.flatMap(id => {
-    const edge = pattern.edges[id];
-    if (!edge) return [id];
-    return [JSON.stringify(edge), edge.startPointId, edge.endPointId];
-  });
-  const points = [...new Set(ids.flatMap(id => {
-    const edge = pattern.edges[id];
-    return edge ? [edge.startPointId, edge.endPointId] : [];
-  }))].map(pointId => JSON.stringify(pattern.points[pointId] ?? pointId));
-  return JSON.stringify([
-    panel.outlineEdgeIds, panel.holes ?? [], panel.seamAllowanceCm, panel.meshResolutionCm,
-    panel.visible, panel.collisionLayer ?? 0, edges, points,
-    project.scene.simulation.meshResolutionCm ?? null,
-  ]);
-}
-
 /** panelId → geometry signature across the whole pattern. */
 export function geometrySignatures(project: Project): Map<string, string> {
   const map = new Map<string, string>();
   for (const panelId of Object.keys(project.pattern.panels)) {
-    map.set(panelId, panelGeometrySignature(project, panelId));
+    map.set(panelId, panelGeometrySignature(project.pattern, project.scene.simulation, panelId));
   }
   return map;
 }

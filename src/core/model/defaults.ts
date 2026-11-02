@@ -2,6 +2,7 @@ import type {
   Project, Pattern, Fabric, Avatar, AvatarParams, SceneConfig, ObjectTransform,
   FabricPresetKey, FabricPhysics, FabricAppearance, RayTracingConfig, DenoiseModel,
   LightType, SceneLight, LightConfig, Vec3, SeamType, EdgeSemantic, TrimKind,
+  MeshSampling,
 } from './types';
 import { vec2, vec3 } from './types';
 
@@ -151,6 +152,9 @@ export function createDefaultAvatar(): Avatar {
 
 /** Default simulation mesh edge length in cm; finer than the per-panel pattern value. */
 export const DEFAULT_MESH_RESOLUTION_CM = 1.5;
+
+/** Default interior mesh point distribution. */
+export const DEFAULT_MESH_SAMPLING: MeshSampling = 'lattice';
 
 /** Default cloth thickness in cm; the minimum clearance against body and floor. */
 export const DEFAULT_CLOTH_THICKNESS_CM = 0.2;

@@ -1,10 +1,9 @@
-import type { Pattern, Panel, SeamAllowanceCorner, Vec2 } from '../../core/model/types';
+import type { MeshSampling, Pattern, Panel, SeamAllowanceCorner, Vec2 } from '../../core/model/types';
 import { DEFAULT_MESH_RESOLUTION_CM } from '../../core/model/defaults';
 import { hasSelfIntersection, offsetOutlinePerEdge, offsetPolygonStyled, safeOffsetPolygon } from '../geom/offset';
 import { computeBBox, ensureCCW } from '../geom/vec2';
-import {
-  triangulatePolygon, refineMesh, extractBoundaryEdges, resampleClosedOutline, type TriangleMesh,
-} from '../triangulate/triangulate';
+import { extractBoundaryEdges, resampleClosedOutline, type TriangleMesh } from '../triangulate/triangulate';
+import { remeshPolygon } from '../triangulate/remesh';
 import { sampleEdge } from '../geom/edgeSample';
 
 export { sampleEdge, sampleEdgeInterval, pointAtT, edgeLength, edgeIntervalLength } from '../geom/edgeSample';
@@ -88,9 +87,15 @@ function to3D(positions2D: Float32Array): Float32Array {
 
 /**
  * Builds a panel's simulation mesh: outline sampling, seam allowance, triangulation, refinement, UVs and seam mapping.
- * `resolutionCm` overrides the panel's own mesh resolution when given.
+ * `resolutionCm` overrides the panel's own mesh resolution when given; `sampling` overrides the
+ * project's interior point distribution when given.
  */
-export function buildPanelMesh(pattern: Pattern, panelId: string, resolutionCm?: number): PanelMesh | null {
+export function buildPanelMesh(
+  pattern: Pattern,
+  panelId: string,
+  resolutionCm?: number,
+  sampling?: MeshSampling,
+): PanelMesh | null {
   const panel = pattern.panels[panelId];
   if (!panel) return null;
 
@@ -102,9 +107,8 @@ export function buildPanelMesh(pattern: Pattern, panelId: string, resolutionCm?:
     .map(loop => resampleClosedOutline(sampleOutline(pattern, loop), resolution))
     .filter(loop => loop.length >= 3);
 
-  let mesh: TriangleMesh = triangulatePolygon(outline, holes);
-
-  mesh = refineMesh(mesh, resolution);
+  const mesh = remeshPolygon(outline, holes, resolution, sampling);
+  if (mesh.triangleCount === 0) return null;
 
   const bbox = computeBBox(outline);
   const uvs = generateUVs(mesh.positions, bbox);

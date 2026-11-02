@@ -1,5 +1,5 @@
 import type { CameraPreset } from '../core/engine/garmentEngine';
-import type { CameraProjection, DenoiseModel, EditPreviewTier, RenderMode, ToneMappingMode } from '../core/model/types';
+import type { CameraProjection, DenoiseModel, EditPreviewTier, MeshSampling, RenderMode, ToneMappingMode } from '../core/model/types';
 import type { PropTab, DisplayMode } from '../store/stores';
 import type { IconName } from './icons';
 import type { RayTraceFailure, RayTraceState, RayTracingCapability } from '../render/renderer/rendererContext';
@@ -76,6 +76,12 @@ export const EDIT_PREVIEW_TIERS: Array<{ value: EditPreviewTier; label: string }
   { value: 'off', label: '关闭' },
   { value: 'low', label: '低精度' },
   { value: 'full', label: '全精度' },
+];
+
+/** Interior point distributions offered by the project tab's mesh generation block. */
+export const MESH_SAMPLINGS: Array<{ value: MeshSampling; label: string }> = [
+  { value: 'lattice', label: '六边形晶格' },
+  { value: 'blueNoise', label: '蓝噪声' },
 ];
 
 /** Tone-mapping modes offered by the menu and the render tab. */

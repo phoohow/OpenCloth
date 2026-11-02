@@ -178,13 +178,14 @@ export function Viewport2D() {
     ctx.clearRect(0, 0, w, h);
 
     drawScene(ctx, w, h, {
-      pattern, view, selection, hoverPointId, preview, rect: rectWorld,
+      pattern, view, simulation: project.scene.simulation,
+      selection, hoverPointId, preview, rect: rectWorld,
       showSeams: activeTool === 'seam' || idsOfKind(selection, 'seam').length > 0 || idsOfKind(selection, 'edge').length > 0,
       draft, snapHint, display: displayOptions as DisplayOptions, gradingOutlines,
       onPrintImageReady: () => useUIStore.getState().requestRepaint(),
     });
     noteDrawnFrame('2d', performance.now());
-  }, [pattern, view, selection, hoverPointId, preview, rectWorld, activeTool, draft, snapHint, displayOptions, gradingOutlines]);
+  }, [pattern, view, project.scene.simulation, selection, hoverPointId, preview, rectWorld, activeTool, draft, snapHint, displayOptions, gradingOutlines]);
 
   useEffect(() => { render(); }, [render, repaintToken]);
 

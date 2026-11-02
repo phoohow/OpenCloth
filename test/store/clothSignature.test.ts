@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { computeClothSignature } from '../../src/store/projectStore';
-import { panelGeometrySignature } from '../../src/core/engine/clothSignatures';
+import { panelGeometrySignature } from '../../src/pattern/panel/panelMeshSignature';
 import { createDefaultProject, createEmptyPattern } from '../../src/core/model/defaults';
 import { vec2, vec3, type Pattern, type Project } from '../../src/core/model/types';
 
@@ -225,12 +225,21 @@ describe('computeClothSignature rebuild fields', () => {
   it('keeps a per-panel mesh density change local to that panel', () => {
     const project = makeProject();
     project.pattern.panels.panel_b = { ...project.pattern.panels.panel_a, id: 'panel_b', name: '后片' };
-    const beforeA = panelGeometrySignature(project, 'panel_a');
-    const beforeB = panelGeometrySignature(project, 'panel_b');
+    const beforeA = panelGeometrySignature(project.pattern, project.scene.simulation, 'panel_a');
+    const beforeB = panelGeometrySignature(project.pattern, project.scene.simulation, 'panel_b');
 
     project.pattern.panels.panel_a.meshResolutionCm = 4;
-    expect(panelGeometrySignature(project, 'panel_a')).not.toBe(beforeA);
-    expect(panelGeometrySignature(project, 'panel_b')).toBe(beforeB);
+    expect(panelGeometrySignature(project.pattern, project.scene.simulation, 'panel_a')).not.toBe(beforeA);
+    expect(panelGeometrySignature(project.pattern, project.scene.simulation, 'panel_b')).toBe(beforeB);
+  });
+
+  it('changes the panel geometry signature when the initial pose changes', () => {
+    const project = makeProject();
+    const before = panelGeometrySignature(project.pattern, project.scene.simulation, 'panel_a');
+    project.pattern.panels.panel_a.transform = {
+      position: vec3(0.1, 0, 0), rotationEuler: vec3(0, 0, 0), scale: vec3(1, 1, 1),
+    };
+    expect(panelGeometrySignature(project.pattern, project.scene.simulation, 'panel_a')).not.toBe(before);
   });
 
   it('changes the signature when panel structure fields change', () => {

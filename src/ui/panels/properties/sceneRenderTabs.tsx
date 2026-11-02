@@ -1,9 +1,12 @@
 import { displayModeOf, usePerfStore, useSimStore, useUIStore } from '../../../store/stores';
 import type { Project } from '../../../core/model/types';
-import { DEFAULT_CLOTH_THICKNESS_CM, DEFAULT_LAYER_SPACING_CM, DEFAULT_MESH_RESOLUTION_CM, normalizeRayTracing } from '../../../core/model/defaults';
+import {
+  DEFAULT_CLOTH_THICKNESS_CM, DEFAULT_LAYER_SPACING_CM, DEFAULT_MESH_RESOLUTION_CM,
+  DEFAULT_MESH_SAMPLING, normalizeRayTracing,
+} from '../../../core/model/defaults';
 import { patchValue, setGlobalMeshResolution, setRayTracingConfig, setSimulationConfig, setToneMapping, type EngineRef } from '../../sceneCommands';
 import { SizeChart } from './objectDataSections';
-import { DENOISE_MODELS, DISPLAY_MODES, TONE_MAPPING, rayTracingUnavailableReason } from '../../optionTables';
+import { DENOISE_MODELS, DISPLAY_MODES, MESH_SAMPLINGS, TONE_MAPPING, rayTracingUnavailableReason } from '../../optionTables';
 import { CheckRow, Row, Section, SelectRow, SliderRow, TextRow } from '../../widgets/propertyRows';
 import { downloadTextFile } from '../../../io/codec';
 import { fitReportCsv } from '../../../render/analysis/fitReport';
@@ -30,6 +33,15 @@ export function ProjectTab({ project, engineRef }: { project: Project; engineRef
         <Row label="面料">{Object.keys(project.fabrics).length}</Row>
         <Row label="参考物">{refs.length}</Row>
       </Section>
+      <Section title="网格生成">
+        <SelectRow label="生成方式" value={sim.meshSampling ?? DEFAULT_MESH_SAMPLING}
+          options={MESH_SAMPLINGS}
+          onChange={v => setSimulationConfig('修改网格生成方式', { meshSampling: v })} />
+        <SliderRow label="网格边长" min={0.5} max={10} step={0.5} unit="cm"
+          value={sim.meshResolutionCm ?? DEFAULT_MESH_RESOLUTION_CM} commitOnRelease
+          onChange={v => setGlobalMeshResolution(v)} />
+        <div style={styles.note}>生成方式决定版片内部撒点的分布：六边形晶格是规则的三角结构，蓝噪声（泊松盘）没有固定方向，三角形更接近正三角。两种方式都在松手后把全部版片的网格边长设为该值并重建布料；之后可在单片的「布料网格」区块单独调整。</div>
+      </Section>
       <Section title="全局模拟">
         <SliderRow label="重力" min={-20} max={0} step={0.1} unit="m/s²" value={sim.gravity.y}
           onChange={v => setSimulationConfig('修改重力', { gravity: { ...sim.gravity, y: v } })} />
@@ -37,9 +49,6 @@ export function ProjectTab({ project, engineRef }: { project: Project; engineRef
           onChange={v => setSimulationConfig('修改风速', { wind: { ...sim.wind, speed: v } })} />
         <SliderRow label="迭代次数" min={1} max={15} step={1} value={sim.constraintIterations}
           onChange={v => setSimulationConfig('修改迭代次数', { constraintIterations: Math.round(v) })} />
-        <SliderRow label="网格边长" min={0.5} max={10} step={0.5} unit="cm"
-          value={sim.meshResolutionCm ?? DEFAULT_MESH_RESOLUTION_CM} commitOnRelease
-          onChange={v => setGlobalMeshResolution(v)} />
         <CheckRow label="布料自碰撞" checked={sim.selfCollision !== false}
           onChange={v => setSimulationConfig('修改布料自碰撞', { selfCollision: v })} />
         <SliderRow label="布料厚度" min={0} max={1} step={0.05} unit="cm"
@@ -48,7 +57,7 @@ export function ProjectTab({ project, engineRef }: { project: Project; engineRef
         <SliderRow label="层间距" min={0} max={2} step={0.1} unit="cm"
           value={sim.layerSpacingCm ?? DEFAULT_LAYER_SPACING_CM}
           onChange={v => setSimulationConfig('修改层间距', { layerSpacingCm: v })} />
-        <div style={styles.note}>网格边长在松手后把全部版片的网格密度设为该值并重建布料；之后可在单片的「布料网格」区块单独调整。布料厚度同时抬高模特与地面的碰撞距离；层间距按相邻版片的「碰撞层」差值加大分离距离，0 为最内层。</div>
+        <div style={styles.note}>布料厚度同时抬高模特与地面的碰撞距离；层间距按相邻版片的「碰撞层」差值加大分离距离，0 为最内层。</div>
       </Section>
       <SizeChart project={project} engineRef={engineRef} />
     </>

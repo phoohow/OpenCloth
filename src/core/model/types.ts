@@ -551,6 +551,9 @@ export interface WindConfig {
   speed: number;
 }
 
+/** How a panel mesh's interior sample points are distributed. */
+export type MeshSampling = 'lattice' | 'blueNoise';
+
 /** Solver settings. */
 export interface SimulationConfig {
   gravity: Vec3;
@@ -562,6 +565,8 @@ export interface SimulationConfig {
   avatarCollision: boolean;
   /** Target simulation mesh edge length in cm; smaller means finer cloth. */
   meshResolutionCm?: number;
+  /** Interior mesh point distribution; absent means the hexagonal lattice. */
+  meshSampling?: MeshSampling;
   /** Cloth thickness in cm; the minimum clearance against the body and the floor. */
   clothThicknessCm?: number;
   /** CPU self-collision pass after each readback; absent or false skips it entirely. */

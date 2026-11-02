@@ -50,7 +50,7 @@ export function computeClothSignature(project: Project): string {
   ]);
   const pattern = JSON.stringify(project.pattern, (key, value) => (drawOnly.has(key) ? undefined : value));
   const body = avatarBodySignature(project.avatar);
-  return `${pattern}|${body}|${project.scene.simulation.meshResolutionCm ?? null}`;
+  return `${pattern}|${body}|${project.scene.simulation.meshResolutionCm ?? null}|${project.scene.simulation.meshSampling ?? null}`;
 }
 
 /** Commits a finished command draft as the new immutable project state. */

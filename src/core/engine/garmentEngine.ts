@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu';
 import type { Project, SimulationConfig, FabricPhysics, ObjectTransform, RenderMode, Vec3, CameraProjection, ReferenceObjectRef, EditPreviewTier } from '../model/types';
-import { buildPanelMesh, type PanelMesh } from '../../pattern/panel/panelBuilder';
+import { type PanelMesh } from '../../pattern/panel/panelBuilder';
+import { getPanelMesh } from '../../pattern/panel/panelMeshCache';
 import { DEFAULT_MESH_RESOLUTION_CM } from '../model/defaults';
 import { fabricForPanel, clothMaterialSlotKey, clothMaterialSlotPlan, panelPrints, type ClothMaterialSlot } from '../model/fabric';
 import { ClothSimulator, type ClothSimInput } from '../../sim/clothSimulator';
@@ -198,45 +199,17 @@ export class GarmentEngine {
     }
 
     for (const panelId of removed) this.panelMeshes.delete(panelId);
-    const layoutStable = removed.length === 0
-      && [...next.keys()].join('|') === [...previous.keys()].join('|');
-    let statePreserved = layoutStable;
     for (const panelId of changed) {
-      const mesh = buildPanelMesh(project.pattern, panelId);
-      const old = this.panelMeshes.get(panelId);
-      if (mesh) {
-        if (old && mesh.vertexCount !== old.vertexCount) statePreserved = false;
-        this.panelMeshes.set(panelId, mesh);
-      } else {
-        this.panelMeshes.delete(panelId);
-        statePreserved = false;
-      }
+      const mesh = getPanelMesh(project.pattern, panelId, undefined, project.scene.simulation);
+      if (mesh) this.panelMeshes.set(panelId, mesh);
+      else this.panelMeshes.delete(panelId);
     }
 
-    const carried = statePreserved && this.lastGoodPositions.length === this.mergedPositions.length
-      ? this.lastGoodPositions
-      : null;
-    const before = this.mergedInput;
-    this.mergedInput = this.mergePanelMeshes(project);
+    this.mergePanelMeshes(project);
     if (!this.mergedInput) return;
-    let rebased = false;
-    if (carried && before) {
-      this.carryParticleRanges(before, this.mergedInput, carried);
-      if (clothLayoutFingerprint(before, this.cloth.seamPairs.length) === clothLayoutFingerprint(this.mergedInput, this.cloth.seamPairs.length)
-        && this.simulator && this.simReady) {
-        this.simulator.rebaseGeometry(this.mergedInput, this.mergedInput.positions, carried);
-        this.mergedPositions = this.mergedInput.positions.slice();
-        rebased = true;
-      }
-    }
     this.removeRenderMesh();
     this.createRenderMesh(project);
-    if (rebased) {
-      this.simulatorLayout = clothLayoutFingerprint(this.mergedInput, this.cloth.seamPairs.length);
-      this.installConstraintSets();
-    } else {
-      this.simulatorLayout = '';
-    }
+    this.simulatorLayout = '';
     this.appliedGeometry = next;
   }
 
@@ -261,7 +234,7 @@ export class GarmentEngine {
       }
       everyMeshLent = false;
       const panelResolution = project.pattern.panels[panelId]?.meshResolutionCm ?? DEFAULT_MESH_RESOLUTION_CM;
-      const mesh = buildPanelMesh(project.pattern, panelId, editPreviewResolutionCm(tier, panelResolution));
+      const mesh = getPanelMesh(project.pattern, panelId, editPreviewResolutionCm(tier, panelResolution), project.scene.simulation);
       if (mesh) previewMeshes.set(panelId, mesh);
     }
 
@@ -329,7 +302,7 @@ export class GarmentEngine {
 
     // Global mesh density from the simulation settings overrides per-panel resolution.
     for (const panelId of panelIds) {
-      const mesh = buildPanelMesh(project.pattern, panelId);
+      const mesh = getPanelMesh(project.pattern, panelId, undefined, project.scene.simulation);
       if (mesh) this.panelMeshes.set(panelId, mesh);
     }
 

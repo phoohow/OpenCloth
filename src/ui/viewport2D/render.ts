@@ -1,5 +1,7 @@
-import type { Measurement, Panel, Pattern, Print, Seam, Topstitch, Trim, Vec2 } from '../../core/model/types';
-import { buildPanelMesh, panelGrainLine, panelOutlineWithAllowance, sampleEdge, sampleEdgeInterval, samplePanelOutline, type PanelMesh } from '../../pattern/panel/panelBuilder';
+import type { Measurement, Pattern, Print, Seam, Topstitch, Trim, Vec2 } from '../../core/model/types';
+import { panelGrainLine, panelOutlineWithAllowance, sampleEdge, sampleEdgeInterval, samplePanelOutline, type PanelMesh } from '../../pattern/panel/panelBuilder';
+import { getPanelMesh } from '../../pattern/panel/panelMeshCache';
+import type { PanelMeshSettings } from '../../pattern/panel/panelMeshSignature';
 import { measurementValue, pointAtT } from '../../pattern/geom/edgeSample';
 import { edgeCurve } from '../../pattern/geom/bezier';
 import { computeBBox } from '../../pattern/geom/vec2';
@@ -13,6 +15,9 @@ import { panelFrame, printCenter, printFrame, shapeFrame, topstitchRows, trimRad
 import type { SnapCandidate } from './snap';
 
 const NEAR = 1e-6;
+
+/** Coarse wireframe edge length while a drag is in flight, so the pane stays responsive. */
+const WIREFRAME_DRAG_RESOLUTION_CM = 2.5;
 
 /** In-flight drag shown without committing to the model. */
 export interface PreviewDrag {
@@ -48,6 +53,8 @@ export interface DisplayOptions {
 export interface SceneState {
   pattern: Pattern;
   view: ViewTransform;
+  /** Scene settings the shared panel mesh cache keys on; identical to what the 3D engine reads. */
+  simulation: PanelMeshSettings;
   selection: string[];
   hoverPointId: string | null;
   preview: PreviewDrag | null;
@@ -270,39 +277,6 @@ function tick(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number,
   ctx.stroke();
 }
 
-/** Wireframe overlay resolution: coarser than the simulation mesh so the pane stays interactive. */
-const WIREFRAME_RESOLUTION_CM = 2.5;
-
-/** Panel meshes kept between frames, keyed by panel id and invalidated by a geometry hash. */
-const wireframeCache = new Map<string, { hash: number; mesh: PanelMesh | null }>();
-
-/** Triangulated mesh of one panel, rebuilt only when its outline or holes change. */
-function wireframeMesh(pattern: Pattern, panel: Panel, outline: Vec2[]): PanelMesh | null {
-  const hash = meshHash(pattern, panel, outline);
-  const cached = wireframeCache.get(panel.id);
-  if (cached && cached.hash === hash) return cached.mesh;
-  const mesh = buildPanelMesh(pattern, panel.id, WIREFRAME_RESOLUTION_CM);
-  wireframeCache.set(panel.id, { hash, mesh });
-  return mesh;
-}
-
-/** FNV-1a hash of the panel outline and hole points at 0.01 cm precision. */
-function meshHash(pattern: Pattern, panel: Panel, outline: Vec2[]): number {
-  let hash = 2166136261;
-  const mix = (value: number): void => {
-    hash = Math.imul(hash ^ (value & 0xffff), 16777619);
-    hash = Math.imul(hash ^ ((value >> 16) & 0xffff), 16777619);
-  };
-  mix(outline.length);
-  for (const p of outline) { mix(Math.round(p.x * 100)); mix(Math.round(p.y * 100)); }
-  for (const loop of panel.holes ?? []) {
-    for (const edgeId of loop) {
-      for (const p of sampleEdge(pattern, edgeId)) { mix(Math.round(p.x * 100)); mix(Math.round(p.y * 100)); }
-    }
-  }
-  return hash;
-}
-
 /** Triangle edges of a panel mesh, drawn over its filled outline. */
 function drawWireframe(ctx: CanvasRenderingContext2D, mesh: PanelMesh, screen: (p: Vec2) => Vec2): void {
   const { positions2D, indices, vertexCount } = mesh;
@@ -367,7 +341,10 @@ function drawPanel(
   ctx.stroke();
 
   if (display.wireframe) {
-    const mesh = wireframeMesh(pattern, panel, outline);
+    // Coarse while a drag is in flight; otherwise the panel's own edge length, which is the same
+    // value the 3D cloth build resolves, so both sides draw one shared mesh instance.
+    const resolutionCm = scene.preview ? WIREFRAME_DRAG_RESOLUTION_CM : panel.meshResolutionCm;
+    const mesh = getPanelMesh(pattern, panel.id, resolutionCm, scene.simulation);
     if (mesh) drawWireframe(ctx, mesh, screen);
   }
 
