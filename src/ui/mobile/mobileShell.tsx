@@ -60,17 +60,17 @@ function TopBar({ onOpenMenu, onOpenProps }: { onOpenMenu: () => void; onOpenPro
     ? pattern.panels[selection[0]]?.name ?? null
     : null;
   const isPlaying = useSimStore(s => s.isPlaying);
-  const isDraped = useSimStore(s => s.isDraped);
-  const isDraping = useSimStore(s => s.isDraping);
+  const isDressed = useSimStore(s => s.isDressed);
+  const isDressing = useSimStore(s => s.isDressing);
   const currentFrame = useSimStore(s => s.currentFrame);
   const renderMode = useUIStore(s => s.renderMode);
   const fps3D = usePerfStore(s => s.fps['3d']);
   const samples3D = usePerfStore(s => s.samples3D);
   const rayState3D = usePerfStore(s => s.rayState3D);
 
-  const status = isDraping
+  const status = isDressing
     ? { text: '缝合着装中', color: '#4da6ff' }
-    : !isDraped
+    : !isDressed
       ? { text: '未着装', color: '#e0a040' }
       : isPlaying
         ? { text: '模拟中', color: '#50c878' }
@@ -101,7 +101,7 @@ function TopBar({ onOpenMenu, onOpenProps }: { onOpenMenu: () => void; onOpenPro
 /** Thumb-reach actions: dress the garment, run the simulation, change its speed, edit properties. */
 function Dock({ actions, onOpenProps }: { actions: MenuActions; onOpenProps: () => void }) {
   const isPlaying = useSimStore(s => s.isPlaying);
-  const isDraping = useSimStore(s => s.isDraping);
+  const isDressing = useSimStore(s => s.isDressing);
   const speed = useSimStore(s => s.speed);
   const setSpeed = useSimStore(s => s.setSpeed);
 
@@ -109,10 +109,10 @@ function Dock({ actions, onOpenProps }: { actions: MenuActions; onOpenProps: () 
     <nav style={styles.dock}>
       <DockButton
         icon="t-shirt"
-        label={isDraping ? '着装中…' : '自动着装'}
+        label={isDressing ? '着装中…' : '自动着装'}
         primary
-        disabled={isDraping}
-        onClick={actions.drape}
+        disabled={isDressing}
+        onClick={actions.dress}
       />
       <DockButton
         icon={isPlaying ? 'pause' : 'play'}

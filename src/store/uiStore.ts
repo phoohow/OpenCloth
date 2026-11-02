@@ -6,7 +6,7 @@ import { pickPrefs, readPrefs, writePrefs } from './prefs';
 /** 2D drafting and 3D fitting tools; each pane owns a subset. */
 export type ToolType = 'select' | 'point' | 'line' | 'curve' | 'internalLine' | 'dart' | 'seam' | 'pin' | 'unpin' | 'rect' | 'circle' | 'ellipse' | 'split' | 'hole' | 'notch' | 'annotation' | 'measure' | 'topstitch' | 'trim';
 /** Properties-editor tabs, one icon in the right-hand rail. Identity and data share `object`. */
-export type PropTab = 'object' | 'material' | 'simulator' | 'generator' | 'render' | 'project';
+export type PropTab = 'object' | 'material' | 'simulator' | 'transform' | 'render' | 'project';
 /** Viewport display-mode value: a render mode or one of the two cloth analysis heatmaps. */
 export type DisplayMode = RenderMode | 'fitHeatmap' | 'strainHeatmap';
 

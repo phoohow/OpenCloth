@@ -53,7 +53,7 @@ export function generateTShirt(params: TShirtParams = DEFAULT_TSHIRT_PARAMS, fab
     neckDepthCm,
     underarmAt,
     shoulderSlopeCm: SHOULDER_SLOPE_CM,
-    drape: { region: 'torso', ...frontArc(180), plumb: true },
+    drape: { region: 'torso', ...frontArc(180) },
   });
 
   const back = addBodice(builder, {
@@ -65,7 +65,7 @@ export function generateTShirt(params: TShirtParams = DEFAULT_TSHIRT_PARAMS, fab
     neckDepthCm: neckDepthCm * BACK_NECK_SHARE,
     underarmAt,
     shoulderSlopeCm: SHOULDER_SLOPE_CM,
-    drape: { region: 'torso', ...backArc(180), plumb: true },
+    drape: { region: 'torso', ...backArc(180) },
   });
 
   // The cap arc must match the armhole arc, so the cap height follows from the armhole length.
@@ -76,13 +76,11 @@ export function generateTShirt(params: TShirtParams = DEFAULT_TSHIRT_PARAMS, fab
   const sleeveDrape = (side: 'left' | 'right'): PanelDrape => ({
     region: 'arm',
     side,
-    rowWrap: true,
     pinTop: false,
     // The cap crown joins the shoulder tip, which sits one slope below the neck seam.
     anchor: 'shoulderTop',
     anchorOffsetCm: -SHOULDER_SLOPE_CM,
-    // A cap row only covers the arc its own fabric is long, so the cap narrows toward the
-    // outer side of the arm and keeps its rest length instead of stretching around it.
+    // Centre the full turn on the outer side of the arm, away from the body.
     startDeg: side === 'left' ? 0 : -180,
     sweepDeg: 360,
   });

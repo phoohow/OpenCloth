@@ -12,8 +12,9 @@ Modifications: the multires level-1 subdivision (86.9 k triangles) was applied i
 joined with the two eye meshes; UV layers, vertex colors, materials and the (unused) rig data were dropped
 so the export stays a single unsplit vertex buffer; the mesh was rotated to face +Z, scaled to 1.70 m and
 grounded at y = 0, and given one matte warm-gray body material plus one dark eye material. The figure's
-rest pose already hangs the arms ~28° from vertical, so no re-posing was needed. Measurements in
-`BUNDLED_AVATARS` (chest 92 / waist 70 / hip 92) follow the exported mesh's cross-sections.
+rest pose already hangs the arms ~28° from vertical, so no re-posing was needed. Cross-sections of the
+exported mesh measure chest 92 / waist 70 / hip 92; the default entry in `BUNDLED_AVATARS` scales the mesh
+to 175 cm and sets the body to chest 92 / waist 70 / hip 110.
 
 ## human-body-pro.glb
 

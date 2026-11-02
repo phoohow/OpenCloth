@@ -83,13 +83,13 @@ export function markerReportCsv(report: MarkerReport): string {
   const rows: string[][] = [
     ['项目', '数值'],
     ['版片数', String(report.pieceCount)],
-    ['用料长度 (m)', report.usedLengthM.toFixed(4)],
-    ['面料面积 (m²)', report.fabricAreaM2.toFixed(4)],
-    ['版片面积 (m²)', report.garmentAreaM2.toFixed(4)],
+    ['用料长度(m)', report.usedLengthM.toFixed(4)],
+    ['面料面积(m²)', report.fabricAreaM2.toFixed(4)],
+    ['版片面积(m²)', report.garmentAreaM2.toFixed(4)],
     ['利用率', report.utilization.toFixed(4)],
   ];
   if (report.cost !== null) rows.push([`面料成本 (${report.currency})`, report.cost.toFixed(2)]);
-  rows.push(['版片', '数量', '面积 (m²)']);
+  rows.push(['版片', '数量', '面积(m²)']);
   for (const panel of report.panels) {
     rows.push([panel.name, String(panel.count), panel.areaM2.toFixed(4)]);
   }

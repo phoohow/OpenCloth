@@ -183,8 +183,8 @@ export class EngineSync {
         const project = useProjectStore.getState().project;
         void this.engine.stepFrame(project).then(() => {
           const sim = useSimStore.getState();
-          sim.setDraping(this.engine.isDraping);
-          sim.setDraped(this.engine.isDressed);
+          sim.setDressing(this.engine.isDressing);
+          sim.setDressed(this.engine.isDressed);
           sim.incrementFrame();
         });
       }
@@ -220,7 +220,7 @@ export class EngineSync {
       if (this.cancelled || seq !== this.rebuildSeq) return;
       syncSelectionOverlay(this.engine, project.pattern, useUIStore.getState().selection);
       useSimStore.getState().reset();
-      useSimStore.getState().setDraped(false);
+      useSimStore.getState().setDressed(false);
       useSimStore.getState().bumpPins();
       const fit = useUIStore.getState();
       if (fit.fitCheck) {
@@ -317,8 +317,8 @@ export class EngineSync {
         }
       }
       // The engine owns the dressing stages, so the UI mirrors its state.
-      if (simState.isDraping !== this.engine.isDraping) simState.setDraping(this.engine.isDraping);
-      if (simState.isDraped !== this.engine.isDressed) simState.setDraped(this.engine.isDressed);
+      if (simState.isDressing !== this.engine.isDressing) simState.setDressing(this.engine.isDressing);
+      if (simState.isDressed !== this.engine.isDressed) simState.setDressed(this.engine.isDressed);
       if (useUIStore.getState().fitCheck) {
         const fit = useUIStore.getState();
         const stats = this.engine.refreshFit(fit.fitTightCm, fit.fitLooseCm);

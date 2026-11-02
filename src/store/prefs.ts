@@ -53,7 +53,7 @@ const LAYOUTS: ViewLayout[] = ['split3d2d', 'split2d3d', '2d', '3d'];
 const PANES: PaneId[] = ['2d', '3d'];
 const RENDER_MODES: RenderMode[] = ['shaded', 'raytraced', 'wireframe', 'shadedWireframe', 'uvCheck', 'normalVis'];
 const CAMERA_PROJECTIONS: CameraProjection[] = ['perspective', 'orthographic'];
-const PROP_TABS: PropTab[] = ['object', 'material', 'simulator', 'generator', 'render', 'project'];
+const PROP_TABS: PropTab[] = ['object', 'material', 'simulator', 'transform', 'render', 'project'];
 const EDIT_PREVIEW_TIERS: EditPreviewTier[] = ['off', 'low', 'full'];
 const AUTO_SAVE_SECONDS = [0, 30, 60, 300];
 /** Draggable ranges matching the divider helpers in the viewport layout. */

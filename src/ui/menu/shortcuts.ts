@@ -37,7 +37,7 @@ export const SHORTCUTS: ShortcutDef[] = [
   { id: 'fitView', label: '适应视图', combo: 'F', scope: '2D 制版' },
   { id: 'toggleFocus', label: '在 3D 与 2D 之间切换焦点', combo: 'Tab', scope: '全局' },
 
-  { id: 'drape', label: '自动着装', combo: 'Ctrl+D', scope: '全局' },
+  { id: 'dress', label: '自动着装', combo: 'Ctrl+D', scope: '全局' },
 
   { id: 'playPause', label: '播放 / 暂停', combo: 'Space', scope: '3D 视口' },
   { id: 'stepFrame', label: '单步', combo: '.', scope: '3D 视口' },

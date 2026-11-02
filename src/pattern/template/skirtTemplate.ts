@@ -40,14 +40,14 @@ export function generateSkirt(params: SkirtParams = DEFAULT_SKIRT_PARAMS, fabric
       waistWidthCm,
       hemWidthCm: panelWidthCm,
       lengthCm: params.lengthCm,
-      drape: { region: 'torso', anchor: 'waist', rowWrap: true, ...bandArc(i, perHalf) },
+      drape: { region: 'torso', anchor: 'waist', ...bandArc(i, perHalf) },
     }));
     back.push(addFlaredPanel(builder, {
       name: `后裙片${i + 1}`,
       waistWidthCm,
       hemWidthCm: panelWidthCm,
       lengthCm: params.lengthCm,
-      drape: { region: 'torso', anchor: 'waist', rowWrap: true, ...bandArc(i, perHalf, true) },
+      drape: { region: 'torso', anchor: 'waist', ...bandArc(i, perHalf, true) },
     }));
   }
 

@@ -167,7 +167,7 @@ function DisplaySheet({ onClose }: { onClose: () => void }) {
   );
 }
 
-/** Object, material, simulator, generator, render and project properties. */
+/** Object, material, simulator, transform, render and project properties. */
 function PropsSheet({ engineRef }: { engineRef: EngineRef }) {
   const setPropTab = useUIStore(s => s.setPropTab);
   const target = usePropsTarget(engineRef);

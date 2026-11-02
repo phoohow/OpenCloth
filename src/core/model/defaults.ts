@@ -122,7 +122,7 @@ export interface BundledAvatar {
 }
 
 const MALE_PARAMS: AvatarParams = { heightCm: 170, chestCm: 92, waistCm: 74, hipCm: 96, poseArmAngleRad: 0.12 };
-const FEMALE_PARAMS: AvatarParams = { heightCm: 170, chestCm: 92, waistCm: 70, hipCm: 92, poseArmAngleRad: 0.12 };
+const FEMALE_PARAMS: AvatarParams = { heightCm: 175, chestCm: 92, waistCm: 70, hipCm: 110, poseArmAngleRad: 0.12 };
 
 /** Bundled body meshes, first entry is the default. */
 export const BUNDLED_AVATARS: BundledAvatar[] = [

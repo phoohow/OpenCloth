@@ -38,22 +38,9 @@ export function posedPositions3D(mesh: PanelMesh, panel: Panel, landmarks: BodyL
 const PIN_TOP_FRACTION = 0.04;
 
 /** Unsewn start pose: wrapped panels slide off the body, flat panels stay on their coordinates. */
-export function initialPositions3D(positions3D: Float32Array, panel: Panel, mesh: PanelMesh): Float32Array {
+export function initialPositions3D(positions3D: Float32Array, panel: Panel): Float32Array {
   if (panel.placement || !panel.drape) return positions3D;
-  if (!resolveDrape(panel).pinTop) return explodeOffBody(positions3D);
-  return explodeOffBody(positions3D, explodeWeights(mesh));
-}
-
-/** Explode share per vertex: the pinned top band keeps its wrapped pose and fades out below it. */
-function explodeWeights(mesh: PanelMesh): Float32Array {
-  const { maxy, band } = pinnedBand(mesh);
-  const weights = new Float32Array(mesh.vertexCount);
-  if (!(band > 0)) return weights;
-  for (let i = 0; i < mesh.vertexCount; i++) {
-    const y = mesh.positions2D[i * 2 + 1];
-    weights[i] = Math.min(1, Math.max(0, (maxy - band - y) / band));
-  }
-  return weights;
+  return explodeOffBody(positions3D);
 }
 
 /** Vertical extent of a panel mesh and the height of its pinned top band, in centimetres. */

@@ -6,9 +6,9 @@ interface SimStore {
   isPlaying: boolean;
   currentFrame: number;
   speed: number;
-  isDraped: boolean;
-  /** True while the sew → dress → settle animation is playing. */
-  isDraping: boolean;
+  isDressed: boolean;
+  /** True while the sew → glide → settle dressing animation is playing. */
+  isDressing: boolean;
   /** Incremented to request one physics step. */
   stepToken: number;
   /** Incremented to request a restore of the initial positions. */
@@ -29,8 +29,8 @@ interface SimStore {
   setStrainStats: (stats: StrainStats | null) => void;
   setSpeed: (s: number) => void;
   incrementFrame: () => void;
-  setDraped: (v: boolean) => void;
-  setDraping: (v: boolean) => void;
+  setDressed: (v: boolean) => void;
+  setDressing: (v: boolean) => void;
 }
 
 /** Playback state for the cloth simulation, driven by the timeline and the 3D viewport. */
@@ -38,8 +38,8 @@ export const useSimStore = create<SimStore>((set, get) => ({
   isPlaying: false,
   currentFrame: 0,
   speed: 1,
-  isDraped: false,
-  isDraping: false,
+  isDressed: false,
+  isDressing: false,
   stepToken: 0,
   resetToken: 0,
   pinsVersion: 0,
@@ -56,6 +56,6 @@ export const useSimStore = create<SimStore>((set, get) => ({
   setStrainStats: (stats) => set({ strainStats: stats }),
   setSpeed: (s) => set({ speed: s }),
   incrementFrame: () => set(s => ({ currentFrame: s.currentFrame + 1 })),
-  setDraped: (v) => set({ isDraped: v }),
-  setDraping: (v) => set({ isDraping: v }),
+  setDressed: (v) => set({ isDressed: v }),
+  setDressing: (v) => set({ isDressing: v }),
 }));

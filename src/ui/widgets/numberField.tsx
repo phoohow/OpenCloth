@@ -107,7 +107,7 @@ interface Vec3FieldProps {
   precision?: number;
   min?: number;
   max?: number;
-  /** Unit appended to the row label as `名称 (单位)`. */
+  /** Unit appended to the row label as `名称(单位)`. */
   unit?: string;
   onPreview?: (v: Vec3) => void;
   onCommit: (v: Vec3) => void;
@@ -119,7 +119,7 @@ export function Vec3Field({ label, value, step, precision, min, max, unit, onPre
   const withAxis = (axis: keyof typeof AXIS_COLOR, v: number): Vec3 => ({ ...value, [axis.toLowerCase()]: v });
   return (
     <div style={styles.vecRow}>
-      <span style={styles.vecLabel}>{unit ? `${label} (${unit})` : label}</span>
+      <span style={styles.vecLabel}>{unit ? `${label}(${unit})` : label}</span>
       <div style={styles.vecCells}>
         {axes.map(a => (
           <NumberField

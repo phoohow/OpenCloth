@@ -77,7 +77,7 @@ export class MergedCloth {
       const mesh = panelMeshes.get(panelId)!;
       const panel = project.pattern.panels[panelId];
       const posed = posedPositions3D(mesh, panel, landmarks.resolve(project.avatar.params));
-      const start = initialPositions3D(posed, panel, mesh);
+      const start = initialPositions3D(posed, panel);
 
       for (const local of topBandParticles(mesh, panel)) pinnedIndices.push(vertexOffset + local);
 

@@ -515,9 +515,9 @@ export function avatarLabel(project: Project): string {
   return avatar.modelName ?? BUNDLED_AVATARS.find(b => b.url === avatar.glbUrl)?.label ?? '外部模型';
 }
 
-/** Rows that carry a scene transform. */
+/** Rows with a placement: a scene transform, or the position and target of a light. */
 export function supportsTransform(kind: SceneNodeKind): boolean {
-  return kind === 'panel' || kind === 'avatar' || kind === 'reference';
+  return kind === 'panel' || kind === 'avatar' || kind === 'reference' || kind === 'light';
 }
 
 /** Rows that expose material properties. */
@@ -527,11 +527,6 @@ export function supportsMaterial(kind: SceneNodeKind): boolean {
 
 /** Rows that expose simulation settings. */
 export function supportsSimulator(kind: SceneNodeKind): boolean {
-  return kind === 'panel' || kind === 'avatar';
-}
-
-/** Rows that expose generator settings. */
-export function supportsGenerator(kind: SceneNodeKind): boolean {
   return kind === 'panel' || kind === 'avatar';
 }
 

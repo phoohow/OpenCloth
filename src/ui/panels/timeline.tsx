@@ -12,8 +12,8 @@ export function Timeline() {
   const step = useSimStore(s => s.step);
   const reset = useSimStore(s => s.reset);
   const setSpeed = useSimStore(s => s.setSpeed);
-  const isDraped = useSimStore(s => s.isDraped);
-  const isDraping = useSimStore(s => s.isDraping);
+  const isDressed = useSimStore(s => s.isDressed);
+  const isDressing = useSimStore(s => s.isDressing);
   const renderMode = useUIStore(s => s.renderMode);
   const fps3D = usePerfStore(s => s.fps['3d']);
   const samples3D = usePerfStore(s => s.samples3D);
@@ -48,10 +48,10 @@ export function Timeline() {
       )}
 
       <div style={styles.status}>
-        {isDraping && <span style={{ color: '#4da6ff' }}><Icon name="status-dot" size={8} style={{ marginRight: 5 }} />缝合着装中</span>}
-        {!isDraping && !isDraped && <span style={{ color: '#e0a040' }}><Icon name="status-dot" size={8} style={{ marginRight: 5 }} />未着装 — 播放或执行「自动着装」开始缝合</span>}
-        {!isDraping && isDraped && isPlaying && <span style={{ color: '#50c878' }}><Icon name="status-dot" size={8} style={{ marginRight: 5 }} />模拟中</span>}
-        {!isDraping && isDraped && !isPlaying && <span style={{ color: '#888' }}><Icon name="status-dot" size={8} style={{ marginRight: 5 }} />已暂停</span>}
+        {isDressing && <span style={{ color: '#4da6ff' }}><Icon name="status-dot" size={8} style={{ marginRight: 5 }} />缝合着装中</span>}
+        {!isDressing && !isDressed && <span style={{ color: '#e0a040' }}><Icon name="status-dot" size={8} style={{ marginRight: 5 }} />未着装 — 播放或执行「自动着装」开始缝合</span>}
+        {!isDressing && isDressed && isPlaying && <span style={{ color: '#50c878' }}><Icon name="status-dot" size={8} style={{ marginRight: 5 }} />模拟中</span>}
+        {!isDressing && isDressed && !isPlaying && <span style={{ color: '#888' }}><Icon name="status-dot" size={8} style={{ marginRight: 5 }} />已暂停</span>}
       </div>
 
       <div style={styles.controls}>

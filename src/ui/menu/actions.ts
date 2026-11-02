@@ -78,7 +78,7 @@ export interface MenuActions {
   camera: (preset: CameraPreset) => void;
   cameraProjection: (projection: CameraProjection) => void;
   openPropTab: (tab: PropTab) => void;
-  drape: () => void;
+  dress: () => void;
   playPause: () => void;
   stepFrame: () => void;
   resetSim: () => void;
@@ -345,8 +345,8 @@ export function createMenuActions(refs: MenuActionContext): MenuActions {
     cameraProjection: projection => useUIStore.getState().setCameraProjection(projection),
     openPropTab: tab => useUIStore.getState().setPropTab(tab),
 
-    drape: () => withEngine(refs, engine => {
-      void engine.beginDrape(project()).then(ok => { if (ok) useSimStore.getState().play(); });
+    dress: () => withEngine(refs, engine => {
+      void engine.beginDress(project()).then(ok => { if (ok) useSimStore.getState().play(); });
     }),
     playPause: () => useSimStore.getState().togglePlay(),
     stepFrame: () => useSimStore.getState().step(),
@@ -385,7 +385,7 @@ export function shortcutActions(actions: MenuActions): ShortcutActions {
     layout3d: () => actions.setLayout('3d'),
     fitView: actions.fitView,
     toggleFocus: actions.toggleFocus,
-    drape: actions.drape,
+    dress: actions.dress,
     playPause: actions.playPause,
     stepFrame: actions.stepFrame,
     resetSim: actions.resetSim,

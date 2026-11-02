@@ -77,7 +77,6 @@ export function generateDress(params: DressParams = DEFAULT_DRESS_PARAMS, fabric
       region: 'torso',
       anchor: 'shoulderTop',
       anchorOffsetCm: -waistLineCm,
-      rowWrap: true,
       ...bandArc(0, 1),
     },
   });
@@ -89,7 +88,6 @@ export function generateDress(params: DressParams = DEFAULT_DRESS_PARAMS, fabric
       region: 'torso',
       anchor: 'shoulderTop',
       anchorOffsetCm: -waistLineCm,
-      rowWrap: true,
       ...bandArc(0, 1, true),
     },
   });

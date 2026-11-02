@@ -55,7 +55,7 @@ export interface CameraState {
   viewHeightMeters: number;
 }
 
-/** Orchestrates the garment pipeline: pattern → mesh → draping placement → GPU simulation → render meshes. */
+/** Orchestrates the garment pipeline: pattern → mesh → drape placement → GPU simulation → render meshes. */
 export class GarmentEngine {
   private cloth = new MergedCloth();
   private landmarks = new BodyLandmarkCache();
@@ -321,7 +321,7 @@ export class GarmentEngine {
     this.selection.clear(scene);
     this.pinMarkers.clear(scene);
 
-    // The avatar and reference objects show even before a garment is draped.
+    // The avatar and reference objects show even before a garment is dressed.
     await this.buildAvatar(project);
     await this.references.ensure(project.scene.referenceObjects ?? [], scene);
 
@@ -778,14 +778,14 @@ export class GarmentEngine {
   }
 
   /** True while a staged dressing animation is playing. */
-  get isDraping(): boolean { return this.dressing.isDraping; }
+  get isDressing(): boolean { return this.dressing.isDressing; }
 
   /** True when the seams are closed and the garment sits dressed on the body. */
   get isDressed(): boolean { return this.dressing.isDressed; }
 
   /** Starts the staged dressing animation from the unsewn layout; stepDressingFrame plays it. */
-  async beginDrape(project: Project): Promise<boolean> {
-    return this.dressing.beginDrape(project);
+  async beginDress(project: Project): Promise<boolean> {
+    return this.dressing.beginDress(project);
   }
 
   /** Plays one frame of the dressing animation; false once the garment has settled. */

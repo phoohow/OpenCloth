@@ -515,8 +515,8 @@ function renderTechPack(data: TechPackData): Uint8Array {
     const columns: Column[] = [
       { title: '版片', width: 180 },
       { title: '数量', width: 50, align: 'right' },
-      { title: '净面积 (m2)', width: 140, align: 'right' },
-      { title: '毛面积 (m2)', width: 140, align: 'right' },
+      { title: '净面积(m2)', width: 140, align: 'right' },
+      { title: '毛面积(m2)', width: 140, align: 'right' },
     ];
     table(sheet, columns, data.panels.map(panel => [
       panel.name, String(panel.quantity), panel.netAreaM2.toFixed(4), panel.grossAreaM2.toFixed(4),
@@ -530,7 +530,7 @@ function renderTechPack(data: TechPackData): Uint8Array {
     const columns: Column[] = [
       { title: '材质', width: 96 },
       { title: '基础色', width: 62 },
-      { title: '面密度 (g/m2)', width: 76, align: 'right' },
+      { title: '面密度(g/m2)', width: 76, align: 'right' },
       { title: '拉伸', width: 52, align: 'right' },
       { title: '弯曲', width: 52, align: 'right' },
       { title: '剪切', width: 52, align: 'right' },
@@ -553,7 +553,7 @@ function renderTechPack(data: TechPackData): Uint8Array {
       { title: '甲片 / 边', width: 150 },
       { title: '乙片 / 边', width: 150 },
       { title: '缝型', width: 58 },
-      { title: '缝份 (cm)', width: 70, align: 'right' },
+      { title: '缝份(cm)', width: 70, align: 'right' },
       { title: '缩缝', width: 82 },
     ];
     table(sheet, columns, data.seams.map(seam => [
@@ -572,7 +572,7 @@ function renderTechPack(data: TechPackData): Uint8Array {
     const columns: Column[] = [
       { title: '版片', width: 100 },
       { title: '印花', width: 130 },
-      { title: '尺寸 (cm)', width: 100, align: 'right' },
+      { title: '尺寸(cm)', width: 100, align: 'right' },
       { title: '角度', width: 60, align: 'right' },
       { title: '平铺', width: 60, align: 'right' },
       { title: '不透明度', width: 60, align: 'right' },
@@ -594,10 +594,10 @@ function renderTechPack(data: TechPackData): Uint8Array {
     const columns: Column[] = [
       { title: '版片', width: 100 },
       { title: '边', width: 130 },
-      { title: '偏移 (mm)', width: 80, align: 'right' },
-      { title: '行距 (mm)', width: 70, align: 'right' },
+      { title: '偏移(mm)', width: 80, align: 'right' },
+      { title: '行距(mm)', width: 70, align: 'right' },
       { title: '行数', width: 50, align: 'right' },
-      { title: '长度 (cm)', width: 80, align: 'right' },
+      { title: '长度(cm)', width: 80, align: 'right' },
     ];
     table(sheet, columns, data.topstitches.map(stitch => [
       stitch.panelName, stitch.edge,
@@ -613,7 +613,7 @@ function renderTechPack(data: TechPackData): Uint8Array {
       { title: '版片', width: 100 },
       { title: '名称', width: 110 },
       { title: '类型', width: 70 },
-      { title: '直径 (mm)', width: 70, align: 'right' },
+      { title: '直径(mm)', width: 70, align: 'right' },
       { title: '数量', width: 50, align: 'right' },
       { title: '单价', width: 60, align: 'right' },
       { title: '颜色', width: 50 },
@@ -654,10 +654,10 @@ function renderTechPack(data: TechPackData): Uint8Array {
   } else {
     const marker = data.marker;
     const rows: string[][] = [
-      ['幅宽 (cm)', marker.fabricWidthCm.toFixed(0)],
+      ['幅宽(cm)', marker.fabricWidthCm.toFixed(0)],
       ['版片数', String(marker.pieceCount)],
-      ['用料长度 (m)', marker.usedLengthM.toFixed(2)],
-      ['面料面积 (m2)', marker.fabricAreaM2.toFixed(2)],
+      ['用料长度(m)', marker.usedLengthM.toFixed(2)],
+      ['面料面积(m2)', marker.fabricAreaM2.toFixed(2)],
       ['利用率', `${(marker.utilization * 100).toFixed(1)}%`],
     ];
     if (marker.cost !== null) rows.push([`面料成本 (${marker.currency})`, marker.cost.toFixed(2)]);

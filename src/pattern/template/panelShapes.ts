@@ -131,7 +131,7 @@ export function addSleeve(builder: PatternBuilder, o: SleeveOptions): SleeveEdge
   const panel = builder.panel({
     name: o.name,
     edges: [hem, seamRight, capRight, capLeft, seamLeft],
-    drape: o.drape ?? { region: 'arm', side: o.side, rowWrap: true, pinTop: false },
+    drape: o.drape ?? { region: 'arm', side: o.side, pinTop: false },
     seamAllowanceCm: o.seamAllowanceCm ?? 1,
   });
 

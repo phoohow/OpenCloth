@@ -41,7 +41,7 @@ export function SliderRow({ label, min, max, step, value, onChange, commitOnRele
   value: number;
   onChange: (v: number) => void;
   commitOnRelease?: boolean;
-  /** Unit appended to the label as `名称 (单位)`. */
+  /** Unit appended to the label as `名称(单位)`. */
   unit?: string;
 }) {
   const [draft, setDraft] = useState<number | null>(null);
@@ -68,7 +68,7 @@ export function SliderRow({ label, min, max, step, value, onChange, commitOnRele
   return (
     <div style={styles.sliderRow}>
       <div style={styles.sliderHead}>
-        <span style={styles.label}>{unit ? `${label} (${unit})` : label}</span>
+        <span style={styles.label}>{unit ? `${label}(${unit})` : label}</span>
         <span style={styles.sliderField}>
           <input
             type="text" inputMode="decimal" spellCheck={false} style={styles.sliderNum}
@@ -243,19 +243,24 @@ export function FlexSelect<T extends string>({ label, value, options, onChange, 
   );
 }
 
-/** Dropdown row over the listed choices. */
-export function SelectRow<T extends string>({ label, value, options, onChange }: {
+/** Dropdown row over the listed choices; `trailing` sits beside it on the same row. */
+export function SelectRow<T extends string>({ label, value, options, onChange, trailing }: {
   label: string;
   value: T;
   options: Array<{ value: T; label: string; disabled?: boolean }>;
   onChange: (v: T) => void;
+  /** Extra control packed after the dropdown, such as an icon button. */
+  trailing?: ReactNode;
 }) {
   return (
     <div style={styles.row}>
       <span style={styles.label}>{label}</span>
-      <select style={styles.select} value={value} onChange={e => onChange(e.target.value as T)}>
-        {options.map(o => <option key={o.value} value={o.value} disabled={o.disabled}>{o.label}</option>)}
-      </select>
+      <span style={styles.control}>
+        <select style={styles.select} value={value} onChange={e => onChange(e.target.value as T)}>
+          {options.map(o => <option key={o.value} value={o.value} disabled={o.disabled}>{o.label}</option>)}
+        </select>
+        {trailing}
+      </span>
     </div>
   );
 }
@@ -322,6 +327,7 @@ const styles: Record<string, React.CSSProperties> = {
   row: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, minHeight: 'var(--oc-h-row)', fontSize: 'var(--oc-fs-micro)', color: '#ccc' },
   label: { color: '#999', flex: '0 0 auto', minWidth: 'var(--oc-w-field-label)', textAlign: 'right' },
   value: { color: '#ddd', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  control: { display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 },
   sliderRow: { padding: '5px 0 7px', fontSize: 'var(--oc-fs-micro)', color: '#aaa' },
   sliderHead: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginBottom: 4 },
   range: { width: '100%' },

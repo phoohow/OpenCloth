@@ -8,7 +8,7 @@ export const ICON_NAMES = [
   // 3D pin tools
   'pin', 'unpin',
   // Properties tabs
-  'cube', 'swatch', 'waves', 'sparkles', 'image', 'briefcase', 'scene',
+  'cube', 'swatch', 'waves', 'move', 'sparkles', 'image', 'briefcase', 'scene',
   // Outliner nodes
   'folder', 'panel', 'avatar', 'reference', 'environment', 'camera',
   'light-directional', 'light-point', 'light-spot', 'light-area',

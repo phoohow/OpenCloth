@@ -127,8 +127,8 @@ export type BodyLandmark =
   | 'hip' | 'crotch' | 'knee' | 'ankle';
 
 /**
- * How a flat panel wraps the body in the pre-simulation placement. Absent on panels
- * drawn by hand, which fall back to name-based inference.
+ * Drape: how a flat panel wraps the body in the pre-simulation placement. A panel
+ * without one stays flat at its pattern coordinates.
  */
 export interface PanelDrape {
   /** Body part the panel wraps. */
@@ -145,17 +145,7 @@ export interface PanelDrape {
   side?: 'left' | 'right';
   /** Adds this many centimeters to the wrap radius. */
   easeCm?: number;
-  /**
-   * Wraps each height row across the whole span using that row's own width and radius, so
-   * tapered panels meet at their side seams instead of leaving angular gaps.
-   */
-  rowWrap?: boolean;
-  /**
-   * Keeps the wrap ring as wide as the widest body cross-section above each height, so a loose
-   * garment hangs straight instead of shrink-wrapping the waist and hip.
-   */
-  plumb?: boolean;
-  /** Bastes the top edge band while draping; sleeves hang from their cap seams instead. Defaults to true. */
+  /** Bastes the top edge band while dressing; sleeves hang from their cap seams instead. Defaults to true. */
   pinTop?: boolean;
 }
 

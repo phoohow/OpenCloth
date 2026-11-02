@@ -4,11 +4,8 @@ export const EXPLODE_OFFSET_M = 0.02;
 /**
  * Slides a wrapped panel straight out along the direction from the body axis through its centre.
  * The shift is rigid, so the panel keeps its stress-free wrapped shape while the seams open up.
- * An optional per-vertex weight scales the shift, which keeps a pinned band on its wrapped pose.
  */
-export function explodeOffBody(
-  wrapped: Float32Array, weights?: Float32Array, offsetM = EXPLODE_OFFSET_M,
-): Float32Array {
+export function explodeOffBody(wrapped: Float32Array, offsetM = EXPLODE_OFFSET_M): Float32Array {
   const count = Math.floor(wrapped.length / 3);
   if (count === 0) return wrapped.slice();
 
@@ -28,10 +25,9 @@ export function explodeOffBody(
 
   const out = new Float32Array(wrapped.length);
   for (let i = 0; i < count; i++) {
-    const w = weights?.[i] ?? 1;
-    out[i * 3] = wrapped[i * 3] + dx * w;
+    out[i * 3] = wrapped[i * 3] + dx;
     out[i * 3 + 1] = wrapped[i * 3 + 1];
-    out[i * 3 + 2] = wrapped[i * 3 + 2] + dz * w;
+    out[i * 3 + 2] = wrapped[i * 3 + 2] + dz;
   }
   return out;
 }

@@ -319,7 +319,7 @@ export function Viewport2D() {
   const preciseInput = () => {
     const d = draftRef.current;
     if (d && d.tool === 'pen' && d.points.length > 0) {
-      const raw = prompt('输入长度与角度（cm，°）', '10, 0');
+      const raw = prompt('输入长度与角度(cm, °)', '10, 0');
       if (!raw) return;
       const [len, angleDeg] = raw.split(/[,，\s]+/).map(Number);
       if (!Number.isFinite(len) || !Number.isFinite(angleDeg) || len <= 0) return;
@@ -332,7 +332,7 @@ export function Viewport2D() {
     const panelIds = idsOfKind(selection, 'panel').filter(id => !!pattern.panels[id] && !pattern.panels[id]?.locked);
     const pointIds = idsOfKind(selection, 'point').filter(id => !!pattern.points[id]);
     if (panelIds.length === 0 && pointIds.length === 0) return;
-    const raw = prompt('输入位移 dx,dy（cm）', '0, 0');
+    const raw = prompt('输入位移 dx,dy(cm)', '0, 0');
     if (!raw) return;
     const [dx, dy] = raw.split(/[,，\s]+/).map(Number);
     if (!Number.isFinite(dx) || !Number.isFinite(dy)) return;

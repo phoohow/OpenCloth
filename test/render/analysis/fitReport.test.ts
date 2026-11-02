@@ -9,11 +9,11 @@ describe('fitReportCsv', () => {
     }, { tightCm: 0.5, looseCm: 2.5 }, new Date('2026-10-31T00:00:00.000Z'));
     expect(csv).toContain('工程,测试工程');
     expect(csv).toContain('日期,2026-10-31T00:00:00.000Z');
-    expect(csv).toContain('贴近阈值 (cm),0.50');
-    expect(csv).toContain('宽松阈值 (cm),2.50');
-    expect(csv).toContain('最小间隙 (cm),-0.125');
-    expect(csv).toContain('平均间隙 (cm),1.235');
-    expect(csv).toContain('最大间隙 (cm),3.400');
+    expect(csv).toContain('贴近阈值(cm),0.50');
+    expect(csv).toContain('宽松阈值(cm),2.50');
+    expect(csv).toContain('最小间隙(cm),-0.125');
+    expect(csv).toContain('平均间隙(cm),1.235');
+    expect(csv).toContain('最大间隙(cm),3.400');
   });
 
   it('quotes project names containing separators', () => {

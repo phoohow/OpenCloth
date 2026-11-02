@@ -210,7 +210,7 @@ export function Toolbar2D() {
         execute(new CreatePanelFromEdgesCommand(edges));
       } else if (action === 'fillet') {
         if (points.length === 0) throw new Error('请先选中角点');
-        const input = prompt('圆角半径 (cm)', '1.5');
+        const input = prompt('圆角半径(cm)', '1.5');
         const radius = Number(input);
         if (!(radius > 0)) return;
         execute(new FilletCornersCommand(points, radius));
@@ -225,11 +225,11 @@ export function Toolbar2D() {
         execute(new MergeCollinearEdgesCommand(edges));
       } else if (action === 'simplify') {
         if (edges.length === 0) throw new Error('请选中要简化的曲线边');
-        const [deviation] = promptNumbers('拟合容差 (cm)', '0.05');
+        const [deviation] = promptNumbers('拟合容差(cm)', '0.05');
         execute(new SimplifyCurveCommand(edges, { ...(deviation > 0 ? { maxDeviationCm: deviation } : {}) }));
       } else if (action === 'offset-line') {
         if (edges.length !== 1) throw new Error('请选中一条基准边');
-        const distances = promptNumbers('等距距离 (cm)，可多个', '1, 2').filter(v => v > 0);
+        const distances = promptNumbers('等距距离(cm)，可多个', '1, 2').filter(v => v > 0);
         if (distances.length === 0) return;
         execute(new OffsetInternalLineCommand(edges[0]!, distances));
       } else if (action === 'loop-panel') {
@@ -242,13 +242,13 @@ export function Toolbar2D() {
         if (edges.length !== 1) throw new Error('请选中省所在的边');
         const panel = Object.values(pattern.panels).find(p => p.outlineEdgeIds.includes(edges[0]!));
         if (!panel) throw new Error('这条边不属于任何版片');
-        const [intake, length] = promptNumbers('省量与省长 (cm)', '2, 8');
+        const [intake, length] = promptNumbers('省量与省长(cm)', '2, 8');
         if (!(intake > 0) || !(length > 0)) return;
         execute(new RhombusDartCommand(panel.id, edges[0]!, 0.5, intake, length));
       } else if (action === 'blend-start' || action === 'blend-end') {
         const seams = idsOfKind(selection, 'seam').filter(id => !!pattern.seams[id]);
         if (seams.length !== 1) throw new Error('请选中一条缝合');
-        const radius = Number(prompt('圆顺半径 (cm)', '1.5'));
+        const radius = Number(prompt('圆顺半径(cm)', '1.5'));
         if (!(radius > 0)) return;
         execute(new BlendSeamJointCommand(seams[0]!, action === 'blend-start' ? 'start' : 'end', radius));
       }

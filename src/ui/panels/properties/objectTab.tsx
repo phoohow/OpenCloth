@@ -17,7 +17,7 @@ import { Vec3Field } from '../../widgets/numberField';
 import { degVec, radVec } from './constants';
 import { styles } from './styles';
 import { MaterialTab, panelFabric } from './materialTab';
-import { GeneratorData, ObjectData, PanelManageRows, PanelMeshData } from './objectDataSections';
+import { LightPlacementData, ObjectData, PanelDrapeData, PanelManageRows, PanelMeshData } from './objectDataSections';
 import { AvatarPhysics, FabricPhysics } from './physicsTabs';
 import { ProjectTab, RenderTab } from './sceneRenderTabs';
 
@@ -38,8 +38,8 @@ export function selectedBody(tab: PropTab, project: Project, nodeId: string, nod
         </>
       );
     }
-    case 'generator':
-      return <GeneratorData project={project} nodeId={nodeId} kind={node.kind} engineRef={engineRef} />;
+    case 'transform':
+      return <TransformTab project={project} nodeId={nodeId} kind={node.kind} engineRef={engineRef} />;
     case 'render':
       return <RenderTab project={project} />;
     default:
@@ -47,11 +47,10 @@ export function selectedBody(tab: PropTab, project: Project, nodeId: string, nod
   }
 }
 
-/** One selected object: identity, transform, then the rows its kind carries. */
+/** Identity of one selected object and the rows its kind carries; transform and drape sit in the 变换 tab. */
 function ObjectTab({ project, nodeId, kind, label, note, engineRef }: {
   project: Project; nodeId: string; kind: SceneNodeKind; label: string; note?: string; engineRef: EngineRef;
 }) {
-  const transform = readTransform(project, nodeId);
   const panel = project.pattern.panels[nodeId];
   const ref = nodeId.startsWith('@ref:')
     ? (project.scene.referenceObjects ?? []).find(r => r.id === referenceObjectId(nodeId))
@@ -67,17 +66,6 @@ function ObjectTab({ project, nodeId, kind, label, note, engineRef }: {
     : elementId?.kind === 'topstitch' ? project.pattern.topstitches?.[elementId.id] ?? null
     : elementId?.kind === 'trim' ? project.pattern.trims?.[elementId.id] ?? null
     : null;
-  /** Avatar and reference edits move the live object before they are committed. */
-  const live = isAvatar || !!ref;
-
-  /** Edits one transform part. */
-  const setPart = (part: 'position' | 'rotationEuler' | 'scale', value: Vec3) => {
-    if (!transform) return;
-    const next: ObjectTransform = { ...transform, [part]: value };
-    if (live) previewTransform(nodeId, next, engineRef);
-    commitTransform(nodeId, next, engineRef);
-  };
-
   /** Viewport visibility or enable flag of the row; null when the kind has none. */
   const shown = isAvatar ? project.avatar.display !== 'hidden'
     : panel ? panel.visible
@@ -132,6 +120,29 @@ function ObjectTab({ project, nodeId, kind, label, note, engineRef }: {
         {panel && <PanelManageRows panel={panel} />}
         <Row label="类型">{note ? `${SCENE_KIND_LABELS[kind]} · ${note}` : SCENE_KIND_LABELS[kind]}</Row>
       </Section>
+      <ObjectData project={project} nodeId={nodeId} kind={kind} engineRef={engineRef} />
+    </>
+  );
+}
+
+/** Object transform, a light's position and aim, and the drape placement a panel wraps with. */
+function TransformTab({ project, nodeId, kind, engineRef }: {
+  project: Project; nodeId: string; kind: SceneNodeKind; engineRef: EngineRef;
+}) {
+  const transform = readTransform(project, nodeId);
+  /** Avatar and reference edits move the live object before they are committed. */
+  const live = nodeId === AVATAR_NODE_ID || nodeId.startsWith('@ref:');
+
+  /** Edits one transform part. */
+  const setPart = (part: 'position' | 'rotationEuler' | 'scale', value: Vec3) => {
+    if (!transform) return;
+    const next: ObjectTransform = { ...transform, [part]: value };
+    if (live) previewTransform(nodeId, next, engineRef);
+    commitTransform(nodeId, next, engineRef);
+  };
+
+  return (
+    <>
       {transform && (
         <Section title="变换">
           <Vec3Field label="位置" value={transform.position} step={0.01} precision={2} unit="m"
@@ -151,7 +162,9 @@ function ObjectTab({ project, nodeId, kind, label, note, engineRef }: {
           {!live && <div style={styles.note}>版片变换在松手后重建布料并重置模拟。</div>}
         </Section>
       )}
-      <ObjectData project={project} nodeId={nodeId} kind={kind} engineRef={engineRef} />
+      {kind === 'light' && <LightPlacementData project={project} nodeId={nodeId} />}
+      {kind === 'panel' && <PanelDrapeData project={project} panelId={nodeId} />}
+      {!transform && kind !== 'panel' && kind !== 'light' && <Hint>这个对象没有变换。</Hint>}
     </>
   );
 }

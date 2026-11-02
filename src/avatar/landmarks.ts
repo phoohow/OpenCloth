@@ -126,7 +126,7 @@ export interface BodyLandmarks extends BodyProportions {
   torsoCenterXAt(y: number): number;
 }
 
-/** Builds the landmark set used by draping, collision and the procedural mannequin. */
+/** Builds the landmark set used by the drape placement, collision and the procedural mannequin. */
 export function bodyLandmarks(params: AvatarParams): BodyLandmarks {
   const p = bodyProportions(params);
   const anchors = TORSO_PROFILE.map(a => ({ y: a.at(p), ...girthEllipse(a.r(p), a.depth) }));

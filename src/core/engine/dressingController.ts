@@ -25,7 +25,7 @@ export interface DressingHost {
 }
 
 /** One in-flight dressing animation. */
-interface DrapeRun {
+interface DressRun {
   /** Fabric physics used by every frame of the run. */
   physics: FabricPhysics;
   /** Project simulation config the stages run under. */
@@ -45,13 +45,13 @@ function primaryPhysics(project: Project): FabricPhysics {
 
 /** Plays the staged sew → glide → settle dressing animation and the post-dress free steps. */
 export class DressingController {
-  private run: DrapeRun | null = null;
+  private run: DressRun | null = null;
   private dressed = false;
 
   constructor(private host: DressingHost) { }
 
   /** True while a staged dressing animation is playing. */
-  get isDraping(): boolean { return this.run !== null; }
+  get isDressing(): boolean { return this.run !== null; }
 
   /** True when the seams are closed and the garment sits dressed on the body. */
   get isDressed(): boolean { return this.dressed; }
@@ -68,7 +68,7 @@ export class DressingController {
   }
 
   /** Starts the staged dressing animation from the unsewn layout; stepDressingFrame plays it. */
-  async beginDrape(project: Project): Promise<boolean> {
+  async beginDress(project: Project): Promise<boolean> {
     if (!this.host.simulator() || !this.host.simReady()) await this.host.ensureSimulator(project);
     if (!this.host.simulator()) return false;
     this.host.resetPositions();
@@ -119,7 +119,7 @@ export class DressingController {
       return;
     }
     if (!this.dressed) {
-      await this.beginDrape(project);
+      await this.beginDress(project);
       return;
     }
     await this.host.step(project.scene.simulation, primaryPhysics(project));

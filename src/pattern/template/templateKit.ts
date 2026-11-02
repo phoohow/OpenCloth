@@ -90,7 +90,7 @@ export class PatternBuilder {
     return panel;
   }
 
-  /** Joins two outline edges; paired by arc-length fraction during draping. */
+  /** Joins two outline edges; paired by arc-length fraction while dressing. */
   seam(edgeAId: string, edgeBId: string, opts: { flipB?: boolean; type?: Seam['type']; strength?: number } = {}): void {
     const id = genId('seam');
     const a: SeamEnd = { edgeId: edgeAId, t0: 0, t1: 1 };

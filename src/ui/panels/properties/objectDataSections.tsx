@@ -33,7 +33,8 @@ import {
   type EngineRef,
 } from '../../sceneCommands';
 import { importAvatarViaPicker, importEnvironmentViaPicker } from '../../modelImport';
-import { ButtonRow, CheckRow, ColorRow, FlexSelect, Hint, InlineText, PopupSelect, Row, Section, SelectRow, SliderRow, SmallButton, TextRow } from '../../widgets/propertyRows';
+import { ButtonRow, CheckRow, ColorRow, FlexSelect, Hint, IconButton, InlineText, PopupSelect, Row, Section, SelectRow, SliderRow, SmallButton, TextRow } from '../../widgets/propertyRows';
+import { Icon } from '../../icons';
 import { NumberField, Vec3Field } from '../../widgets/numberField';
 import { reportActionError } from '../../widgets/toast';
 import { CAMERA_PROJECTIONS } from '../../optionTables';
@@ -56,7 +57,7 @@ export function ObjectData({ project, nodeId, kind, engineRef }: {
 }) {
   switch (kind) {
     case 'panel': return <PanelData project={project} panelId={nodeId} />;
-    case 'avatar': return <AvatarData project={project} />;
+    case 'avatar': return <AvatarData project={project} engineRef={engineRef} />;
     case 'reference': return <ReferenceData project={project} nodeId={nodeId} engineRef={engineRef} />;
     case 'light': return <LightData project={project} nodeId={nodeId} />;
     case 'seam': return <SeamData project={project} nodeId={nodeId} />;
@@ -143,8 +144,8 @@ function PanelData({ project, panelId }: { project: Project; panelId: string }) 
         <Row label="镂空">{(panel.holes ?? []).length}</Row>
       </Section>
       <Section title="尺寸">
-        <Row label="轮廓">{size ? `${size.width.toFixed(2)} × ${size.height.toFixed(2)} cm` : '—'}</Row>
-        <Row label="目标尺寸 (cm)">
+        <Row label="轮廓(cm)">{size ? `${size.width.toFixed(2)} × ${size.height.toFixed(2)}` : '—'}</Row>
+        <Row label="目标尺寸(cm)">
           <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <NumberField value={size?.width ?? 0} step={0.5} precision={2} title="版片宽"
               onCommit={v => resize(v, null)} />
@@ -156,7 +157,7 @@ function PanelData({ project, panelId }: { project: Project; panelId: string }) 
         <div style={styles.note}>尺寸按包围盒等比或拉伸缩放，控制柄、圆弧圆心与半径、内部线、省尖和注释一起跟随。圆弧边只能等比缩放；与其它片共用顶点的片需先断开。</div>
       </Section>
       <Section title="倒圆角">
-        <Row label="半径 (cm)">
+        <Row label="半径(cm)">
           <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <NumberField value={cornerRadius} step={0.5} precision={2} title="圆角半径"
               onCommit={v => setCornerRadius(v)} />
@@ -168,7 +169,7 @@ function PanelData({ project, panelId }: { project: Project; panelId: string }) 
       <Section title="生产">
         <SliderRow label="布纹线角度" min={-180} max={180} step={1} unit="°" value={panel.grainAngleDeg ?? 0} commitOnRelease
           onChange={v => setGrain({ angleDeg: v })} />
-        <Row label="布纹线位置 (cm)">
+        <Row label="布纹线位置(cm)">
           <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <NumberField value={panel.grainOffset?.x ?? 0} step={0.5} precision={2} title="横向偏离包围盒中心"
               onCommit={v => setGrain({ offset: { x: v, y: panel.grainOffset?.y ?? 0 } })} />
@@ -176,7 +177,7 @@ function PanelData({ project, panelId }: { project: Project; panelId: string }) 
               onCommit={v => setGrain({ offset: { x: panel.grainOffset?.x ?? 0, y: v } })} />
           </span>
         </Row>
-        <Row label="布纹线长度 (cm)">
+        <Row label="布纹线长度(cm)">
           <NumberField value={panel.grainLengthCm ?? 0} step={0.5} precision={2} title="0 为按轮廓自动"
             onCommit={v => setGrain({ lengthCm: v })} />
         </Row>
@@ -223,7 +224,7 @@ export function PanelMeshData({ project, panelId }: { project: Project; panelId:
   return (
     <>
       <Section title="布料网格">
-        <Row label="网格密度 (cm)">
+        <Row label="网格密度(cm)">
           <NumberField value={panel.meshResolutionCm} step={0.5} precision={2} min={0.5} max={10} title="逐片网格密度；修改只重建当前片"
             onCommit={v => {
               try {
@@ -245,33 +246,22 @@ export function PanelMeshData({ project, panelId }: { project: Project; panelId:
   );
 }
 
-/** Drape placement of one panel. */
-function PanelDrapeData({ project, panelId }: { project: Project; panelId: string }) {
+/** Drape placement of one panel; the 变换 tab shows it. */
+export function PanelDrapeData({ project, panelId }: { project: Project; panelId: string }) {
   const panel = project.pattern.panels[panelId];
   if (!panel) return <Hint>版片已删除。</Hint>;
   return (
-    <Section title="着装">
+    <Section title="环绕">
       <Row label="方式">{panel.drape ? `环绕 ${drapeRegionLabel(panel.drape.region)}` : '自动推断'}</Row>
       {panel.placement && <Row label="手动放置">平面摆放</Row>}
     </Section>
   );
 }
 
-/** Generator settings of the selected object: drape placement, or the avatar model. */
-export function GeneratorData({ project, nodeId, kind, engineRef }: {
-  project: Project; nodeId: string; kind: SceneNodeKind; engineRef: EngineRef;
-}) {
-  switch (kind) {
-    case 'panel': return <PanelDrapeData project={project} panelId={nodeId} />;
-    case 'avatar': return <AvatarModelData project={project} engineRef={engineRef} />;
-    default: return <Hint>这个对象没有生成设置。</Hint>;
-  }
-}
-
 const drapeRegionLabel = (region: 'torso' | 'arm' | 'leg' | 'neck'): string =>
   ({ torso: '躯干', arm: '手臂', leg: '腿', neck: '领口' }[region]);
 
-function AvatarData({ project }: { project: Project }) {
+function AvatarData({ project, engineRef }: { project: Project; engineRef: EngineRef }) {
   const avatar = project.avatar;
 
   /** Replaces the avatar record so the 3D view rebuilds the body. */
@@ -284,6 +274,7 @@ function AvatarData({ project }: { project: Project }) {
 
   return (
     <>
+      <AvatarModelData project={project} engineRef={engineRef} />
       <Section title="体型">
         <SliderRow label="身高" min={140} max={200} step={1} unit="cm" value={avatar.params.heightCm} commitOnRelease
           onChange={v => setAvatar('修改身高', { params: { ...avatar.params, heightCm: v } })} />
@@ -359,10 +350,11 @@ function AvatarModelData({ project, engineRef }: { project: Project; engineRef: 
 
   return (
     <Section title="模型来源">
-      <SelectRow label="模型" value={modelValue} options={modelOptions} onChange={chooseModel} />
-      <ButtonRow>
-        <SmallButton disabled={!engineRef.current} onClick={() => engineRef.current && void importAvatarViaPicker()}>导入模特</SmallButton>
-      </ButtonRow>
+      <SelectRow label="模型" value={modelValue} options={modelOptions} onChange={chooseModel}
+        trailing={
+          <IconButton title="导入模特" disabled={!engineRef.current}
+            onClick={() => engineRef.current && void importAvatarViaPicker()}><Icon name="plus" size={12} /></IconButton>
+        } />
     </Section>
   );
 }
@@ -393,10 +385,36 @@ const INTENSITY_RANGE: Record<LightType, { max: number; step: number }> = {
   area: { max: 60, step: 0.5 },
 };
 
-function LightData({ project, nodeId }: { project: Project; nodeId: string }) {
-  const light = normalizeLights(project.scene.lights).find(l => l.id === lightObjectId(nodeId));
+/** Light record addressed by an outliner row id. */
+function lightOf(project: Project, nodeId: string): SceneLight | null {
+  return normalizeLights(project.scene.lights).find(l => l.id === lightObjectId(nodeId)) ?? null;
+}
+
+/** Direction or position and aim of one light; the 变换 tab shows it. */
+export function LightPlacementData({ project, nodeId }: { project: Project; nodeId: string }) {
+  const light = lightOf(project, nodeId);
   if (!light) return <Hint>光源已删除。</Hint>;
   const aims = light.type !== 'point';
+
+  return (
+    <Section title="位置">
+      <Vec3Field label={light.type === 'directional' ? '方向' : '位置'} value={light.position}
+        step={0.05} precision={2} unit="m"
+        onCommit={v => patchLight(light.id, '修改光源位置', { position: v })} />
+      {aims && (
+        <Vec3Field label="目标" value={light.target} step={0.05} precision={2} unit="m"
+          onCommit={v => patchLight(light.id, '修改光源目标', { target: v })} />
+      )}
+      {light.type === 'directional' && (
+        <div style={styles.note}>方向光的位置只决定照射方向，光线平行射向目标点。</div>
+      )}
+    </Section>
+  );
+}
+
+function LightData({ project, nodeId }: { project: Project; nodeId: string }) {
+  const light = lightOf(project, nodeId);
+  if (!light) return <Hint>光源已删除。</Hint>;
   const punctual = light.type === 'point' || light.type === 'spot';
 
   /** Edits one field of this light. */
@@ -415,18 +433,6 @@ function LightData({ project, nodeId }: { project: Project; nodeId: string }) {
         <ButtonRow>
           <SmallButton onClick={() => removeLight(light.id)}>删除光源</SmallButton>
         </ButtonRow>
-      </Section>
-      <Section title="位置">
-        <Vec3Field label={light.type === 'directional' ? '方向' : '位置'} value={light.position}
-          step={0.05} precision={2} unit="m"
-          onCommit={v => set('修改光源位置', { position: v })} />
-        {aims && (
-          <Vec3Field label="目标" value={light.target} step={0.05} precision={2} unit="m"
-            onCommit={v => set('修改光源目标', { target: v })} />
-        )}
-        {light.type === 'directional' && (
-          <div style={styles.note}>方向光的位置只决定照射方向，光线平行射向目标点。</div>
-        )}
       </Section>
       {light.type !== 'directional' && (
         <Section title="照射范围">
@@ -622,7 +628,7 @@ function PointData({ project, nodeId }: { project: Project; nodeId: string }) {
 
   return (
     <Section title="点">
-      <Row label="坐标 (cm)">
+      <Row label="坐标(cm)">
         <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           <NumberField value={point.pos.x} step={0.1} precision={2} title="X 坐标"
             onCommit={v => move({ x: v - point.pos.x, y: 0 })} />
@@ -720,7 +726,7 @@ function EdgeData({ project, nodeId }: { project: Project; nodeId: string }) {
   return (
     <Section title="边">
       <Row label="边类型">{EDGE_TYPE_LABELS[edge.type]}</Row>
-      <Row label="长度 (cm)">
+      <Row label="长度(cm)">
         <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           <NumberField value={length} step={0.1} precision={2} min={0.01} title="目标边长；只移动终点"
             onCommit={v => execute(new SetEdgeLengthCommand(edge.id, v))} />
@@ -728,18 +734,18 @@ function EdgeData({ project, nodeId }: { project: Project; nodeId: string }) {
       </Row>
       {edge.type === 'arc' && edge.arc && (
         <>
-          <Row label="半径 (cm)">
+          <Row label="半径(cm)">
             <NumberField value={edge.arc.radius} step={0.1} precision={2} min={0.01} title="圆弧半径；两端点保持不动"
               onCommit={v => execute(new SetArcParamsCommand(edge.id, { radiusCm: v }))} />
           </Row>
-          <Row label="圆心角 (°)">
+          <Row label="圆心角(°)">
             <NumberField value={Math.abs(arcSpan(edge.arc)) * 180 / Math.PI} step={0.5} precision={1} min={1} max={359} title="圆心角；两端点保持不动"
               onCommit={v => execute(new SetArcParamsCommand(edge.id, { sweepDeg: v }))} />
           </Row>
         </>
       )}
       {neighbours.length > 0 && (
-        <Row label="与邻边夹角 (°)">
+        <Row label="与邻边夹角(°)">
           <AngleRow pattern={pattern} edge={edge} neighbours={neighbours} onCommit={execute} />
         </Row>
       )}
@@ -840,7 +846,7 @@ function DartData({ project, nodeId }: { project: Project; nodeId: string }) {
         onChange={v => setDart('修改省量', { intakeCm: v })} />
       <CheckRow label="收省（模拟时缝合省边）" checked={!!dart.closing}
         onChange={v => setDart(v ? '闭合省道' : '打开省道', { closing: v })} />
-      <Row label="省尖">{`${project.pattern.points[dart.tipId]?.pos.x.toFixed(1)}, ${project.pattern.points[dart.tipId]?.pos.y.toFixed(1)} cm`}</Row>
+      <Row label="省尖(cm)">{`${project.pattern.points[dart.tipId]?.pos.x.toFixed(1)}, ${project.pattern.points[dart.tipId]?.pos.y.toFixed(1)}`}</Row>
       <ButtonRow>
         <SmallButton
           title="先选中一条轮廓边，再把省道转移到该边"
@@ -915,7 +921,7 @@ function AnnotationData({ project, nodeId }: { project: Project; nodeId: string 
         onChange={v => setNote('修改注释角度', { angleDeg: v })} />
       <SliderRow label="字号" min={2} max={12} step={0.5} unit="mm" value={note.sizeMm ?? 4} commitOnRelease
         onChange={v => setNote('修改注释字号', { sizeMm: v })} />
-      <Row label="坐标">{`${note.pos.x.toFixed(2)}, ${note.pos.y.toFixed(2)} cm`}</Row>
+      <Row label="坐标(cm)">{`${note.pos.x.toFixed(2)}, ${note.pos.y.toFixed(2)}`}</Row>
       <ButtonRow>
         <SmallButton onClick={() => useProjectStore.getState().executeCommand(new DeleteAnnotationCommand(note.id))}>删除注释</SmallButton>
       </ButtonRow>
@@ -983,7 +989,7 @@ function PrintData({ project, nodeId }: { project: Project; nodeId: string }) {
     <Section title="印花">
       <Row label="版片">{panelName}</Row>
       <Row label="图片">{print.imageName ?? '已载入'}</Row>
-      <Row label="宽 × 高 (cm)">
+      <Row label="宽 × 高(cm)">
         <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           <NumberField value={print.widthCm} step={0.5} precision={2} min={0.1} max={1000} title="印花宽度"
             onCommit={v => set({ widthCm: v })} />
@@ -995,7 +1001,7 @@ function PrintData({ project, nodeId }: { project: Project; nodeId: string }) {
         onChange={v => set({ angleDeg: v })} />
       <SliderRow label="不透明度" min={0} max={1} step={0.01} value={print.opacity} commitOnRelease
         onChange={v => set({ opacity: v })} />
-      <Row label="平铺 (次)">
+      <Row label="平铺(次)">
         <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           <NumberField value={print.repeat.x} step={1} precision={0} min={1} max={50} title="横向平铺次数"
             onCommit={v => set({ repeat: { ...print.repeat, x: v } })} />
@@ -1003,7 +1009,7 @@ function PrintData({ project, nodeId }: { project: Project; nodeId: string }) {
             onCommit={v => set({ repeat: { ...print.repeat, y: v } })} />
         </span>
       </Row>
-      <Row label="位置 (cm)">
+      <Row label="位置(cm)">
         <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           <NumberField value={print.center.x} step={0.5} precision={2} title="相对版片外接框中心的横向偏移"
             onCommit={v => set({ center: { ...print.center, x: v } })} />
@@ -1088,7 +1094,7 @@ function TrimData({ project, nodeId }: { project: Project; nodeId: string }) {
       <SelectRow label="类型" value={trim.kind}
         options={TRIM_KINDS.map(kind => ({ value: kind, label: TRIM_KIND_LABELS[kind] }))}
         onChange={v => set({ kind: v as TrimKind })} />
-      <Row label="直径 (mm)">
+      <Row label="直径(mm)">
         <NumberField value={trim.sizeMm} step={0.5} precision={1} min={0.5} max={200} title="辅料直径"
           onCommit={v => set({ sizeMm: v })} />
       </Row>
@@ -1097,11 +1103,11 @@ function TrimData({ project, nodeId }: { project: Project; nodeId: string }) {
         <NumberField value={trim.qty} step={1} precision={0} min={1} max={9999} title="这个标记代表的件数"
           onCommit={v => set({ qty: Math.round(v) })} />
       </Row>
-      <Row label="单价 (元)">
+      <Row label="单价(元)">
         <NumberField value={trim.unitPrice ?? 0} step={0.1} precision={2} min={0} title="填 0 表示不计价"
           onCommit={v => set({ unitPrice: v > 0 ? v : undefined })} />
       </Row>
-      <Row label="位置 (cm)">
+      <Row label="位置(cm)">
         <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           <NumberField value={trim.pos.x} step={0.5} precision={2} title="X 坐标"
             onCommit={v => set({ pos: { ...trim.pos, x: v } })} />

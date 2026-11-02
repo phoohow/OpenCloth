@@ -20,7 +20,7 @@ describe('projectCodec 往返', () => {
     expect(Object.keys(decoded.pattern.panels).length).toBeGreaterThan(0);
     expect(Object.keys(decoded.pattern.seams).length).toBeGreaterThan(0);
     expect(Object.keys(decoded.fabrics).length).toBe(1);
-    expect(decoded.avatar.params.heightCm).toBe(170);
+    expect(decoded.avatar.params.heightCm).toBe(175);
     expect(decoded.scene.simulation.gravity.y).toBeCloseTo(-9.8, 5);
   });
 

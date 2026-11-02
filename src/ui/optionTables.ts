@@ -16,7 +16,7 @@ export const PROP_TAB_OPTIONS: PropTabOption[] = [
   { key: 'object', icon: 'cube', label: '对象' },
   { key: 'material', icon: 'swatch', label: '材质' },
   { key: 'simulator', icon: 'waves', label: '模拟' },
-  { key: 'generator', icon: 'sparkles', label: '生成' },
+  { key: 'transform', icon: 'move', label: '变换' },
   { key: 'render', icon: 'image', label: '渲染' },
   { key: 'project', icon: 'briefcase', label: '工程' },
 ];
