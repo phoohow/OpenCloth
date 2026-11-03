@@ -290,7 +290,7 @@ function MenuSheet({ actions, onClose }: { actions: MenuActions; onClose: () => 
         <SheetButton label="快捷键总览…" onClick={() => { actions.showShortcuts(); onClose(); }} />
         <SheetButton label="关于 OpenCloth" onClick={() => { actions.showAbout(); onClose(); }} />
       </SheetGroup>
-      <SheetNote>手机端不提供 2D 制版、模板库与 PIN 打点；需要改版型时请在电脑端打开同一个 .ocproj.json 工程。</SheetNote>
+      <SheetNote>手机端不提供 2D 制版、模板库、PIN 打点与捏布拖拽；需要改版型或在模拟里拉扯布料时请在电脑端打开同一个 .ocproj.json 工程。</SheetNote>
     </>
   );
 }

@@ -3,7 +3,7 @@ import type { AvatarParams, Panel } from '../model/types';
 import type { PanelMesh } from '../../pattern/panel/panelBuilder';
 import { IDENTITY_TRANSFORM } from '../model/defaults';
 import { bodyLandmarks, type BodyLandmarks } from '../../avatar/landmarks';
-import { drapePositions, resolveDrape } from '../../pattern/drape/drapePlacement';
+import { drapePositions } from '../../pattern/drape/drapePlacement';
 import { explodeOffBody } from '../../pattern/drape/explodedLayout';
 import { applyObjectTransform } from './objectTransforms';
 
@@ -34,36 +34,10 @@ export function posedPositions3D(mesh: PanelMesh, panel: Panel, landmarks: BodyL
   return positions;
 }
 
-/** Share of a panel's height that the basted top band covers. */
-const PIN_TOP_FRACTION = 0.04;
-
 /** Unsewn start pose: wrapped panels slide off the body, flat panels stay on their coordinates. */
 export function initialPositions3D(positions3D: Float32Array, panel: Panel): Float32Array {
   if (panel.placement || !panel.drape) return positions3D;
   return explodeOffBody(positions3D);
-}
-
-/** Vertical extent of a panel mesh and the height of its pinned top band, in centimetres. */
-function pinnedBand(mesh: PanelMesh): { maxy: number; band: number } {
-  let miny = Infinity;
-  let maxy = -Infinity;
-  for (let i = 0; i < mesh.vertexCount; i++) {
-    const y = mesh.positions2D[i * 2 + 1];
-    if (y < miny) miny = y;
-    if (y > maxy) maxy = y;
-  }
-  return { maxy, band: (maxy - miny) * PIN_TOP_FRACTION };
-}
-
-/** Particle indices of the top band a hanging panel is basted from. */
-export function topBandParticles(mesh: PanelMesh, panel: Panel): number[] {
-  if (panel.placement || !panel.drape || !resolveDrape(panel).pinTop) return [];
-  const { maxy, band } = pinnedBand(mesh);
-  const pinned: number[] = [];
-  for (let i = 0; i < mesh.vertexCount; i++) {
-    if (mesh.positions2D[i * 2 + 1] >= maxy - band) pinned.push(i);
-  }
-  return pinned;
 }
 
 /** Lays a flat panel out at its stored placement. */

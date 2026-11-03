@@ -38,7 +38,6 @@ export interface ResolvedDrape {
   sweepDeg: number;
   side: 'left' | 'right';
   easeCm: number;
-  pinTop: boolean;
 }
 
 /** Completes a panel's drape, inferring one from the panel name for hand-drawn patterns. */
@@ -53,7 +52,6 @@ export function resolveDrape(panel: Panel): ResolvedDrape {
     sweepDeg: drape.sweepDeg ?? REGION_SWEEP[region],
     side: drape.side ?? 'right',
     easeCm: drape.easeCm ?? REGION_EASE[region],
-    pinTop: drape.pinTop ?? region !== 'arm',
   };
 }
 

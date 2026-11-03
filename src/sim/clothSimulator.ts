@@ -1,6 +1,7 @@
 import type { SimulationConfig, FabricPhysics } from '../core/model/types';
-import type { AvatarSDF } from '../avatar/sdf/avatarSDF';
-import { packCapsules } from '../avatar/sdf/avatarSDF';
+import type { AvatarCollider } from '../avatar/collider/avatarCollider';
+import { packCapsules } from '../avatar/collider/avatarCollider';
+import type { MeshCollider } from '../avatar/collider/meshCollider';
 import { packConstraints, type Constraint } from './buffers/constraintBuilder';
 import {
   computeParticlePanelMap, ParticleGrid, pickNearest, pickNearestToPoint,
@@ -11,7 +12,7 @@ import {
 } from './gpuPipelines';
 import {
   packCollideParams, packIntegrateParams, packPinParams, packSolveParams, packUpdateParams,
-  clothThicknessMeters, layerSpacingMeters,
+  clothThicknessMeters, layerSpacingMeters, type CollideBody,
 } from './simUniforms';
 import {
   buildCreaseConstraints, buildPanelConstraints, createBatchedConstraints, rewriteBatches,
@@ -52,8 +53,18 @@ export class ClothSimulator {
   // Body collision
   private capsuleBuf!: GPUBuffer;
   private capsuleCount = 0;
+  /** Triangle grid of the body mesh: vertices, cell offsets and per-cell triangle indices. */
+  private meshTriangleBuf!: GPUBuffer;
+  private cellStartBuf!: GPUBuffer;
+  private cellTrianglesBuf!: GPUBuffer;
+  /** Collider description the COLLIDE uniform block is packed from. */
+  private collideBody: CollideBody = {
+    capsuleCount: 0, triangleCount: 0, gridOrigin: [0, 0, 0], gridCell: 1, gridDims: [0, 0, 0],
+  };
   /** Per-particle damping mirroring each panel's material. */
   private dampingBuf!: GPUBuffer;
+  /** Per-particle pointer-drag weights read by the INTEGRATE pass. */
+  private grabWeightBuf!: GPUBuffer;
 
   // Uniform buffers
   private integrateParamsBuf!: GPUBuffer;
@@ -108,6 +119,10 @@ export class ClothSimulator {
   private layerSpacing = 0.004;
   /** Particle indices currently pinned (inverse mass = 0). */
   private pinnedSet = new Set<number>();
+  /** Per-particle pointer-drag weight; 0 everywhere while no fabric is grabbed. */
+  private grabWeights: Float32Array<ArrayBuffer> = new Float32Array(0);
+  /** Point the grabbed fabric is pulled toward, or null while nothing is grabbed. */
+  private grabTarget: [number, number, number] | null = null;
   /** Setup input, kept so material edits can rebuild constraints without touching geometry. */
   private simInput: ClothSimInput | null = null;
   /** Per-panel material physics behind the live constraint buffers. */
@@ -122,7 +137,7 @@ export class ClothSimulator {
   private pickGridVersion = -1;
 
   /** Builds all GPU resources from the simulation input, the avatar collision body and the config. */
-  async setup(input: ClothSimInput, avatarSDF: AvatarSDF | null, config: SimulationConfig): Promise<void> {
+  async setup(input: ClothSimInput, avatarCollider: AvatarCollider | null, config: SimulationConfig): Promise<void> {
     this.particleCount = input.particleCount;
     this.triangleCount = input.triangleCount;
     const pc = this.particleCount;
@@ -137,6 +152,8 @@ export class ClothSimulator {
     this.baseInvMass = computeBaseInvMass(input, this.panelPhysics, pc);
     this.dampingBuf = createStorageBuffer(dev, computeParticleDamping(
       input, this.panelPhysics, pc, this.panelPhysics[0]?.damping ?? 0.02));
+    this.grabWeights = new Float32Array(pc);
+    this.grabWeightBuf = createStorageBuffer(dev, this.grabWeights);
 
     // ---- Particle buffers ----
     const posData = new Float32Array(pc * 4);
@@ -173,23 +190,29 @@ export class ClothSimulator {
     // ---- Constraint build and coloring ----
     const built = buildPanelConstraints(input, this.panelPhysics, config.dt);
 
-    // ---- Body capsules ----
-    if (avatarSDF) {
-      const packed = packCapsules(avatarSDF);
-      this.capsuleCount = avatarSDF.capsules.length;
+    // ---- Body collider: mesh triangles when the model provides them, capsules otherwise ----
+    this.meshTriangleBuf = createStorageBuffer(dev, new Float32Array(4));
+    this.cellStartBuf = createStorageBuffer(dev, new Uint32Array(2));
+    this.cellTrianglesBuf = createStorageBuffer(dev, new Uint32Array(1));
+    if (avatarCollider) {
+      const packed = packCapsules(avatarCollider);
+      this.capsuleCount = avatarCollider.capsules.length;
       this.capsuleBuf = dev.createBuffer({
         size: packed.byteLength,
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
       });
       dev.queue.writeBuffer(this.capsuleBuf, 0, packed.buffer as ArrayBuffer, packed.byteOffset, packed.byteLength);
+      if (avatarCollider.mesh) this.uploadMeshCollider(avatarCollider.mesh);
+      else this.collideBody = { ...this.collideBody, capsuleCount: this.capsuleCount, triangleCount: 0 };
     } else {
       this.capsuleCount = 0;
       this.capsuleBuf = createStorageBuffer(dev, new Float32Array(8));
+      this.collideBody = { ...this.collideBody, capsuleCount: 0, triangleCount: 0 };
     }
 
     // ---- Uniform buffers ----
-    this.integrateParamsBuf = createUniformBuffer(dev, 64);
-    this.collideParamsBuf = createUniformBuffer(dev, 32);
+    this.integrateParamsBuf = createUniformBuffer(dev, 80);
+    this.collideParamsBuf = createUniformBuffer(dev, 64);
     this.updateParamsBuf = createUniformBuffer(dev, 32);
     this.normalsParamsBuf = createUniformBuffer(dev, 16);
     this.particleCountBuf = createUniformBuffer(dev, 16);
@@ -340,15 +363,48 @@ export class ClothSimulator {
     this.positionsVersion++;
   }
 
+  /**
+   * Uploads the body mesh grid and switches body collision from the capsules to the triangles.
+   * Vertices widen to three vec4 slots per triangle for the storage-buffer stride.
+   */
+  private uploadMeshCollider(mesh: MeshCollider): void {
+    const dev = this.device;
+    const vertices = new Float32Array(mesh.triangleCount * 12);
+    for (let t = 0; t < mesh.triangleCount; t++) {
+      const src = t * 9;
+      const dst = t * 12;
+      for (let k = 0; k < 3; k++) {
+        vertices[dst + k * 4] = mesh.vertices[src + k * 3]!;
+        vertices[dst + k * 4 + 1] = mesh.vertices[src + k * 3 + 1]!;
+        vertices[dst + k * 4 + 2] = mesh.vertices[src + k * 3 + 2]!;
+      }
+    }
+    this.meshTriangleBuf.destroy();
+    this.cellStartBuf.destroy();
+    this.cellTrianglesBuf.destroy();
+    this.meshTriangleBuf = createStorageBuffer(dev, vertices);
+    this.cellStartBuf = createStorageBuffer(dev, mesh.cellStart);
+    this.cellTrianglesBuf = createStorageBuffer(dev, mesh.cellTriangles);
+    this.collideBody = {
+      capsuleCount: this.capsuleCount,
+      triangleCount: mesh.triangleCount,
+      gridOrigin: mesh.origin,
+      gridCell: mesh.cell,
+      gridDims: mesh.dims,
+    };
+  }
+
   private createBindGroups(): void {
     const L = this.pipelines.layouts;
     const bind = (layout: GPUBindGroupLayout, buffers: GPUBuffer[]): GPUBindGroup =>
       this.bindGroup(layout, buffers);
 
     this.integrateBG = bind(L.integrate,
-      [this.posInvMassBuf, this.prevPosBuf, this.velocityBuf, this.predictedBuf, this.integrateParamsBuf]);
+      [this.posInvMassBuf, this.prevPosBuf, this.velocityBuf, this.predictedBuf, this.integrateParamsBuf,
+        this.grabWeightBuf]);
     this.collideBG = bind(L.collide,
-      [this.predictedBuf, this.capsuleBuf, this.collideParamsBuf, this.prevPosBuf]);
+      [this.predictedBuf, this.capsuleBuf, this.collideParamsBuf, this.prevPosBuf,
+        this.meshTriangleBuf, this.cellStartBuf, this.cellTrianglesBuf]);
     this.updateBG = bind(L.update,
       [this.posInvMassBuf, this.prevPosBuf, this.velocityBuf, this.predictedBuf, this.updateParamsBuf,
         this.dampingBuf]);
@@ -435,7 +491,7 @@ export class ClothSimulator {
       const subTime = frameStart + (sub + 1) * subDt;
       const encoder = dev.createCommandEncoder();
 
-      dev.queue.writeBuffer(this.integrateParamsBuf, 0, packIntegrateParams(subConfig, fabric, pc, subTime));
+      dev.queue.writeBuffer(this.integrateParamsBuf, 0, packIntegrateParams(subConfig, fabric, pc, subTime, this.grabTarget));
       dev.queue.writeBuffer(this.updateParamsBuf, 0, packUpdateParams(subConfig, pc));
 
       // Predict positions from velocity, gravity and wind
@@ -462,10 +518,10 @@ export class ClothSimulator {
         }
       }
 
-      // Body capsule collision; the floor plane is always active and always dispatched
+      // Body collision; the floor plane is always active and always dispatched
       {
         dev.queue.writeBuffer(this.collideParamsBuf, 0,
-          packCollideParams(subConfig, pc, this.capsuleCount, this.floorY));
+          packCollideParams(subConfig, pc, this.collideBody, this.floorY));
         const pass = encoder.beginComputePass();
         pass.setPipeline(this.pipelines.collide);
         pass.setBindGroup(0, this.collideBG);
@@ -613,8 +669,10 @@ export class ClothSimulator {
     return { positions: this.readPositions, normals: this.readNormals };
   }
 
-  /** Restores the initial positions; the current pin set is preserved. */
-  reset(initialPositions: Float32Array): void {    if (!this.initialized) return;
+  /** Restores the initial positions; the current pin set is preserved and any grab is released. */
+  reset(initialPositions: Float32Array): void {
+    if (!this.initialized) return;
+    this.clearGrab();
     const pc = this.particleCount;
     const data = new Float32Array(pc * 4);
     // Inverse mass comes from initialPosInvMass, which mirrors live pin changes.
@@ -725,6 +783,30 @@ export class ClothSimulator {
     return this.readPositions;
   }
 
+  /**
+   * Grabs the fabric: `weights` holds one pull weight per particle (0 outside the grabbed
+   * region), and every following step moves those particles that fraction of the way toward
+   * `target`. Weights stay with the particles, so the grab follows the fabric as it moves.
+   */
+  setGrab(weights: Float32Array, target: readonly [number, number, number]): boolean {
+    if (!this.initialized || weights.length !== this.particleCount) return false;
+    this.grabWeights.set(weights);
+    this.device.queue.writeBuffer(this.grabWeightBuf, 0, this.grabWeights);
+    this.grabTarget = [target[0], target[1], target[2]];
+    return true;
+  }
+
+  /** Moves the point the grabbed fabric is pulled toward. Ignored when nothing is grabbed. */
+  moveGrab(target: readonly [number, number, number]): void {
+    if (!this.grabTarget) return;
+    this.grabTarget = [target[0], target[1], target[2]];
+  }
+
+  /** Releases the grab; the particles keep the velocity the pull gave them. */
+  clearGrab(): void {
+    this.grabTarget = null;
+  }
+
   /** Pins or unpins one particle at runtime. False when the solver rejects the index. */
   async setParticlePin(particleIndex: number, pinned: boolean): Promise<boolean> {
     return this.setParticlePins([particleIndex], pinned);
@@ -808,7 +890,8 @@ export class ClothSimulator {
     this.initialized = false;
     const buffers: (GPUBuffer | undefined)[] = [
       this.posInvMassBuf, this.prevPosBuf, this.velocityBuf, this.predictedBuf, this.normalsBuf,
-      this.indicesBuf, this.capsuleBuf, this.dampingBuf,
+      this.indicesBuf, this.capsuleBuf, this.dampingBuf, this.grabWeightBuf,
+      this.meshTriangleBuf, this.cellStartBuf, this.cellTrianglesBuf,
       this.integrateParamsBuf, this.collideParamsBuf, this.updateParamsBuf, this.normalsParamsBuf,
       this.particleCountBuf, this.pinIndicesBuf, this.pinInvMassBuf, this.pinParamsBuf,
       this.readbackBuf, this.readbackNormalsBuf,

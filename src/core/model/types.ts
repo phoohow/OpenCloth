@@ -145,8 +145,6 @@ export interface PanelDrape {
   side?: 'left' | 'right';
   /** Adds this many centimeters to the wrap radius. */
   easeCm?: number;
-  /** Bastes the top edge band while dressing; sleeves hang from their cap seams instead. Defaults to true. */
-  pinTop?: boolean;
 }
 
 /** One cut piece of the garment. */

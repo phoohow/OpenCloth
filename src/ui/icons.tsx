@@ -5,10 +5,10 @@ export const ICON_NAMES = [
   // 2D pattern tools
   'select', 'add-point', 'line', 'curve', 'internal-line', 'dart', 'seam', 'pan',
   'rect', 'circle', 'ellipse', 'print', 'topstitch', 'trim',
-  // 3D pin tools
-  'pin', 'unpin',
+  // 3D fitting tools
+  'pin', 'unpin', 'move',
   // Properties tabs
-  'cube', 'swatch', 'waves', 'move', 'sparkles', 'image', 'briefcase', 'scene',
+  'cube', 'swatch', 'waves', 'sparkles', 'image', 'briefcase', 'scene',
   // Outliner nodes
   'folder', 'panel', 'avatar', 'reference', 'environment', 'camera',
   'light-directional', 'light-point', 'light-spot', 'light-area',

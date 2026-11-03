@@ -1,5 +1,5 @@
 import type { Object3D } from 'three/webgpu';
-import type { AvatarSDF, Capsule } from './avatarSDF';
+import type { AvatarCollider, Capsule } from './avatarCollider';
 
 /** Minimal structural view of a mesh; keeps capsule fitting free of runtime THREE use. */
 interface MeshLike {
@@ -122,7 +122,7 @@ function boxToCapsule(b: CellBox, voxel: number): Capsule {
 export function fitCapsulesFromGroup(
   root: Object3D,
   opts?: { maxCapsules?: number; voxel?: number },
-): AvatarSDF {
+): AvatarCollider {
   const maxCapsules = opts?.maxCapsules ?? 300;
   const voxel = opts?.voxel ?? 0.03;
   const pad = 0.1;

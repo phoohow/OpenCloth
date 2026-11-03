@@ -8,7 +8,7 @@ import { fabricForPanel } from '../model/fabric';
 import { collapseSeamPairs, type VertexRef } from '../../pattern/drape/sewnTargets';
 import { seamBreakStretch } from '../../sim/seamStrength';
 import { FALLBACK_PHYSICS } from './clothConstants';
-import { flatRestPositions, initialPositions3D, posedPositions3D, topBandParticles, type BodyLandmarkCache } from './initialPose';
+import { flatRestPositions, initialPositions3D, posedPositions3D, type BodyLandmarkCache } from './initialPose';
 
 /** Compliance of a stitched dart leg pair, as strong as a fully tight seam. */
 const DART_STITCH_STRENGTH = 1;
@@ -68,7 +68,6 @@ export class MergedCloth {
     const indices = new Uint32Array(totalTriangles * 3);
     const uvs = new Float32Array(totalVertices * 2);
     const panels: ClothSimInput['panels'] = [];
-    const pinnedIndices: number[] = [];
     const panelIds = Array.from(panelMeshes.keys());
 
     let vertexOffset = 0;
@@ -78,8 +77,6 @@ export class MergedCloth {
       const panel = project.pattern.panels[panelId];
       const posed = posedPositions3D(mesh, panel, landmarks.resolve(project.avatar.params));
       const start = initialPositions3D(posed, panel);
-
-      for (const local of topBandParticles(mesh, panel)) pinnedIndices.push(vertexOffset + local);
 
       for (let i = 0; i < mesh.vertexCount; i++) {
         const src = i * 3;
@@ -125,7 +122,6 @@ export class MergedCloth {
       indices,
       panels,
       seamConstraints,
-      pinnedIndices,
       particleCount: totalVertices,
       triangleCount: totalTriangles,
     };

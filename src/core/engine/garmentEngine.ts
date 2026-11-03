@@ -23,6 +23,7 @@ import { ClothPicker, type CameraPreset } from './clothPicker';
 import { MergedCloth } from './mergedCloth';
 import { EnvironmentStage } from './environmentStage';
 import { PinMarkers } from './pinMarkers';
+import { ClothInteraction } from './clothInteraction';
 import { ReferenceStage, type ReferenceObject } from './referenceStage';
 import { SeamThreads } from './seamThreads';
 import { TopstitchThreads, topstitchSegments } from './topstitchThreads';
@@ -30,7 +31,9 @@ import { SelectionOverlay } from './selectionOverlay';
 import { DressingController } from './dressingController';
 import { appearanceSignature, avatarBodySignature, clothLayoutFingerprint, constraintSignature, geometrySignatures, physicsSignature, visibilitySignature, type ClothGroupRange } from './clothSignatures';
 import { timeAsync } from './engineTiming';
-import { FALLBACK_APPEARANCE, FALLBACK_PHYSICS, editPreviewResolutionCm } from './clothConstants';
+import {
+  FALLBACK_APPEARANCE, FALLBACK_PHYSICS, editPreviewResolutionCm,
+} from './clothConstants';
 import { computeFitField, fitStats, type FitStats } from '../../render/analysis/fit';
 import { FitOverlay } from '../../render/analysis/fitOverlay';
 import { computeVertexStrain, strainStats, type StrainStats } from '../../render/analysis/strain';
@@ -65,6 +68,8 @@ export class GarmentEngine {
   private environment: EnvironmentStage;
   private picker: ClothPicker;
   private pinMarkers = new PinMarkers();
+  /** Hover, grab and pinned-point gestures on the cloth. */
+  private interaction: ClothInteraction;
   private seamThreads = new SeamThreads();
   private topstitchThreads = new TopstitchThreads();
   /** Composed panel textures of the printed pieces, one per printing panel. */
@@ -153,6 +158,15 @@ export class GarmentEngine {
       pickParticleAtPoint: (point, radius, panelSlot) =>
         this.simulator?.pickNearestAtPoint(point, radius, panelSlot) ?? null,
       frameObjects: () => this.frameObjects(),
+    });
+    this.interaction = new ClothInteraction({
+      picker: this.picker,
+      avatar: this.avatar,
+      pinMarkers: this.pinMarkers,
+      renderer: rendererCtx,
+      positions: () => this.clothParticlePositions(),
+      simulator: () => (this.simReady ? this.simulator : null),
+      pickParticle: (ndcX, ndcY) => this.pickClothParticleAtScreen(ndcX, ndcY),
     });
   }
 
@@ -497,12 +511,12 @@ export class GarmentEngine {
       return null;
     }
     this.fitCountdown = 5;
-    const sdf = this.avatar.sdf;
+    const collider = this.avatar.collider;
     const positions = this.lastGoodPositions.length === this.mergedPositions.length && this.mergedPositions.length > 0
       ? this.lastGoodPositions
       : this.mergedPositions;
-    if (!sdf || positions.length === 0) return null;
-    const field = computeFitField(positions, sdf, { thresholds: { tightCm, looseCm } });
+    if (!collider || positions.length === 0) return null;
+    const field = computeFitField(positions, collider, { thresholds: { tightCm, looseCm } });
     this.fitOverlay.update(field);
     return fitStats(field);
   }
@@ -683,13 +697,15 @@ export class GarmentEngine {
   async initSimulator(project: Project): Promise<void> {
     if (!this.mergedInput) return;
     await timeAsync(`initSimulator (${this.mergedInput.particleCount} particles)`, async () => {
+      // A rebuilt solver has no grabbed particle yet, so any in-flight drag ends with the old one.
+      this.endClothDrag();
       this.simulator?.destroy();
       const carried = this.carriedPinIndices(this.mergedInput!.particleCount);
       const input = carried.length > 0
         ? { ...this.mergedInput!, pinnedIndices: [...new Set([...(this.mergedInput!.pinnedIndices ?? []), ...carried])] }
         : this.mergedInput!;
       const simulator = new ClothSimulator(rendererDevice(this.rendererCtx));
-      await simulator.setup(input, this.avatar.sdf, project.scene.simulation);
+      await simulator.setup(input, this.avatar.collider, project.scene.simulation);
       this.simulator = simulator;
       this.simReady = true;
       this.appliedPhysics = physicsSignature(this.clothPanelIds(), project);
@@ -732,6 +748,7 @@ export class GarmentEngine {
       this.seamThreads.update(this.cloth.seamPairs, positions);
       this.topstitchThreads.update(positions);
       this.pinMarkers.sync(this.simulator.getReadbackPositions());
+      this.interaction.syncMarker(positions);
     } finally {
       this.stepping = false;
     }
@@ -748,6 +765,7 @@ export class GarmentEngine {
     this.seamThreads.update(this.cloth.seamPairs, this.mergedPositions);
     this.topstitchThreads.update(this.mergedPositions);
     this.pinMarkers.sync(this.mergedPositions);
+    this.interaction.syncMarker(this.mergedPositions);
   }
 
   /** True while a staged dressing animation is playing. */
@@ -780,20 +798,13 @@ export class GarmentEngine {
     return true;
   }
 
-  /** Currently pinned particle indices. */
-  getPinnedParticles(): readonly number[] {
-    return this.simulator?.getPinnedParticles() ?? [];
-  }
-
   /** Particle indices carrying a PIN marker, that is, the points pinned by hand. */
   getPinMarkers(): readonly number[] {
     return this.pinMarkers.list();
   }
 
-  /**
-   * Releases every pinned particle in one solver pass and drops all markers, including the
-   * automatic basting band, so clearing a large garment costs one GPU submit.
-   */
+  /** Releases every pinned particle in one solver pass and drops all markers. */
+
   async clearPins(): Promise<boolean> {
     if (!this.simulator) return false;
     const indices = this.simulator.getPinnedParticles();
@@ -807,9 +818,44 @@ export class GarmentEngine {
     return this.picker.pickClothParticleAtScreen(ndcX, ndcY, radiusFactor);
   }
 
+  /** True once a solver is built and stepping, so cloth interactions have something to act on. */
+  isSimReady(): boolean {
+    return this.simReady && this.simulator !== null;
+  }
+
+  /** True when the garment is the front-most surface under a screen point. */
+  hoverClothAtScreen(ndcX: number, ndcY: number): boolean {
+    return this.interaction.hoverClothAtScreen(ndcX, ndcY);
+  }
+
+  /** Pinned particle whose marker sits within `radiusPx` of a screen point, or null. */
+  hoverPinAtScreen(ndcX: number, ndcY: number, radiusPx?: number): number | null {
+    return this.interaction.hoverPinAtScreen(ndcX, ndcY, radiusPx);
+  }
+
+  /** Highlights the pin a remove click would release; null restores every marker. */
+  setHoveredPin(particleIndex: number | null): void {
+    this.interaction.setHoveredPin(particleIndex);
+  }
+
   /** Raycasts the cloth surface and returns the owning panel of the hit triangle. */
   pickPanelAtScreen(ndcX: number, ndcY: number): string | null {
     return this.picker.pickPanelAtScreen(ndcX, ndcY);
+  }
+
+  /** Grabs the cloth under a screen point for a pointer drag; false when the point misses it. */
+  beginClothDrag(ndcX: number, ndcY: number): boolean {
+    return this.interaction.beginDrag(ndcX, ndcY);
+  }
+
+  /** Moves the drag target to where the pointer ray crosses the plane it started on. */
+  moveClothDrag(ndcX: number, ndcY: number): void {
+    this.interaction.moveDrag(ndcX, ndcY);
+  }
+
+  /** Releases the pointer drag; the cloth keeps the velocity the pull gave it. */
+  endClothDrag(): void {
+    this.interaction.endDrag();
   }
 
   /** Highlights the listed panels; ids without cloth triangles are ignored. */
@@ -981,6 +1027,8 @@ export class GarmentEngine {
     this.avatar.highlight(false);
     this.clearCloth();
     this.pinMarkers.dispose(scene);
+    // Releases a pointer still holding the cloth and frees the grabbed-point marker.
+    this.interaction.dispose();
     this.references.clear(scene);
     this.avatar.detach(scene);
     this.environment.release();

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { bodyLandmarks } from '../../src/avatar/landmarks';
-import { generateAvatarSDF } from '../../src/avatar/sdf/avatarSDF';
+import { generateAvatarCollider } from '../../src/avatar/collider/avatarCollider';
 import type { AvatarParams } from '../../src/core/model/types';
 
 const BASE: AvatarParams = { heightCm: 170, chestCm: 92, waistCm: 74, hipCm: 96 };
@@ -32,25 +32,25 @@ describe('body pose landmarks', () => {
 
 describe('collision capsules follow the pose', () => {
   it('keeps legs vertical and centred on the hip axis without splay', () => {
-    const sdf = generateAvatarSDF(BASE);
+    const collider = generateAvatarCollider(BASE);
     const body = bodyLandmarks(BASE);
-    const thigh = sdf.capsules.find(c => c.ay === body.legH && c.ax < 0);
+    const thigh = collider.capsules.find(c => c.ay === body.legH && c.ax < 0);
     expect(thigh).toBeDefined();
     expect(thigh!.bx).toBeCloseTo(thigh!.ax);
-    const shin = sdf.capsules.find(c => c.ay < body.legH && c.bx < 0);
+    const shin = collider.capsules.find(c => c.ay < body.legH && c.bx < 0);
     expect(shin!.bx).toBeCloseTo(shin!.ax);
     expect(shin!.bx).toBeCloseTo(-body.hipX);
   });
 
   it('splays both legs outward about the hip', () => {
     const params: AvatarParams = { ...BASE, poseLegSpreadRad: 0.2 };
-    const sdf = generateAvatarSDF(params);
+    const collider = generateAvatarCollider(params);
     const body = bodyLandmarks(params);
 
-    const rightThigh = sdf.capsules.find(c => c.ay === body.legH && c.ax > 0)!;
-    const rightShin = sdf.capsules.find(c => c.ay < body.legH && c.bx > 0)!;
-    const leftThigh = sdf.capsules.find(c => c.ay === body.legH && c.ax < 0)!;
-    const leftShin = sdf.capsules.find(c => c.ay < body.legH && c.bx < 0)!;
+    const rightThigh = collider.capsules.find(c => c.ay === body.legH && c.ax > 0)!;
+    const rightShin = collider.capsules.find(c => c.ay < body.legH && c.bx > 0)!;
+    const leftThigh = collider.capsules.find(c => c.ay === body.legH && c.ax < 0)!;
+    const leftShin = collider.capsules.find(c => c.ay < body.legH && c.bx < 0)!;
 
     expect(rightThigh.bx).toBeGreaterThan(rightThigh.ax);
     expect(rightShin.bx).toBeGreaterThan(rightThigh.bx);
@@ -63,9 +63,9 @@ describe('collision capsules follow the pose', () => {
 
   it('leans the torso capsules while the hip ring stays on the centreline', () => {
     const params: AvatarParams = { ...BASE, poseTorsoLeanRad: 0.2 };
-    const sdf = generateAvatarSDF(params);
+    const collider = generateAvatarCollider(params);
     const body = bodyLandmarks(params);
-    const waist = sdf.capsules.find(c => c.ay === body.hipY && c.by === body.waistY);
+    const waist = collider.capsules.find(c => c.ay === body.hipY && c.by === body.waistY);
     expect(waist).toBeDefined();
     expect(waist!.ax).toBeCloseTo(0);
     expect(waist!.bx).toBeCloseTo(body.torsoCenterXAt(body.waistY));
@@ -75,15 +75,15 @@ describe('collision capsules follow the pose', () => {
     const params: AvatarParams = {
       ...BASE, poseTorsoLeanRad: 0.3, poseLegSpreadRad: 0.3, poseArmAngleRad: 0.4,
     };
-    const sdf = generateAvatarSDF(params);
-    for (const c of sdf.capsules) {
+    const collider = generateAvatarCollider(params);
+    for (const c of collider.capsules) {
       for (const x of [c.ax, c.bx]) {
-        expect(x - c.radius).toBeGreaterThanOrEqual(sdf.bounds.min[0] - 1e-9);
-        expect(x + c.radius).toBeLessThanOrEqual(sdf.bounds.max[0] + 1e-9);
+        expect(x - c.radius).toBeGreaterThanOrEqual(collider.bounds.min[0] - 1e-9);
+        expect(x + c.radius).toBeLessThanOrEqual(collider.bounds.max[0] + 1e-9);
       }
       for (const y of [c.ay, c.by]) {
-        expect(y).toBeGreaterThanOrEqual(sdf.bounds.min[1] - 1e-9);
-        expect(y).toBeLessThanOrEqual(sdf.bounds.max[1] + 1e-9);
+        expect(y).toBeGreaterThanOrEqual(collider.bounds.min[1] - 1e-9);
+        expect(y).toBeLessThanOrEqual(collider.bounds.max[1] + 1e-9);
       }
     }
   });

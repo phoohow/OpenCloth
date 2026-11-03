@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Audits docs/ for cross-references, heading levels and oversized paragraphs.
+ * Audits docs/ for cross-references, heading levels, oversized paragraphs and list items.
  * Exits with code 1 when any error is found; warnings alone exit 0.
  *
  * docs/draft holds target and historical documents whose filenames carry no
@@ -172,6 +172,19 @@ function auditReferences(file, entries) {
   }
 }
 
+/** Reports list items longer than the prose budget; they hide verbosity the paragraph pass skips. */
+function auditListItems(file, entries) {
+  for (const entry of entries) {
+    if (entry.fenced) continue;
+    const text = entry.text.trim();
+    if (!/^([-*+]|\d+[.)])\s/.test(text)) continue;
+    const length = text.replace(/\s+/g, '').length;
+    if (length > MAX_PARAGRAPH_CHARS) {
+      report(file, 'warning', entry.line, `长列表项 ${length} 字（超过 ${MAX_PARAGRAPH_CHARS} 字）`);
+    }
+  }
+}
+
 const isPlainText = text => {
   const trimmed = text.trim();
   if (trimmed === '') return false;
@@ -216,6 +229,7 @@ for (const file of files) {
   const entries = entriesByFile.get(file);
   auditReferences(file, entries);
   auditParagraphs(file, entries);
+  auditListItems(file, entries);
 }
 
 const order = { error: 0, warning: 1 };

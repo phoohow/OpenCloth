@@ -1,8 +1,10 @@
 import type { AvatarParams } from '../../core/model/types';
 import { bodyLandmarks, type BodyEllipse, type BodyLandmarks } from '../landmarks';
+import type { MeshCollider } from './meshCollider';
 
 export { fitCapsulesFromGroup } from './meshCapsuleFitter';
-export { evalSDF } from './sdfEval';
+export type { MeshCollider } from './meshCollider';
+export { evalBodyDistance } from './bodyDistance';
 
 /** Body cross-section approximated by a line segment with elliptical half widths. */
 export interface Capsule {
@@ -17,13 +19,15 @@ export interface Capsule {
 }
 
 /**
- * Analytic capsule SDF: the body as a set of capsules whose distance to a point is
- * evaluated directly, on the GPU or on the CPU.
+ * Body collision proxy: the capsule approximation plus, when the body mesh is available,
+ * the exact triangle grid that takes precedence over it.
  */
-export interface AvatarSDF {
+export interface AvatarCollider {
   capsules: Capsule[];
   /** Bounding box for fast rejection */
   bounds: { min: [number, number, number]; max: [number, number, number] };
+  /** Exact collider built from the body mesh; the capsules are not used when it is present. */
+  mesh?: MeshCollider | null;
 }
 
 /** Largest cross-section a body segment covers, sampled over its height span. */
@@ -39,7 +43,7 @@ function widestEllipse(body: BodyLandmarks, y0: number, y1: number): BodyEllipse
 }
 
 /** Builds the capsule set from body measurement parameters. */
-export function generateAvatarSDF(params: AvatarParams): AvatarSDF {
+export function generateAvatarCollider(params: AvatarParams): AvatarCollider {
   const body = bodyLandmarks(params);
   const capsules: Capsule[] = [];
   const cap = (
@@ -116,9 +120,9 @@ export function generateAvatarSDF(params: AvatarParams): AvatarSDF {
 }
 
 /** Packs capsules to match the WGSL Capsule struct: a = (start.xyz, radiusX), b = (end.xyz, radiusZ). */
-export function packCapsules(sdf: AvatarSDF): Float32Array {
-  const data = new Float32Array(sdf.capsules.length * 8);
-  sdf.capsules.forEach((c, i) => {
+export function packCapsules(collider: AvatarCollider): Float32Array {
+  const data = new Float32Array(collider.capsules.length * 8);
+  collider.capsules.forEach((c, i) => {
     const o = i * 8;
     data[o] = c.ax; data[o + 1] = c.ay; data[o + 2] = c.az; data[o + 3] = c.radius;
     data[o + 4] = c.bx; data[o + 5] = c.by; data[o + 6] = c.bz; data[o + 7] = c.radiusZ ?? 0;

@@ -5,7 +5,7 @@ import type { AvatarParams, Pattern, Seam } from '../core/model/types';
 import { createDefaultAvatar } from '../core/model/defaults';
 import { buildPanelMesh, sampleEdge, type PanelMesh } from '../pattern/panel/panelBuilder';
 import { bodyLandmarks } from '../avatar/landmarks';
-import { generateAvatarSDF } from '../avatar/sdf/avatarSDF';
+import { generateAvatarCollider } from '../avatar/collider/avatarCollider';
 import { drapePositions } from '../pattern/drape/drapePlacement';
 import { flatLayout } from './flatLayout';
 import { explodeOffBody } from '../pattern/drape/explodedLayout';
@@ -184,8 +184,8 @@ function drawFloor(canvas: SoftCanvas, cam: Camera): void {
 }
 
 function drawBody(canvas: SoftCanvas, cam: Camera): void {
-  const sdf = generateAvatarSDF(AVATAR);
-  for (const c of sdf.capsules) {
+  const collider = generateAvatarCollider(AVATAR);
+  for (const c of collider.capsules) {
     const tris = capsuleTriangles([c.ax, c.ay, c.az], [c.bx, c.by, c.bz], c.radius, 10, 14, c.radiusZ);
     for (const [a, b, cc] of tris) canvas.triangle(cam, a, b, cc, BODY);
   }

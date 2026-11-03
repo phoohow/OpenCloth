@@ -489,15 +489,12 @@ export function Toolbar3D({ engineRef }: { engineRef: MutableRefObject<GarmentEn
   const [clearing, setClearing] = useState(false);
   const [rebuilding, setRebuilding] = useState(false);
 
-  // The pinned set lives on the solver, so the counts refresh when the version token moves.
-  const pinCounts = useMemo(() => {
-    const engine = engineRef.current;
-    return {
-      marked: engine?.getPinMarkers().length ?? 0,
-      pinned: engine?.getPinnedParticles().length ?? 0,
-    };
+  // The pinned set lives on the solver, so the count refreshes when the version token moves.
+  const pinCount = useMemo(
+    () => engineRef.current?.getPinMarkers().length ?? 0,
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pinsVersion]);
+    [pinsVersion],
+  );
 
   const clearPins = async () => {
     const engine = engineRef.current;
@@ -528,13 +525,16 @@ export function Toolbar3D({ engineRef }: { engineRef: MutableRefObject<GarmentEn
   return (
     <div style={styles.bar}>
       {TOOLS_3D.map(t => (
-        <ToolButton key={t.key} tool={t} active={activeTool === t.key} onPick={setTool} />
+        <ToolButton
+          key={t.key}
+          tool={t}
+          active={activeTool === t.key}
+          onPick={setTool}
+          badge={t.key === 'pin' && pinCount > 0 ? { count: pinCount, label: `已打 ${pinCount} 个` } : undefined}
+        />
       ))}
       <button style={styles.textBtn} title="释放全部 PIN" disabled={clearing} onClick={() => void clearPins()}>{clearing ? '清除中…' : '清除PIN'}</button>
       <button style={styles.textBtn} title="按当前工程重建布料网格" disabled={rebuilding} onClick={() => void rebuildCloth()}>{rebuilding ? '重建中…' : '重建网格'}</button>
-      <span style={styles.pinCount} title="手动打点数 · 固定点总数（含版片顶部假缝带）">
-        <Icon name="pin" size={11} /> {pinCounts.marked} · 固定 {pinCounts.pinned}
-      </span>
       <div style={styles.spacer} />
       <Dropdown
         label="视角"
@@ -563,18 +563,25 @@ export function Toolbar3D({ engineRef }: { engineRef: MutableRefObject<GarmentEn
   );
 }
 
-function ToolButton({ tool, active, onPick }: {
+function ToolButton({ tool, active, onPick, badge }: {
   tool: { key: ToolType; label: string; icon: IconName };
   active: boolean;
   onPick: (t: ToolType) => void;
+  /** Count drawn after the icon; the button widens to hold it. */
+  badge?: { count: number; label: string };
 }) {
   return (
     <button
-      style={{ ...styles.toolBtn, ...(active ? styles.toolBtnActive : null) }}
-      title={tool.label}
+      style={{
+        ...styles.toolBtn,
+        ...(badge ? styles.toolBtnCounted : null),
+        ...(active ? styles.toolBtnActive : null),
+      }}
+      title={badge ? `${tool.label} · ${badge.label}` : tool.label}
       onClick={() => onPick(tool.key)}
     >
       <Icon name={tool.icon} size={15} />
+      {badge ? <span style={styles.toolCount}>{badge.count}</span> : null}
     </button>
   );
 }
@@ -724,8 +731,9 @@ const styles: Record<string, React.CSSProperties> = {
   spacer: { flex: 1 },
   toolBtn: { flex: '0 0 auto', width: 26, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: '1px solid transparent', borderRadius: 3, color: '#bbb', cursor: 'pointer' },
   toolBtnActive: { background: '#2a4a6a', border: '1px solid #4da6ff', color: '#fff' },
+  toolBtnCounted: { width: 'auto', minWidth: 26, padding: '0 6px', gap: 4 },
+  toolCount: { color: '#4da6ff', fontSize: 10, fontVariantNumeric: 'tabular-nums' },
   textBtn: { flex: '0 0 auto', whiteSpace: 'nowrap', padding: '3px 6px', background: '#2a2a30', border: '1px solid #3a3a42', borderRadius: 3, color: '#ccc', cursor: 'pointer', fontSize: 11 },
-  pinCount: { flex: '0 1 auto', minWidth: 0, padding: '3px 2px', color: '#9ab', fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'default' },
   backdrop: { position: 'fixed', inset: 0, zIndex: 900 },
   menuPopup: {
     position: 'fixed', width: 'max-content', minWidth: 140, overflowY: 'auto',

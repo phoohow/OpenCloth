@@ -9,8 +9,8 @@ function rect(w: number, h: number) {
 
 describe('inferDrape from a panel name', () => {
   it('wraps a sleeve around the arm on the side named in the panel', () => {
-    expect(inferDrape('左袖')).toEqual({ region: 'arm', side: 'left', pinTop: false });
-    expect(inferDrape('袖片')).toEqual({ region: 'arm', side: 'right', pinTop: false });
+    expect(inferDrape('左袖')).toEqual({ region: 'arm', side: 'left' });
+    expect(inferDrape('袖片')).toEqual({ region: 'arm', side: 'right' });
   });
 
   it('wraps trousers and legs around a leg', () => {
@@ -33,7 +33,7 @@ describe('inferDrape from a panel name', () => {
 
 describe('inferDrape from an outline', () => {
   it('wraps a tall narrow piece around a limb', () => {
-    expect(inferDrape(rect(10, 40))).toEqual({ region: 'arm', pinTop: false });
+    expect(inferDrape(rect(10, 40))).toEqual({ region: 'arm' });
   });
 
   it('wraps a long piece with leg proportions around a leg', () => {

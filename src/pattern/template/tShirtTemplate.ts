@@ -76,7 +76,6 @@ export function generateTShirt(params: TShirtParams = DEFAULT_TSHIRT_PARAMS, fab
   const sleeveDrape = (side: 'left' | 'right'): PanelDrape => ({
     region: 'arm',
     side,
-    pinTop: false,
     // The cap crown joins the shoulder tip, which sits one slope below the neck seam.
     anchor: 'shoulderTop',
     anchorOffsetCm: -SHOULDER_SLOPE_CM,

@@ -22,6 +22,18 @@ export const FALLBACK_PHYSICS: FabricPhysics = structuredClone(FABRIC_PHYSICS_PR
 /** Mesh density the coarse edit preview rebuilds at, in centimeters per edge. */
 export const PREVIEW_COARSE_RESOLUTION_CM = 6;
 
+/** World radius around the grabbed particle a pointer drag pulls, in meters. */
+export const DRAG_GRAB_RADIUS_M = 0.03;
+
+/** Share of the remaining gap a pointer drag covers per solver substep. */
+export const DRAG_GRAB_STRENGTH = 0.35;
+
+/** Distance from the grabbed point a drag target is clamped to, in meters. */
+export const DRAG_MAX_REACH_M = 1;
+
+/** How close to a PIN marker the pointer must be, in screen pixels, to target that pin. */
+export const PIN_HOVER_RADIUS_PX = 14;
+
 /** Mesh density an edit preview builds at; the full tier keeps the project's own density. */
 export function editPreviewResolutionCm(tier: EditPreviewTier, projectResolutionCm: number): number {
   return tier === 'low' ? PREVIEW_COARSE_RESOLUTION_CM : projectResolutionCm;

@@ -12,7 +12,7 @@ export function inferDrape(panelNameOrShape: string | Vec2[]): PanelDrape {
 
 function inferDrapeFromName(name: string): PanelDrape {
   if (name.includes('袖')) {
-    return { region: 'arm', side: name.includes('左') ? 'left' : 'right', pinTop: false };
+    return { region: 'arm', side: name.includes('左') ? 'left' : 'right' };
   }
   if (name.includes('裤') || name.includes('腿')) {
     return { region: 'leg', side: name.includes('左') ? 'left' : 'right' };
@@ -33,7 +33,7 @@ function inferDrapeFromShape(pts: Vec2[]): PanelDrape {
   const h = box.max.y - box.min.y;
   if (w <= 0 || h <= 0) return { region: 'torso' };
   const ratio = w / h;
-  if (ratio < 0.45 && h < 45) return { region: 'arm', pinTop: false };
+  if (ratio < 0.45 && h < 45) return { region: 'arm' };
   if (ratio < 0.55 && h >= 45) return { region: 'leg' };
   return { region: 'torso' };
 }

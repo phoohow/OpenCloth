@@ -1,9 +1,11 @@
-import type { AvatarSDF, Capsule } from './avatarSDF';
+import type { AvatarCollider, Capsule } from './avatarCollider';
+import { sampleMeshCollider } from './meshCollider';
 
 /** CPU-side signed distance to the body surface; negative inside the body. */
-export function evalSDF(sdf: AvatarSDF, px: number, py: number, pz: number): number {
+export function evalBodyDistance(collider: AvatarCollider, px: number, py: number, pz: number): number {
+  if (collider.mesh) return sampleMeshCollider(collider.mesh, px, py, pz);
   let minDist = Infinity;
-  for (const c of sdf.capsules) {
+  for (const c of collider.capsules) {
     const d = pointToCapsuleDist(px, py, pz, c) - ellipseRadiusAt(c, px, py, pz);
     if (d < minDist) minDist = d;
   }

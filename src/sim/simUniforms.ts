@@ -8,14 +8,15 @@ const SURFACE_OFFSET = 0.005;
 /** Tangential pull toward the previous frame position on contact. */
 const CONTACT_FRICTION = 0.5;
 
-/** INTEGRATE SimParams block: 64 bytes. */
+/** INTEGRATE SimParams block: 80 bytes; the drag target only counts while its w flag is 1. */
 export function packIntegrateParams(
   config: SimulationConfig,
   fabric: FabricPhysics,
   particleCount: number,
   time: number,
+  grabTarget: readonly [number, number, number] | null,
 ): Float32Array<ArrayBuffer> {
-  const data = new Float32Array(16);
+  const data = new Float32Array(20);
   const u32 = new Uint32Array(data.buffer);
   data[0] = config.dt;
   u32[1] = particleCount;
@@ -29,6 +30,12 @@ export function packIntegrateParams(
   data[12] = fabric.damping;
   data[13] = time;
   data[14] = MAX_SPEED;
+  if (grabTarget) {
+    data[16] = grabTarget[0];
+    data[17] = grabTarget[1];
+    data[18] = grabTarget[2];
+    data[19] = 1;
+  }
   return data;
 }
 
@@ -46,22 +53,44 @@ export function layerSpacingMeters(config: SimulationConfig): number {
   return Math.min(2, Math.max(0, value)) / 100;
 }
 
-/** COLLIDE SimParams block: 32 bytes; capsule count is 0 when body collision is off or absent. */
+/** Body collider handed to the COLLIDE pass: the triangle grid, plus capsules for the fallback. */
+export interface CollideBody {
+  capsuleCount: number;
+  triangleCount: number;
+  gridOrigin: [number, number, number];
+  gridCell: number;
+  gridDims: [number, number, number];
+}
+
+/**
+ * COLLIDE SimParams block: 64 bytes. The mesh collider replaces the capsules, so
+ * `capsuleCount` is 0 whenever triangles are present; both are 0 without body collision.
+ */
 export function packCollideParams(
   config: SimulationConfig,
   particleCount: number,
-  capsuleCount: number,
+  body: CollideBody,
   floorY: number,
 ): Float32Array<ArrayBuffer> {
-  const data = new Float32Array(8);
+  const data = new Float32Array(16);
   const u32 = new Uint32Array(data.buffer);
+  const on = config.avatarCollision;
+  const triangles = on ? body.triangleCount : 0;
   data[0] = config.dt;
   u32[1] = particleCount;
-  u32[2] = config.avatarCollision && capsuleCount > 0 ? capsuleCount : 0;
+  u32[2] = triangles > 0 || !on ? 0 : body.capsuleCount;
   data[3] = SURFACE_OFFSET;
   data[4] = CONTACT_FRICTION;
   data[5] = floorY;
   data[6] = clothThicknessMeters(config);
+  u32[7] = triangles;
+  data[8] = body.gridOrigin[0];
+  data[9] = body.gridOrigin[1];
+  data[10] = body.gridOrigin[2];
+  data[11] = body.gridCell;
+  data[12] = body.gridDims[0];
+  data[13] = body.gridDims[1];
+  data[14] = body.gridDims[2];
   return data;
 }
 

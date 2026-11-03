@@ -1,5 +1,5 @@
-import type { AvatarSDF } from '../../avatar/sdf/avatarSDF';
-import { evalSDF } from '../../avatar/sdf/sdfEval';
+import type { AvatarCollider } from '../../avatar/collider/avatarCollider';
+import { evalBodyDistance } from '../../avatar/collider/bodyDistance';
 
 /** Clearance bands used to colour and summarise a fit check, in centimetres. */
 export interface FitThresholds {
@@ -45,7 +45,7 @@ export interface FitFieldOptions {
  */
 export function computeFitField(
   positions: ArrayLike<number>,
-  sdf: AvatarSDF,
+  collider: AvatarCollider,
   options: FitFieldOptions = {},
 ): FitField {
   const count = Math.floor(positions.length / 3);
@@ -57,7 +57,7 @@ export function computeFitField(
       continue;
     }
     const o = i * 3;
-    clearanceCm[i] = evalSDF(sdf, positions[o]!, positions[o + 1]!, positions[o + 2]!) * 100;
+    clearanceCm[i] = evalBodyDistance(collider, positions[o]!, positions[o + 1]!, positions[o + 2]!) * 100;
   }
   return { clearanceCm, thresholds: options.thresholds ?? DEFAULT_FIT_THRESHOLDS };
 }

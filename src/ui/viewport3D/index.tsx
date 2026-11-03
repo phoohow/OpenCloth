@@ -4,7 +4,7 @@ import {
   disposeRendererContext, setRendererMode, type RendererContext,
 } from '../../render/renderer/rendererContext';
 import { GarmentEngine } from '../../core/engine/garmentEngine';
-import { useProjectStore, useSimStore, useUIStore, usePerfStore, isSplitLayout, type ViewLayout } from '../../store/stores';
+import { useProjectStore, useSimStore, useUIStore, usePerfStore, isSplitLayout, type ViewLayout, type ToolType } from '../../store/stores';
 import { EngineSync, recoverWithRaster, syncSelectionOverlay } from './engineSync';
 import { useClothPicking } from './useClothPicking';
 import { ViewportHint } from '../widgets/viewportHint';
@@ -20,11 +20,17 @@ interface Viewport3DProps {
 }
 
 /** Gestures the current layout allows. */
-const statusHint = (layout: ViewLayout): string => {
+const statusHint = (layout: ViewLayout, tool: ToolType): string => {
   if (isMobileUi()) return MOBILE_VIEWPORT_HINT;
+  if (tool === 'pin') {
+    return '3D 试衣 · 悬停到布料上出现「圆圈+红点」时点击即打PIN · 其余位置照常旋转缩放（拖动旋转 · 滚轮缩放 · 右键平移）· 双击选择版片';
+  }
+  if (tool === 'unpin') {
+    return '3D 试衣 · 悬停到已有 PIN 上出现叉号时点击即拔PIN，该点会同时高亮 · 其余位置照常旋转缩放 · 滚轮缩放 · 右键平移';
+  }
   return isSplitLayout(layout)
-    ? '3D 试衣 · 拖拽旋转 · 滚轮缩放 · 双击选片 · 快捷键需点击聚焦本窗格'
-    : '3D 试衣 · 拖拽旋转 · 滚轮缩放 · 右键平移 · Alt+点击打PIN · Alt+Shift+点击取消PIN · 双击选择版片 · 小键盘 2/8/4/6/0/5 正视/后视/左视/右视/仰视/俯视，1/3/7/9 四个 45° 侧视 · Esc取消选中';
+    ? '3D 试衣 · 移动中悬停布料可用夹子拖拽 · 拖拽旋转 · 滚轮缩放 · 双击选片 · 快捷键需点击聚焦本窗格'
+    : '3D 试衣 · 模拟中夹住布料可拖拽 · 拖拽旋转 · 滚轮缩放 · 右键平移 · Alt+点击打PIN · Alt+Shift+点击取消PIN · 双击选择版片 · 小键盘 2/8/4/6/0/5 正视/后视/左视/右视/仰视/俯视，1/3/7/9 四个 45° 侧视 · Esc取消选中';
 };
 
 /** 3D fitting viewport: owns the renderer context, the garment engine and their store sync. */
@@ -38,6 +44,7 @@ export function Viewport3D({ onEngineReady }: Viewport3DProps) {
 
   const renderMode = useUIStore(s => s.renderMode);
   const layout = useUIStore(s => s.layout);
+  const activeTool = useUIStore(s => s.activeTool);
   const rayState3D = usePerfStore(s => s.rayState3D);
 
   useEffect(() => {
@@ -137,8 +144,9 @@ export function Viewport3D({ onEngineReady }: Viewport3DProps) {
 
   return (
     <div ref={containerRef} style={{ width: '100%', height: '100%', position: 'relative' }}>
-      <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%' }} />
-      <ViewportHint right={isMobileUi() ? MOBILE_HINT_RIGHT : 8}>{statusHint(layout)}</ViewportHint>
+      {/* The pointer cursor is owned by useClothPicking: it depends on what is under it. */}
+      <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%', cursor: 'default' }} />
+      <ViewportHint right={isMobileUi() ? MOBILE_HINT_RIGHT : 8}>{statusHint(layout, activeTool)}</ViewportHint>
       {renderMode === 'raytraced' && !isMobileUi() && (
         <div style={{
           position: 'absolute', top: 8, left: 8, padding: '5px 8px', color: '#bde7ff',

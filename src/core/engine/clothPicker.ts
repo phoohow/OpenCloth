@@ -106,6 +106,16 @@ export class ClothPicker {
     return null;
   }
 
+  /** Distance along the screen ray to the nearest cloth triangle, or null when it misses. */
+  clothDistanceAtScreen(ndcX: number, ndcY: number): number | null {
+    const mesh = this.targets.mesh();
+    const ray = this.screenRay(ndcX, ndcY);
+    if (!mesh || !ray) return null;
+    mesh.updateWorldMatrix(false, false);
+    const hit = this.surfaceHit(ray, mesh);
+    return hit ? hit.distance : null;
+  }
+
   /**
    * Particle the clicked surface point sits closest to, taken from the panel that was clicked.
    * Without a hit there, one of the triangle's own corners carries the PIN.

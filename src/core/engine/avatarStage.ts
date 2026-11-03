@@ -1,7 +1,10 @@
 import * as THREE from 'three/webgpu';
 import type { Avatar, ObjectTransform } from '../model/types';
 import { IDENTITY_TRANSFORM } from '../model/defaults';
-import { generateAvatarSDF, fitCapsulesFromGroup, type AvatarSDF } from '../../avatar/sdf/avatarSDF';
+import {
+  generateAvatarCollider, fitCapsulesFromGroup, type AvatarCollider,
+} from '../../avatar/collider/avatarCollider';
+import { meshColliderFromObject } from './avatarMeshCollider';
 import { generateProceduralAvatar } from '../../avatar/generator/avatarGenerator';
 import { loadModelFromFile, loadModelFromUrl } from '../../io/modelLoader';
 import { getModelBlob } from '../../io/objectStore';
@@ -14,10 +17,13 @@ const SELECTION_MATERIAL = new THREE.MeshBasicMaterial({
   polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
 });
 
-/** The body garment is dressed onto: its scene group, collision capsules and selection overlay. */
+/** The body garment is dressed onto: its scene group, collision body and selection overlay. */
 export class AvatarStage {
-  /** Collision capsules fitted to the current body. */
-  sdf: AvatarSDF | null = null;
+  /**
+   * Collision body fitted to the current model, baked in the group's local frame: a scene
+   * transform applied later by `place()` is not reflected in it.
+   */
+  collider: AvatarCollider | null = null;
 
   private group: THREE.Group | null = null;
   private overlays: THREE.Mesh[] = [];
@@ -28,20 +34,21 @@ export class AvatarStage {
   /** Scene group holding the body, or null before the first build. */
   get object(): THREE.Group | null { return this.group; }
 
-  /** Replaces the scene avatar with the project's body and rebuilds its collision capsules. */
+  /** Replaces the scene avatar with the project's body and rebuilds its collision body. */
   async build(avatar: Avatar, scene: THREE.Scene): Promise<void> {
     this.detach(scene);
     const loaded = avatar.source === 'procedural'
       ? null
       : await this.loadModel(avatar);
-    if (loaded) {
-      loaded.name = 'avatar';
-      this.group = loaded;
-      this.sdf = fitCapsulesFromGroup(loaded);
-    } else {
-      this.group = generateProceduralAvatar(avatar.params);
-      this.sdf = generateAvatarSDF(avatar.params);
-    }
+    const group = loaded ?? generateProceduralAvatar(avatar.params);
+    if (loaded) group.name = 'avatar';
+    const collider = loaded
+      ? fitCapsulesFromGroup(loaded)
+      : generateAvatarCollider(avatar.params);
+    // The capsules remain the fallback and the fit-analysis proxy; the triangle grid drives collision.
+    collider.mesh = meshColliderFromObject(group);
+    this.group = group;
+    this.collider = collider;
     scene.add(this.group);
   }
 
@@ -82,7 +89,7 @@ export class AvatarStage {
     if (!this.group) return;
     scene.remove(this.group);
     this.group = null;
-    this.sdf = null;
+    this.collider = null;
   }
 
   /** Loads the avatar from its model url, else from the stored imported bytes. */
