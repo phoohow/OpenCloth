@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { normalLocal, packNormalToRGB } from 'three/tsl';
 import type { FabricAppearance, FabricMapSlot, RenderMode } from '../../core/model/types';
 import { acquireFabricTexture, type FabricTextureHandle } from './fabricTextures';
 
@@ -162,7 +163,14 @@ export function createMaterialForMode(
       return m;
     }
     case 'normalVis': {
-      const m = new THREE.MeshNormalMaterial({ side: THREE.DoubleSide });
+      // Object-space vertex normal, interpolated across the triangle and shown as colour. Unlike
+      // the view-space normal of MeshNormalMaterial this does not follow the camera.
+      const m = new THREE.MeshBasicNodeMaterial({ side: THREE.DoubleSide, toneMapped: false });
+      const packed = packNormalToRGB(normalLocal.normalize());
+      // sRGB decode, so the renderer's working-space to sRGB output shows the packed colour as is.
+      const decoded = packed.lessThanEqual(0.04045)
+        .select(packed.div(12.92), packed.add(0.055).div(1.055).pow(2.4));
+      m.colorNode = decoded;
       return m;
     }
     case 'shadedWireframe':

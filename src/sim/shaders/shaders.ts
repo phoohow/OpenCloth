@@ -388,84 +388,47 @@ fn updateVelocity(@builtin(global_invocation_id) gid: vec3<u32>) {
 `;
 
 // ============ Normal computation pass ============
+// One invocation per particle sums the face normals of its welded vertex group, so every vertex
+// owns its own normal slot and no two invocations ever write the same one.
 export const NORMALS_WGSL = /* wgsl */`
 struct SimParams {
-  triangleCount: u32,
   particleCount: u32,
-  _p0: f32,
-  _p1: f32,
+  _p0: u32,
+  _p1: u32,
+  _p2: u32,
 };
 
 @group(0) @binding(0) var<storage, read> posInvMass: array<vec4<f32>>;
 @group(0) @binding(1) var<storage, read_write> normals: array<vec4<f32>>;
 @group(0) @binding(2) var<storage, read> indices: array<u32>;
-@group(0) @binding(3) var<uniform> params: SimParams;
+@group(0) @binding(3) var<storage, read> groupStart: array<u32>;
+@group(0) @binding(4) var<storage, read> groupTriangles: array<u32>;
+@group(0) @binding(5) var<storage, read> groupOfParticle: array<u32>;
+@group(0) @binding(6) var<uniform> params: SimParams;
 
 @compute @workgroup_size(256)
 fn computeNormals(@builtin(global_invocation_id) gid: vec3<u32>) {
-  let tri = gid.x;
-  if (tri >= params.triangleCount) { return; }
-
-  let i0 = indices[tri * 3u + 0u];
-  let i1 = indices[tri * 3u + 1u];
-  let i2 = indices[tri * 3u + 2u];
-  let p0 = posInvMass[i0].xyz;
-  let p1 = posInvMass[i1].xyz;
-  let p2 = posInvMass[i2].xyz;
-
-  // Unnormalized cross product = 2x face area, so accumulation is area-weighted.
-  let n = cross(p1 - p0, p2 - p0);
-
-  // Accumulate face normals per particle; a separate pass normalizes them.
-  normals[i0] = normals[i0] + vec4<f32>(n, 0.0);
-  normals[i1] = normals[i1] + vec4<f32>(n, 0.0);
-  normals[i2] = normals[i2] + vec4<f32>(n, 0.0);
-}
-`;
-
-// ============ Normal normalization pass ============
-export const NORMALIZE_WGSL = /* wgsl */`
-struct NormParams {
-  particleCount: u32,
-  _p0: u32,
-  _p1: u32,
-  _p2: u32,
-};
-
-@group(0) @binding(0) var<storage, read_write> normals: array<vec4<f32>>;
-@group(0) @binding(1) var<uniform> params: NormParams;
-
-@compute @workgroup_size(256)
-fn normalizeNormals(@builtin(global_invocation_id) gid: vec3<u32>) {
   let i = gid.x;
   if (i >= params.particleCount) { return; }
-  let n = normals[i].xyz;
-  let len = length(n);
-  if (len > 1e-7) {
-    normals[i] = vec4<f32>(n / len, 0.0);
-  } else {
-    normals[i] = vec4<f32>(0.0, 1.0, 0.0, 0.0);
+
+  let group = groupOfParticle[i];
+  let start = groupStart[group];
+  let end = groupStart[group + 1u];
+
+  var sum = vec3<f32>(0.0);
+  for (var k = start; k < end; k++) {
+    let tri = groupTriangles[k] * 3u;
+    let p0 = posInvMass[indices[tri]].xyz;
+    let p1 = posInvMass[indices[tri + 1u]].xyz;
+    let p2 = posInvMass[indices[tri + 2u]].xyz;
+    // Unnormalized cross product = 2x face area, so the sum is area-weighted.
+    sum = sum + cross(p1 - p0, p2 - p0);
   }
-}
-`;
 
-// ============ Normal clear pass ============
-export const CLEAR_NORMALS_WGSL = /* wgsl */`
-struct NormParams {
-  particleCount: u32,
-  _p0: u32,
-  _p1: u32,
-  _p2: u32,
-};
-
-@group(0) @binding(0) var<storage, read_write> normals: array<vec4<f32>>;
-@group(0) @binding(1) var<uniform> params: NormParams;
-
-@compute @workgroup_size(256)
-fn clearNormals(@builtin(global_invocation_id) gid: vec3<u32>) {
-  let i = gid.x;
-  if (i >= params.particleCount) { return; }
-  normals[i] = vec4<f32>(0.0, 0.0, 0.0, 0.0);
+  let len = length(sum);
+  var n = vec3<f32>(0.0, 1.0, 0.0);
+  if (len > 1e-12) { n = sum / len; }
+  normals[i] = vec4<f32>(n, 0.0);
 }
 `;
 

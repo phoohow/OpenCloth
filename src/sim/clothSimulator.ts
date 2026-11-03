@@ -3,6 +3,7 @@ import type { AvatarCollider } from '../avatar/collider/avatarCollider';
 import { packCapsules } from '../avatar/collider/avatarCollider';
 import type { MeshCollider } from '../avatar/collider/meshCollider';
 import { packConstraints, type Constraint } from './buffers/constraintBuilder';
+import { buildNormalAdjacency } from './buffers/normalAdjacency';
 import {
   computeParticlePanelMap, ParticleGrid, pickNearest, pickNearestToPoint,
   type ParticlePickHit, type Vec3Like,
@@ -40,6 +41,10 @@ export class ClothSimulator {
   private predictedBuf!: GPUBuffer;
   private normalsBuf!: GPUBuffer;
   private indicesBuf!: GPUBuffer;
+  /** Welded vertex groups and the triangles each one touches, read by the normals pass. */
+  private groupStartBuf!: GPUBuffer;
+  private groupTrianglesBuf!: GPUBuffer;
+  private groupOfParticleBuf!: GPUBuffer;
 
   // Constraint buffers, one replaceable group per constraint kind
   private groups = new Map<ConstraintGroupKind, ConstraintGroup>();
@@ -71,7 +76,6 @@ export class ClothSimulator {
   private collideParamsBuf!: GPUBuffer;
   private updateParamsBuf!: GPUBuffer;
   private normalsParamsBuf!: GPUBuffer;
-  private particleCountBuf!: GPUBuffer;
 
   // Runtime pinning (SET_PIN pass)
   private pinIndicesBuf!: GPUBuffer;
@@ -84,8 +88,6 @@ export class ClothSimulator {
   private collideBG!: GPUBindGroup;
   private updateBG!: GPUBindGroup;
   private normalsBG!: GPUBindGroup;
-  private normalizeBG!: GPUBindGroup;
-  private clearNormalsBG!: GPUBindGroup;
   private setPinBG!: GPUBindGroup;
   private solveBGs: GPUBindGroup[] = [];
   /** Constraint count per solve batch, one-to-one with solveBGs. */
@@ -97,7 +99,6 @@ export class ClothSimulator {
   private readNormals!: Float32Array;
 
   private particleCount = 0;
-  private triangleCount = 0;
   private initialized = false;
   private time = 0;
   /** Floor plane height (world y); keeps cloth from falling through the floor. */
@@ -139,7 +140,6 @@ export class ClothSimulator {
   /** Builds all GPU resources from the simulation input, the avatar collision body and the config. */
   async setup(input: ClothSimInput, avatarCollider: AvatarCollider | null, config: SimulationConfig): Promise<void> {
     this.particleCount = input.particleCount;
-    this.triangleCount = input.triangleCount;
     const pc = this.particleCount;
     const dev = this.device;
 
@@ -181,11 +181,7 @@ export class ClothSimulator {
     this.predictedBuf = createStorageBuffer(dev, posData);
     this.normalsBuf = createStorageBuffer(dev, new Float32Array(pc * 4));
 
-    this.indicesBuf = dev.createBuffer({
-      size: Math.max(input.indices.byteLength, 4),
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-    });
-    dev.queue.writeBuffer(this.indicesBuf, 0, input.indices.buffer as ArrayBuffer, input.indices.byteOffset, input.indices.byteLength);
+    this.uploadIndices(input.indices);
 
     // ---- Constraint build and coloring ----
     const built = buildPanelConstraints(input, this.panelPhysics, config.dt);
@@ -215,7 +211,6 @@ export class ClothSimulator {
     this.collideParamsBuf = createUniformBuffer(dev, 64);
     this.updateParamsBuf = createUniformBuffer(dev, 32);
     this.normalsParamsBuf = createUniformBuffer(dev, 16);
-    this.particleCountBuf = createUniformBuffer(dev, 16);
     // Pin lists carry one index and one inverse mass per particle.
     this.pinIndicesBuf = dev.createBuffer({
       size: Math.max(pc * 4, 4),
@@ -228,6 +223,7 @@ export class ClothSimulator {
     this.pinParamsBuf = createUniformBuffer(dev, 16);
 
     this.pipelines = createSimPipelines(dev);
+    this.rebuildNormalTopology(input);
     this.createBindGroups();
 
     // Constraint groups need the solve pipeline, so they are installed after it.
@@ -408,12 +404,52 @@ export class ClothSimulator {
     this.updateBG = bind(L.update,
       [this.posInvMassBuf, this.prevPosBuf, this.velocityBuf, this.predictedBuf, this.updateParamsBuf,
         this.dampingBuf]);
-    this.normalsBG = bind(L.normals,
-      [this.posInvMassBuf, this.normalsBuf, this.indicesBuf, this.normalsParamsBuf]);
-    this.normalizeBG = bind(L.particleCount, [this.normalsBuf, this.particleCountBuf]);
-    this.clearNormalsBG = bind(L.particleCount, [this.normalsBuf, this.particleCountBuf]);
     this.setPinBG = bind(L.setPin,
       [this.posInvMassBuf, this.pinIndicesBuf, this.pinParamsBuf, this.pinInvMassBuf]);
+  }
+
+  /** Wires the normals pass, which reads the index and normal-topology buffers. */
+  private refreshNormalsBindGroup(): void {
+    this.normalsBG = this.bindGroup(this.pipelines.layouts.normals, [
+      this.posInvMassBuf, this.normalsBuf, this.indicesBuf,
+      this.groupStartBuf, this.groupTrianglesBuf, this.groupOfParticleBuf, this.normalsParamsBuf,
+    ]);
+  }
+
+  /** Uploads the triangle indices, growing the storage buffer when the geometry outgrew it. */
+  private uploadIndices(indices: Uint32Array): void {
+    if (!this.indicesBuf || this.indicesBuf.size < indices.byteLength) {
+      this.indicesBuf?.destroy();
+      this.indicesBuf = this.device.createBuffer({
+        size: Math.max(indices.byteLength, 4),
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+      });
+    }
+    if (indices.byteLength > 0) {
+      this.device.queue.writeBuffer(
+        this.indicesBuf, 0, indices.buffer as ArrayBuffer, indices.byteOffset, indices.byteLength,
+      );
+    }
+  }
+
+  /**
+   * Rebuilds the welded vertex groups and their triangle lists from the input's indices and
+   * stitch pairs, then rebinds the normals pass to the new buffers.
+   */
+  private rebuildNormalTopology(input: ClothSimInput): void {
+    this.groupStartBuf?.destroy();
+    this.groupTrianglesBuf?.destroy();
+    this.groupOfParticleBuf?.destroy();
+
+    const adjacency = buildNormalAdjacency(input.indices, this.particleCount, input.seamConstraints);
+    // A storage buffer cannot be empty, so a mesh without triangles gets one dummy slot.
+    const triangles = adjacency.groupTriangles.byteLength > 0
+      ? adjacency.groupTriangles
+      : new Uint32Array(1);
+    this.groupStartBuf = createStorageBuffer(this.device, adjacency.groupStart);
+    this.groupTrianglesBuf = createStorageBuffer(this.device, triangles);
+    this.groupOfParticleBuf = createStorageBuffer(this.device, adjacency.groupOfParticle);
+    this.refreshNormalsBindGroup();
   }
 
   /** Bind group wiring `buffers` to the layout's bindings, in order. */
@@ -472,6 +508,26 @@ export class ClothSimulator {
 
   /** Advances the simulation by one frame, split into `config.substeps` solver substeps. */
   step(config: SimulationConfig, fabric: FabricPhysics): void {
+    this.advanceFrame(config, fabric);
+    this.writeBack();
+  }
+
+  /**
+   * Adopts a new frame time step. Constraint stiffness is derived from it, so the groups are
+   * repacked in place; positions, velocities and pins are kept, so playback does not jump.
+   */
+  setTimeStep(dt: number): boolean {
+    if (!this.initialized) return false;
+    if (dt === this.constraintDt) return true;
+    const previous = this.constraintDt;
+    this.constraintDt = dt;
+    if (this.rebuildConstraints(this.panelPhysics)) return true;
+    this.constraintDt = previous;
+    return false;
+  }
+
+  /** Submits the substeps of one frame, without the normals pass or the readback copy. */
+  private advanceFrame(config: SimulationConfig, fabric: FabricPhysics): void {
     if (!this.initialized) return;
     const dev = this.device;
     const pc = this.particleCount;
@@ -482,7 +538,6 @@ export class ClothSimulator {
     this.applySelfCollisionConfig(config);
 
     const wg = (n: number) => Math.ceil(n / 256);
-    dev.queue.writeBuffer(this.particleCountBuf, 0, new Uint32Array([pc]));
 
     // One encoder + submit per substep: queue writes are ordered against submits,
     // so each substep's uniforms are visible only to its own dispatches.
@@ -540,29 +595,24 @@ export class ClothSimulator {
 
       dev.queue.submit([encoder.finish()]);
     }
+  }
 
+  /** Computes vertex normals for the last frame and copies positions and normals back. */
+  private writeBack(): void {
+    if (!this.initialized) return;
+    const dev = this.device;
+    const pc = this.particleCount;
+    const wg = (n: number) => Math.ceil(n / 256);
     const encoder = dev.createCommandEncoder();
 
-    // Per-particle vertex normals
+    // One invocation per particle writes its own vertex normal, so the pass needs no clearing
+    dev.queue.writeBuffer(this.normalsParamsBuf, 0, new Uint32Array([pc]));
     {
-      const clearPass = encoder.beginComputePass();
-      clearPass.setPipeline(this.pipelines.clearNormals);
-      clearPass.setBindGroup(0, this.clearNormalsBG);
-      clearPass.dispatchWorkgroups(wg(pc));
-      clearPass.end();
-
-      dev.queue.writeBuffer(this.normalsParamsBuf, 0, new Uint32Array([this.triangleCount, pc]));
       const nPass = encoder.beginComputePass();
       nPass.setPipeline(this.pipelines.normals);
       nPass.setBindGroup(0, this.normalsBG);
-      nPass.dispatchWorkgroups(wg(this.triangleCount));
+      nPass.dispatchWorkgroups(wg(pc));
       nPass.end();
-
-      const normPass = encoder.beginComputePass();
-      normPass.setPipeline(this.pipelines.normalize);
-      normPass.setBindGroup(0, this.normalizeBG);
-      normPass.dispatchWorkgroups(wg(pc));
-      normPass.end();
     }
 
     // Read back positions and normals
@@ -578,6 +628,13 @@ export class ClothSimulator {
    * Groups whose batch layout changed are repacked into fresh buffers instead.
    */
   updateMaterialPhysics(physicsByPanel: FabricPhysics[], positions: Float32Array): boolean {
+    if (!this.rebuildConstraints(physicsByPanel)) return false;
+    this.setPositions(positions);
+    return true;
+  }
+
+  /** Repacks constraint groups, inverse masses and damping; positions and velocities stay as they are. */
+  private rebuildConstraints(physicsByPanel: FabricPhysics[]): boolean {
     const input = this.simInput;
     if (!input || !this.initialized || physicsByPanel.length !== input.panels.length) return false;
 
@@ -601,7 +658,6 @@ export class ClothSimulator {
       const w = this.pinnedSet.has(i) ? 0 : this.baseInvMass[i];
       this.initialPosInvMass[i * 4 + 3] = w;
     }
-    this.setPositions(positions);
     return true;
   }
 
@@ -615,6 +671,7 @@ export class ClothSimulator {
     this.installGroup('seam', constraints);
     this.seamOpenLengths = this.group('seam').batched.batches.map(batch => batch.map(c => c.restLength));
     this.tornSeams.clear();
+    this.rebuildNormalTopology(this.simInput);
   }
 
   /**
@@ -705,6 +762,8 @@ export class ClothSimulator {
     this.panelMap = computeParticlePanelMap(input);
     this.baseInvMass = computeBaseInvMass(input, this.panelPhysics, pc);
     this.layerByParticle = computeParticleLayers(input, pc);
+    this.uploadIndices(input.indices);
+    this.rebuildNormalTopology(input);
     this.device.queue.writeBuffer(this.dampingBuf, 0, computeParticleDamping(
       input, this.panelPhysics, pc, this.panelPhysics[0]?.damping ?? 0.02));
     this.syncInvMassMirror();
@@ -890,10 +949,11 @@ export class ClothSimulator {
     this.initialized = false;
     const buffers: (GPUBuffer | undefined)[] = [
       this.posInvMassBuf, this.prevPosBuf, this.velocityBuf, this.predictedBuf, this.normalsBuf,
-      this.indicesBuf, this.capsuleBuf, this.dampingBuf, this.grabWeightBuf,
+      this.indicesBuf, this.groupStartBuf, this.groupTrianglesBuf, this.groupOfParticleBuf,
+      this.capsuleBuf, this.dampingBuf, this.grabWeightBuf,
       this.meshTriangleBuf, this.cellStartBuf, this.cellTrianglesBuf,
       this.integrateParamsBuf, this.collideParamsBuf, this.updateParamsBuf, this.normalsParamsBuf,
-      this.particleCountBuf, this.pinIndicesBuf, this.pinInvMassBuf, this.pinParamsBuf,
+      this.pinIndicesBuf, this.pinInvMassBuf, this.pinParamsBuf,
       this.readbackBuf, this.readbackNormalsBuf,
     ];
     for (const group of this.groups.values()) buffers.push(...group.batched.buffers, ...group.paramBufs);
