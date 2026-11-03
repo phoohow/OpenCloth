@@ -42,15 +42,6 @@ export function isTapGesture(dx: number, dy: number, elapsedMs: number): boolean
 /** Touch gestures the phone shell supports, shown as the 3D viewport hint. */
 export const MOBILE_VIEWPORT_HINT = '3D 试衣 · 单指拖拽旋转 · 双指捏合缩放 · 双指拖拽平移 · 轻点选片 · 轻点空白取消';
 
-/** Simulation speeds offered by the phone dock, in dock order. */
-export const SPEED_STEPS = [0.25, 0.5, 1, 2];
-
-/** Next dock speed, wrapping at the end of SPEED_STEPS. */
-export function nextSpeed(speed: number): number {
-  const index = SPEED_STEPS.indexOf(speed);
-  return SPEED_STEPS[(index + 1) % SPEED_STEPS.length];
-}
-
 let cachedUiMode: UiMode | null = null;
 
 /**

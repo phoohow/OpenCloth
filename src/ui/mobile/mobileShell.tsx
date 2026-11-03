@@ -3,10 +3,10 @@ import { Viewport3D } from '../viewport3D';
 import { MobileSheet, type MobileSheetId } from './mobileSheets';
 import { MenuDialogs } from '../menu/menuDialogs';
 import { Icon, type IconName } from '../icons';
-import { nextSpeed } from './mobileUi';
 import { normalizeRayTracing } from '../../core/model/defaults';
 import { usePerfStore, useProjectStore, useSimStore, useUIStore } from '../../store/stores';
-import { rayTraceStateLabel } from '../optionTables';
+import { nextSimStep, rayTraceStateLabel, simStepLabel } from '../optionTables';
+import { setSimulationConfig } from '../sceneCommands';
 import type { MenuActions } from '../menu/actions';
 import type { GarmentEngine } from '../../core/engine/garmentEngine';
 import type { RendererContext } from '../../render/renderer/rendererContext';
@@ -98,12 +98,11 @@ function TopBar({ onOpenMenu, onOpenProps }: { onOpenMenu: () => void; onOpenPro
   );
 }
 
-/** Thumb-reach actions: dress the garment, run the simulation, change its speed, edit properties. */
+/** Thumb-reach actions: dress the garment, run the simulation, change its step length, edit properties. */
 function Dock({ actions, onOpenProps }: { actions: MenuActions; onOpenProps: () => void }) {
   const isPlaying = useSimStore(s => s.isPlaying);
   const isDressing = useSimStore(s => s.isDressing);
-  const speed = useSimStore(s => s.speed);
-  const setSpeed = useSimStore(s => s.setSpeed);
+  const dt = useProjectStore(s => s.project.scene.simulation.dt);
 
   return (
     <nav style={styles.dock}>
@@ -122,10 +121,10 @@ function Dock({ actions, onOpenProps }: { actions: MenuActions; onOpenProps: () 
       <DockButton icon="reset" label="重置" onClick={actions.resetSim} />
       <DockButton
         icon="atom"
-        label={`${speed}x 速度`}
-        active={speed !== 1}
-        title="点击切换模拟速度"
-        onClick={() => setSpeed(nextSpeed(speed))}
+        label={simStepLabel(dt)}
+        active={dt !== 1 / 60}
+        title="点击切换仿真步长"
+        onClick={() => setSimulationConfig('修改仿真步长', { dt: nextSimStep(dt) })}
       />
       <DockButton icon="cube" label="参数" onClick={onOpenProps} />
     </nav>

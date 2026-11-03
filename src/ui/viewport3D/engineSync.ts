@@ -5,7 +5,7 @@ import { RayTracingUnsupportedError } from '../../render/renderer/rendererContex
 import type { RendererContext } from '../../render/renderer/rendererContext';
 import type { GarmentEngine } from '../../core/engine/garmentEngine';
 import {
-  noteDrawnFrame, noteRayTraceState, noteRayTracingSamples, noteRayTracingUnsupported,
+  noteDrawnFrame, noteRayTraceState, noteRayTracingSamples, noteRayTracingUnsupported, noteSimSteps,
   useProjectStore, useSimStore, useUIStore,
 } from '../../store/stores';
 import { normalizeLights, normalizeRayTracing } from '../../core/model/defaults';
@@ -46,6 +46,7 @@ function projectSignals(state: { project: Project; clothSignature: string }) {
   const render = project.scene.render;
   return {
     cloth: state.clothSignature,
+    dt: project.scene.simulation.dt,
     avatar: project.avatar.display,
     env: `${lights.iblObjectKey ?? lights.iblUrl ?? 'bundled'}:${lights.iblName ?? ''}`,
     light: JSON.stringify([normalizeLights(lights), lights.iblEnabled, lights.iblIntensity, render.toneMapping]),
@@ -55,6 +56,9 @@ function projectSignals(state: { project: Project; clothSignature: string }) {
 }
 
 type ProjectSignals = ReturnType<typeof projectSignals>;
+
+/** Playback time is published to the store at this interval instead of every tick. */
+const PLAYED_PUBLISH_MS = 100;
 
 /**
  * Keeps the garment engine and renderer in sync with the stores and runs the frame loop.
@@ -75,8 +79,10 @@ export class EngineSync {
   private previewApplied = false;
   /** Geometry rebuilds awaiting the engine; a preview never lands in the middle of one. */
   private rebuildsInFlight = 0;
-  /** Fractional physics steps carried across frames so slower speeds still slow playback. */
-  private stepAccumulator = 0;
+  /** Start of the previous playing tick, 0 while paused; feeds the timeline's elapsed time. */
+  private lastTickMs = 0;
+  /** Playback time not yet published to the sim store, flushed every PLAYED_PUBLISH_MS. */
+  private playedPending = 0;
   /** Load counter of the project the camera was last applied from. */
   private lastLoadToken = 0;
   /** Pending camera write; orbiting restarts it so only the settled view is stored. */
@@ -109,6 +115,10 @@ export class EngineSync {
         this.previewApplied = false;
         this.pendingPreviewPattern = null;
         this.rebuildCloth(project);
+      }
+      if (signals.dt !== this.last.dt) {
+        this.last.dt = signals.dt;
+        this.engine.applyTimeStep(project);
       }
       if (signals.avatar !== this.last.avatar) {
         this.last.avatar = signals.avatar;
@@ -179,7 +189,7 @@ export class EngineSync {
     }));
 
     this.unsubscribes.push(useSimStore.subscribe((state, previous) => {
-      if (state.stepToken !== previous?.stepToken) {
+      if (state.stepToken !== previous?.stepToken && !reachedStopFrame(state)) {
         const project = useProjectStore.getState().project;
         void this.engine.stepFrame(project).then(() => {
           const sim = useSimStore.getState();
@@ -189,7 +199,6 @@ export class EngineSync {
         });
       }
       if (state.resetToken !== previous?.resetToken) {
-        this.stepAccumulator = 0;
         this.engine.resetSimulation();
       }
     }));
@@ -305,15 +314,34 @@ export class EngineSync {
     const simState = useSimStore.getState();
     const projState = useProjectStore.getState().project;
 
+    // Playback wall-clock: consecutive playing ticks only, so paused gaps are not counted.
+    const tickStart = performance.now();
+    if (simState.isPlaying) {
+      if (this.lastTickMs > 0) this.playedPending += tickStart - this.lastTickMs;
+      this.lastTickMs = tickStart;
+      if (this.playedPending >= PLAYED_PUBLISH_MS) {
+        simState.addPlayedMs(this.playedPending);
+        this.playedPending = 0;
+      }
+    } else {
+      this.lastTickMs = 0;
+      if (this.playedPending > 0) {
+        simState.addPlayedMs(this.playedPending);
+        this.playedPending = 0;
+      }
+    }
+
     try {
       this.applyEditPreview();
       if (simState.isPlaying) {
-        this.stepAccumulator += simState.speed;
-        const steps = Math.floor(this.stepAccumulator);
-        this.stepAccumulator -= steps;
-        for (let i = 0; i < steps; i++) {
+        // The auto-pause frame ends playback instead of stepping past it.
+        const remaining = simState.stopFrame === null ? Infinity : simState.stopFrame - simState.currentFrame;
+        if (remaining <= 0) {
+          simState.pause();
+        } else {
           await this.engine.stepFrame(projState);
           simState.incrementFrame();
+          noteSimSteps(1);
         }
       }
       // The engine owns the dressing stages, so the UI mirrors its state.
@@ -360,6 +388,11 @@ export class EngineSync {
     for (const unsubscribe of this.unsubscribes) unsubscribe();
     this.unsubscribes = [];
   }
+}
+
+/** Whether the sim has reached its auto-pause frame. */
+function reachedStopFrame(sim: { currentFrame: number; stopFrame: number | null }): boolean {
+  return sim.stopFrame !== null && sim.currentFrame >= sim.stopFrame;
 }
 
 /** Whether a stored camera equals the live placement. */

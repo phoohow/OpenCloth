@@ -17,6 +17,13 @@ let accumulating = false;
 let frozenCostMs = 0;
 /** Ray tracing gate the 3D view reported on its last drawn frame. */
 let rayState: RayTraceState = 'inactive';
+/** Physics steps executed by the playback loop since the last sample. */
+let countedSteps = 0;
+
+/** Records physics steps the playback loop executed. */
+export function noteSimSteps(count: number): void {
+  countedSteps += count;
+}
 
 /** Frames per second for `count` frames drawn within `elapsedMs`; 0 for a non-positive window. */
 export function fpsFrom(count: number, elapsedMs: number): number {
@@ -72,6 +79,8 @@ interface PerfStore {
   costMs3D: number;
   /** Ray tracing gate the 3D view is behind, read on the frame it last drew. */
   rayState3D: RayTraceState;
+  /** Physics steps per second the playback loop actually executed; 0 while paused. */
+  simRate: number;
   /** Probe result that stopped the display modes from offering ray tracing; null while available. */
   rayUnsupported3D: RayTracingCapability | null;
   /** Publishes the rate and sample count of the window gathered so far and opens the next one. */
@@ -85,6 +94,7 @@ export const usePerfStore = create<PerfStore>((set, get) => ({
   costMs3D: 0,
   rayState3D: 'inactive',
   rayUnsupported3D: null,
+  simRate: 0,
 
   sampleFps: (now: number) => {
     const before = get();
@@ -99,12 +109,14 @@ export const usePerfStore = create<PerfStore>((set, get) => ({
     counted['2d'] = 0;
     counted['3d'] = 0;
     sampleStart = now;
+    const simRate = fpsFrom(countedSteps, elapsed);
+    countedSteps = 0;
     const live = accumulating ? now : frozenCostMs + costStart;
     const costMs3D = reportedSamples > 0 ? Math.max(0, live - costStart) : 0;
     const prev = get();
     if (prev.fps['2d'] === fps['2d'] && prev.fps['3d'] === fps['3d']
       && prev.samples3D === reportedSamples && prev.costMs3D === costMs3D
-      && prev.rayState3D === rayState) return;
-    set({ fps, samples3D: reportedSamples, costMs3D, rayState3D: rayState });
+      && prev.rayState3D === rayState && prev.simRate === simRate) return;
+    set({ fps, samples3D: reportedSamples, costMs3D, rayState3D: rayState, simRate });
   },
 }));

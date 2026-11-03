@@ -789,6 +789,11 @@ export class GarmentEngine {
     return this.dressing.stepFrame(project);
   }
 
+  /** Adopts a new simulation step length; constraint stiffness is rebuilt from it. */
+  applyTimeStep(project: Project): void {
+    this.simulator?.setTimeStep(project.scene.simulation.dt);
+  }
+
   /** Pin or unpin a cloth particle and update its marker. */
   async setPin(particleIndex: number, pinned: boolean): Promise<boolean> {
     if (!this.simulator) return false;

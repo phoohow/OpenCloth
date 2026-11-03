@@ -2,7 +2,7 @@ export { computeClothSignature, useProjectStore } from './projectStore';
 export { useSimStore } from './simStore';
 export {
   FPS_SAMPLE_MS, noteDrawnFrame, noteRayTraceState, noteRayTracingSamples,
-  noteRayTracingUnsupported, usePerfStore,
+  noteRayTracingUnsupported, noteSimSteps, usePerfStore,
 } from './perfStore';
 export {
   displayModeOf, is2DFocus, is3DFocus, isRightPanelShown, isSplitLayout, leftPaneOf, toolPane, useUIStore,

@@ -130,3 +130,19 @@ export function rayTracingUnavailableReason(capability: RayTracingCapability | n
   if (!capability || capability.ok) return null;
   return `${RAY_FAILURE_LABELS[capability.failure ?? 'setup-failed']}（${capability.detail}）`;
 }
+
+/** Simulation step lengths offered by the timeline and the phone dock, in seconds, coarsest first. */
+export const SIM_STEP_OPTIONS: number[] = [1 / 30, 1 / 60, 1 / 120, 1 / 240];
+
+/** Step length as a fraction of a second (`1/60 s`), or in milliseconds when it has no short fraction. */
+export function simStepLabel(dt: number): string {
+  const denominator = Math.round(1 / dt);
+  if (denominator > 0 && Math.abs(1 / denominator - dt) < 1e-9) return `1/${denominator} s`;
+  return `${(dt * 1000).toFixed(1)} ms`;
+}
+
+/** Next step length in SIM_STEP_OPTIONS order, wrapping at the end; off-list values land on the first. */
+export function nextSimStep(dt: number): number {
+  const index = SIM_STEP_OPTIONS.indexOf(dt);
+  return SIM_STEP_OPTIONS[(index + 1) % SIM_STEP_OPTIONS.length];
+}

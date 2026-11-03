@@ -5,7 +5,10 @@ import type { StrainStats } from '../render/analysis/strain';
 interface SimStore {
   isPlaying: boolean;
   currentFrame: number;
-  speed: number;
+  /** Frame at which playback pauses by itself; null plays until paused manually. */
+  stopFrame: number | null;
+  /** Wall-clock milliseconds spent playing since the last reset. */
+  playedMs: number;
   isDressed: boolean;
   /** True while the sew → glide → settle dressing animation is playing. */
   isDressing: boolean;
@@ -27,8 +30,11 @@ interface SimStore {
   bumpPins: () => void;
   setFitStats: (stats: FitStats | null) => void;
   setStrainStats: (stats: StrainStats | null) => void;
-  setSpeed: (s: number) => void;
+  /** Sets the auto-pause frame, never below the current frame; null clears it. */
+  setStopFrame: (frame: number | null) => void;
   incrementFrame: () => void;
+  /** Adds playback wall-clock time, driven by the 3D view's playback loop. */
+  addPlayedMs: (ms: number) => void;
   setDressed: (v: boolean) => void;
   setDressing: (v: boolean) => void;
 }
@@ -37,7 +43,8 @@ interface SimStore {
 export const useSimStore = create<SimStore>((set, get) => ({
   isPlaying: false,
   currentFrame: 0,
-  speed: 1,
+  stopFrame: null,
+  playedMs: 0,
   isDressed: false,
   isDressing: false,
   stepToken: 0,
@@ -50,12 +57,15 @@ export const useSimStore = create<SimStore>((set, get) => ({
   pause: () => set({ isPlaying: false }),
   togglePlay: () => set({ isPlaying: !get().isPlaying }),
   step: () => set(s => ({ isPlaying: false, stepToken: s.stepToken + 1 })),
-  reset: () => set(s => ({ isPlaying: false, currentFrame: 0, resetToken: s.resetToken + 1 })),
+  reset: () => set(s => ({ isPlaying: false, currentFrame: 0, playedMs: 0, resetToken: s.resetToken + 1 })),
   bumpPins: () => set(s => ({ pinsVersion: s.pinsVersion + 1 })),
   setFitStats: (stats) => set({ fitStats: stats }),
   setStrainStats: (stats) => set({ strainStats: stats }),
-  setSpeed: (s) => set({ speed: s }),
+  setStopFrame: (frame) => set(s => ({
+    stopFrame: frame === null ? null : Math.max(s.currentFrame, Math.round(frame)),
+  })),
   incrementFrame: () => set(s => ({ currentFrame: s.currentFrame + 1 })),
+  addPlayedMs: (ms) => set(s => ({ playedMs: s.playedMs + Math.max(0, ms) })),
   setDressed: (v) => set({ isDressed: v }),
   setDressing: (v) => set({ isDressing: v }),
 }));

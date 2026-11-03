@@ -2,12 +2,11 @@ import { useEffect, type ReactNode } from 'react';
 import type { MenuActions } from '../menu/actions';
 import { AUTO_SAVE_ITEMS } from '../menu/menuModel';
 import { formatSavedAt } from '../timeFormat';
-import { CAMERA_PRESETS, CAMERA_PROJECTIONS, DISPLAY_MODES, PROP_TAB_OPTIONS, rayTracingUnavailableReason } from '../optionTables';
+import { CAMERA_PRESETS, CAMERA_PROJECTIONS, DISPLAY_MODES, PROP_TAB_OPTIONS, rayTracingUnavailableReason, SIM_STEP_OPTIONS, simStepLabel } from '../optionTables';
 import { usePropsTarget } from '../panels/propertiesEditor';
 import { Icon } from '../icons';
-import type { EngineRef } from '../sceneCommands';
+import { setSimulationConfig, type EngineRef } from '../sceneCommands';
 import { displayModeOf, usePerfStore, useProjectStore, useSimStore, useUIStore } from '../../store/stores';
-import { SPEED_STEPS } from './mobileUi';
 import type { PropTab } from '../../store/stores';
 import type { CameraProjection } from '../../core/model/types';
 import type { CameraPreset } from '../../core/engine/garmentEngine';
@@ -206,8 +205,7 @@ function MenuSheet({ actions, onClose }: { actions: MenuActions; onClose: () => 
   const autoSaveSeconds = useUIStore(s => s.autoSaveSeconds);
   const lastAutosaveAt = useUIStore(s => s.lastAutosaveAt);
   const isPlaying = useSimStore(s => s.isPlaying);
-  const setSpeed = useSimStore(s => s.setSpeed);
-  const speed = useSimStore(s => s.speed);
+  const dt = project.scene.simulation.dt;
 
   const panels = project.pattern.panels;
   const panelIds = Object.keys(panels);
@@ -222,9 +220,14 @@ function MenuSheet({ actions, onClose }: { actions: MenuActions; onClose: () => 
         <SheetButton label="单步" onClick={actions.stepFrame} />
         <SheetButton label="重置模拟" onClick={actions.resetSim} />
       </SheetGroup>
-      <SheetGroup title="模拟速度">
-        {SPEED_STEPS.map(value => (
-          <SheetButton key={value} label={`${value}x`} active={speed === value} onClick={() => setSpeed(value)} />
+      <SheetGroup title="模拟步长">
+        {SIM_STEP_OPTIONS.map(value => (
+          <SheetButton
+            key={value}
+            label={simStepLabel(value)}
+            active={dt === value}
+            onClick={() => setSimulationConfig('修改仿真步长', { dt: value })}
+          />
         ))}
       </SheetGroup>
       <SheetGroup title="选择与编辑">
