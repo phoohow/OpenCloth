@@ -16,7 +16,7 @@ import { ButtonRow, CheckRow, Hint, Row, Section, SelectRow, SmallButton, TextRo
 import { Vec3Field } from '../../widgets/numberField';
 import { degVec, radVec } from './constants';
 import { styles } from './styles';
-import { MaterialTab, panelFabric } from './materialTab';
+import { AvatarMaterialTab, MaterialTab, panelFabric } from './materialTab';
 import { LightPlacementData, ObjectData, PanelDrapeData, PanelManageRows, PanelMeshData } from './objectDataSections';
 import { AvatarPhysics, FabricPhysics } from './physicsTabs';
 import { ProjectTab, RenderTab } from './sceneRenderTabs';
@@ -27,7 +27,9 @@ export function selectedBody(tab: PropTab, project: Project, nodeId: string, nod
     case 'object':
       return <ObjectTab project={project} nodeId={nodeId} kind={node.kind} label={node.label} note={node.note} engineRef={engineRef} />;
     case 'material':
-      return <MaterialTab project={project} panelId={nodeId} engineRef={engineRef} />;
+      return node.kind === 'avatar'
+        ? <AvatarMaterialTab project={project} />
+        : <MaterialTab project={project} panelId={nodeId} engineRef={engineRef} />;
     case 'simulator': {
       if (node.kind === 'avatar') return <AvatarPhysics project={project} />;
       const fabric = panelFabric(project, nodeId);

@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu';
-import type { Project, SimulationConfig, FabricPhysics, ObjectTransform, RenderMode, Vec3, CameraProjection, ReferenceObjectRef, EditPreviewTier } from '../model/types';
+import type { Project, SimulationConfig, FabricPhysics, ObjectTransform, RenderMode, Vec3, CameraProjection, ReferenceObjectRef, EditPreviewTier, SkinAppearance } from '../model/types';
 import { type PanelMesh } from '../../pattern/panel/panelBuilder';
 import { getPanelMesh } from '../../pattern/panel/panelMeshCache';
 import { DEFAULT_MESH_RESOLUTION_CM } from '../model/defaults';
@@ -953,6 +953,11 @@ export class GarmentEngine {
   /** Shows, hides or fades the avatar body. */
   applyAvatarDisplay(display: 'visible' | 'hidden' | 'translucent'): void {
     this.avatar.applyDisplay(display);
+  }
+
+  /** Rewrites the avatar's skin appearance; the body and the cloth keep their state. */
+  applyAvatarAppearance(appearance?: SkinAppearance): void {
+    this.avatar.applyAppearance(appearance);
   }
 
   /** Keeps the scene's reference meshes in sync with the project's reference list. */

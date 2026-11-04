@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useProjectStore } from '../../../store/stores';
-import type { Fabric, FabricMapSlot, FabricPresetKey, Project } from '../../../core/model/types';
-import { FABRIC_PRESET_KEYS, FABRIC_PRESET_LABELS } from '../../../core/model/defaults';
+import type { Fabric, FabricMapSlot, FabricPresetKey, Project, SkinAppearance } from '../../../core/model/types';
+import { DEFAULT_SKIN_APPEARANCE, FABRIC_PRESET_KEYS, FABRIC_PRESET_LABELS, SKIN_TONES } from '../../../core/model/defaults';
 import { fabricList, panelsUsingFabric, uniqueFabricName } from '../../../core/model/fabric';
 import { AddFabricCommand, AssignFabricCommand, DetachFabricCommand } from '../../../core/command/fabricCommands';
 import type { Command } from '../../../core/command/command';
@@ -11,7 +11,7 @@ import { Vec2Field } from '../../widgets/numberField';
 import { Icon } from '../../icons';
 import {
   ColorRow, FileRow, FlexSelect, Hint, IconButton, InlineText, PopupSelect, Row, Section,
-  SliderRow, SlotRow, ValueButton,
+  SelectRow, SliderRow, SlotRow, ValueButton,
 } from '../../widgets/propertyRows';
 
 // ===== Material tab ("材质") =====
@@ -183,5 +183,42 @@ export function MaterialTab({ project, panelId, engineRef }: {
         <Hint>这个版片还没有材质，点右侧下拉换用一个，或用「＋」建一个。</Hint>
       )}
     </>
+  );
+}
+
+// ===== Avatar material tab ("材质") =====
+
+/** Dropdown value standing for a colour that matches no preset. */
+const CUSTOM_TONE = 'custom';
+
+/** Skin appearance of the selected body; edits repaint it without rebuilding the body. */
+export function AvatarMaterialTab({ project }: { project: Project }) {
+  const avatar = project.avatar;
+  const skin = avatar.appearance ?? DEFAULT_SKIN_APPEARANCE;
+
+  const write = (label: string, patch: Partial<SkinAppearance>) => patchValue(
+    label,
+    p => p.avatar,
+    (ctx, value) => { ctx.project.avatar = { ...value }; },
+    { ...avatar, appearance: { ...skin, ...patch } },
+  );
+
+  const preset = SKIN_TONES.find(tone => tone.color.toLowerCase() === skin.color.toLowerCase());
+  const toneOptions = preset ? SKIN_TONES : [...SKIN_TONES, { key: CUSTOM_TONE, label: '自定义', color: CUSTOM_TONE }];
+
+  return (
+    <Section title="皮肤">
+      <ColorRow label="肤色" value={skin.color} onChange={v => write('修改肤色', { color: v })} />
+      <SelectRow label="肤色预设" value={preset?.color ?? CUSTOM_TONE}
+        options={toneOptions.map(tone => ({ value: tone.color, label: tone.label }))}
+        onChange={v => {
+          if (v !== CUSTOM_TONE) write('套用肤色预设', { color: v });
+        }} />
+      <SliderRow label="粗糙度" min={0} max={1} step={0.01} value={skin.roughness} commitOnRelease
+        onChange={v => write('修改皮肤粗糙度', { roughness: v })} />
+      <SliderRow label="高光" min={0} max={1} step={0.01} value={skin.clearcoat} commitOnRelease
+        onChange={v => write('修改皮肤高光', { clearcoat: v })} />
+      <Hint>肤色只作用于无贴图的人体表面，眼睛与自带贴图的模型保持原样。</Hint>
+    </Section>
   );
 }

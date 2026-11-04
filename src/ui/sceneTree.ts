@@ -522,7 +522,7 @@ export function supportsTransform(kind: SceneNodeKind): boolean {
 
 /** Rows that expose material properties. */
 export function supportsMaterial(kind: SceneNodeKind): boolean {
-  return kind === 'panel';
+  return kind === 'panel' || kind === 'avatar';
 }
 
 /** Rows that expose simulation settings. */

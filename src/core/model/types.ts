@@ -435,6 +435,16 @@ export interface AvatarParams {
   poseTorsoLeanRad?: number;
 }
 
+/** Surface appearance of the avatar body. */
+export interface SkinAppearance {
+  /** Base skin colour, sRGB hex. */
+  color: string;
+  /** Diffuse roughness, 0..1; higher is more matte. */
+  roughness: number;
+  /** Strength of the oily highlight layer, 0..1. */
+  clearcoat: number;
+}
+
 /** The body the garment dresses. */
 export interface Avatar {
   id: string;
@@ -452,6 +462,8 @@ export interface Avatar {
   modelName?: string;
   /** Scene placement; absent means the identity transform. */
   transform?: ObjectTransform;
+  /** Skin appearance of the body; absent means `DEFAULT_SKIN_APPEARANCE`. */
+  appearance?: SkinAppearance;
   display: AvatarDisplay;
 }
 

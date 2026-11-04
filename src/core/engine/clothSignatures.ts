@@ -8,7 +8,9 @@ import { FALLBACK_PHYSICS } from './clothConstants';
  * pose and source. Display, name and scene transform only affect drawing.
  */
 export function avatarBodySignature(avatar: Avatar): string {
-  return JSON.stringify({ ...avatar, name: undefined, display: undefined, transform: undefined });
+  return JSON.stringify({
+    ...avatar, name: undefined, display: undefined, transform: undefined, appearance: undefined,
+  });
 }
 
 /** Cloth geometry group, keyed by the index range it draws. */

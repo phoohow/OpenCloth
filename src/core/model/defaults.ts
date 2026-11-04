@@ -2,7 +2,7 @@ import type {
   Project, Pattern, Fabric, Avatar, AvatarParams, SceneConfig, ObjectTransform,
   FabricPresetKey, FabricPhysics, FabricAppearance, RayTracingConfig, DenoiseModel,
   LightType, SceneLight, LightConfig, Vec3, SeamType, EdgeSemantic, TrimKind,
-  MeshSampling,
+  MeshSampling, SkinAppearance,
 } from './types';
 import { vec2, vec3 } from './types';
 
@@ -137,6 +137,19 @@ const DEFAULT_AVATAR = BUNDLED_AVATARS[0];
 /** Url of that default mesh. */
 export const BUNDLED_AVATAR_URL = DEFAULT_AVATAR.url;
 
+/** Skin appearance of a body without its own record: warm light tan, matte, faint highlight. */
+export const DEFAULT_SKIN_APPEARANCE: SkinAppearance = {
+  color: '#d6a97e', roughness: 0.55, clearcoat: 0.08,
+};
+
+/** Skin tones offered as one-click presets, light to deep. */
+export const SKIN_TONES: Array<{ key: string; label: string; color: string }> = [
+  { key: 'light', label: '浅肤', color: '#ecd3b9' },
+  { key: 'asian', label: '亚洲', color: DEFAULT_SKIN_APPEARANCE.color },
+  { key: 'warm', label: '暖棕', color: '#c89873' },
+  { key: 'deep', label: '深肤', color: '#8d5c3c' },
+];
+
 /** Avatar dressed in the default bundled mesh and its measurements. */
 export function createDefaultAvatar(): Avatar {
   return {
@@ -144,6 +157,7 @@ export function createDefaultAvatar(): Avatar {
     source: 'glb',
     params: { ...DEFAULT_AVATAR.params },
     glbUrl: BUNDLED_AVATAR_URL,
+    appearance: { ...DEFAULT_SKIN_APPEARANCE },
     display: 'visible',
   };
 }

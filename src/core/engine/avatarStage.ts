@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu';
-import type { Avatar, ObjectTransform } from '../model/types';
+import type { Avatar, ObjectTransform, SkinAppearance } from '../model/types';
 import { IDENTITY_TRANSFORM } from '../model/defaults';
 import {
   generateAvatarCollider, fitCapsulesFromGroup, type AvatarCollider,
@@ -10,6 +10,7 @@ import { loadModelFromFile, loadModelFromUrl } from '../../io/modelLoader';
 import { getModelBlob } from '../../io/objectStore';
 import { applyTransform } from './objectTransforms';
 import { AVATAR_OVERLAY_NAME } from './clothConstants';
+import { applyBodySkin } from '../../render/material/bodyMaterial';
 
 /** Translucent material for the clones marking the avatar as selected. */
 const SELECTION_MATERIAL = new THREE.MeshBasicMaterial({
@@ -27,6 +28,8 @@ export class AvatarStage {
 
   private group: THREE.Group | null = null;
   private overlays: THREE.Mesh[] = [];
+  /** Appearance key the body materials were last written for. */
+  private appliedSkin = '';
 
   /** True while the selection overlay clones are in the scene. */
   get hasOverlay(): boolean { return this.overlays.length > 0; }
@@ -49,7 +52,14 @@ export class AvatarStage {
     collider.mesh = meshColliderFromObject(group);
     this.group = group;
     this.collider = collider;
+    this.applySkin(avatar.appearance);
     scene.add(this.group);
+  }
+
+  /** Rewrites the body materials for a new skin appearance without rebuilding the body. */
+  applyAppearance(appearance?: SkinAppearance): void {
+    if (!this.group || skinKey(appearance) === this.appliedSkin) return;
+    this.applySkin(appearance);
   }
 
   /** Places the avatar group at its stored scene transform. */
@@ -90,6 +100,7 @@ export class AvatarStage {
     scene.remove(this.group);
     this.group = null;
     this.collider = null;
+    this.appliedSkin = '';
   }
 
   /** Loads the avatar from its model url, else from the stored imported bytes. */
@@ -113,4 +124,15 @@ export class AvatarStage {
     for (const overlay of this.overlays) overlay.removeFromParent();
     this.overlays = [];
   }
+
+  /** Writes the appearance onto the current group and records what was applied. */
+  private applySkin(appearance?: SkinAppearance): void {
+    this.appliedSkin = skinKey(appearance);
+    if (this.group) applyBodySkin(this.group, appearance);
+  }
+}
+
+/** Comparable key of a skin appearance. */
+function skinKey(appearance?: SkinAppearance): string {
+  return JSON.stringify(appearance ?? null);
 }

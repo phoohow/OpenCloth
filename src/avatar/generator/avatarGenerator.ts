@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu';
 import type { AvatarParams } from '../../core/model/types';
 import { bodyLandmarks } from '../landmarks';
+import { DEFAULT_SKIN_APPEARANCE } from '../../core/model/defaults';
 
 /** Elliptical cross-section at one height of a lofted body part. */
 interface Station { y: number; rx: number; rz: number; }
@@ -118,7 +119,9 @@ export function generateProceduralAvatar(params: AvatarParams): THREE.Group {
   } = body;
 
   const mat = new THREE.MeshStandardMaterial({
-    color: 0xd8d5d0, roughness: 0.65, metalness: 0,
+    color: DEFAULT_SKIN_APPEARANCE.color,
+    roughness: DEFAULT_SKIN_APPEARANCE.roughness,
+    metalness: 0,
   });
 
   const add = (geo: THREE.BufferGeometry, x = 0, y = 0, z = 0, rotZ = 0, depth = 1): THREE.Mesh => {

@@ -268,6 +268,7 @@ export class EngineSync {
   private applyDrawState(project: Project): void {
     const renderMode = useUIStore.getState().renderMode;
     this.engine.applyFabrics(project, renderMode);
+    this.engine.applyAvatarAppearance(project.avatar.appearance);
     this.engine.applyPanelVisibility(project);
     this.engine.applySeamStitchVisibility(project);
     this.engine.applyTopstitchThreads(project);
