@@ -93,7 +93,8 @@ export function useCanvasView(
       if (!size) return;
       const rect = canvas.getBoundingClientRect();
       const cursor = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-      const factor = e.deltaY > 0 ? 0.9 : 1.1;
+      // Scroll down moves the view closer, scroll up pulls it back.
+      const factor = e.deltaY > 0 ? 1.1 : 0.9;
       setView(v => zoomAround(v, cursor, factor, size.w, size.h));
     };
     canvas.addEventListener('wheel', onWheel, { passive: false });

@@ -19,6 +19,67 @@ export function isOrthographic(camera: ViewportCamera): camera is THREE.Orthogra
 /** Half-depth of the orthographic clip range in meters; linear depth keeps this generous. */
 const ORTHO_CLIP_RANGE = 100;
 
+/** Distance multiplier of one zoom step; the same curve OrbitControls uses for its own zoom. */
+const ZOOM_FACTOR = 0.95;
+
+/**
+ * Dollies the camera on the wheel and on a middle-button drag: scrolling or dragging down moves
+ * closer, up pulls away. OrbitControls maps both gestures the other way and exposes no switch,
+ * so its wheel zoom is replaced by a capture-phase listener and its middle-button dolly by a
+ * drag handler of our own.
+ * Returns the detach function.
+ */
+function attachZoomGestures(controls: OrbitControls, canvas: HTMLCanvasElement): () => void {
+  const dolly = (pixels: number) => {
+    if (pixels === 0) return;
+    const factor = Math.pow(ZOOM_FACTOR, Math.abs(pixels) * 0.01 * controls.zoomSpeed);
+    if (pixels > 0) controls.dollyIn(factor);
+    else controls.dollyOut(factor);
+  };
+
+  const onWheel = (event: WheelEvent) => {
+    if (event.target !== canvas || !controls.enabled || !controls.enableZoom) return;
+    event.preventDefault();
+    event.stopPropagation();
+    // Normalise line and page deltas to pixels before deriving the step.
+    const delta = event.deltaMode === 1 ? event.deltaY * 16 : event.deltaMode === 2 ? event.deltaY * 100 : event.deltaY;
+    dolly(delta);
+  };
+
+  controls.mouseButtons.MIDDLE = null;
+  let dragPointer: number | null = null;
+  let dragY = 0;
+  const onPointerDown = (event: PointerEvent) => {
+    if (event.button !== 1 || !controls.enabled || !controls.enableZoom) return;
+    event.preventDefault();
+    dragPointer = event.pointerId;
+    dragY = event.clientY;
+    canvas.setPointerCapture(event.pointerId);
+  };
+  const onPointerMove = (event: PointerEvent) => {
+    if (event.pointerId !== dragPointer) return;
+    dolly(event.clientY - dragY);
+    dragY = event.clientY;
+  };
+  const onPointerEnd = (event: PointerEvent) => {
+    if (event.pointerId === dragPointer) dragPointer = null;
+  };
+
+  window.addEventListener('wheel', onWheel, { capture: true, passive: false });
+  canvas.addEventListener('pointerdown', onPointerDown);
+  canvas.addEventListener('pointermove', onPointerMove);
+  canvas.addEventListener('pointerup', onPointerEnd);
+  canvas.addEventListener('pointercancel', onPointerEnd);
+
+  return () => {
+    window.removeEventListener('wheel', onWheel, { capture: true });
+    canvas.removeEventListener('pointerdown', onPointerDown);
+    canvas.removeEventListener('pointermove', onPointerMove);
+    canvas.removeEventListener('pointerup', onPointerEnd);
+    canvas.removeEventListener('pointercancel', onPointerEnd);
+  };
+}
+
 /** Long-lived three.js objects one viewport owns. */
 export interface RendererContext {
   renderer: THREE.WebGPURenderer;
@@ -44,6 +105,8 @@ export interface RendererContext {
   rayCapability: RayTracingCapability | null;
   /** Watcher that keeps the drawing buffer in sync with the viewport's layout size. */
   resizeObserver?: ResizeObserver;
+  /** Removes the listeners that drive the camera dolly. */
+  detachZoomGestures?: () => void;
   disposed: boolean;
 }
 
@@ -226,12 +289,14 @@ export async function createRendererContext(canvas: HTMLCanvasElement): Promise<
   controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
   controls.target.set(0, 0.9, 0);
   controls.update();
+  const detachZoomGestures = attachZoomGestures(controls, canvas);
 
   const ctx: RendererContext = {
     renderer, scene, camera, perspectiveCamera: camera, orthographicCamera,
     projection: 'perspective', orthoViewHeight: 1, controls, canvas,
     renderMode: 'shaded', rayConfig: createDefaultRayTracing(),
     rayTracer: null, rayTracerLoading: null, rayCapability: null,
+    detachZoomGestures,
     disposed: false,
   };
   syncOrthoFrustum(ctx, width / height);
@@ -463,6 +528,7 @@ export function disposeRendererContext(ctx: RendererContext): void {
   ctx.rayTracer?.dispose();
   ctx.rayTracer = null;
   void ctx.rayTracerLoading?.then(rayTracer => rayTracer?.dispose()).catch(() => { });
+  ctx.detachZoomGestures?.();
   ctx.controls.dispose();
   ctx.renderer.dispose();
 }
