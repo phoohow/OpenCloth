@@ -7,10 +7,12 @@ import {
   AddInternalLineCommand, OutlineSplitCommand, MergePanelsCommand, OutlineHoleCommand,
   RemoveHoleCommand, CreateDartCommand, MoveDartTipCommand, TransferDartCommand,
   MirrorPanelCommand, SyncMirrorCommand, ScalePanelCommand, MovePointsCommand, SetEdgeLengthCommand,
+  AddPointOnEdgeCommand, DeleteElementsCommand,
 } from '../../../src/core/command/patternCommands';
 import { ctxOf, addSquare } from './fixtures';
 import { computeBBox } from '../../../src/pattern/geom/vec2';
-import { samplePanelOutline } from '../../../src/pattern/panel/panelBuilder';
+import { pointAtT, samplePanelOutline } from '../../../src/pattern/panel/panelBuilder';
+import { elementNodeId } from '../../../src/core/model/elementRef';
 
 function squareCtx(size = 10): { ctx: ProjectContext; panelId: string } {
   const p = createEmptyPattern();
@@ -295,5 +297,75 @@ describe('structure commands', () => {
     };
     expect(() => new ScalePanelCommand(panelId, 20, 20).execute(ctx)).toThrow(/共用顶点/);
     expect(ctx.project.pattern.points['sq_p1'].pos).toEqual({ x: 10, y: 0 });
+  });
+});
+
+describe('delete contour vertex', () => {
+  /** Corner positions of a panel in outline order, one entry per edge start. */
+  function corners(pattern: Pattern, panelId: string): Vec2[] {
+    return pattern.panels[panelId].outlineEdgeIds.map(id => ({ ...pattern.points[pattern.edges[id]!.startPointId]!.pos }));
+  }
+
+  it('joins the two neighbouring points after a split point is deleted', () => {
+    const { ctx, panelId } = squareCtx();
+    new AddPointOnEdgeCommand('sq_e0', { x: 5, y: 0 }).execute(ctx);
+    const pattern = ctx.project.pattern;
+    expect(pattern.panels[panelId].outlineEdgeIds).toHaveLength(5);
+    const inserted = Object.keys(pattern.points).find(id => Math.hypot(pattern.points[id]!.pos.x - 5, pattern.points[id]!.pos.y) < 1e-9)!;
+
+    new DeleteElementsCommand([elementNodeId('point', inserted)]).execute(ctx);
+
+    expect(pattern.points[inserted]).toBeUndefined();
+    expect(Object.keys(pattern.edges)).toHaveLength(4);
+    expect(corners(pattern, panelId)).toEqual([{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }, { x: 0, y: 10 }]);
+    expect(pattern.panels[panelId].outlineEdgeIds.every(id => pattern.edges[id]!.type === 'line')).toBe(true);
+    expect(validatePattern(pattern)).toEqual([]);
+  });
+
+  it('restores the curve when a split point on a bezier edge is deleted', () => {
+    const { ctx, panelId } = squareCtx();
+    const pattern = ctx.project.pattern;
+    const edge = pattern.edges['sq_e0']!;
+    edge.type = 'bezier';
+    pattern.points['sq_p0']!.kind = 'smooth';
+    pattern.points['sq_p0']!.handleOut = { x: 3, y: 3 };
+    pattern.points['sq_p1']!.kind = 'smooth';
+    pattern.points['sq_p1']!.handleIn = { x: 7, y: -3 };
+    const before = [0.25, 0.5, 0.75].map(t => pointAtT(pattern, 'sq_e0', t)!);
+
+    new AddPointOnEdgeCommand('sq_e0', { x: 5, y: 1 }).execute(ctx);
+    const inserted = Object.keys(pattern.points).find(id => !['sq_p0', 'sq_p1', 'sq_p2', 'sq_p3'].includes(id))!;
+    new DeleteElementsCommand([elementNodeId('point', inserted)]).execute(ctx);
+
+    const merged = pattern.panels[panelId].outlineEdgeIds.find(id => pattern.edges[id]!.type === 'bezier')!;
+    expect(merged).toBeDefined();
+    expect(pattern.panels[panelId].outlineEdgeIds).toHaveLength(4);
+    [0.25, 0.5, 0.75].forEach((t, i) => {
+      const at = pointAtT(pattern, merged, t)!;
+      expect(at.x).toBeCloseTo(before[i]!.x, 1);
+      expect(at.y).toBeCloseTo(before[i]!.y, 1);
+    });
+    expect(validatePattern(pattern)).toEqual([]);
+  });
+
+  it('refuses a vertex when the outline would drop below three edges', () => {
+    const p = createEmptyPattern();
+    p.points = {
+      a: { id: 'a', pos: { x: 0, y: 0 } }, b: { id: 'b', pos: { x: 10, y: 0 } }, c: { id: 'c', pos: { x: 0, y: 10 } },
+    };
+    p.edges = {
+      ab: { id: 'ab', type: 'line', startPointId: 'a', endPointId: 'b' },
+      bc: { id: 'bc', type: 'line', startPointId: 'b', endPointId: 'c' },
+      ca: { id: 'ca', type: 'line', startPointId: 'c', endPointId: 'a' },
+    };
+    p.panels.tri = {
+      id: 'tri', name: '三角', outlineEdgeIds: ['ab', 'bc', 'ca'], dartIds: [], internalLineIds: [],
+      seamAllowanceCm: 1, fabricId: 'f', meshResolutionCm: 3, visible: true, locked: false,
+    };
+    const ctx = ctxOf(p);
+    const snapshot = structuredClone(p);
+
+    expect(() => new DeleteElementsCommand([elementNodeId('point', 'b')]).execute(ctx)).toThrow(/不足 3 条边/);
+    expect(ctx.project.pattern).toEqual(snapshot);
   });
 });

@@ -1,7 +1,7 @@
 import type { Pattern, Vec2 } from '../core/model/types';
 import { panelGrainLine, panelOutlineWithAllowance, sampleOutline, samplePanelOutline } from '../pattern/panel/panelBuilder';
 import { computeBBox } from '../pattern/geom/vec2';
-import { sampleEdge } from '../pattern/geom/edgeSample';
+import { pointAtT, sampleEdge } from '../pattern/geom/edgeSample';
 import {
   buildMarkerLayout, placePoint, placedLabel, placedOutline,
   type MarkerLayoutOptions,
@@ -101,7 +101,8 @@ function renderLayers(view: View, title: string, layers: Layer[]): string {
 /** Inward unit normal at a sampled edge point; outlines run CCW so the right-hand normal faces outward. */
 function edgeFrame(pattern: Pattern, edgeId: string, t: number): { p: Vec2; nx: number; ny: number } | null {
   const pts = sampleEdge(pattern, edgeId);
-  if (pts.length < 2) return null;
+  const p = pointAtT(pattern, edgeId, t);
+  if (pts.length < 2 || !p) return null;
   const idx = Math.min(pts.length - 1, Math.max(0, Math.round(t * (pts.length - 1))));
   const prev = pts[Math.max(0, idx - 1)];
   const next = pts[Math.min(pts.length - 1, idx + 1)];
@@ -110,7 +111,7 @@ function edgeFrame(pattern: Pattern, edgeId: string, t: number): { p: Vec2; nx: 
   const len = Math.hypot(tx, ty) || 1;
   tx /= len;
   ty /= len;
-  return { p: pts[idx], nx: ty, ny: -tx };
+  return { p, nx: ty, ny: -tx };
 }
 
 /** Renders the whole pattern as a standalone centimetre SVG: outlines, optional seam allowance, holes, internal lines, darts, notches, grainlines and annotations, one `<g>` per layer. */

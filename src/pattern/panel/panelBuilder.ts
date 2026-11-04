@@ -86,6 +86,16 @@ function to3D(positions2D: Float32Array): Float32Array {
 }
 
 /**
+ * Bounds of a panel's cutting outline in centimeters: the outline a mesh is resampled from,
+ * so the numbers match the mesh the drape wraps and the 2D pane can derive the same heights.
+ */
+export function panelCutBounds(pattern: Pattern, panel: Panel): { min: Vec2; max: Vec2 } {
+  const resolution = panel.meshResolutionCm ?? DEFAULT_MESH_RESOLUTION_CM;
+  const outline = resampleClosedOutline(panelOutlineWithAllowance(pattern, panel), resolution);
+  return computeBBox(outline.length >= 3 ? outline : samplePanelOutline(pattern, panel));
+}
+
+/**
  * Builds a panel's simulation mesh: outline sampling, seam allowance, triangulation, refinement, UVs and seam mapping.
  * `resolutionCm` overrides the panel's own mesh resolution when given; `sampling` overrides the
  * project's interior point distribution when given.

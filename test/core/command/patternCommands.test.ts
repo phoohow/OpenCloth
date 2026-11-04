@@ -2,11 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { vec2, type ArcGeom, type Pattern, type Project, type Vec2 } from '../../../src/core/model/types';
 import { createDefaultProject } from '../../../src/core/model/defaults';
 import { generateTShirt } from '../../../src/pattern/template/tShirtTemplate';
-import { samplePanelOutline } from '../../../src/pattern/panel/panelBuilder';
+import { panelCutBounds, samplePanelOutline } from '../../../src/pattern/panel/panelBuilder';
 import type { ProjectContext } from '../../../src/core/command/command';
 import {
-  AddPointOnEdgeCommand, DeleteSelectionCommand, MovePanelsCommand, MovePointsCommand,
-  panelMoveGeometry, previewMove,
+  AddPointOnEdgeCommand, DeleteSelectionCommand, MoveGeometryCommand, MovePanelsCommand,
+  MovePanelsHeightCommand, MovePointsCommand, edgePointIds, movePanelsCommands, panelMoveGeometry,
+  pointMoveGeometry, previewMove, previewPanelMove,
 } from '../../../src/core/command/patternCommands';
 import { arcFromThreePoints, evalArc } from '../../../src/pattern/geom/arc';
 
@@ -18,6 +19,13 @@ function projectWithPattern(pattern: Pattern): Project {
   const project = createDefaultProject();
   project.pattern = pattern;
   return project;
+}
+
+/** Outline vertex of a panel that sits highest in the pattern. */
+function topVertexOf(pattern: Pattern, panel: Pattern['panels'][string]): string {
+  return panel.outlineEdgeIds
+    .flatMap(edgeId => [pattern.edges[edgeId]!.startPointId, pattern.edges[edgeId]!.endPointId])
+    .reduce((best, id) => (pattern.points[id]!.pos.y > pattern.points[best]!.pos.y ? id : best));
 }
 
 describe('MovePointsCommand', () => {
@@ -66,6 +74,52 @@ describe('MovePointsCommand', () => {
 
     cmd.undo(ctx);
     expect(pattern.internalLines.line1.points[0]).toEqual({ x: 1, y: 0 });
+  });
+
+  it('keeps a draped panel in place when its top vertex moves', () => {
+    const pattern = generateTShirt();
+    const front = Object.values(pattern.panels).find(p => p.name === '前片')!;
+    const topId = topVertexOf(pattern, front);
+    const topBefore = panelCutBounds(pattern, front).max.y;
+    const anchorBefore = front.drape!.anchorOffsetCm ?? 0;
+    const ctx = makeCtx(projectWithPattern(pattern));
+
+    new MovePointsCommand(new Map([[topId, vec2(0, 5)]])).execute(ctx);
+
+    // The drape anchor rides the top edge, so the panel keeps the height it is drawn at.
+    const grew = panelCutBounds(pattern, front).max.y - topBefore;
+    expect(grew).toBeGreaterThan(0);
+    expect(front.drape!.anchorOffsetCm).toBeCloseTo(anchorBefore + grew, 6);
+    expect(panelCutBounds(pattern, front).max.y - (front.drape!.anchorOffsetCm ?? 0))
+      .toBeCloseTo(topBefore - anchorBefore, 6);
+  });
+
+  it('restores the drape anchor on undo', () => {
+    const pattern = generateTShirt();
+    const front = Object.values(pattern.panels).find(p => p.name === '前片')!;
+    const topId = topVertexOf(pattern, front);
+    const anchorBefore = front.drape!.anchorOffsetCm;
+    const ctx = makeCtx(projectWithPattern(pattern));
+    const cmd = new MovePointsCommand(new Map([[topId, vec2(0, 5)]]));
+
+    cmd.execute(ctx);
+    expect(front.drape!.anchorOffsetCm).not.toBe(anchorBefore);
+
+    cmd.undo(ctx);
+    expect(front.drape!.anchorOffsetCm).toBe(anchorBefore);
+  });
+
+  it('previews a point move with the same drape anchor as the commit', () => {
+    const pattern = generateTShirt();
+    const front = Object.values(pattern.panels).find(p => p.name === '前片')!;
+    const topId = topVertexOf(pattern, front);
+    const ctx = makeCtx(projectWithPattern(pattern));
+    const delta = vec2(0, 4);
+
+    const previewed = previewMove(pattern, pointMoveGeometry(pattern, [topId]), delta, { keepDrapeHeight: true });
+    new MovePointsCommand(new Map([[topId, delta]])).execute(ctx);
+
+    expect(previewed).toEqual(ctx.project.pattern);
   });
 });
 
@@ -137,6 +191,64 @@ describe('MovePanelsCommand', () => {
     new MovePanelsCommand([panel.id], delta).execute(ctx);
 
     expect(previewed).toEqual(ctx.project.pattern);
+  });
+});
+
+describe('movePanelsCommands', () => {
+  /** A draped panel on edge e1 (p3 -> p4) and a plain panel on edge e2 (p1 -> p2). */
+  function drapedAndFlat(): Project {
+    const pattern = createEmptyTestPattern();
+    pattern.points.p4 = { id: 'p4', pos: vec2(0, 4) };
+    pattern.edges.e1 = { id: 'e1', type: 'line', startPointId: 'p3', endPointId: 'p4' };
+    pattern.edges.e2 = { id: 'e2', type: 'line', startPointId: 'p1', endPointId: 'p2' };
+    pattern.panels.panel1!.outlineEdgeIds = ['e1'];
+    pattern.panels.panel1!.drape = { region: 'torso', anchor: 'waist' };
+    pattern.panels.panel2!.outlineEdgeIds = ['e2'];
+    return projectWithPattern(pattern);
+  }
+
+  it('moves a draped panel horizontally in the pattern and vertically on the body', () => {
+    const project = drapedAndFlat();
+    const ctx = makeCtx(project);
+
+    for (const command of movePanelsCommands(project.pattern, ['panel1'], vec2(3, 5))) command.execute(ctx);
+
+    expect(project.pattern.points.p3!.pos).toEqual({ x: 8, y: 4 });
+    expect(project.pattern.points.p4!.pos).toEqual({ x: 3, y: 4 });
+    expect(project.pattern.panels.panel1!.drape!.anchorOffsetCm).toBe(5);
+  });
+
+  it('translates a panel without a drape as one rigid piece', () => {
+    const project = drapedAndFlat();
+    const ctx = makeCtx(project);
+
+    for (const command of movePanelsCommands(project.pattern, ['panel2'], vec2(3, 5))) command.execute(ctx);
+
+    expect(project.pattern.points.p1!.pos).toEqual({ x: 4, y: 5 });
+    expect(project.pattern.points.p2!.pos).toEqual({ x: 8, y: 5 });
+    expect(project.pattern.panels.panel2!.drape).toBeUndefined();
+  });
+
+  it('restores the drape height on undo', () => {
+    const project = drapedAndFlat();
+    const ctx = makeCtx(project);
+    const command = new MovePanelsHeightCommand(['panel1'], -4);
+
+    command.execute(ctx);
+    expect(project.pattern.panels.panel1!.drape!.anchorOffsetCm).toBe(-4);
+    command.undo(ctx);
+    expect(project.pattern.panels.panel1!.drape!.anchorOffsetCm).toBe(0);
+  });
+
+  it('previews the same split without touching the model', () => {
+    const project = drapedAndFlat();
+    const preview = previewPanelMove(project.pattern, ['panel1', 'panel2'], vec2(3, 5));
+
+    expect(project.pattern.points.p3!.pos).toEqual({ x: 5, y: 4 });
+    expect(project.pattern.panels.panel1!.drape!.anchorOffsetCm).toBeUndefined();
+    expect(preview.points.p3!.pos).toEqual({ x: 8, y: 4 });
+    expect(preview.points.p1!.pos).toEqual({ x: 4, y: 5 });
+    expect(preview.panels.panel1!.drape!.anchorOffsetCm).toBe(5);
   });
 });
 
@@ -319,6 +431,91 @@ describe('DeleteSelectionCommand', () => {
     expect(() => new DeleteSelectionCommand(['panel1']).execute(ctx))
       .toThrow(/共用/);
     expect(pattern.panels.panel1).toBeDefined();
+  });
+});
+
+describe('edge move', () => {
+  it('lists both endpoints of the given edges once', () => {
+    const pattern = createEmptyTestPattern();
+    pattern.edges['e1'] = { id: 'e1', type: 'line', startPointId: 'p1', endPointId: 'p2' };
+    pattern.edges['e2'] = { id: 'e2', type: 'line', startPointId: 'p2', endPointId: 'p3' };
+
+    expect(edgePointIds(pattern, ['e1', 'e2', 'missing'])).toEqual(['p1', 'p2', 'p3']);
+  });
+
+  it('translates the points an edge hangs on and restores them on undo', () => {
+    const pattern = createEmptyTestPattern();
+    pattern.edges['e1'] = { id: 'e1', type: 'line', startPointId: 'p1', endPointId: 'p2' };
+    const ctx = makeCtx(projectWithPattern(pattern));
+
+    const geom = pointMoveGeometry(pattern, edgePointIds(pattern, ['e1']));
+    const cmd = new MoveGeometryCommand(geom, vec2(1, 2), { keepDrapeHeight: true });
+    cmd.execute(ctx);
+    expect(pattern.points.p1!.pos).toEqual({ x: 2, y: 2 });
+    expect(pattern.points.p2!.pos).toEqual({ x: 6, y: 2 });
+    expect(pattern.points.p3!.pos).toEqual({ x: 5, y: 4 });
+
+    cmd.undo(ctx);
+    expect(pattern.points.p1!.pos).toEqual({ x: 1, y: 0 });
+    expect(pattern.points.p2!.pos).toEqual({ x: 5, y: 0 });
+  });
+
+  it('shifts an arc with both ends instead of refitting it', () => {
+    const pattern = arcTestPattern();
+    const center = { ...pattern.edges['e1']!.arc!.center };
+    const ctx = makeCtx(projectWithPattern(pattern));
+
+    const geom = pointMoveGeometry(pattern, edgePointIds(pattern, ['e1']));
+    const cmd = new MoveGeometryCommand(geom, vec2(2, 1));
+    cmd.execute(ctx);
+
+    expect(pattern.edges['e1']!.type).toBe('arc');
+    expect(pattern.edges['e1']!.arc!.center).toEqual({ x: center.x + 2, y: center.y + 1 });
+    expect(pattern.edges['e1']!.arc!.radius).toBeCloseTo(2, 9);
+  });
+});
+
+describe('internal line vertex drag', () => {
+  /** One panel holding the given internal line. */
+  const linePattern = (points: Vec2[]): Pattern => {
+    const pattern = createEmptyTestPattern();
+    pattern.internalLines.l1 = { id: 'l1', kind: 'fold', points };
+    pattern.panels.panel1!.internalLineIds = ['l1'];
+    return pattern;
+  };
+
+  it('moves only the picked vertex and restores it on undo', () => {
+    const pattern = linePattern([vec2(2, 2), vec2(5, 5), vec2(8, 2)]);
+    const ctx = makeCtx(projectWithPattern(pattern));
+    const geom = { pointIds: [], lineVertices: [{ lineId: 'l1', index: 1 }] };
+
+    const preview = previewMove(pattern, geom, vec2(1, -2));
+    expect(preview.internalLines.l1!.points[1]).toEqual(vec2(6, 3));
+    expect(pattern.internalLines.l1!.points[1]).toEqual(vec2(5, 5));
+
+    const cmd = new MoveGeometryCommand(geom, vec2(1, -2), { label: '移动内部线顶点' });
+    cmd.execute(ctx);
+    expect(pattern.internalLines.l1!.points).toEqual([vec2(2, 2), vec2(6, 3), vec2(8, 2)]);
+    expect(pattern.points.p1!.pos).toEqual(vec2(1, 0));
+
+    cmd.undo(ctx);
+    expect(pattern.internalLines.l1!.points).toEqual([vec2(2, 2), vec2(5, 5), vec2(8, 2)]);
+  });
+
+  it('keeps a closed ring closed when either end moves', () => {
+    const pattern = linePattern([vec2(2, 2), vec2(8, 2), vec2(8, 8), vec2(2, 2)]);
+    const ctx = makeCtx(projectWithPattern(pattern));
+    const geom = { pointIds: [], lineVertices: [{ lineId: 'l1', index: 0 }, { lineId: 'l1', index: 3 }] };
+
+    const cmd = new MoveGeometryCommand(geom, vec2(0, 1));
+    cmd.execute(ctx);
+    expect(pattern.internalLines.l1!.points[0]).toEqual(vec2(2, 3));
+    expect(pattern.internalLines.l1!.points[3]).toEqual(vec2(2, 3));
+    expect(pattern.internalLines.l1!.points[1]).toEqual(vec2(8, 2));
+
+    cmd.undo(ctx);
+    expect(pattern.internalLines.l1!.points[0]).toEqual(vec2(2, 2));
+    expect(pattern.internalLines.l1!.points[3]).toEqual(vec2(2, 2));
   });
 });
 

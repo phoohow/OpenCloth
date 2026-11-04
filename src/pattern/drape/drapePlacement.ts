@@ -105,13 +105,26 @@ function columnAngle(x: number, bounds: PanelBounds, drape: ResolvedDrape): numb
 }
 
 /** Height of a vertex in meters: the top edge sits at the anchor and fabric depth hangs below. */
-function vertexHeight(topY: number, bounds: PanelBounds, y: number): number {
-  return topY - (bounds.maxY - y) * 0.01;
+function vertexHeight(offsetCm: number, y: number): number {
+  return (y + offsetCm) * 0.01;
 }
 
 /** Height the panel's top edge sits at. */
 function anchorHeight(drape: ResolvedDrape, body: BodyLandmarks): number {
   return landmarkY(body, drape.anchor) + drape.anchorOffsetCm * 0.01;
+}
+
+/** Vertical offset in centimeters from a pattern y to the world height of the same point. */
+function heightOffsetCm(topY: number, maxYCm: number): number {
+  return topY * 100 - maxYCm;
+}
+
+/**
+ * Vertical offset in centimeters a draped panel adds to its pattern y to reach its world height.
+ * The 2D pane reads the same value, so a panel sits at one height on both sides.
+ */
+export function drapeHeightOffsetCm(panel: Panel, maxYCm: number, body: BodyLandmarks): number {
+  return heightOffsetCm(anchorHeight(resolveDrape(panel), body), maxYCm);
 }
 
 /** Widest torso cross-section over a height span, so nothing inside the piece pokes through it. */
@@ -135,6 +148,7 @@ function widestRing(body: BodyLandmarks, topY: number, bottomY: number): BodyEll
 function wrapTorso(mesh: PanelMesh, drape: ResolvedDrape, body: BodyLandmarks, bounds: PanelBounds): Float32Array {
   const out = new Float32Array(mesh.vertexCount * 3);
   const topY = anchorHeight(drape, body);
+  const offsetCm = heightOffsetCm(topY, bounds.maxY);
   const depth = Math.max((bounds.maxY - bounds.minY) * 0.01, 1e-3);
   const ring = widestRing(body, topY, topY - depth);
   const centerX = body.torsoCenterXAt(topY);
@@ -144,7 +158,7 @@ function wrapTorso(mesh: PanelMesh, drape: ResolvedDrape, body: BodyLandmarks, b
   const topR = meanR + ease;
   const hemR = Math.max((bounds.maxX - bounds.minX) * 0.01 / sweepRad, topR);
   for (let i = 0; i < mesh.vertexCount; i++) {
-    const wy = vertexHeight(topY, bounds, mesh.positions2D[i * 2 + 1]);
+    const wy = vertexHeight(offsetCm, mesh.positions2D[i * 2 + 1]);
     const theta = columnAngle(mesh.positions2D[i * 2], bounds, drape);
     const scale = (topR + (hemR - topR) * (topY - wy) / depth) / meanR;
     out[i * 3] = centerX + ring.rx * scale * Math.sin(theta);
@@ -204,8 +218,9 @@ interface LimbTube {
 /** Bends a panel around a vertical tube whose axis shifts outward with depth. */
 function wrapTube(mesh: PanelMesh, drape: ResolvedDrape, bounds: PanelBounds, tube: LimbTube): Float32Array {
   const out = new Float32Array(mesh.vertexCount * 3);
+  const offsetCm = heightOffsetCm(tube.topY, bounds.maxY);
   for (let i = 0; i < mesh.vertexCount; i++) {
-    const wy = vertexHeight(tube.topY, bounds, mesh.positions2D[i * 2 + 1]);
+    const wy = vertexHeight(offsetCm, mesh.positions2D[i * 2 + 1]);
     const theta = columnAngle(mesh.positions2D[i * 2], bounds, drape);
     const axis = tube.axisX + tube.rake * Math.max(tube.topY - wy, 0);
     out[i * 3] = axis + tube.radius * Math.cos(theta);

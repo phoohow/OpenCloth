@@ -1,5 +1,6 @@
 import type { ArcGeom, EdgeType, Panel, Pattern, Vec2 } from '../model/types';
 import { arcFromThreePoints, evalArc } from '../../pattern/geom/arc';
+import { panelCutBounds } from '../../pattern/panel/panelBuilder';
 
 /** Coincidence tolerance in cm for treating two positions as the same spot. */
 const EPS = 1e-6;
@@ -10,7 +11,8 @@ const moved = (p: Vec2, d: Vec2): Vec2 => ({ x: p.x + d.x, y: p.y + d.y });
 export type MoveRecord =
   | { kind: 'point'; id: string; old: { pos: Vec2; handleIn?: Vec2; handleOut?: Vec2; kind?: string } }
   | { kind: 'internal'; lineId: string; index: number; old: Vec2 }
-  | { kind: 'arc'; edgeId: string; old: { type: EdgeType; arc?: ArcGeom } };
+  | { kind: 'arc'; edgeId: string; old: { type: EdgeType; arc?: ArcGeom } }
+  | { kind: 'drape'; panelId: string; old: { anchorOffsetCm?: number } };
 
 /** Everything a translation moves as one unit: points (with their handles) and line vertices. */
 export interface MoveGeometry {
@@ -65,6 +67,18 @@ export function pointMoveGeometry(pattern: Pattern, pointIds: readonly string[])
   return geom;
 }
 
+/** Endpoint points of the given edges, each listed once. */
+export function edgePointIds(pattern: Pattern, edgeIds: readonly string[]): string[] {
+  const ids = new Set<string>();
+  for (const edgeId of edgeIds) {
+    const edge = pattern.edges[edgeId];
+    if (!edge) continue;
+    ids.add(edge.startPointId);
+    ids.add(edge.endPointId);
+  }
+  return [...ids];
+}
+
 /**
  * All geometry owned by the given panels: outline vertices (handles ride along),
  * dart tips and legs, and every internal-line vertex.
@@ -107,10 +121,39 @@ export function panelMoveGeometry(pattern: Pattern, panelIds: readonly string[])
   };
 }
 
+/**
+ * Top edge each draped panel of the given points currently hangs from. A draped panel is placed so
+ * that this edge sits at its anchor height, so moving a point here would otherwise re-hang the
+ * whole panel instead of deforming it.
+ */
+function drapedTopsOf(pattern: Pattern, pointIds: readonly string[]): Map<string, number> {
+  const tops = new Map<string, number>();
+  for (const pointId of pointIds) {
+    for (const panel of panelsOfPoint(pattern, pointId)) {
+      if (!panel.drape || tops.has(panel.id)) continue;
+      tops.set(panel.id, panelCutBounds(pattern, panel).max.y);
+    }
+  }
+  return tops;
+}
+
+/** Options of a translation. */
+export interface TranslateOptions {
+  /**
+   * Keeps a draped panel's height placement by shifting its drape anchor with its top edge.
+   * Defaults to true: moving a point deforms the panel where it hangs, and a whole panel move
+   * carries the anchor along. Pass false to re-hang the panel off its moved top edge.
+   */
+  keepDrapeHeight?: boolean;
+}
+
 /** Applies the translation to the pattern in place and returns the values needed for undo. */
-export function translateGeometry(pattern: Pattern, geom: MoveGeometry, delta: Vec2): MoveRecord[] {
+export function translateGeometry(
+  pattern: Pattern, geom: MoveGeometry, delta: Vec2, options: TranslateOptions = {},
+): MoveRecord[] {
   const records: MoveRecord[] = [];
   const movedIds = new Set(geom.pointIds);
+  const pinned = options.keepDrapeHeight === false ? null : drapedTopsOf(pattern, geom.pointIds);
 
   for (const id of geom.pointIds) {
     const point = pattern.points[id];
@@ -139,6 +182,17 @@ export function translateGeometry(pattern: Pattern, geom: MoveGeometry, delta: V
   }
 
   refitArcs(pattern, movedIds, { translation: delta }, records);
+
+  if (pinned) {
+    for (const [panelId, top] of pinned) {
+      const drape = pattern.panels[panelId]?.drape;
+      if (!drape) continue;
+      const shift = panelCutBounds(pattern, pattern.panels[panelId]!).max.y - top;
+      if (Math.abs(shift) < 1e-6) continue;
+      records.push({ kind: 'drape', panelId, old: { anchorOffsetCm: drape.anchorOffsetCm } });
+      drape.anchorOffsetCm = (drape.anchorOffsetCm ?? 0) + shift;
+    }
+  }
 
   return records;
 }
@@ -193,6 +247,11 @@ export function restoreGeometry(pattern: Pattern, records: MoveRecord[]): void {
       edge.type = rec.old.type;
       if (rec.old.arc) edge.arc = { ...rec.old.arc, center: { ...rec.old.arc.center } };
       else delete edge.arc;
+    } else if (rec.kind === 'drape') {
+      const drape = pattern.panels[rec.panelId]?.drape;
+      if (!drape) continue;
+      if (rec.old.anchorOffsetCm === undefined) delete drape.anchorOffsetCm;
+      else drape.anchorOffsetCm = rec.old.anchorOffsetCm;
     } else {
       const line = pattern.internalLines[rec.lineId];
       if (line) line.points = line.points.map((p, i) => (i === rec.index ? { ...rec.old } : p));
@@ -201,8 +260,31 @@ export function restoreGeometry(pattern: Pattern, records: MoveRecord[]): void {
 }
 
 /** Copy of the pattern with the geometry translated, for the live drag preview. */
-export function previewMove(pattern: Pattern, geom: MoveGeometry, delta: Vec2): Pattern {
+export function previewMove(
+  pattern: Pattern, geom: MoveGeometry, delta: Vec2, options: TranslateOptions = {},
+): Pattern {
   const copy = structuredClone(pattern);
-  translateGeometry(copy, geom, delta);
+  translateGeometry(copy, geom, delta, options);
+  return copy;
+}
+
+/**
+ * Copy of the pattern with panels moved the way their heights demand: draped panels take the
+ * horizontal part as a pattern translation and the vertical part as a drape-height shift, so they
+ * rise on the body, while the rest translate as one piece.
+ */
+export function previewPanelMove(pattern: Pattern, panelIds: readonly string[], delta: Vec2): Pattern {
+  const copy = structuredClone(pattern);
+  const draped = panelIds.filter(id => copy.panels[id]?.drape);
+  const flat = panelIds.filter(id => copy.panels[id] && !copy.panels[id]!.drape);
+
+  if (flat.length > 0) translateGeometry(copy, panelMoveGeometry(copy, flat), delta);
+  if (draped.length > 0) {
+    translateGeometry(copy, panelMoveGeometry(copy, draped), { x: delta.x, y: 0 });
+    for (const panelId of draped) {
+      const drape = copy.panels[panelId]!.drape!;
+      drape.anchorOffsetCm = (drape.anchorOffsetCm ?? 0) + delta.y;
+    }
+  }
   return copy;
 }

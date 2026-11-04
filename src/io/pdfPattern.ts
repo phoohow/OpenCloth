@@ -1,6 +1,6 @@
 import type { Panel, Pattern, Vec2 } from '../core/model/types';
 import { panelGrainLine, panelOutlineWithAllowance, sampleOutline, samplePanelOutline } from '../pattern/panel/panelBuilder';
-import { sampleEdge } from '../pattern/geom/edgeSample';
+import { pointAtT, sampleEdge } from '../pattern/geom/edgeSample';
 import { computeBBox } from '../pattern/geom/vec2';
 import { assemblePdf, circlePath, closedPath, CM_PT, clamp, openPath, pdfNum, rectPath, textOps } from './pdf/pdfDocument';
 
@@ -125,7 +125,8 @@ function hasAllowance(pattern: Pattern, panelId: string): boolean {
 /** Inward unit frame at an edge point, in pattern centimetres; outlines run CCW. */
 function edgeFrame(pattern: Pattern, edgeId: string, t: number): { p: Vec2; nx: number; ny: number } | null {
   const pts = sampleEdge(pattern, edgeId);
-  if (pts.length < 2) return null;
+  const p = pointAtT(pattern, edgeId, t);
+  if (pts.length < 2 || !p) return null;
   const idx = Math.min(pts.length - 1, Math.max(0, Math.round(t * (pts.length - 1))));
   const prev = pts[Math.max(0, idx - 1)];
   const next = pts[Math.min(pts.length - 1, idx + 1)];
@@ -134,7 +135,7 @@ function edgeFrame(pattern: Pattern, edgeId: string, t: number): { p: Vec2; nx: 
   const len = Math.hypot(tx, ty) || 1;
   tx /= len;
   ty /= len;
-  return { p: pts[idx]!, nx: ty, ny: -tx };
+  return { p, nx: ty, ny: -tx };
 }
 
 /** Combined outline bounds of the visible panels, allowance included on request. */

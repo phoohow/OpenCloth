@@ -4,10 +4,15 @@ import { sampleEdge, samplePanelOutline } from '../../pattern/panel/panelBuilder
 import { pointAtT } from '../../pattern/geom/edgeSample';
 import { is2DFocus, isSplitLayout, useProjectStore, useUIStore, noteDrawnFrame, type ToolType, type ViewLayout } from '../../store/stores';
 import {
-  AddPointOnEdgeCommand, AddTopstitchCommand, AddTrimCommand, CompositeCommand,
-  MovePanelsCommand, MovePointsCommand, UpdatePrintCommand, UpdateTrimCommand,
-  panelMoveGeometry, pointMoveGeometry, previewMove, type MoveGeometry,
+  AddPointOnEdgeCommand, AddTopstitchCommand, AddTrimCommand, CompositeCommand, DeleteElementsCommand,
+  UpdatePrintCommand, UpdateTrimCommand,
+  edgePointIds, MoveGeometryCommand, panelMoveCommand, panelMoveGeometry, pointMoveCommand,
+  pointMoveGeometry, previewMove, previewPanelMove, type MoveGeometry,
 } from '../../core/command/patternCommands';
+import { bodyLandmarks } from '../../avatar/landmarks';
+import {
+  panelHeightOffsets, panelMoveOffsets, panelOffsetCm, pointHeightOffsets, toHeightPattern, toPatternPoint, toPatternPoints,
+} from './panelHeight';
 import {
   CreatePanelFromPointsCommand, CreateRectCommand, CreateCircleCommand, CreateEllipseCommand,
 } from '../../core/command/patternCreateCommands';
@@ -15,18 +20,21 @@ import { AddInternalLineCommand, CreateDartCommand, OutlineHoleCommand, OutlineS
 import { CreateFreeSeamCommand } from '../../core/command/patternSeamCommands';
 import { SetPointHandleCommand } from '../../core/command/patternEditCommands';
 import { CreateAnnotationCommand, CreateMeasurementCommand, CreateNotchCommand, MoveNotchCommand } from '../../core/command/patternProductionCommands';
-import { elementNodeId, idsOfKind, parseElementNodeId, type PatternElementKind } from '../elementSelection';
+import { elementNodeId, idsOfKind, parseElementNodeId } from '../elementSelection';
 import { orderedSizes, sizeOutlines } from '../../pattern/grading/grading';
 import {
-  elementsInRect, nearestEdgeSegment, nearestPointWithinRadius, panelIdOfEdge, panelsOfPoint,
-  pickElements, visiblePanelUnderPoint, type Rect,
+  elementsInRect, hoverTargetKey, isPlacementTool, markHintKey, nearestEdgeSegment, nearestPointWithinRadius, panelIdOfEdge,
+  panelsOfPoint, pickElements, pickHoverTarget, pickInternalLineVertex, pickPlacementFeedback, pickPointHandle,
+  pickPressRole, visiblePanelUnderPoint, MARK_KINDS, PRODUCTION_KINDS,
+  type HoverTarget, type MarkHint, type PressRole, type Rect,
 } from './hitTest';
 import { snapToGrid, type ViewTransform } from './viewMath';
 import { collectSnapCandidates, constrainAngle, findSnapAtPattern, type SnapCandidate } from './snap';
 import { drawScene, type PreviewDrag, type DisplayOptions } from './render';
+import { viewport2DCursor } from './cursor';
 import {
-  DEFAULT_DART_INTAKE_CM, orderedDartLegs, printCenter, printFrame, shapeFrame,
-  type DraftState, type PolylineMode,
+  cleanDraftLoop, DEFAULT_DART_INTAKE_CM, NOTCH_MID_T, orderedDartLegs, printCenter, printFrame, shapeFrame,
+  type DraftState, type PolylineMode, type SeamSide,
 } from './tools';
 import { MAX_PRINT_BYTES } from '../../core/model/defaults';
 import { readImageAsPngDataUrl } from '../../io/imageData';
@@ -35,17 +43,18 @@ import { useNudgeSession } from './useNudgeSession';
 import { ViewportHint } from '../widgets/viewportHint';
 import { reportActionError } from '../widgets/toast';
 
-/** What a pointer drag translates: whole panels rigidly, or a single vertex. */
+/** What a pointer drag translates: whole panels, outline points, or internal-line vertices. */
 type MoveTarget =
   | { kind: 'panels'; panelIds: string[] }
-  | { kind: 'points'; pointIds: string[] };
+  | { kind: 'points'; pointIds: string[] }
+  | { kind: 'internalVertex'; lineId: string; indices: number[] };
 
 type Drag =
   | { kind: 'pan'; startX: number; startY: number; ox: number; oy: number }
   | { kind: 'move'; target: MoveTarget; geom: MoveGeometry; anchor: Vec2; startWorld: Vec2; offset: Vec2 | null }
   | { kind: 'handle'; pointId: string; which: 'in' | 'out'; target: Vec2 }
   | { kind: 'shape'; shape: 'rect' | 'circle' | 'ellipse'; start: Vec2; current: Vec2 }
-  | { kind: 'seamdrag'; edgeId: string; start: Vec2 }
+  | { kind: 'seamdrag'; edgeId: string; start: Vec2; current: Vec2 }
   | { kind: 'notch'; notchId: string; edgeId: string; t: number }
   | { kind: 'printmove'; printId: string; startCenter: Vec2; startWorld: Vec2; center: Vec2 }
   | { kind: 'printresize'; printId: string; size: { widthCm: number; heightCm: number } }
@@ -54,6 +63,9 @@ type Drag =
 
 const HIT_RADIUS_PX = 8;
 const SNAP_RADIUS_PX = 8;
+
+/** Sweep below this fraction of an edge counts as a click, so the whole edge is taken. */
+const SEAM_DRAG_MIN_T = 0.02;
 
 /** Pattern copy with one notch slid along its edge, for the drag preview. */
 function previewNotch(pattern: Pattern, notchId: string, t: number): Pattern {
@@ -82,24 +94,35 @@ const DEFAULT_ANNOTATION_TEXT = '标注';
 /** Drafting tools whose rubber-band preview follows the cursor. */
 const CURSOR_TOOLS = new Set<ToolType>(['line', 'curve', 'internalLine', 'split', 'hole', 'dart', 'measure']);
 
-/** Marks a plain click selects inside a panel body, after edges and before the panel fill. */
-const MARK_KINDS: PatternElementKind[] = ['seam', 'dart', 'internal', 'measurement'];
-
-/** Production objects that win over the panel outline; trims first because their symbols are small. */
-const PRODUCTION_KINDS: PatternElementKind[] = ['trim', 'print', 'topstitch'];
+/** Step the seam tool is on, so the hint can name the next click. */
+type SeamStep = 'pick' | 'start' | 'second' | 'startB';
 
 /** Zoom readout with the gestures the current layout allows. */
-const statusHint = (layout: ViewLayout, scale: number): string =>
-  isSplitLayout(layout)
+const statusHint = (layout: ViewLayout, scale: number, tool: ToolType, seamStep: SeamStep): string => {
+  if (tool === 'seam') {
+    switch (seamStep) {
+      case 'start': return '2D 制版 · 缝合 · 单击 A 边的端点，确定缝纫方向（从该端缝向另一端）';
+      case 'second': return '2D 制版 · 缝合 · 单击第二条边（B），再点它的端点确定方向 · Esc 取消';
+      case 'startB': return '2D 制版 · 缝合 · 单击 B 边的端点，随即完成缝合 · Esc 取消';
+      default: return '2D 制版 · 缝合 · 单击轮廓边取整条边，按住拖动可只取一段 · 点空白或 Esc 取消';
+    }
+  }
+  return isSplitLayout(layout)
     ? `2D 制版 · 缩放 ${scale.toFixed(1)}x · 单击选片/拖点移动 · F适应 · 快捷键需点击聚焦本窗格`
-    : `2D 制版 · 缩放 ${scale.toFixed(1)}x · 单击选片/Ctrl加选/空白拖框选 · 拖点或拖动版片（0.5cm吸附，Alt自由）· 右键输入长度角度或精确位移 · Delete删除/方向键微调 · 点工具单击边加点 · 滚轮定点缩放 · F或双击空白适应 · 中键或空格平移`;
+    : `2D 制版 · 缩放 ${scale.toFixed(1)}x · 单击选片/Ctrl加选/空白拖框选 · 拖点、拖边或拖动版片（0.5cm吸附，Alt自由）· 右键输入长度角度或精确位移 · Delete删除/方向键微调 · 点工具：增加顶点单击轮廓边，删除顶点单击顶点（相邻点相连）· 滚轮定点缩放 · F或双击空白适应 · 中键或空格平移`;
+};
 
 /** 2D drafting canvas: draws the pattern and turns pointer and keyboard input into pattern edits. */
 export function Viewport2D() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isPanning, setIsPanning] = useState(false);
-  const [hoverPointId, setHoverPointId] = useState<string | null>(null);
+  const [hoverTarget, setHoverTarget] = useState<HoverTarget | null>(null);
+  const [markHint, setMarkHint] = useState<MarkHint | null>(null);
+  const [hoverRole, setHoverRole] = useState<PressRole>(null);
+  /** Edge under the cursor while the seam tool is armed, shown as the side about to be picked. */
+  const [seamHover, setSeamHover] = useState<{ edgeId: string; t0: number; t1: number } | null>(null);
+  const [insertHint, setInsertHint] = useState<{ pos: Vec2; edgeId: string } | null>(null);
   const [preview, setPreview] = useState<PreviewDrag | null>(null);
   const [rectWorld, setRectWorld] = useState<{ a: Vec2; b: Vec2 } | null>(null);
   const [draft, setDraft] = useState<DraftState>(null);
@@ -121,6 +144,14 @@ export function Viewport2D() {
   const trimKind = useUIStore(s => s.trimKind);
 
   const pattern = project.pattern;
+  const body = useMemo(() => bodyLandmarks(project.avatar.params), [project.avatar.params]);
+  // Centimetres each panel is raised so its pattern y reads as height above the ground, and the
+  // pattern itself shifted by them: the pane draws and picks on the height view, commands still edit
+  // the model, which differs only by these offsets.
+  const heightOffsets = useMemo(() => panelHeightOffsets(pattern, body), [pattern, body]);
+  const pointOffsets = useMemo(() => pointHeightOffsets(pattern, heightOffsets), [pattern, heightOffsets]);
+  const heights = useMemo(() => toHeightPattern(pattern, heightOffsets), [pattern, heightOffsets]);
+
   const selectedPanelIds = useMemo(
     () => idsOfKind(selection, 'panel').filter(id => !!pattern.panels[id]),
     [selection, pattern],
@@ -128,37 +159,57 @@ export function Viewport2D() {
 
   const outlines = useMemo(() => {
     const map = new Map<string, Vec2[]>();
-    for (const panel of Object.values(pattern.panels)) {
-      map.set(panel.id, samplePanelOutline(pattern, panel));
+    for (const panel of Object.values(heights.panels)) {
+      map.set(panel.id, samplePanelOutline(heights, panel));
     }
     return map;
-  }, [pattern]);
+  }, [heights]);
 
   const pointCandidates = useMemo(
-    () => Object.values(pattern.points).map(p => ({ id: p.id, pos: p.pos })),
-    [pattern],
+    () => Object.values(heights.points).map(p => ({ id: p.id, pos: p.pos })),
+    [heights],
   );
 
-  const snapCandidates = useMemo(() => collectSnapCandidates(pattern), [pattern]);
+  const snapCandidates = useMemo(() => collectSnapCandidates(heights), [heights]);
 
   /** Nested size-chart outlines drawn behind the active geometry when the layer is on. */
   const gradingOutlines = useMemo(() => {
     if (!displayOptions.gradingOverlay) return [];
     return orderedSizes(project)
       .filter(size => size.id !== project.activeSizeId)
-      .map(size => ({
-        label: size.label,
-        polygons: Object.keys(pattern.panels).flatMap(id => sizeOutlines(pattern, id, size.id, project.activeSizeId)),
-      }));
-  }, [displayOptions.gradingOverlay, project, pattern]);
+      .map(size => {
+        const dyOf = (id: string): number => heightOffsets.get(id) ?? 0;
+        return {
+          label: size.label,
+          polygons: Object.keys(pattern.panels).flatMap(id =>
+            sizeOutlines(pattern, id, size.id, project.activeSizeId)
+              .map(poly => poly.map(p => ({ x: p.x, y: p.y + dyOf(id) })))),
+        };
+      });
+  }, [displayOptions.gradingOverlay, project, pattern, heightOffsets]);
 
-  /** Resolve drafting input: snap candidate, else grid, else freehand with Alt. */
-  const draftWorld = useCallback((world: Vec2, freehand: boolean): Vec2 => {
-    if (freehand) { setSnapHint(null); return world; }
-    const snap = findSnapAtPattern(pattern, world, snapCandidates, SNAP_RADIUS_PX / view.scale);
+  /** Drops the snap marker; no state write when it is already clear. */
+  const clearSnapHint = useCallback(() => {
+    setSnapHint(hint => (hint ? null : hint));
+  }, []);
+
+  /**
+   * Resolve a placed point and its snap marker: snap candidate, else grid, else the raw position
+   * with Alt. `anchor` is the open stroke's last point, enabling tangency and offset snapping.
+   */
+  const resolvePlacedPoint = useCallback((world: Vec2, freehand: boolean, anchor?: Vec2): { pos: Vec2; snap: SnapCandidate | null } => {
+    if (freehand) return { pos: world, snap: null };
+    const snap = findSnapAtPattern(heights, world, snapCandidates, SNAP_RADIUS_PX / view.scale, anchor);
+    const pos = snap ? snap.pos : snapToGrid(world);
+    return { pos, snap: snap ?? { pos, kind: 'grid' } };
+  }, [snapCandidates, view.scale, heights]);
+
+  /** Resolve a placed point and show its snap marker. */
+  const draftWorld = useCallback((world: Vec2, freehand: boolean, anchor?: Vec2): Vec2 => {
+    const { pos, snap } = resolvePlacedPoint(world, freehand, anchor);
     setSnapHint(snap);
-    return snap ? snap.pos : snapToGrid(world);
-  }, [snapCandidates, view.scale, pattern]);
+    return pos;
+  }, [resolvePlacedPoint]);
 
   const render = useCallback(() => {
     const canvas = canvasRef.current;
@@ -177,23 +228,32 @@ export function Viewport2D() {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
 
+    const shown = preview ? preview.pattern : pattern;
+    const shownOffsets = preview ? (preview.offsets ?? panelHeightOffsets(shown, body)) : heightOffsets;
     drawScene(ctx, w, h, {
-      pattern, view, simulation: project.scene.simulation,
-      selection, hoverPointId, preview, rect: rectWorld,
-      showSeams: activeTool === 'seam' || idsOfKind(selection, 'seam').length > 0 || idsOfKind(selection, 'edge').length > 0,
-      draft, snapHint, display: displayOptions as DisplayOptions, gradingOutlines,
+      pattern: preview ? toHeightPattern(shown, shownOffsets) : heights,
+      meshPattern: shown,
+      offsets: shownOffsets,
+      view, simulation: project.scene.simulation,
+      selection, hover: hoverTarget, markHint, preview: preview && { ...preview, pattern: toHeightPattern(shown, shownOffsets) }, rect: rectWorld,
+      showSeams: activeTool === 'seam' || idsOfKind(selection, 'seam').length > 0,
+      draft, snapHint, insertHint, seamHover, hoverDelete: activeTool === 'deletePoint', display: displayOptions as DisplayOptions,
+      gradingOutlines,
       onPrintImageReady: () => useUIStore.getState().requestRepaint(),
     });
     noteDrawnFrame('2d', performance.now());
-  }, [pattern, view, project.scene.simulation, selection, hoverPointId, preview, rectWorld, activeTool, draft, snapHint, displayOptions, gradingOutlines]);
+  }, [pattern, heights, heightOffsets, body, view, project.scene.simulation, selection, hoverTarget, markHint, preview, rectWorld, activeTool, draft, snapHint, insertHint, seamHover, displayOptions, gradingOutlines]);
 
   useEffect(() => { render(); }, [render, repaintToken]);
 
-  // Tool switches clear any in-progress stroke.
-  useEffect(() => { setDraft(null); setSnapHint(null); }, [activeTool]);
+  // Tool switches clear any in-progress stroke and the hover affordance of the previous tool.
+  useEffect(() => {
+    setDraft(null); setSnapHint(null); setHoverRole(null); setHoverTarget(null);
+    setMarkHint(null); setInsertHint(null); setSeamHover(null);
+  }, [activeTool]);
 
   const { getCanvasSize, eventWorld, fitToPattern } =
-    useCanvasView({ pattern, view, setView, render, canvasRef, containerRef });
+    useCanvasView({ pattern: heights, view, setView, render, canvasRef, containerRef });
   const { commitNudge, spaceDown } = useNudgeSession(pattern, setPreview);
 
   // Hands the in-flight drag pattern to the 3D pane while a preview tier is on; the drag end,
@@ -203,39 +263,87 @@ export function Viewport2D() {
     return () => useUIStore.getState().setEditPreviewPattern(null);
   }, [preview, editPreview]);
 
-  const commitPen = useCallback((points: Vec2[]) => {
+  /** Closes a freehand stroke into a panel; `curve` keeps it a spline instead of straight edges. */
+  const commitPen = useCallback((points: Vec2[], curve: boolean) => {
     setDraft(null);
-    if (points.length < 3) return;
+    const loop = cleanDraftLoop(points);
+    if (loop.length < 3) {
+      useUIStore.getState().showToast('围成版片至少需要 3 个不同的点');
+      return;
+    }
     try {
-      useProjectStore.getState().executeCommand(new CreatePanelFromPointsCommand(points));
+      useProjectStore.getState().executeCommand(new CreatePanelFromPointsCommand(loop, { smooth: curve }));
     } catch (err) {
-      reportActionError(err);
+      reportActionError(err, '闭合版片失败');
     }
   }, []);
 
   /** A polyline draft becomes an internal line, a split cut, or a hole loop on Enter. */
   const commitPolyline = useCallback((d: Extract<DraftState, { tool: 'polyline' }>) => {
+    const points = toPatternPoints(d.points, panelOffsetCm(heightOffsets, d.panelId));
+    const least = d.mode === 'hole' ? 3 : 2;
+    if (points.length < least) {
+      setDraft(null);
+      useUIStore.getState().showToast(d.mode === 'split'
+        ? '分割线至少需要 2 个点，且两端要落在轮廓边上'
+        : d.mode === 'hole' ? '内孔至少需要 3 个点' : '内部线至少需要 2 个点');
+      return;
+    }
     const command = d.mode === 'line'
-      ? new AddInternalLineCommand(d.panelId, d.points)
+      ? new AddInternalLineCommand(d.panelId, points)
       : d.mode === 'split'
-        ? new OutlineSplitCommand(d.panelId, d.points)
-        : new OutlineHoleCommand(d.panelId, d.points);
+        ? new OutlineSplitCommand(d.panelId, points)
+        : new OutlineHoleCommand(d.panelId, points);
     setDraft(null);
     try {
       useProjectStore.getState().executeCommand(command);
     } catch (err) {
       reportActionError(err);
     }
-  }, []);
+  }, [heightOffsets]);
 
   const pickPanel = useCallback(
-    (world: Vec2): string | null => visiblePanelUnderPoint(pattern, outlines, world, HIT_RADIUS_PX / view.scale),    [pattern, outlines, view.scale],
+    (world: Vec2): string | null => visiblePanelUnderPoint(heights, outlines, world, HIT_RADIUS_PX / view.scale),
+    [heights, outlines, view.scale],
   );
 
   const pickEdge = useCallback(
-    (world: Vec2) => nearestEdgeSegment(pattern, Object.keys(pattern.edges), world, HIT_RADIUS_PX / view.scale),
-    [pattern, view.scale],
+    (world: Vec2) => nearestEdgeSegment(heights, Object.keys(heights.edges), world, HIT_RADIUS_PX / view.scale),
+    [heights, view.scale],
   );
+
+  /**
+   * Edge the point tool would split under the cursor: the selected panels' outlines while panels
+   * are selected, every edge otherwise.
+   */
+  const pickInsertEdge = useCallback((world: Vec2) => {
+    const edgeIds = selectedPanelIds.flatMap(id => pattern.panels[id]?.outlineEdgeIds ?? []);
+    const scope = edgeIds.length > 0 ? edgeIds : Object.keys(heights.edges);
+    return nearestEdgeSegment(heights, scope, world, HIT_RADIUS_PX / view.scale);
+  }, [selectedPanelIds, pattern, heights, view.scale]);
+
+  /**
+   * Which end of a picked seam side the cursor is on: true for the low-t end, false for the high-t
+   * end, null when neither is within reach.
+   */
+  const seamEndAt = useCallback((side: SeamSide, world: Vec2, radius: number): boolean | null => {
+    const low = pointAtT(heights, side.edgeId, side.t0);
+    const high = pointAtT(heights, side.edgeId, side.t1);
+    const toLow = low ? Math.hypot(low.x - world.x, low.y - world.y) : Infinity;
+    const toHigh = high ? Math.hypot(high.x - world.x, high.y - world.y) : Infinity;
+    if (Math.min(toLow, toHigh) > radius) return null;
+    return toLow <= toHigh;
+  }, [heights]);
+
+  /** Insertion marker of the point tool; a target that did not move keeps the stored one. */
+  const showInsertHint = useCallback((next: { pos: Vec2; edgeId: string } | null) => {
+    setInsertHint(prev => {
+      if (!prev || !next) return prev === next ? prev : next;
+      const same = prev.edgeId === next.edgeId
+        && Math.hypot(prev.pos.x - next.pos.x, prev.pos.y - next.pos.y) < 1e-9;
+      return same ? prev : next;
+    });
+  }, []);
 
   const startPanelDrag = (panelIds: string[], anchor: Vec2, world: Vec2) => {
     const movable = panelIds.filter(id => !pattern.panels[id]?.locked);
@@ -253,46 +361,76 @@ export function Viewport2D() {
     dragRef.current = { kind: 'move', target: { kind: 'points', pointIds: movable }, geom, anchor, startWorld: world, offset: null };
   };
 
-  /** Nearest drawn handle of a selected smooth point, for handle dragging. */
-  const pickHandle = useCallback((world: Vec2): { pointId: string; which: 'in' | 'out'; pos: Vec2 } | null => {
-    const radius = HIT_RADIUS_PX / view.scale;
-    for (const pointId of idsOfKind(selection, 'point')) {
-      const point = pattern.points[pointId];
-      if (!point) continue;
-      for (const which of ['in', 'out'] as const) {
-        const handle = which === 'in' ? point.handleIn : point.handleOut;
-        if (handle && Math.hypot(handle.x - world.x, handle.y - world.y) <= radius) {
-          return { pointId, which, pos: { x: handle.x, y: handle.y } };
-        }
+  /**
+   * Vertex under a press, within radius. Vertices that coincide because panels are stacked resolve
+   * to the one whose panel is already selected, so a press stays on the panel in hand.
+   */
+  const pickVertex = (target: Vec2, radius: number): string | null => {
+    let bestId: string | null = null;
+    let bestScore = radius;
+    for (const candidate of pointCandidates) {
+      const distance = Math.hypot(candidate.pos.x - target.x, candidate.pos.y - target.y);
+      if (distance > radius) continue;
+      const preferred = panelsOfPoint(pattern, candidate.id).some(id => selectedPanelIds.includes(id));
+      const score = preferred ? distance - 1e-6 : distance;
+      if (score <= bestScore) {
+        bestScore = score;
+        bestId = candidate.id;
       }
     }
-    return null;
-  }, [pattern, selection, view.scale]);
+    return bestId;
+  };
+
+  /**
+   * Commits a move. Panels take the vertical part as a body height through their drape and only the
+   * horizontal part as a pattern translation; points translate as they are.
+   */
+  const executeTranslation = useCallback((target: MoveTarget, delta: Vec2) => {
+    try {
+      const command = target.kind === 'internalVertex'
+        ? new MoveGeometryCommand({
+          pointIds: [],
+          lineVertices: target.indices.map(index => ({ lineId: target.lineId, index })),
+        }, delta, { label: '移动内部线顶点' })
+        : target.kind === 'points'
+          ? pointMoveCommand(pattern, target.pointIds, delta)
+          : panelMoveCommand(pattern, target.panelIds, delta);
+      if (command) useProjectStore.getState().executeCommand(command);
+    } catch (err) {
+      reportActionError(err);
+    }
+  }, [pattern]);
+
+  /** Drawn handle of a selected smooth point, for handle dragging. */
+  const pickHandle = useCallback(
+    (world: Vec2) => pickPointHandle(heights, idsOfKind(selection, 'point'), world, HIT_RADIUS_PX / view.scale),
+    [heights, selection, view.scale],
+  );
 
   /** Notch or annotation under the cursor, picked before edges and panels. */
   const pickMark = useCallback((world: Vec2): { kind: 'notch' | 'annotation'; id: string } | null => {
     const radius = HIT_RADIUS_PX / view.scale;
-    for (const notch of Object.values(pattern.notches ?? {})) {
-      const p = pointAtT(pattern, notch.edgeId, notch.t);
+    for (const notch of Object.values(heights.notches ?? {})) {
+      const p = pointAtT(heights, notch.edgeId, notch.t);
       if (p && Math.hypot(p.x - world.x, p.y - world.y) <= radius) return { kind: 'notch', id: notch.id };
     }
-    for (const note of Object.values(pattern.annotations ?? {})) {
+    for (const note of Object.values(heights.annotations ?? {})) {
       if (Math.hypot(note.pos.x - world.x, note.pos.y - world.y) <= radius) return { kind: 'annotation', id: note.id };
     }
     return null;
-  }, [pattern, view.scale]);
+  }, [heights, view.scale]);
 
   /** Corner handle of a selected print, used to scale it. */
   const pickPrintHandle = useCallback((world: Vec2): string | null => {
     const radius = HIT_RADIUS_PX / view.scale;
     for (const printId of idsOfKind(selection, 'print')) {
-      const print = pattern.prints?.[printId];
+      const print = heights.prints?.[printId];
       if (!print?.visible) continue;
-      const frame = printFrame(pattern, print);
+      const frame = printFrame(heights, print);
       if (frame?.some(corner => Math.hypot(corner.x - world.x, corner.y - world.y) <= radius)) return printId;
     }
     return null;
-  }, [pattern, selection, view.scale]);
+  }, [heights, selection, view.scale]);
 
   /** Swaps the artwork of the print that was double-clicked. */
   const onPrintFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -331,7 +469,8 @@ export function Viewport2D() {
     }
 
     const panelIds = idsOfKind(selection, 'panel').filter(id => !!pattern.panels[id] && !pattern.panels[id]?.locked);
-    const pointIds = idsOfKind(selection, 'point').filter(id => !!pattern.points[id]);
+    const pointIds = [...idsOfKind(selection, 'point'), ...edgePointIds(pattern, idsOfKind(selection, 'edge'))]
+      .filter(id => !!pattern.points[id]);
     if (panelIds.length === 0 && pointIds.length === 0) return;
     const raw = prompt('输入位移 dx,dy(cm)', '0, 0');
     if (!raw) return;
@@ -341,9 +480,9 @@ export function Viewport2D() {
     commitNudge();
     try {
       if (panelIds.length > 0) {
-        useProjectStore.getState().executeCommand(new MovePanelsCommand(panelIds, { x: dx, y: dy }));
+        executeTranslation({ kind: 'panels', panelIds }, { x: dx, y: dy });
       } else {
-        useProjectStore.getState().executeCommand(new MovePointsCommand(new Map(pointIds.map(id => [id, { x: dx, y: dy }]))));
+        executeTranslation({ kind: 'points', pointIds }, { x: dx, y: dy });
       }
     } catch (err) {
       reportActionError(err);
@@ -371,7 +510,6 @@ export function Viewport2D() {
     if (e.button !== 0) return;
 
     const radius = HIT_RADIUS_PX / view.scale;
-    const pos = draftWorld(world, e.altKey);
 
     if (activeTool === 'topstitch') {
       const hit = pickEdge(world);
@@ -390,8 +528,11 @@ export function Viewport2D() {
     if (activeTool === 'trim') {
       const panelId = pickPanel(world);
       if (!panelId) return;
+      const pos = draftWorld(world, e.altKey);
       try {
-        useProjectStore.getState().executeCommand(new AddTrimCommand(panelId, trimKind, pos));
+        useProjectStore.getState().executeCommand(
+          new AddTrimCommand(panelId, trimKind, toPatternPoint(pos, panelOffsetCm(heightOffsets, panelId))),
+        );
       } catch (err) {
         reportActionError(err);
       }
@@ -399,16 +540,23 @@ export function Viewport2D() {
     }
 
     if (activeTool === 'line' || activeTool === 'curve') {
-      setDraft(d => {
-        const points = d && d.tool === 'pen' ? d.points : [];
-        const last = points[points.length - 1];
-        const placed = e.shiftKey && last ? constrainAngle(last, pos) : pos;
-        return { tool: 'pen', points: [...points, placed], cursor: placed, smoothNext: activeTool === 'curve' && !!e.ctrlKey };
+      const prev = draftRef.current;
+      const last = prev && prev.tool === 'pen' ? prev.points[prev.points.length - 1] : undefined;
+      const pos = draftWorld(world, e.altKey, last);
+      const placed = e.shiftKey && last ? constrainAngle(last, pos) : pos;
+      // A constrained step leaves the snapped position, so drop its marker.
+      if (Math.hypot(placed.x - pos.x, placed.y - pos.y) > 1e-6) setSnapHint(null);
+      setDraft({
+        tool: 'pen',
+        points: [...(prev && prev.tool === 'pen' ? prev.points : []), placed],
+        cursor: placed,
+        curve: activeTool === 'curve',
       });
       return;
     }
 
     if (activeTool === 'rect' || activeTool === 'circle' || activeTool === 'ellipse') {
+      const pos = draftWorld(world, e.altKey);
       dragRef.current = { kind: 'shape', shape: activeTool, start: pos, current: pos };
       setDraft({ tool: 'shape', shape: activeTool, start: pos, current: pos });
       e.currentTarget.setPointerCapture(e.pointerId);
@@ -420,6 +568,7 @@ export function Viewport2D() {
       const prev = draftRef.current;
       const panelId = pickPanel(world) ?? (prev && prev.tool === 'polyline' ? prev.panelId : null);
       if (!panelId) return;
+      const pos = draftWorld(world, e.altKey);
       setDraft(d => {
         const points = d && d.tool === 'polyline' && d.panelId === panelId && d.mode === mode ? d.points : [];
         return { tool: 'polyline', mode, panelId, points: [...points, pos], cursor: pos };
@@ -431,7 +580,7 @@ export function Viewport2D() {
       const hit = pickEdge(world);
       if (!hit) return;
       try {
-        useProjectStore.getState().executeCommand(new CreateNotchCommand(hit.edgeId, arcFraction(pattern, hit.edgeId, hit.point)));
+        useProjectStore.getState().executeCommand(new CreateNotchCommand(hit.edgeId, NOTCH_MID_T));
       } catch (err) {
         reportActionError(err);
       }
@@ -441,8 +590,11 @@ export function Viewport2D() {
     if (activeTool === 'annotation') {
       const panelId = pickPanel(world);
       if (!panelId) return;
+      const pos = draftWorld(world, e.altKey);
       try {
-        useProjectStore.getState().executeCommand(new CreateAnnotationCommand(panelId, DEFAULT_ANNOTATION_TEXT, pos));
+        useProjectStore.getState().executeCommand(
+          new CreateAnnotationCommand(panelId, DEFAULT_ANNOTATION_TEXT, toPatternPoint(pos, panelOffsetCm(heightOffsets, panelId))),
+        );
       } catch (err) {
         reportActionError(err);
       }
@@ -452,6 +604,7 @@ export function Viewport2D() {
     if (activeTool === 'measure') {
       const pointId = nearestPointWithinRadius(pointCandidates, world, HIT_RADIUS_PX / view.scale);
       if (!pointId) return;
+      const pos = draftWorld(world, e.altKey);
       const prev = draftRef.current;
       if (!prev || prev.tool !== 'measure' || !prev.pointAId) {
         setDraft({ tool: 'measure', pointAId: pointId, cursor: pos });
@@ -470,6 +623,7 @@ export function Viewport2D() {
       const prev = draftRef.current;
       const hit = pickEdge(world);
       if (!hit) return;
+      const pos = draftWorld(world, e.altKey);
 
       // First click arms the dart on the edge under the cursor.
       if (!prev || prev.tool !== 'dart' || !prev.leg1) {
@@ -493,7 +647,10 @@ export function Viewport2D() {
 
       try {
         useProjectStore.getState().executeCommand(
-          new CreateDartCommand(prev.panelId, prev.leg1.edgeId, prev.leg1.t, prev.leg2.edgeId, prev.leg2.t, DEFAULT_DART_INTAKE_CM, pos),
+          new CreateDartCommand(
+            prev.panelId, prev.leg1.edgeId, prev.leg1.t, prev.leg2.edgeId, prev.leg2.t,
+            DEFAULT_DART_INTAKE_CM, toPatternPoint(pos, panelOffsetCm(heightOffsets, prev.panelId)),
+          ),
         );
       } catch (err) {
         reportActionError(err);
@@ -503,34 +660,75 @@ export function Viewport2D() {
     }
 
     if (activeTool === 'seam') {
+      const prev = draftRef.current?.tool === 'seam' ? draftRef.current : null;
+      const sides = prev?.sides ?? [];
+      const pending = sides[sides.length - 1];
+      // While a side waits for its start vertex, a click on either end answers it.
+      if (pending && pending.startLow === undefined) {
+        const start = seamEndAt(pending, world, radius);
+        if (start !== null) {
+          const next = [...sides.slice(0, -1), { ...pending, startLow: start }];
+          if (next.length === 2) createSeam(next[0]!, next[1]!);
+          else setDraft({ tool: 'seam', sides: next, drag: null });
+          return;
+        }
+      }
       const hit = pickEdge(world);
-      if (!hit) return;
-      dragRef.current = { kind: 'seamdrag', edgeId: hit.edgeId, start: hit.point };
-      setDraft(d => ({
-        tool: 'seam',
-        pickA: d && d.tool === 'seam' ? d.pickA : null,
-        drag: { edgeId: hit.edgeId, start: hit.point, current: hit.point },
-      }));
+      // A click on empty canvas drops the picks made so far.
+      if (!hit) {
+        if (sides.length > 0) setDraft(null);
+        return;
+      }
+      dragRef.current = { kind: 'seamdrag', edgeId: hit.edgeId, start: hit.point, current: hit.point };
+      setSeamHover(null);
+      setDraft({ tool: 'seam', sides, drag: { edgeId: hit.edgeId, start: hit.point, current: hit.point } });
       e.currentTarget.setPointerCapture(e.pointerId);
       return;
     }
 
+    if (activeTool === 'deletePoint') {
+      // Clicking a vertex deletes it; the two points either side end up joined by one edge.
+      const pointId = pickVertex(world, radius);
+      if (!pointId) return;
+      const row = elementNodeId('point', pointId);
+      try {
+        useProjectStore.getState().executeCommand(new DeleteElementsCommand([row]));
+        const rest = useUIStore.getState().selection.filter(selected => selected !== row);
+        if (rest.length !== useUIStore.getState().selection.length) useUIStore.getState().select(rest);
+        setHoverTarget(null);
+      } catch (err) {
+        reportActionError(err, '删除顶点失败');
+      }
+      return;
+    }
+
     if (activeTool === 'point') {
-      const edgeIds = selectedPanelIds.flatMap(id => pattern.panels[id]?.outlineEdgeIds ?? []);
-      const scope = edgeIds.length > 0 ? edgeIds : Object.keys(pattern.edges);
-      const hit = nearestEdgeSegment(pattern, scope, world, radius);
+      // A press on an existing vertex selects it instead of splitting the edge beneath it, so
+      // Delete removes that vertex and joins the two points either side.
+      const pointId = pickVertex(world, radius);
+      if (pointId) {
+        const row = elementNodeId('point', pointId);
+        if (e.ctrlKey || e.metaKey || e.shiftKey) useUIStore.getState().toggleSelection(row);
+        else useUIStore.getState().select([row]);
+        showInsertHint(null);
+        return;
+      }
+      const hit = pickInsertEdge(world);
       if (hit) {
         try {
-          useProjectStore.getState().executeCommand(new AddPointOnEdgeCommand(hit.edgeId, hit.point));
+          const at = toPatternPoint(hit.point, panelOffsetCm(heightOffsets, panelIdOfEdge(pattern, hit.edgeId)));
+          useProjectStore.getState().executeCommand(new AddPointOnEdgeCommand(hit.edgeId, at));
         } catch (err) {
           reportActionError(err);
         }
       }
+      showInsertHint(null);
       return;
     }
 
     if (activeTool !== 'select') return;
 
+    // Pick order here is mirrored by `pickPressRole()` for the cursor hint; keep the two in step.
     const handle = pickHandle(world);
     if (handle) {
       dragRef.current = { kind: 'handle', pointId: handle.pointId, which: handle.which, target: handle.pos };
@@ -538,23 +736,39 @@ export function Viewport2D() {
       return;
     }
 
-    const pointId = nearestPointWithinRadius(pointCandidates, world, radius);
+    const pointId = pickVertex(world, radius);
     if (pointId) {
       if (e.ctrlKey || e.metaKey || e.shiftKey) {
         useUIStore.getState().toggleSelection(elementNodeId('point', pointId));
         return;
       }
-      const owners = panelsOfPoint(pattern, pointId).filter(id => pattern.panels[id]?.visible);
-      const pointPos = pattern.points[pointId]!.pos;
-      useUIStore.getState().select([elementNodeId('point', pointId)]);
-      if (owners.some(id => selectedPanelIds.includes(id))) {
-        startPointDrag([pointId], pointPos, world);
-      } else if (selectedPanelIds.length > 0) {
-        startPanelDrag(selectedPanelIds, pointPos, world);
-      } else if (owners.length > 0) {
-        startPanelDrag([owners[0]!], pointPos, world);
-      }
+      // A vertex press always drags vertices; the panel is moved by its body or outline instead.
+      const picked = idsOfKind(selection, 'point');
+      const group = picked.includes(pointId) ? picked : [pointId];
+      useUIStore.getState().select(group.map(id => elementNodeId('point', id)));
+      const anchor = heights.points[pointId]!.pos;
+      startPointDrag(group, anchor, world);
       if (dragRef.current) e.currentTarget.setPointerCapture(e.pointerId);
+      return;
+    }
+
+    // Vertices of a selected internal line are drag handles; a closed ring moves both ends.
+    const internalVertex = pickInternalLineVertex(heights, selection, world, radius);
+    if (internalVertex) {
+      if (e.ctrlKey || e.metaKey || e.shiftKey) {
+        useUIStore.getState().toggleSelection(elementNodeId('internal', internalVertex.lineId));
+        return;
+      }
+      const anchor = heights.internalLines[internalVertex.lineId]!.points[internalVertex.indices[0]!]!;
+      const geom: MoveGeometry = {
+        pointIds: [],
+        lineVertices: internalVertex.indices.map(index => ({ lineId: internalVertex.lineId, index })),
+      };
+      dragRef.current = {
+        kind: 'move', target: { kind: 'internalVertex', ...internalVertex },
+        geom, anchor, startWorld: world, offset: null,
+      };
+      e.currentTarget.setPointerCapture(e.pointerId);
       return;
     }
 
@@ -586,7 +800,7 @@ export function Viewport2D() {
     }
 
     // Trims, prints and topstitches sit inside the panel, so they are picked before the outline.
-    const productionRow = pickElements(pattern, world, radius, PRODUCTION_KINDS);
+    const productionRow = pickElements(heights, world, radius, PRODUCTION_KINDS);
     if (productionRow) {
       const additive = e.ctrlKey || e.metaKey || e.shiftKey;
       if (additive) {
@@ -618,14 +832,21 @@ export function Viewport2D() {
       const row = elementNodeId('edge', edgeHit.edgeId);
       if (e.ctrlKey || e.metaKey || e.shiftKey) {
         useUIStore.getState().toggleSelection(row);
-      } else {
-        useUIStore.getState().select([row]);
+        return;
       }
+      // An edge drags the vertices it hangs on; an already selected edge drags the selected set.
+      const picked = idsOfKind(selection, 'edge');
+      const group = picked.includes(edgeHit.edgeId) ? picked : [edgeHit.edgeId];
+      useUIStore.getState().select(group.map(id => elementNodeId('edge', id)));
+      const edge = pattern.edges[edgeHit.edgeId]!;
+      const anchor = heights.points[edge.startPointId]?.pos ?? edgeHit.point;
+      startPointDrag(edgePointIds(pattern, group), anchor, world);
+      if (dragRef.current) e.currentTarget.setPointerCapture(e.pointerId);
       return;
     }
 
     // Production marks sit inside the panel area, so they are picked before the panel fill.
-    const markRow = pickElements(pattern, world, radius, MARK_KINDS);
+    const markRow = pickElements(heights, world, radius, MARK_KINDS);
     if (markRow) {
       if (e.ctrlKey || e.metaKey || e.shiftKey) useUIStore.getState().toggleSelection(markRow);
       else useUIStore.getState().select([markRow]);
@@ -659,22 +880,63 @@ export function Viewport2D() {
     const drag = dragRef.current;
 
     if (!drag) {
-      if (activeTool === 'select' || activeTool === 'point') {
-        const id = nearestPointWithinRadius(pointCandidates, world, HIT_RADIUS_PX / view.scale);
-        setHoverPointId(prev => (prev === id ? prev : id));
+      const radius = HIT_RADIUS_PX / view.scale;
+      if (activeTool === 'select') {
+        const next = pickHoverTarget(heights, outlines, selection, world, radius);
+        setHoverTarget(prev => (hoverTargetKey(prev) === hoverTargetKey(next) ? prev : next));
+        const role = pickPressRole(heights, outlines, selection, world, radius);
+        setHoverRole(prev => (prev === role ? prev : role));
+      } else if (activeTool === 'point' || activeTool === 'deletePoint') {
+        const id = pickVertex(world, radius);
+        const next: HoverTarget | null = id ? { kind: 'point', id } : null;
+        setHoverTarget(prev => (hoverTargetKey(prev) === hoverTargetKey(next) ? prev : next));
+        // The point tool marks the insertion position; a vertex under the cursor wins the press.
+        if (activeTool === 'point') {
+          const hit = id ? null : pickInsertEdge(world);
+          showInsertHint(hit ? { pos: hit.point, edgeId: hit.edgeId } : null);
+        }
+      } else if (isPlacementTool(activeTool)) {
+        // Pre-highlight the placement tool's target and ghost its landing point.
+        const placed = activeTool === 'annotation' ? resolvePlacedPoint(world, e.altKey).pos : null;
+        const feedback = pickPlacementFeedback(activeTool, heights, outlines, pointCandidates, world, radius, placed);
+        setHoverTarget(prev => (hoverTargetKey(prev) === hoverTargetKey(feedback.hover) ? prev : feedback.hover));
+        setMarkHint(prev => (markHintKey(prev) === markHintKey(feedback.hint) ? prev : feedback.hint));
+      } else {
+        setHoverTarget(prev => (prev === null ? prev : null));
+        setMarkHint(prev => (prev === null ? prev : null));
+      }
+      if (activeTool === 'seam') {
+        // While a start vertex is awaited the cursor should read as "pick an end", not an edge.
+        const d = draftRef.current?.tool === 'seam' ? draftRef.current : null;
+        const awaiting = d ? d.sides.length > 0 && d.sides[d.sides.length - 1]!.startLow === undefined : false;
+        const hit = awaiting ? null : pickEdge(world);
+        setSeamHover(prev => {
+          if (!hit) return prev === null ? prev : null;
+          return prev?.edgeId === hit.edgeId ? prev : { edgeId: hit.edgeId, t0: 0, t1: 1 };
+        });
       }
       if (CURSOR_TOOLS.has(activeTool)) {
-        const pos = draftWorld(world, e.altKey);
-        setDraft(d => (d && 'cursor' in d ? ({ ...d, cursor: pos } as DraftState) : d));
+        const d = draftRef.current;
+        const anchor = d && d.tool === 'pen' ? d.points[d.points.length - 1] : undefined;
+        const pos = draftWorld(world, e.altKey, anchor);
+        setDraft(draft => (draft && 'cursor' in draft ? ({ ...draft, cursor: pos } as DraftState) : draft));
+      } else {
+        clearSnapHint();
       }
       return;
     }
 
+    // A drag moves the geometry under the old hover, so drop its preview until the next move.
+    setHoverTarget(prev => (prev === null ? prev : null));
+    setMarkHint(prev => (prev === null ? prev : null));
+
+    // Only the shape and handle drags place a point; every other drag leaves no marker behind.
+    if (drag.kind !== 'shape' && drag.kind !== 'handle') clearSnapHint();
+
     if (drag.kind === 'seamdrag') {
-      const pos = draftWorld(world, e.altKey);
-      dragRef.current = { ...drag, current: pos } as typeof drag;
+      dragRef.current = { ...drag, current: world };
       setDraft(d => (d && d.tool === 'seam' && d.drag
-        ? { ...d, drag: { ...d.drag, current: nearestOnEdge(pattern, drag.edgeId, pos) } }
+        ? { ...d, drag: { ...d.drag, current: nearestOnEdge(heights, drag.edgeId, world) } }
         : d));
       return;
     }
@@ -693,6 +955,8 @@ export function Viewport2D() {
       const current = e.shiftKey && drag.shape !== 'ellipse'
         ? constrainAngle(drag.start, raw)
         : raw;
+      // A constrained corner leaves the snapped position, so drop its marker.
+      if (Math.hypot(current.x - raw.x, current.y - raw.y) > 1e-6) setSnapHint(null);
       dragRef.current = { ...drag, current };
       setDraft({ tool: 'shape', shape: drag.shape, start: drag.start, current });
       return;
@@ -701,15 +965,16 @@ export function Viewport2D() {
     if (drag.kind === 'handle') {
       const pos = draftWorld(world, e.altKey);
       dragRef.current = { ...drag, target: pos };
-      setPreview({ pattern: withHandle(pattern, drag.pointId, drag.which, pos), ghost: null });
+      const target = toPatternPoint(pos, pointOffsets.get(drag.pointId) ?? 0);
+      setPreview({ pattern: withHandle(pattern, drag.pointId, drag.which, target), ghost: null });
       return;
     }
 
     if (drag.kind === 'notch') {
-      const hit = nearestEdgeSegment(pattern, [drag.edgeId], world, Infinity);
+      const hit = nearestEdgeSegment(heights, [drag.edgeId], world, Infinity);
       if (!hit) return;
-      drag.t = Math.min(1, Math.max(0, arcFraction(pattern, drag.edgeId, hit.point)));
-      setPreview({ pattern: previewNotch(pattern, drag.notchId, drag.t), ghost: null });
+      drag.t = Math.min(1, Math.max(0, arcFraction(heights, drag.edgeId, hit.point)));
+      setPreview({ pattern: previewNotch(pattern, drag.notchId, drag.t), offsets: heightOffsets, ghost: null });
       return;
     }
 
@@ -719,14 +984,14 @@ export function Viewport2D() {
         y: drag.startCenter.y + world.y - drag.startWorld.y,
       };
       drag.center = center;
-      setPreview({ pattern: previewPrint(pattern, drag.printId, { center }), ghost: null });
+      setPreview({ pattern: previewPrint(pattern, drag.printId, { center }), offsets: heightOffsets, ghost: null });
       return;
     }
 
     if (drag.kind === 'printresize') {
       const print = pattern.prints?.[drag.printId];
       if (!print) return;
-      const center = printCenter(pattern, print);
+      const center = printCenter(heights, print);
       if (!center) return;
       const rad = (print.angleDeg * Math.PI) / 180;
       const cos = Math.cos(rad), sin = Math.sin(rad);
@@ -736,7 +1001,7 @@ export function Viewport2D() {
       const localY = -dx * sin + dy * cos;
       const size = { widthCm: Math.max(0.1, Math.abs(localX) * 2), heightCm: Math.max(0.1, Math.abs(localY) * 2) };
       drag.size = size;
-      setPreview({ pattern: previewPrint(pattern, drag.printId, size), ghost: null });
+      setPreview({ pattern: previewPrint(pattern, drag.printId, size), offsets: heightOffsets, ghost: null });
       return;
     }
 
@@ -746,7 +1011,7 @@ export function Viewport2D() {
         y: drag.startPos.y + world.y - drag.startWorld.y,
       };
       drag.pos = pos;
-      setPreview({ pattern: previewTrim(pattern, drag.trimId, pos), ghost: null });
+      setPreview({ pattern: previewTrim(pattern, drag.trimId, pos), offsets: heightOffsets, ghost: null });
       return;
     }
 
@@ -760,7 +1025,17 @@ export function Viewport2D() {
         ghost = snapped;
       }
       drag.offset = offset;
-      setPreview({ pattern: previewMove(pattern, drag.geom, offset), ghost });
+      setPreview({
+        pattern: drag.target.kind === 'panels'
+          ? previewPanelMove(pattern, drag.target.panelIds, offset)
+          : previewMove(pattern, drag.geom, offset),
+        // A panel move rides the drape anchors, so the offsets follow the shift exactly; a point
+        // move deforms outlines, so those frames resample the bounds.
+        offsets: drag.target.kind === 'panels'
+          ? panelMoveOffsets(pattern, heightOffsets, drag.target.panelIds, offset.y)
+          : undefined,
+        ghost,
+      });
       return;
     }
 
@@ -796,7 +1071,8 @@ export function Viewport2D() {
 
     if (drag.kind === 'handle') {
       setPreview(null);
-      useProjectStore.getState().executeCommand(new SetPointHandleCommand(drag.pointId, drag.which, drag.target));
+      const target = toPatternPoint(drag.target, pointOffsets.get(drag.pointId) ?? 0);
+      useProjectStore.getState().executeCommand(new SetPointHandleCommand(drag.pointId, drag.which, target));
       return;
     }
 
@@ -844,11 +1120,7 @@ export function Viewport2D() {
       const delta = drag.offset;
       if (delta && (delta.x !== 0 || delta.y !== 0)) {
         commitNudge();
-        useProjectStore.getState().executeCommand(
-          drag.target.kind === 'panels'
-            ? new MovePanelsCommand(drag.target.panelIds, delta)
-            : new MovePointsCommand(new Map(drag.target.pointIds.map(id => [id, delta]))),
-        );
+        executeTranslation(drag.target, delta);
       }
       setPreview(null);
     } else if (drag.kind === 'rect') {
@@ -867,7 +1139,7 @@ export function Viewport2D() {
         min: { x: Math.min(drag.startWorld.x, world.x), y: Math.min(drag.startWorld.y, world.y) },
         max: { x: Math.max(drag.startWorld.x, world.x), y: Math.max(drag.startWorld.y, world.y) },
       };
-      const ids = elementsInRect(pattern, rect, useUIStore.getState().marqueeKinds);
+      const ids = elementsInRect(heights, rect, useUIStore.getState().marqueeKinds);
       useUIStore.getState().select(ids);
     }
     if (e.currentTarget.hasPointerCapture(e.pointerId)) {
@@ -875,36 +1147,64 @@ export function Viewport2D() {
     }
   };
 
-  /** One seam drag picks an interval on one edge; the second interval closes the seam pair. */
+  /**
+   * A press takes one seam side: a click takes the whole edge, a drag narrows it to the swept
+   * interval. Each side then waits for its start vertex before the next side can be picked.
+   */
   const commitSeamPick = (drag: Extract<Drag, { kind: 'seamdrag' }>) => {
-    const current = (drag as { current?: Vec2 }).current ?? drag.start;
-    const t0 = Math.min(arcFraction(pattern, drag.edgeId, drag.start), arcFraction(pattern, drag.edgeId, current));
-    const t1 = Math.max(arcFraction(pattern, drag.edgeId, drag.start), arcFraction(pattern, drag.edgeId, current));
-    const pick = { edgeId: drag.edgeId, t0, t1 };
+    const current = drag.current;
+    let t0 = Math.min(arcFraction(heights, drag.edgeId, drag.start), arcFraction(heights, drag.edgeId, current));
+    let t1 = Math.max(arcFraction(heights, drag.edgeId, drag.start), arcFraction(heights, drag.edgeId, current));
+    if (t1 - t0 < SEAM_DRAG_MIN_T) { t0 = 0; t1 = 1; }
+    const pick: SeamSide = { edgeId: drag.edgeId, t0, t1 };
     const d = draftRef.current;
     if (!d || d.tool !== 'seam') { setDraft(null); return; }
-    if (!d.pickA) {
-      setDraft({ tool: 'seam', pickA: pick, drag: null });
+    const sides = d.sides;
+    const last = sides[sides.length - 1];
+    // The other side cannot be picked again: a seam never joins an edge to itself.
+    if (sides.some((s, i) => i !== sides.length - 1 && s.startLow !== undefined && s.edgeId === pick.edgeId)) {
+      setDraft({ tool: 'seam', sides, drag: null });
       return;
     }
+    if (last && last.startLow === undefined) {
+      // Re-pressing the pending side drops it; pressing another edge replaces it.
+      setDraft(last.edgeId === pick.edgeId
+        ? (sides.length === 1 ? null : { tool: 'seam', sides: sides.slice(0, -1), drag: null })
+        : { tool: 'seam', sides: [...sides.slice(0, -1), pick], drag: null });
+      return;
+    }
+    if (last?.edgeId === pick.edgeId) {
+      // Re-pressing a finished side replaces its interval and clears its start.
+      setDraft({ tool: 'seam', sides: [...sides.slice(0, -1), pick], drag: null });
+      return;
+    }
+    setDraft({ tool: 'seam', sides: [...sides, pick], drag: null });
+  };
+
+  /** Writes the seam; the side that starts from its low end becomes A so the arrow can follow it. */
+  const createSeam = (first: SeamSide, second: SeamSide) => {
+    const [a, b] = first.startLow === false && second.startLow === true ? [second, first] : [first, second];
+    // Opposite start ends sew in reverse; both from the high ends share the same orientation.
+    const flip = a.startLow !== b.startLow;
     try {
-      useProjectStore.getState().executeCommand(
-        new CreateFreeSeamCommand(d.pickA.edgeId, d.pickA.t0, d.pickA.t1, pick.edgeId, pick.t0, pick.t1),
-      );
+      useProjectStore.getState().executeCommand(new CreateFreeSeamCommand(
+        a.edgeId, a.t0, a.t1, b.edgeId, b.t0, b.t1,
+        flip ? { flip: true } : {},
+      ));
     } catch (err) {
       reportActionError(err);
     }
-    setDraft({ tool: 'seam', pickA: null, drag: null });
+    setDraft(null);
   };
 
   const handleDoubleClick = (e: React.MouseEvent) => {
     if (draft && draft.tool === 'pen') {
-      commitPen(draft.points);
+      commitPen(draft.points, draft.curve);
       return;
     }
     const world = eventWorld(e);
     if (!world) return;
-    const row = pickElements(pattern, world, HIT_RADIUS_PX / view.scale, ['print']);
+    const row = pickElements(heights, world, HIT_RADIUS_PX / view.scale, ['print']);
     const element = row ? parseElementNodeId(row) : null;
     const print = element?.kind === 'print' ? pattern.prints?.[element.id] : null;
     if (print) {
@@ -933,7 +1233,7 @@ export function Viewport2D() {
         return;
       }
       if (e.key === 'Enter') {
-        if (d.tool === 'pen') commitPen(d.points);
+        if (d.tool === 'pen') commitPen(d.points, d.curve);
         if (d.tool === 'polyline') commitPolyline(d);
       }
     };
@@ -970,16 +1270,21 @@ export function Viewport2D() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
-  const dragging = dragRef.current?.kind === 'move' || dragRef.current?.kind === 'rect';
-  const cursor = isPanning || (preview && dragRef.current?.kind === 'move')
-    ? 'grabbing'
-    : spaceDown
-      ? 'grab'
-      : hoverPointId
-        ? 'grab'
-        : activeTool === 'select' || activeTool === 'point' || activeTool === 'topstitch' || activeTool === 'trim'
-          ? 'crosshair'
-          : dragging ? 'crosshair' : 'default';
+  const cursor = viewport2DCursor({
+    tool: activeTool,
+    panning: isPanning,
+    spaceDown,
+    hover: hoverRole,
+    dragging: preview !== null,
+  });
+  const seamStep: SeamStep = (() => {
+    if (draft?.tool !== 'seam') return 'pick';
+    const sides = draft.sides;
+    const last = sides[sides.length - 1];
+    if (!last) return 'pick';
+    if (last.startLow === undefined) return sides.length === 1 ? 'start' : 'startB';
+    return 'second';
+  })();
 
   return (
     <div ref={containerRef} style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
@@ -989,11 +1294,12 @@ export function Viewport2D() {
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
+        onPointerLeave={() => { clearSnapHint(); setHoverTarget(null); setMarkHint(null); setHoverRole(null); showInsertHint(null); setSeamHover(null); }}
         onDoubleClick={handleDoubleClick}
         onContextMenu={e => e.preventDefault()}
       />
       <input ref={printInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={onPrintFile} />
-      <ViewportHint>{statusHint(layout, view.scale)}</ViewportHint>
+      <ViewportHint>{statusHint(layout, view.scale, activeTool, seamStep)}</ViewportHint>
     </div>
   );
 }

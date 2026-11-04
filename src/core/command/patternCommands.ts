@@ -1,10 +1,15 @@
 export {
+  edgePointIds,
   panelMoveGeometry,
   pointMoveGeometry,
   previewMove,
+  previewPanelMove,
   type MoveGeometry,
 } from './patternMoveGeometry';
-export { MovePanelsCommand, MovePointsCommand } from './patternMoveCommands';
+export {
+  MovePanelsCommand, MovePointsCommand, MovePanelsHeightCommand, MoveGeometryCommand,
+  movePanelsCommands, panelMoveCommand, pointMoveCommand, type MoveGeometryOptions,
+} from './patternMoveCommands';
 export {
   AddPointOnEdgeCommand, DeleteSelectionCommand, SetPointHandleCommand, SetPointKindCommand,
   FilletCornersCommand,

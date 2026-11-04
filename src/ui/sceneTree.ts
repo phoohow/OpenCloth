@@ -1,6 +1,7 @@
 import type { ObjectTransform, Panel, Pattern, Project, SceneLight, Seam } from '../core/model/types';
 import { PATTERN_ELEMENT_KINDS } from '../core/model/elementRef';
 import { elementNodeId, parseElementNodeId } from './elementSelection';
+import { seamNumbers } from '../pattern/seam/seamNumber';
 import {
   BUNDLED_AVATARS, EDGE_SEMANTIC_LABELS, IDENTITY_TRANSFORM, LIGHT_TYPE_LABELS, SEAM_TYPE_LABELS,
   TRIM_KIND_LABELS, normalizeLights,
@@ -390,16 +391,24 @@ export function buildSceneTree(project: Project): SceneNode {
     icon: 'folder',
     hideable: true,
     visible: seams.length > 0 && seams.every(s => s.stitchVisible),
-    children: seams.map(s => ({
-      id: seamNodeId(s.id),
-      kind: 'seam' as const,
-      label: elementLabel(project, 'seam', s.id),
-      note: SEAM_TYPE_LABELS[s.type],
-      icon: 'seam',
-      hideable: true,
-      visible: s.stitchVisible,
-      children: [],
-    })),
+    children: (() => {
+      // The numbers are the ones the canvas paints on both sides of each seam.
+      const numbers = seamNumbers(project.pattern);
+      return seams.map(s => {
+        const name = elementLabel(project, 'seam', s.id);
+        const no = numbers.get(s.id);
+        return {
+          id: seamNodeId(s.id),
+          kind: 'seam' as const,
+          label: no === null ? name : `${name} · ${no}`,
+          note: SEAM_TYPE_LABELS[s.type],
+          icon: 'seam',
+          hideable: true,
+          visible: s.stitchVisible,
+          children: [],
+        };
+      });
+    })(),
   };
 
   const prints = productionCollection(project, 'print', PRINT_COLLECTION_ID, 'print',

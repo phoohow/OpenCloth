@@ -1,5 +1,5 @@
 import type { Command, ProjectContext } from './command';
-import type { InternalLine, Panel, Pattern, SeamEnd, Vec2 } from '../model/types';
+import type { ArcGeom, InternalLine, Panel, Pattern, PatternEdge, SeamEnd, Vec2 } from '../model/types';
 import { parseElementNodeId, type PatternElementKind } from '../model/elementRef';
 import { genId } from '../model/defaults';
 import polygonClipping from 'polygon-clipping';
@@ -407,25 +407,26 @@ function removeEdge(pattern: Pattern, edgeId: string): boolean {
 }
 
 /**
- * Deletes a contour vertex by merging its two neighbouring straight edges into one and
- * rescaling the seam intervals that referenced them.
+ * Deletes a contour vertex, joining the two points either side of it with one edge, and
+ * rescaling the seam intervals that referenced the removed edges.
  */
 function removePoint(pattern: Pattern, pointId: string): boolean {
   const point = pattern.points[pointId];
   if (!point) return false;
   const owners = Object.values(pattern.panels).filter(panel =>
     panel.outlineEdgeIds.some(id => touches(pattern, id, pointId)) || (panel.holes ?? []).some(loop => loop.some(id => touches(pattern, id, pointId))));
-  if (owners.length !== 1) throw new Error('点被多张版片共用，无法删除');
+  if (owners.length === 0) throw new Error('该点不在任何版片轮廓上，无法删除');
+  if (owners.length > 1) throw new Error('点被多张版片共用，无法删除');
   const panel = owners[0]!;
 
   const chain = findMergeChain(pattern, panel, pointId);
-  if (!chain) throw new Error('删除点后轮廓边数不足，或相邻边不是可合并的直线');
+  if (!chain) throw new Error('该点相邻的两条边无法合并，或删除后轮廓不足 3 条边');
   const [beforeId, afterId] = chain;
   const before = pattern.edges[beforeId]!;
   const after = pattern.edges[afterId]!;
   const lenBefore = edgeLength(pattern, beforeId);
   const lenAfter = edgeLength(pattern, afterId);
-  const merged = newEdge(pattern, 'line', before.startPointId, after.endPointId);
+  const merged = mergedEdge(pattern, before, after);
   const share = lenBefore / (lenBefore + lenAfter);
 
   remapSeams(pattern, [beforeId, afterId], merged, share);
@@ -439,7 +440,10 @@ function removePoint(pattern: Pattern, pointId: string): boolean {
   return true;
 }
 
-/** The two edges meeting at a vertex, in outline order, when both are lines and the loop stays ≥3. */
+/**
+ * The two edges meeting at a vertex, in outline order, when the loop keeps at least 3 edges.
+ * Both are lines, or both halves of one curve, which is what a split leaves behind.
+ */
 function findMergeChain(pattern: Pattern, panel: Panel, pointId: string): [string, string] | null {
   for (const chain of [panel.outlineEdgeIds, ...(panel.holes ?? [])]) {
     const index = chain.findIndex(id => pattern.edges[id]?.endPointId === pointId);
@@ -448,12 +452,33 @@ function findMergeChain(pattern: Pattern, panel: Panel, pointId: string): [strin
     const afterId = chain[(index + 1) % chain.length]!;
     const before = pattern.edges[beforeId];
     const after = pattern.edges[afterId];
-    if (!before || !after || before.type !== 'line' || after.type !== 'line') continue;
+    if (!before || !after) continue;
     if (before.endPointId !== pointId || after.startPointId !== pointId) continue;
+    if (before.type !== after.type) continue;
     if (chain.length <= 3) return null;
     return [beforeId, afterId];
   }
   return null;
+}
+
+/**
+ * Id of the edge that joins the two points left after a vertex is deleted. Two halves of one
+ * curve keep that curve: a bezier reuses the outer handles, an arc the outer angles, so the
+ * shape returns to what it was before the split.
+ */
+function mergedEdge(pattern: Pattern, before: PatternEdge, after: PatternEdge): string {
+  const arc = before.type === 'arc' && after.type === 'arc' && before.arc && after.arc && sameArc(before.arc, after.arc)
+    ? { ...before.arc, endAngle: after.arc.endAngle }
+    : undefined;
+  const type: PatternEdge['type'] = arc ? 'arc' : before.type === 'bezier' && after.type === 'bezier' ? 'bezier' : 'line';
+  return newEdge(pattern, type, before.startPointId, after.endPointId, arc);
+}
+
+/** Whether two arcs sit on the same circle, so their angles can be recombined. */
+function sameArc(a: ArcGeom, b: ArcGeom): boolean {
+  return Math.hypot(a.center.x - b.center.x, a.center.y - b.center.y) < 1e-6
+    && Math.abs(a.radius - b.radius) < 1e-6
+    && a.ccw === b.ccw;
 }
 
 /** Rewrites seam ends that pointed at the removed edges onto the merged edge's sub-interval. */

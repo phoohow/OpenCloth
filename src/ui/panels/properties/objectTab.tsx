@@ -7,6 +7,7 @@ import {
 } from '../../sceneTree';
 import { parseElementNodeId } from '../../elementSelection';
 import { normalizeLights } from '../../../core/model/defaults';
+import { seamNumber } from '../../../pattern/seam/seamNumber';
 import {
   commitTransform, patchValue, previewTransform, setAvatarDisplay, setEnvironmentEnabled,
   setLightsEnabled, setPanelsVisible, setProductionVisible, setReferencesVisible, setSeamsStitchVisible,
@@ -64,6 +65,8 @@ function ObjectTab({ project, nodeId, kind, label, note, engineRef }: {
     : null;
   const elementId = parseElementNodeId(nodeId);
   const seam = elementId?.kind === 'seam' ? project.pattern.seams[elementId.id] ?? null : null;
+  /** Number the canvas paints on both sides of this seam. */
+  const seamNo = seam ? seamNumber(project.pattern, seam.id) : null;
   const production = elementId?.kind === 'print' ? project.pattern.prints?.[elementId.id] ?? null
     : elementId?.kind === 'topstitch' ? project.pattern.topstitches?.[elementId.id] ?? null
     : elementId?.kind === 'trim' ? project.pattern.trims?.[elementId.id] ?? null
@@ -106,11 +109,14 @@ function ObjectTab({ project, nodeId, kind, label, note, engineRef }: {
       (ctx, v) => writeSceneName(ctx.project, nodeId, v), next);
   };
   const storedName = storedSceneName(project, nodeId);
+  // The outliner labels a seam with its number; the name row keeps the plain name.
+  const nameText = storedName ?? (seam ? SCENE_KIND_LABELS.seam : label);
 
   return (
     <>
       <Section title="对象">
-        <TextRow label="名称" value={storedName ?? label} onChange={rename} />
+        <TextRow label="名称" value={nameText} onChange={rename} />
+        {seamNo !== null && <Row label="编号">{seamNo}</Row>}
         {shown !== null && (
           <CheckRow label={light || isEnvironment ? '启用' : '可见性'} checked={shown} onChange={setShown} />
         )}

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useProjectStore, useSimStore, useUIStore } from '../../../store/stores';
 import type {
   Annotation, Avatar, Dart, EdgeSemantic, EdgeType, InternalLine, LightType, Measurement,
@@ -33,11 +33,14 @@ import {
   type EngineRef,
 } from '../../sceneCommands';
 import { importAvatarViaPicker, importEnvironmentViaPicker } from '../../modelImport';
+import { seamNumber } from '../../../pattern/seam/seamNumber';
 import { ButtonRow, CheckRow, ColorRow, FlexSelect, Hint, IconButton, InlineText, PopupSelect, Row, Section, SelectRow, SliderRow, SmallButton, TextRow } from '../../widgets/propertyRows';
 import { Icon } from '../../icons';
 import { NumberField, Vec3Field } from '../../widgets/numberField';
 import { reportActionError } from '../../widgets/toast';
 import { CAMERA_PROJECTIONS } from '../../optionTables';
+import { bodyLandmarks } from '../../../avatar/landmarks';
+import { panelHeightOffsets, panelOffsetCm, pointHeightOffsetCm } from '../../viewport2D/panelHeight';
 import { CUSTOM_MODEL, PROCEDURAL_MODEL, toDeg, toRad } from './constants';
 import { styles } from './styles';
 
@@ -470,6 +473,7 @@ function SeamData({ project, nodeId }: { project: Project; nodeId: string }) {
   const seam = project.pattern.seams[seamId];
   if (!seam) return <Hint>缝纫线已删除。</Hint>;
   const [nameA, nameB] = seamPanelNames(project, seam);
+  const seamNo = seamNumber(project.pattern, seam.id);
 
   /** Replaces the seam record; pairing changes rebuild the cloth. */
   const setSeam = (label: string, patch: Partial<Seam>) => patchValue(
@@ -483,7 +487,8 @@ function SeamData({ project, nodeId }: { project: Project; nodeId: string }) {
 
   return (
     <>
-      <Section title="缝纫线">
+      {/* The section heading carries the number, so it reads as the same seam the canvas labels. */}
+      <Section title={seamNo === null ? '缝纫线' : `缝纫线 ${seamNo}`}>
         <Row label="甲边">{nameA}</Row>
         <Row label="乙边">{nameB}</Row>
       </Section>
@@ -523,7 +528,7 @@ function SeamData({ project, nodeId }: { project: Project; nodeId: string }) {
           </>
         )}
         <ColorRow label="线色" value={seam.threadColor} onChange={v => setSeam('修改线色', { threadColor: v })} />
-        <div style={styles.note}>区间、对位点与缝型改动都只重排约束，顶点布局不变时不重建布料、不重置模拟；缩缝比例改写该缝的静止长度。对位点需甲乙两侧同时给定才会参与配对。</div>
+        <div style={styles.note}>区间、对位点与缝型改动都只重排约束，顶点布局不变时不重建布料、不重置模拟；缩缝比例改写该缝的静止长度。对位点需甲乙两侧同时给定才会参与配对。画布上每条缝按序号配色并标注同一个数字，改线色后改用所设颜色。</div>
       </Section>
       <Section title="接角">
         <JointRow project={project} seamId={seamId} end="start" />
@@ -603,6 +608,15 @@ function CameraData({ engineRef }: { engineRef: EngineRef }) {
   );
 }
 
+/**
+ * Height the 2D pane adds to each panel, so the numeric readouts show the same y as the canvas:
+ * centimetres above the ground rather than the raw pattern y.
+ */
+function useHeightOffsets(project: Project): ReadonlyMap<string, number> {
+  const body = useMemo(() => bodyLandmarks(project.avatar.params), [project.avatar.params]);
+  return useMemo(() => panelHeightOffsets(project.pattern, body), [project.pattern, body]);
+}
+
 /** Pattern object behind an `@kind:id` element row. */
 function useElement(_project: Project, nodeId: string) {
   const m = /^@(point|edge|internal|dart|notch|annotation|measurement|print|topstitch|trim):(.+)$/.exec(nodeId);
@@ -611,9 +625,11 @@ function useElement(_project: Project, nodeId: string) {
 }
 
 function PointData({ project, nodeId }: { project: Project; nodeId: string }) {
+  const offsets = useHeightOffsets(project);
   const el = useElement(project, nodeId);
   const point = el?.kind === 'point' ? project.pattern.points[el.id] : null;
   if (!point) return <Hint>点已删除。</Hint>;
+  const heightCm = pointHeightOffsetCm(project.pattern, point.id, offsets);
 
   const setPoint = (label: string, patch: Partial<PatternPoint>) => patchValue(
     label,
@@ -632,8 +648,8 @@ function PointData({ project, nodeId }: { project: Project; nodeId: string }) {
         <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           <NumberField value={point.pos.x} step={0.1} precision={2} title="X 坐标"
             onCommit={v => move({ x: v - point.pos.x, y: 0 })} />
-          <NumberField value={point.pos.y} step={0.1} precision={2} title="Y 坐标"
-            onCommit={v => move({ x: 0, y: v - point.pos.y })} />
+          <NumberField value={point.pos.y + heightCm} step={0.1} precision={2} title="Y 坐标（离地高度）"
+            onCommit={v => move({ x: 0, y: v - heightCm - point.pos.y })} />
         </span>
       </Row>
       <SelectRow label="点类型" value={point.kind ?? 'corner'}
@@ -829,6 +845,7 @@ function InternalLineData({ project, nodeId }: { project: Project; nodeId: strin
 }
 
 function DartData({ project, nodeId }: { project: Project; nodeId: string }) {
+  const offsets = useHeightOffsets(project);
   const el = useElement(project, nodeId);
   const dart = el?.kind === 'dart' ? project.pattern.darts[el.id] : null;
   if (!dart) return <Hint>省道已删除。</Hint>;
@@ -846,7 +863,12 @@ function DartData({ project, nodeId }: { project: Project; nodeId: string }) {
         onChange={v => setDart('修改省量', { intakeCm: v })} />
       <CheckRow label="收省（模拟时缝合省边）" checked={!!dart.closing}
         onChange={v => setDart(v ? '闭合省道' : '打开省道', { closing: v })} />
-      <Row label="省尖(cm)">{`${project.pattern.points[dart.tipId]?.pos.x.toFixed(1)}, ${project.pattern.points[dart.tipId]?.pos.y.toFixed(1)}`}</Row>
+      <Row label="省尖(cm)">{(() => {
+        const tip = project.pattern.points[dart.tipId];
+        if (!tip) return '—';
+        const y = tip.pos.y + pointHeightOffsetCm(project.pattern, tip.id, offsets);
+        return `${tip.pos.x.toFixed(1)}, ${y.toFixed(1)}`;
+      })()}</Row>
       <ButtonRow>
         <SmallButton
           title="先选中一条轮廓边，再把省道转移到该边"
@@ -900,6 +922,7 @@ function NotchData({ project, nodeId }: { project: Project; nodeId: string }) {
 
 /** Free text note carried on a panel. */
 function AnnotationData({ project, nodeId }: { project: Project; nodeId: string }) {
+  const offsets = useHeightOffsets(project);
   const el = useElement(project, nodeId);
   const note = el?.kind === 'annotation' ? project.pattern.annotations?.[el.id] : null;
   if (!note) return <Hint>注释已删除。</Hint>;
@@ -921,7 +944,7 @@ function AnnotationData({ project, nodeId }: { project: Project; nodeId: string 
         onChange={v => setNote('修改注释角度', { angleDeg: v })} />
       <SliderRow label="字号" min={2} max={12} step={0.5} unit="mm" value={note.sizeMm ?? 4} commitOnRelease
         onChange={v => setNote('修改注释字号', { sizeMm: v })} />
-      <Row label="坐标(cm)">{`${note.pos.x.toFixed(2)}, ${note.pos.y.toFixed(2)}`}</Row>
+      <Row label="坐标(cm)">{`${note.pos.x.toFixed(2)}, ${(note.pos.y + panelOffsetCm(offsets, note.panelId)).toFixed(2)}`}</Row>
       <ButtonRow>
         <SmallButton onClick={() => useProjectStore.getState().executeCommand(new DeleteAnnotationCommand(note.id))}>删除注释</SmallButton>
       </ButtonRow>
@@ -1074,6 +1097,7 @@ function TopstitchData({ project, nodeId }: { project: Project; nodeId: string }
 
 /** Button, eyelet, rivet or snap mark recorded for the bill of materials. */
 function TrimData({ project, nodeId }: { project: Project; nodeId: string }) {
+  const offsets = useHeightOffsets(project);
   const el = useElement(project, nodeId);
   const trim = el?.kind === 'trim' ? project.pattern.trims?.[el.id] : null;
   if (!trim) return <Hint>辅料已删除。</Hint>;
@@ -1111,8 +1135,9 @@ function TrimData({ project, nodeId }: { project: Project; nodeId: string }) {
         <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           <NumberField value={trim.pos.x} step={0.5} precision={2} title="X 坐标"
             onCommit={v => set({ pos: { ...trim.pos, x: v } })} />
-          <NumberField value={trim.pos.y} step={0.5} precision={2} title="Y 坐标"
-            onCommit={v => set({ pos: { ...trim.pos, y: v } })} />
+          <NumberField value={trim.pos.y + panelOffsetCm(offsets, trim.panelId)} step={0.5} precision={2}
+            title="Y 坐标（离地高度）"
+            onCommit={v => set({ pos: { ...trim.pos, y: v - panelOffsetCm(offsets, trim.panelId) } })} />
         </span>
       </Row>
       <ButtonRow>

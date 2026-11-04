@@ -1,7 +1,6 @@
 import type { ArcGeom, Pattern, PatternEdge, Vec2 } from '../../core/model/types';
 import { arcSpan } from '../../pattern/geom/arc';
 import { sampleEdge } from '../../pattern/panel/panelBuilder';
-import { snapToGrid } from './viewMath';
 
 /** Kinds of snap candidate, ordered by pick priority. */
 export type SnapKind =
@@ -16,38 +15,99 @@ export interface SnapCandidate {
   edgeId?: string;
 }
 
-const KIND_RANK: Record<SnapKind, number> = {
-  endpoint: 0, intersection: 1, midpoint: 2, perpendicular: 3,
-  tangent: 4, extension: 5, equidistant: 6, grid: 7,
+/**
+ * Head start each kind gets, as a fraction of the snap radius. A vertex pulled this far still wins
+ * over the perpendicular foot under the cursor, which is what keeps corners, midpoints and
+ * crossings pickable: by distance alone the foot always wins, since it is the nearest point of the
+ * edge the cursor is next to.
+ */
+const KIND_PULL: Record<SnapKind, number> = {
+  endpoint: 0.6, intersection: 0.5, midpoint: 0.35, tangent: 0.3,
+  extension: 0.25, perpendicular: 0, equidistant: 0, grid: 0,
 };
+
+/** How far past an edge's end its extension still snaps, in snap radii. */
+const EXTENSION_REACH = 6;
+
+/** Edges and points the pane draws: those of visible panels, dart legs and tips included. */
+function visibleGeometry(pattern: Pattern): { edgeIds: Set<string>; pointIds: Set<string> } {
+  const edgeIds = new Set<string>();
+  const pointIds = new Set<string>();
+  const addEdge = (id: string): void => {
+    const edge = pattern.edges[id];
+    if (!edge) return;
+    edgeIds.add(id);
+    pointIds.add(edge.startPointId);
+    pointIds.add(edge.endPointId);
+  };
+  for (const panel of Object.values(pattern.panels)) {
+    if (panel.visible === false) continue;
+    for (const edgeId of [panel.outlineEdgeIds, ...(panel.holes ?? [])].flat()) addEdge(edgeId);
+    for (const dartId of panel.dartIds) {
+      const dart = pattern.darts[dartId];
+      if (!dart) continue;
+      addEdge(dart.edge1Id);
+      addEdge(dart.edge2Id);
+      pointIds.add(dart.tipId);
+    }
+  }
+  return { edgeIds, pointIds };
+}
 
 /** Snap candidates drawn from the pattern: vertices, edge midpoints and edge crossings. */
 export function collectSnapCandidates(pattern: Pattern): SnapCandidate[] {
+  const { edgeIds, pointIds } = visibleGeometry(pattern);
   const out: SnapCandidate[] = [];
-  for (const point of Object.values(pattern.points)) {
-    out.push({ pos: point.pos, kind: 'endpoint', pointId: point.id });
+  for (const pointId of pointIds) {
+    const point = pattern.points[pointId];
+    if (point) out.push({ pos: point.pos, kind: 'endpoint', pointId });
   }
-  const lines: { id: string; a: Vec2; b: Vec2 }[] = [];
-  for (const edge of Object.values(pattern.edges)) {
-    const pts = sampleEdge(pattern, edge.id);
+  const lines: { a: Vec2; b: Vec2 }[] = [];
+  for (const edgeId of edgeIds) {
+    const pts = sampleEdge(pattern, edgeId);
     if (pts.length < 2) continue;
-    out.push({ pos: pts[Math.floor(pts.length / 2)], kind: 'midpoint', edgeId: edge.id });
-    if (edge.type === 'line') lines.push({ id: edge.id, a: pts[0], b: pts[pts.length - 1] });
+    const mid = polylineMidpoint(pts);
+    if (mid) out.push({ pos: mid, kind: 'midpoint', edgeId });
+    if (pattern.edges[edgeId]?.type === 'line') lines.push({ a: pts[0]!, b: pts[pts.length - 1]! });
   }
-  out.push(...lineIntersections(pattern, lines));
+  out.push(...lineIntersections(lines));
   return out;
 }
 
+/** Point at half the polyline's arc length, interpolated inside the segment holding that half. */
+function polylineMidpoint(pts: readonly Vec2[]): Vec2 | null {
+  const lengths: number[] = [];
+  let total = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const len = Math.hypot(pts[i]!.x - pts[i - 1]!.x, pts[i]!.y - pts[i - 1]!.y);
+    lengths.push(len);
+    total += len;
+  }
+  if (lengths.length === 0 || total < 1e-9) return null;
+  const half = total / 2;
+  let walked = 0;
+  for (let i = 0; i < lengths.length; i++) {
+    const len = lengths[i]!;
+    if (walked + len >= half) {
+      const t = (half - walked) / (len || 1);
+      const a = pts[i]!, b = pts[i + 1]!;
+      return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+    }
+    walked += len;
+  }
+  return pts[pts.length - 1]!;
+}
+
 /** Crossing points of straight edges that do not already share a vertex. */
-function lineIntersections(pattern: Pattern, lines: { id: string; a: Vec2; b: Vec2 }[]): SnapCandidate[] {
+function lineIntersections(lines: readonly { a: Vec2; b: Vec2 }[]): SnapCandidate[] {
   const shared = (x: Vec2, y: Vec2): boolean => Math.hypot(x.x - y.x, x.y - y.y) < 1e-6;
   const out: SnapCandidate[] = [];
   for (let i = 0; i < lines.length; i++) {
     for (let j = i + 1; j < lines.length; j++) {
-      const p = lines[i], q = lines[j];
+      const p = lines[i]!, q = lines[j]!;
       if (shared(p.a, q.a) || shared(p.a, q.b) || shared(p.b, q.a) || shared(p.b, q.b)) continue;
       const at = segmentCrossing(p, q);
-      if (at && pattern.edges[p.id] && pattern.edges[q.id]) out.push({ pos: at, kind: 'intersection' });
+      if (at) out.push({ pos: at, kind: 'intersection' });
     }
   }
   return out;
@@ -75,26 +135,29 @@ function segmentCrossing(
 export function collectCursorCandidates(
   pattern: Pattern, world: Vec2, tolerance: number, anchor?: Vec2,
 ): SnapCandidate[] {
+  const { edgeIds } = visibleGeometry(pattern);
   const out: SnapCandidate[] = [];
-  for (const edge of Object.values(pattern.edges)) {
-    const pts = sampleEdge(pattern, edge.id);
+  for (const edgeId of edgeIds) {
+    const edge = pattern.edges[edgeId];
+    if (!edge) continue;
+    const pts = sampleEdge(pattern, edgeId);
     if (pts.length < 2) continue;
     const foot = nearestOnPolyline(pts, world);
     if (foot && Math.hypot(foot.x - world.x, foot.y - world.y) <= tolerance) {
-      out.push({ pos: foot, kind: 'perpendicular', edgeId: edge.id });
+      out.push({ pos: foot, kind: 'perpendicular', edgeId });
     }
     if (edge.type === 'line') {
-      const onExtension = extensionPoint(pts[0], pts[pts.length - 1], world, tolerance);
-      if (onExtension) out.push({ pos: onExtension, kind: 'extension', edgeId: edge.id });
+      const onExtension = extensionPoint(pts[0]!, pts[pts.length - 1]!, world, tolerance);
+      if (onExtension) out.push({ pos: onExtension, kind: 'extension', edgeId });
     }
     if (!anchor) continue;
     for (const point of tangentPoints(edge, pts, anchor)) {
       if (Math.hypot(point.x - world.x, point.y - world.y) <= tolerance) {
-        out.push({ pos: point, kind: 'tangent', edgeId: edge.id });
+        out.push({ pos: point, kind: 'tangent', edgeId });
       }
     }
     const equidistant = equidistantPoint(pts, anchor, world, tolerance);
-    if (equidistant) out.push({ pos: equidistant, kind: 'equidistant', edgeId: edge.id });
+    if (equidistant) out.push({ pos: equidistant, kind: 'equidistant', edgeId });
   }
   return out;
 }
@@ -137,13 +200,13 @@ function bezierTangentPoints(pts: Vec2[], anchor: Vec2): Vec2[] {
   const out: Vec2[] = [];
   let previous: number | null = null;
   for (let i = 1; i + 1 < pts.length; i++) {
-    const tx = pts[i + 1].x - pts[i - 1].x, ty = pts[i + 1].y - pts[i - 1].y;
+    const tx = pts[i + 1]!.x - pts[i - 1]!.x, ty = pts[i + 1]!.y - pts[i - 1]!.y;
     const tl = Math.hypot(tx, ty);
-    const vx = pts[i].x - anchor.x, vy = pts[i].y - anchor.y;
+    const vx = pts[i]!.x - anchor.x, vy = pts[i]!.y - anchor.y;
     const vl = Math.hypot(vx, vy);
     if (tl < 1e-12 || vl < 1e-12) continue;
     const cos = (vx * tx + vy * ty) / (vl * tl);
-    if (previous !== null && Math.sign(cos) !== Math.sign(previous)) out.push(pts[i]);
+    if (previous !== null && Math.sign(cos) !== Math.sign(previous)) out.push(pts[i]!);
     previous = cos;
   }
   return out;
@@ -170,7 +233,7 @@ function nearestOnPolyline(pts: readonly Vec2[], p: Vec2): Vec2 | null {
   let best: Vec2 | null = null;
   let bestD = Infinity;
   for (let i = 0; i + 1 < pts.length; i++) {
-    const a = pts[i], b = pts[i + 1];
+    const a = pts[i]!, b = pts[i + 1]!;
     const vx = b.x - a.x, vy = b.y - a.y;
     const len2 = vx * vx + vy * vy;
     if (len2 < 1e-12) continue;
@@ -188,47 +251,36 @@ function extensionPoint(a: Vec2, b: Vec2, p: Vec2, tolerance: number): Vec2 | nu
   const len2 = vx * vx + vy * vy;
   if (len2 < 1e-12) return null;
   const t = ((p.x - a.x) * vx + (p.y - a.y) * vy) / len2;
-  const margin = tolerance / Math.sqrt(len2);
+  const length = Math.sqrt(len2);
+  const margin = tolerance / length;
   if (t >= -margin && t <= 1 + margin) return null;
+  // The continuation is local: only just past either end of the edge.
+  const beyond = (t > 1 ? t - 1 : -t) * length;
+  if (beyond > tolerance * EXTENSION_REACH) return null;
   const at = { x: a.x + t * vx, y: a.y + t * vy };
   return Math.hypot(at.x - p.x, at.y - p.y) <= tolerance ? at : null;
 }
 
-/** Best candidate for a world position: nearest wins, ties break by kind priority. */
+/** Best candidate for a world position: nearest after each kind's head start, inside `tolerance`. */
 export function findSnap(
   world: Vec2, candidates: readonly SnapCandidate[], tolerance: number,
 ): SnapCandidate | null {
   let best: SnapCandidate | null = null;
-  for (const c of candidates) {
-    const d = Math.hypot(c.pos.x - world.x, c.pos.y - world.y);
-    if (d > tolerance) continue;
-    if (!best) { best = c; continue; }
-    const bd = Math.hypot(best.pos.x - world.x, best.pos.y - world.y);
-    if (d < bd - 1e-9 || (Math.abs(d - bd) <= 1e-9 && KIND_RANK[c.kind] < KIND_RANK[best.kind])) {
-      best = c;
-    }
+  let bestScore = Infinity;
+  for (const candidate of candidates) {
+    const distance = Math.hypot(candidate.pos.x - world.x, candidate.pos.y - world.y);
+    if (distance > tolerance) continue;
+    const score = distance - KIND_PULL[candidate.kind] * tolerance;
+    if (score < bestScore - 1e-9) { best = candidate; bestScore = score; }
   }
   return best;
 }
 
-/** Static plus cursor-derived candidates, resolved with the same nearest-then-priority rule. */
+/** Static plus cursor-derived candidates, resolved with the same nearest-then-kind rule. */
 export function findSnapAtPattern(
   pattern: Pattern, world: Vec2, candidates: readonly SnapCandidate[], tolerance: number, anchor?: Vec2,
 ): SnapCandidate | null {
   return findSnap(world, [...candidates, ...collectCursorCandidates(pattern, world, tolerance, anchor)], tolerance);
-}
-
-/**
- * Resolution of one pointer position for drafting input: snap candidate when close,
- * grid otherwise, raw when freehand (Alt).
- */
-export function resolveDraftPoint(
-  world: Vec2, candidates: readonly SnapCandidate[], opts: { freehand?: boolean; gridStep?: number },
-): { pos: Vec2; snap: SnapCandidate | null } {
-  if (opts.freehand) return { pos: world, snap: null };
-  const snap = findSnap(world, candidates, 8 / 4);
-  if (snap) return { pos: snap.pos, snap };
-  return { pos: snapToGrid(world, opts.gridStep), snap: null };
 }
 
 /** Constraint of shift-drag input: nearest multiple of 45° from the anchor. */

@@ -1,7 +1,7 @@
 import type { Command, ProjectContext } from './command';
 import type { ArcGeom, Panel, Pattern, PatternEdge, PointKind, Vec2 } from '../model/types';
 import { genId, DEFAULT_MESH_RESOLUTION_CM } from '../model/defaults';
-import { setEdgeCurve } from '../../pattern/geom/bezier';
+import { setEdgeCurve, smoothSplineSegments } from '../../pattern/geom/bezier';
 import { arcFromThreePoints } from '../../pattern/geom/arc';
 import { samplePanelOutline } from '../../pattern/panel/panelBuilder';
 import { SnapshotCommand } from './patternSnapshot';
@@ -10,6 +10,11 @@ import { SnapshotCommand } from './patternSnapshot';
 export interface CreatePanelOptions {
   name?: string;
   seamAllowanceCm?: number;
+}
+
+/** Freehand panel option: a smooth spline through the points instead of straight segments. */
+export interface CreateFreehandOptions extends CreatePanelOptions {
+  smooth?: boolean;
 }
 
 /** Gap kept between a freshly placed panel and the existing pattern, in cm. */
@@ -41,6 +46,17 @@ export function addClosedLineOutline(pattern: Pattern, pts: Vec2[]): string[] {
     edgeIds.push(newEdge(pattern, 'line', pointIds[i], pointIds[(i + 1) % pointIds.length]));
   }
   return edgeIds;
+}
+
+/**
+ * Bends a closed line outline into a spline through its corners: the chain of edges determines the
+ * point order, so the caller only passes the edge ids `addClosedLineOutline()` returned.
+ */
+export function smoothClosedOutline(pattern: Pattern, edgeIds: string[]): void {
+  const edges = edgeIds.map(id => pattern.edges[id]).filter((edge): edge is PatternEdge => !!edge);
+  const corners = edges.map(edge => pattern.points[edge.startPointId]?.pos).filter((p): p is Vec2 => !!p);
+  if (corners.length !== edges.length) return;
+  smoothSplineSegments(corners, true).forEach((segment, i) => setEdgeCurve(pattern, edges[i]!, segment.c0, segment.c1));
 }
 
 /** Name that does not clash with a panel already in the pattern. */
@@ -91,11 +107,12 @@ export function placeRight(pattern: Pattern, min: Vec2, _max: Vec2): Vec2 {
 /** Creates a panel from a closed outline of at least three authored points. */
 export class CreatePanelFromPointsCommand extends SnapshotCommand {
   readonly label = '创建多边形版片';
-  constructor(private points: Vec2[], private opts: CreatePanelOptions = {}) { super(); }
+  constructor(private points: Vec2[], private opts: CreateFreehandOptions = {}) { super(); }
 
   protected apply(pattern: Pattern, ctx: ProjectContext): void {
     if (this.points.length < 3) throw new Error('轮廓至少需要 3 个点');
     const edgeIds = addClosedLineOutline(pattern, this.points);
+    if (this.opts.smooth) smoothClosedOutline(pattern, edgeIds);
     makePanel(pattern, ctx, this.opts, edgeIds);
   }
 }

@@ -52,6 +52,35 @@ function subdivide(b: CubicBezier2, tol: number, out: Vec2[], depth: number, max
   subdivide(right, tol, out, depth + 1, maxDepth);
 }
 
+/**
+ * Cubic segments of a Catmull-Rom spline through `points`, one segment per neighbouring pair, so a
+ * freehand stroke can be stored as bezier edges or previewed as a curve.
+ */
+export function smoothSplineSegments(points: readonly Vec2[], closed = false): CubicBezier2[] {
+  const n = points.length;
+  if (n < 2) return [];
+  const at = (i: number): Vec2 => (closed ? points[(i + n) % n]! : points[Math.min(n - 1, Math.max(0, i))]!);
+  // Uniform Catmull-Rom tangent: the chord across a point's neighbours, which the control points of
+  // the two adjoining cubics split into thirds.
+  const tangentAt = (i: number): Vec2 => {
+    const prev = at(i - 1), next = at(i + 1);
+    const scale = !closed && (i === 0 || i === n - 1) ? 1 : 0.5;
+    return { x: (next.x - prev.x) * scale, y: (next.y - prev.y) * scale };
+  };
+  const segments: CubicBezier2[] = [];
+  const count = closed ? n : n - 1;
+  for (let i = 0; i < count; i++) {
+    const p0 = at(i), p1 = at(i + 1);
+    const t0 = tangentAt(i), t1 = tangentAt(i + 1);
+    segments.push({
+      p0, p1,
+      c0: { x: p0.x + t0.x / 3, y: p0.y + t0.y / 3 },
+      c1: { x: p1.x - t1.x / 3, y: p1.y - t1.y / 3 },
+    });
+  }
+  return segments;
+}
+
 // ============ Pattern-edge curve access ============
 
 const mirrorAround = (pos: Vec2, h: Vec2): Vec2 => ({ x: 2 * pos.x - h.x, y: 2 * pos.y - h.y });

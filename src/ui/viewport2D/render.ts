@@ -3,9 +3,10 @@ import { panelGrainLine, panelOutlineWithAllowance, sampleEdge, sampleEdgeInterv
 import { getPanelMesh } from '../../pattern/panel/panelMeshCache';
 import type { PanelMeshSettings } from '../../pattern/panel/panelMeshSignature';
 import { measurementValue, pointAtT } from '../../pattern/geom/edgeSample';
-import { edgeCurve } from '../../pattern/geom/bezier';
+import { edgeCurve, smoothSplineSegments } from '../../pattern/geom/bezier';
 import { computeBBox } from '../../pattern/geom/vec2';
 import { seamJoint, sewnOutline } from '../../pattern/seam/joinBlend';
+import { seamNumbers } from '../../pattern/seam/seamNumber';
 import {
   gridStepCm, rulerLabel, rulerMinorTicks, rulerStepCm, rulerTicks, toScreen, toWorld,
   type ViewTransform,
@@ -13,16 +14,43 @@ import {
 import { elementNodeId, parseElementNodeId, idsOfKind } from '../elementSelection';
 import { panelFrame, printCenter, printFrame, shapeFrame, topstitchRows, trimRadiusCm, type DraftState } from './tools';
 import type { SnapCandidate } from './snap';
+import { elementHoverPaths, type HoverTarget, type MarkHint } from './hitTest';
 
 const NEAR = 1e-6;
 
 /** Coarse wireframe edge length while a drag is in flight, so the pane stays responsive. */
 const WIREFRAME_DRAG_RESOLUTION_CM = 2.5;
 
+/** Factory thread colour; a seam still carrying it is drawn with a palette hue instead. */
+const DEFAULT_SEAM_THREAD = '#ff4444';
+
+/** Hues cycled across seams so neighbouring pairs never share a colour. */
+const SEAM_PALETTE = [
+  '#ff6b8b', '#4da6ff', '#ffb84d', '#5fd6a6', '#b48cff',
+  '#ff9a4d', '#5ad1e6', '#e07bff', '#8ad14b', '#ff7ad1',
+];
+
+/**
+ * Display colour of a seam: the thread colour the user picked, or a palette hue for its display
+ * order. Past the palette length the hue keeps stepping by the golden angle, so a long seam list
+ * still gets distinct colours instead of repeats.
+ */
+function seamColor(seam: Seam, index: number): string {
+  const custom = seam.threadColor?.toLowerCase();
+  if (custom && custom !== DEFAULT_SEAM_THREAD) return seam.threadColor;
+  const entry = SEAM_PALETTE[index];
+  return entry ?? `hsl(${((index * 137.508) % 360).toFixed(0)} 70% 62%)`;
+}
+
 /** In-flight drag shown without committing to the model. */
 export interface PreviewDrag {
   /** Dry-run copy of the pattern with the drag translation already applied. */
   pattern: Pattern;
+  /**
+   * Height offsets of `pattern` when the drag already knows them, so a frame does not resample
+   * every draped panel's outline to derive them again. Absent for drags that deform geometry.
+   */
+  offsets?: ReadonlyMap<string, number>;
   /** Snapped target marker, null when snapping is off. */
   ghost: Vec2 | null;
 }
@@ -52,20 +80,36 @@ export interface DisplayOptions {
 /** Everything one 2D frame draws. */
 export interface SceneState {
   pattern: Pattern;
+  /**
+   * Pattern the shared mesh cache keys on, in its own coordinates; the wireframe layer shifts what
+   * it returns by the panel's height offset. Defaults to `pattern`.
+   */
+  meshPattern?: Pattern;
+  /** Centimeters each panel is raised from its pattern y to its world height. */
+  offsets?: ReadonlyMap<string, number>;
   view: ViewTransform;
   /** Scene settings the shared panel mesh cache keys on; identical to what the 3D engine reads. */
   simulation: PanelMeshSettings;
   selection: string[];
-  hoverPointId: string | null;
+  /** Element a press would pick, drawn as a pre-highlight before the press. */
+  hover?: HoverTarget | null;
+  /** Landing point of the mark about to be placed, drawn as a ghost. */
+  markHint?: MarkHint | null;
+  /** The hovered vertex is about to be deleted, so its ring turns red. */
+  hoverDelete?: boolean;
   preview: PreviewDrag | null;
   /** Rubber-band box in world coordinates. */
   rect: { a: Vec2; b: Vec2 } | null;
-  /** Seam links only appear while the seam tool is active or an edge is selected. */
+  /** Seam marks only appear while the seam tool is active or a seam is selected. */
   showSeams: boolean;
   /** In-progress tool stroke drawn as a preview layer. */
   draft?: DraftState;
   /** Active snap marker highlighted under the cursor. */
   snapHint?: SnapCandidate | null;
+  /** Where the point tool would insert a vertex, drawn as a marker on the edge. */
+  insertHint?: { pos: Vec2; edgeId: string } | null;
+  /** Edge under the cursor while the seam tool is armed, drawn as the side about to be picked. */
+  seamHover?: { edgeId: string; t0: number; t1: number } | null;
   display?: DisplayOptions;
   /** Extra size-chart patterns drawn faintly behind the active one. */
   gradingOutlines?: Array<{ label: string; polygons: Vec2[][] }>;
@@ -160,18 +204,22 @@ export function drawScene(ctx: CanvasRenderingContext2D, w: number, h: number, s
   }
 
   if (state.showSeams) {
-    for (const seam of Object.values(pattern.seams)) {
-      if (seam.stitchVisible === false) continue;
-      drawSeam(ctx, pattern, seam, screen, seam.threadColor);
-    }
+    const numbers = seamNumbers(pattern);
+    Object.values(pattern.seams).forEach((seam, index) => {
+      if (seam.stitchVisible === false) return;
+      drawSeam(ctx, pattern, seam, screen, seamColor(seam, index), numbers.get(seam.id) ?? index + 1);
+    });
   }
 
   if (display.seamJoin) drawSeamJoints(ctx, state, screen);
 
   drawElementSelection(ctx, state, screen, view.scale);
   drawDraft(ctx, state, screen);
+  drawSeamDraft(ctx, state, screen);
+  drawInsertHint(ctx, state, screen);
   drawSnapHint(ctx, state, screen);
   drawHover(ctx, state, screen);
+  drawMarkHint(ctx, state, screen);
   drawGhost(ctx, state, screen);
   drawRubberBand(ctx, state, screen);
   drawRuler(ctx, w, h, view);
@@ -267,6 +315,16 @@ function drawRuler(ctx: CanvasRenderingContext2D, w: number, h: number, view: Vi
   ctx.stroke();
   ctx.fillStyle = '#2b2b31';
   ctx.fillRect(0, 0, RULER_BAND, RULER_BAND);
+
+  // Height 0 is the ground, the same datum the 3D pane stands the body on.
+  const groundY = h / 2 - view.offsetY;
+  if (groundY > RULER_BAND && groundY < h) {
+    ctx.fillStyle = '#7a8194';
+    ctx.font = '10px system-ui';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText('地面', RULER_BAND + 6, groundY - 3);
+  }
 }
 
 /** One ruler tick line. */
@@ -278,12 +336,14 @@ function tick(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number,
 }
 
 /** Triangle edges of a panel mesh, drawn over its filled outline. */
-function drawWireframe(ctx: CanvasRenderingContext2D, mesh: PanelMesh, screen: (p: Vec2) => Vec2): void {
+function drawWireframe(
+  ctx: CanvasRenderingContext2D, mesh: PanelMesh, screen: (p: Vec2) => Vec2, offsetCm: number,
+): void {
   const { positions2D, indices, vertexCount } = mesh;
   const sx = new Float32Array(vertexCount);
   const sy = new Float32Array(vertexCount);
   for (let i = 0; i < vertexCount; i++) {
-    const s = screen({ x: positions2D[i * 2]!, y: positions2D[i * 2 + 1]! });
+    const s = screen({ x: positions2D[i * 2]!, y: positions2D[i * 2 + 1]! + offsetCm });
     sx[i] = s.x;
     sy[i] = s.y;
   }
@@ -344,8 +404,8 @@ function drawPanel(
     // Coarse while a drag is in flight; otherwise the panel's own edge length, which is the same
     // value the 3D cloth build resolves, so both sides draw one shared mesh instance.
     const resolutionCm = scene.preview ? WIREFRAME_DRAG_RESOLUTION_CM : panel.meshResolutionCm;
-    const mesh = getPanelMesh(pattern, panel.id, resolutionCm, scene.simulation);
-    if (mesh) drawWireframe(ctx, mesh, screen);
+    const mesh = getPanelMesh(scene.meshPattern ?? pattern, panel.id, resolutionCm, scene.simulation);
+    if (mesh) drawWireframe(ctx, mesh, screen, scene.offsets?.get(panel.id) ?? 0);
   }
 
   // 毛边: the cutting outline the offset kernel produces, corner joins and per-edge amounts included.
@@ -455,24 +515,42 @@ function drawPanel(
   }
 }
 
+/** One internal line in its usage colour, or highlighted with vertex markers when selected. */
 function drawInternalLine(
-  ctx: CanvasRenderingContext2D, pattern: Pattern, lineId: string, screen: (p: Vec2) => Vec2,
+  ctx: CanvasRenderingContext2D, pattern: Pattern, lineId: string,
+  screen: (p: Vec2) => Vec2, selected = false,
 ): void {
   const line = pattern.internalLines[lineId];
   if (!line || line.points.length < 2) return;
   const closed = Math.hypot(line.points[0].x - line.points[line.points.length - 1].x,
     line.points[0].y - line.points[line.points.length - 1].y) < NEAR;
   ctx.save();
-  ctx.strokeStyle = line.kind === 'fold' ? '#8ec7ff' : line.kind === 'split' ? '#c7a5ff' : '#9aa0b0';
-  ctx.lineWidth = 1.5;
-  if (line.kind !== 'split') ctx.setLineDash([5, 4]);
+  ctx.setLineDash(selected || line.kind === 'split' ? [] : [5, 4]);
   ctx.beginPath();
   line.points.forEach((p, i) => {
     const s = screen(p);
     if (i === 0) ctx.moveTo(s.x, s.y); else ctx.lineTo(s.x, s.y);
   });
   if (closed) ctx.closePath();
+  if (selected) {
+    ctx.strokeStyle = 'rgba(255,215,94,0.25)';
+    ctx.lineWidth = 8;
+    ctx.stroke();
+  }
+  ctx.strokeStyle = selected ? '#ffd75e'
+    : line.kind === 'fold' ? '#8ec7ff' : line.kind === 'split' ? '#c7a5ff' : '#9aa0b0';
+  ctx.lineWidth = selected ? 3 : 1.5;
   ctx.stroke();
+  if (selected) {
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#ffd75e';
+    for (const p of closed ? line.points.slice(0, -1) : line.points) {
+      const s = screen(p);
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
   ctx.restore();
 }
 
@@ -512,10 +590,8 @@ function drawNotch(
   ctx: CanvasRenderingContext2D, pattern: Pattern, notch: { edgeId: string; t: number; style?: string },
   screen: (p: Vec2) => Vec2,
 ): void {
-  const pts = sampleEdge(pattern, notch.edgeId);
-  if (pts.length < 2) return;
-  const idx = Math.min(pts.length - 1, Math.max(0, Math.round(notch.t * (pts.length - 1))));
-  const p = pts[idx];
+  const p = pointAtT(pattern, notch.edgeId, notch.t);
+  if (!p) return;
   const s = screen(p);
   ctx.save();
   ctx.strokeStyle = '#ffd75e';
@@ -778,6 +854,17 @@ function drawAnnotation(
   ctx.restore();
 }
 
+/** Screen-space frame around an annotation's text, shared by hover and selection highlights. */
+function drawAnnotationFrame(
+  ctx: CanvasRenderingContext2D, s: Vec2, color: string, lineWidth: number,
+): void {
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = lineWidth;
+  ctx.strokeRect(s.x - 24, s.y - 10, 48, 16);
+  ctx.restore();
+}
+
 function drawElementSelection(
   ctx: CanvasRenderingContext2D, scene: SceneState, screen: (p: Vec2) => Vec2, scale: number,
 ): void {
@@ -788,7 +875,7 @@ function drawElementSelection(
       const seam = pattern.seams[el.id];
       if (seam && seam.stitchVisible !== false) drawSeam(ctx, pattern, seam, screen, '#ffd75e');
     }
-    if (el?.kind === 'internal') drawInternalLine(ctx, pattern, el.id, screen);
+    if (el?.kind === 'internal') drawInternalLine(ctx, pattern, el.id, screen, true);
     if (el?.kind === 'print') {
       const print = pattern.prints?.[el.id];
       const frame = print?.visible ? printFrame(pattern, print) : null;
@@ -837,12 +924,7 @@ function drawElementSelection(
     }
     if (el?.kind === 'annotation') {
       const note = pattern.annotations?.[el.id];
-      if (note) {
-        const s = screen(note.pos);
-        ctx.strokeStyle = '#ffd75e';
-        ctx.lineWidth = 1.5;
-        ctx.strokeRect(s.x - 24, s.y - 10, 48, 16);
-      }
+      if (note) drawAnnotationFrame(ctx, screen(note.pos), '#ffd75e', 1.5);
     }
     if (el?.kind === 'measurement') {
       const measurement = pattern.measurements?.[el.id];
@@ -865,10 +947,20 @@ function drawDraft(
     case 'pen': {
       const pts = [...draft.points, draft.cursor];
       ctx.beginPath();
-      pts.forEach((p, i) => {
-        const s = screen(p);
-        if (i === 0) ctx.moveTo(s.x, s.y); else ctx.lineTo(s.x, s.y);
-      });
+      if (draft.curve) {
+        // Same spline the commit builds, so the stroke reads as a curve while it is drawn.
+        const head = screen(pts[0]!);
+        ctx.moveTo(head.x, head.y);
+        for (const segment of smoothSplineSegments(pts)) {
+          const c0 = screen(segment.c0), c1 = screen(segment.c1), end = screen(segment.p1);
+          ctx.bezierCurveTo(c0.x, c0.y, c1.x, c1.y, end.x, end.y);
+        }
+      } else {
+        pts.forEach((p, i) => {
+          const s = screen(p);
+          if (i === 0) ctx.moveTo(s.x, s.y); else ctx.lineTo(s.x, s.y);
+        });
+      }
       ctx.stroke();
       for (const p of draft.points) {
         const s = screen(p);
@@ -918,10 +1010,24 @@ function drawDraft(
       const frame = shapeFrame(draft.start, draft.current, draft.shape, false);
       const a = screen(frame.min);
       const b = screen(frame.max);
+      // Screen Y runs upwards, so `min` sits below `max`: take the box from both ends, not from a to b.
+      const left = Math.min(a.x, b.x), top = Math.min(a.y, b.y);
+      const width = Math.abs(b.x - a.x), height = Math.abs(b.y - a.y);
       ctx.beginPath();
-      if (draft.shape === 'rect') ctx.rect(a.x, a.y, b.x - a.x, b.y - a.y);
-      else ctx.ellipse((a.x + b.x) / 2, (a.y + b.y) / 2, Math.max(1, (b.x - a.x) / 2), Math.max(1, (b.y - a.y) / 2), 0, 0, Math.PI * 2);
+      if (draft.shape === 'rect') ctx.rect(left, top, width, height);
+      else ctx.ellipse(left + width / 2, top + height / 2, Math.max(1, width / 2), Math.max(1, height / 2), 0, 0, Math.PI * 2);
       ctx.stroke();
+      if (draft.shape === 'circle') {
+        // The press point is the centre of the circle, marked so the radius drag reads clearly.
+        const c = screen(draft.start);
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(c.x - 4, c.y);
+        ctx.lineTo(c.x + 4, c.y);
+        ctx.moveTo(c.x, c.y - 4);
+        ctx.lineTo(c.x, c.y + 4);
+        ctx.stroke();
+      }
       break;
     }
     case 'dart': {
@@ -947,25 +1053,215 @@ function drawDraft(
       }
       break;
     }
-    case 'seam': {
-      const highlighted = [draft.pickA, draft.drag ? { edgeId: draft.drag.edgeId, t0: Math.min(arcT(scene.pattern, draft.drag.edgeId, draft.drag.start), arcT(scene.pattern, draft.drag.edgeId, draft.drag.current)), t1: Math.max(arcT(scene.pattern, draft.drag.edgeId, draft.drag.start), arcT(scene.pattern, draft.drag.edgeId, draft.drag.current)) } : null]
-        .flatMap(pick => (pick ? [pick] : []));
-      ctx.setLineDash([]);
-      ctx.lineWidth = 4;
-      for (const pick of highlighted) {
-        const pts = sampleEdgeInterval(scene.pattern, pick.edgeId, pick.t0, pick.t1);
-        ctx.beginPath();
-        pts.forEach((p, i) => {
-          const s = screen(p);
-          if (i === 0) ctx.moveTo(s.x, s.y); else ctx.lineTo(s.x, s.y);
-        });
-        ctx.stroke();
-      }
+    case 'seam':
+      // Picked sides and their direction rings are drawn by drawSeamDraft.
       break;
-    }
     default:
       break;
   }
+  ctx.restore();
+}
+
+/** Colour of the seam side already armed, and of the side under the cursor. */
+const SEAM_PICK_COLOR = '#ffd75e';
+const SEAM_HOVER_COLOR = '#4da6ff';
+
+/** Strokes one edge interval, shared by the armed side, the dragged interval and the hover preview. */
+function drawSeamInterval(
+  ctx: CanvasRenderingContext2D, pattern: Pattern,
+  pick: { edgeId: string; t0: number; t1: number },
+  screen: (p: Vec2) => Vec2, color: string, width: number, dash: number[] = [],
+): void {
+  const pts = sampleEdgeInterval(pattern, pick.edgeId, pick.t0, pick.t1);
+  if (pts.length < 2) return;
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.setLineDash(dash);
+  ctx.beginPath();
+  pts.forEach((p, i) => {
+    const s = screen(p);
+    if (i === 0) ctx.moveTo(s.x, s.y); else ctx.lineTo(s.x, s.y);
+  });
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** Arc length in centimetres of one edge interval. */
+function intervalLengthCm(pattern: Pattern, pick: { edgeId: string; t0: number; t1: number }): number {
+  const pts = sampleEdgeInterval(pattern, pick.edgeId, pick.t0, pick.t1);
+  let total = 0;
+  for (let i = 1; i < pts.length; i++) {
+    total += Math.hypot(pts[i]!.x - pts[i - 1]!.x, pts[i]!.y - pts[i - 1]!.y);
+  }
+  return total;
+}
+
+/** Arc-length middle of one edge interval, where the seam tag sits. */
+function intervalMid(pattern: Pattern, pick: { edgeId: string; t0: number; t1: number }): Vec2 | null {
+  return pointAtT(pattern, pick.edgeId, (pick.t0 + pick.t1) / 2);
+}
+
+/** Radius of a seam tag in pixels, and the length of the direction arrow that follows it. */
+const SEAM_TAG_RADIUS = 7;
+const SEAM_ARROW_LENGTH = 22;
+const SEAM_ARROW_HEAD = 6;
+
+/** Unit vector of the stitching direction along one interval, in screen space. */
+function intervalDirection(
+  pattern: Pattern, pick: { edgeId: string; t0: number; t1: number },
+  screen: (p: Vec2) => Vec2, dir: 1 | -1,
+): Vec2 | null {
+  const mid = (pick.t0 + pick.t1) / 2;
+  const step = Math.min((pick.t1 - pick.t0) / 4, 0.02);
+  const from = pointAtT(pattern, pick.edgeId, mid);
+  const to = pointAtT(pattern, pick.edgeId, mid + dir * step);
+  if (!from || !to) return null;
+  const a = screen(from), b = screen(to);
+  const len = Math.hypot(b.x - a.x, b.y - a.y);
+  if (len < 0.01) return null;
+  return { x: (b.x - a.x) / len, y: (b.y - a.y) / len };
+}
+
+/**
+ * Tag at the middle of one seam side, with an arrow along the stitching direction when the
+ * direction is known. The tag is drawn last so the arrow appears to leave from behind it.
+ */
+function drawSeamTag(
+  ctx: CanvasRenderingContext2D, pattern: Pattern,
+  pick: { edgeId: string; t0: number; t1: number },
+  screen: (p: Vec2) => Vec2, text: string, color: string, dir: 0 | 1 | -1 = 0,
+): void {
+  const mid = intervalMid(pattern, pick);
+  if (!mid) return;
+  const s = screen(mid);
+  const unit = dir === 0 ? null : intervalDirection(pattern, pick, screen, dir);
+
+  ctx.save();
+  if (unit) {
+    const startX = s.x + unit.x * (SEAM_TAG_RADIUS + 1);
+    const startY = s.y + unit.y * (SEAM_TAG_RADIUS + 1);
+    const endX = startX + unit.x * SEAM_ARROW_LENGTH;
+    const endY = startY + unit.y * SEAM_ARROW_LENGTH;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(startX, startY);
+    ctx.lineTo(endX, endY);
+    ctx.stroke();
+    const angle = Math.atan2(unit.y, unit.x);
+    ctx.beginPath();
+    for (const side of [0.78, -0.78]) {
+      ctx.moveTo(endX, endY);
+      ctx.lineTo(endX + Math.cos(angle + Math.PI * side) * SEAM_ARROW_HEAD, endY + Math.sin(angle + Math.PI * side) * SEAM_ARROW_HEAD);
+    }
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = color;
+  ctx.strokeStyle = '#202024';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(s.x, s.y, SEAM_TAG_RADIUS, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#202024';
+  ctx.font = 'bold 10px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, s.x, s.y);
+  ctx.restore();
+}
+
+/** Ring on an interval end that can be picked as the stitching start. */
+function drawSeamEndRing(ctx: CanvasRenderingContext2D, s: Vec2, color: string): void {
+  ctx.save();
+  ctx.fillStyle = '#202024';
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(s.x, s.y, 6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(s.x, s.y, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+/**
+ * Seam draft: each picked side with its direction, rings on the ends still to be answered, the
+ * dragged interval, and the pairing link with both lengths once two sides exist.
+ */
+function drawSeamDraft(ctx: CanvasRenderingContext2D, scene: SceneState, screen: (p: Vec2) => Vec2): void {
+  const current = scene.draft;
+  const draft = current?.tool === 'seam' ? current : null;
+  const hover = scene.seamHover;
+  const drag = draft?.drag ?? null;
+  const last = draft?.sides[draft.sides.length - 1];
+  const awaitingStart = !!last && last.startLow === undefined;
+
+  // Highlight the side about to be picked, before a seam and between picks.
+  if (hover && !drag && !awaitingStart && !draft?.sides.some(side => side.edgeId === hover.edgeId)) {
+    drawSeamInterval(ctx, scene.pattern, hover, screen, SEAM_HOVER_COLOR, 3, [5, 3]);
+  }
+  if (!draft) return;
+
+  if (drag) {
+    const pick = {
+      edgeId: drag.edgeId,
+      t0: Math.min(arcT(scene.pattern, drag.edgeId, drag.start), arcT(scene.pattern, drag.edgeId, drag.current)),
+      t1: Math.max(arcT(scene.pattern, drag.edgeId, drag.start), arcT(scene.pattern, drag.edgeId, drag.current)),
+    };
+    drawSeamInterval(ctx, scene.pattern, pick, screen, SEAM_HOVER_COLOR, 3, [6, 3]);
+  }
+
+  const sideColors = [SEAM_PICK_COLOR, SEAM_HOVER_COLOR];
+  const sideTags = ['A', 'B'];
+  draft.sides.forEach((side, i) => {
+    const color = sideColors[Math.min(i, 1)]!;
+    const tag = sideTags[Math.min(i, 1)]!;
+    strokeSeamSide(ctx, scene.pattern, side, screen, color);
+    if (side.startLow === undefined) {
+      for (const t of [side.t0, side.t1]) {
+        const p = pointAtT(scene.pattern, side.edgeId, t);
+        if (p) drawSeamEndRing(ctx, screen(p), color);
+      }
+      drawSeamTag(ctx, scene.pattern, side, screen, tag, color);
+      return;
+    }
+    drawSeamTag(ctx, scene.pattern, side, screen, tag, color, side.startLow ? 1 : -1);
+  });
+
+  const first = draft.sides[0];
+  if (!first) return;
+  const target = draft.sides[1]
+    ?? (hover && hover.edgeId !== first.edgeId ? hover : null);
+  const aMid = intervalMid(scene.pattern, first);
+  const bMid = target ? intervalMid(scene.pattern, target) : null;
+  if (!aMid || !target || !bMid) return;
+  const sA = screen(aMid), sB = screen(bMid);
+
+  ctx.save();
+  ctx.strokeStyle = 'rgba(77,166,255,0.65)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 3]);
+  ctx.beginPath();
+  ctx.moveTo(sA.x, sA.y);
+  ctx.lineTo(sB.x, sB.y);
+  ctx.stroke();
+
+  // Lengths of both sides; a gap past the easing range turns the readout orange.
+  const lenA = intervalLengthCm(scene.pattern, first);
+  const lenB = intervalLengthCm(scene.pattern, target);
+  const off = lenA > 0 ? Math.abs(lenB - lenA) / lenA : 0;
+  ctx.setLineDash([]);
+  ctx.font = '11px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = off > 0.1 ? '#ffa94d' : '#8a93a3';
+  ctx.fillText(`${lenA.toFixed(1)} / ${lenB.toFixed(1)} cm`, (sA.x + sB.x) / 2 + 6, (sA.y + sB.y) / 2 - 4);
   ctx.restore();
 }
 
@@ -983,6 +1279,35 @@ function arcT(pattern: Pattern, edgeId: string, p: Vec2): number {
     if (i + 1 < pts.length) acc += Math.hypot(pts[i + 1].x - pts[i].x, pts[i + 1].y - pts[i].y);
   }
   return bestT / total;
+}
+
+/** Marker where the point tool would insert a vertex: a dashed ring with a plus on the edge. */
+function drawInsertHint(
+  ctx: CanvasRenderingContext2D, scene: SceneState, screen: (p: Vec2) => Vec2,
+): void {
+  const hint = scene.insertHint;
+  if (!hint) return;
+  const s = screen(hint.pos);
+  const radius = 8;
+  ctx.save();
+  ctx.strokeStyle = '#6ee7a8';
+  ctx.fillStyle = 'rgba(110,231,168,0.16)';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.arc(s.x, s.y, radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.setLineDash([3, 2]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  ctx.moveTo(s.x - radius + 3, s.y); ctx.lineTo(s.x + radius - 3, s.y);
+  ctx.moveTo(s.x, s.y - radius + 3); ctx.lineTo(s.x, s.y + radius - 3);
+  ctx.stroke();
+  ctx.fillStyle = '#6ee7a8';
+  ctx.beginPath();
+  ctx.arc(s.x, s.y, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
 }
 
 function drawSnapHint(
@@ -1011,42 +1336,96 @@ function drawSnapHint(
   ctx.restore();
 }
 
-function drawSeam(
-  ctx: CanvasRenderingContext2D, pattern: Pattern, seam: Seam,
+/** Spacing between the slanted dashes of a seam side, and half their tick length, in pixels. */
+const SEAM_TICK_STEP = 6;
+const SEAM_TICK_HALF = 3;
+
+/** Draws one seam side as slanted dashes leaning 45° off the edge, the usual sewing mark. */
+function strokeSeamSide(
+  ctx: CanvasRenderingContext2D, pattern: Pattern,
+  pick: { edgeId: string; t0: number; t1: number },
   screen: (p: Vec2) => Vec2, color: string,
 ): void {
-  const ptsA = sampleEdgeInterval(pattern, seam.a.edgeId, seam.a.t0, seam.a.t1);
-  const ptsB = sampleEdgeInterval(pattern, seam.b.edgeId, seam.b.t0, seam.b.t1, seam.flip);
-  if (ptsA.length === 0 || ptsB.length === 0) return;
+  const pts = sampleEdgeInterval(pattern, pick.edgeId, pick.t0, pick.t1).map(p => screen(p));
+  if (pts.length < 2) return;
 
-  const midA = ptsA[Math.floor(ptsA.length / 2)];
-  const midB = ptsB[Math.floor(ptsB.length / 2)];
-  const sA = screen(midA), sB = screen(midB);
+  const lean = Math.SQRT1_2;
+  const tick = (x: number, y: number, tx: number, ty: number) => {
+    const nx = (tx - ty) * lean;
+    const ny = (tx + ty) * lean;
+    ctx.moveTo(x - nx * SEAM_TICK_HALF, y - ny * SEAM_TICK_HALF);
+    ctx.lineTo(x + nx * SEAM_TICK_HALF, y + ny * SEAM_TICK_HALF);
+  };
+
+  let total = 0;
+  for (let i = 1; i < pts.length; i++) {
+    total += Math.hypot(pts[i]!.x - pts[i - 1]!.x, pts[i]!.y - pts[i - 1]!.y);
+  }
 
   ctx.save();
   ctx.strokeStyle = color;
-  ctx.lineWidth = 1.5;
-  ctx.setLineDash([4, 3]);
-  // The paired edges get the same colour as their link.
-  for (const pts of [ptsA, ptsB]) {
-    ctx.beginPath();
-    pts.forEach((p, i) => {
-      const s = screen(p);
-      if (i === 0) ctx.moveTo(s.x, s.y); else ctx.lineTo(s.x, s.y);
-    });
-    ctx.stroke();
-  }
+  ctx.lineWidth = 1.2;
+  ctx.setLineDash([]);
   ctx.beginPath();
-  ctx.moveTo(sA.x, sA.y);
-  ctx.lineTo(sB.x, sB.y);
+
+  if (total < SEAM_TICK_STEP) {
+    const a = pts[0]!, b = pts[pts.length - 1]!;
+    const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    tick((a.x + b.x) / 2, (a.y + b.y) / 2, (b.x - a.x) / len, (b.y - a.y) / len);
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
+
+  let next = SEAM_TICK_STEP / 2;
+  let travelled = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1]!, b = pts[i]!;
+    const seg = Math.hypot(b.x - a.x, b.y - a.y);
+    if (seg < 1e-6) continue;
+    const tx = (b.x - a.x) / seg;
+    const ty = (b.y - a.y) / seg;
+    while (next <= travelled + seg) {
+      const at = (next - travelled) / seg;
+      tick(a.x + (b.x - a.x) * at, a.y + (b.y - a.y) * at, tx, ty);
+      next += SEAM_TICK_STEP;
+    }
+    travelled += seg;
+  }
   ctx.stroke();
-  drawSeamAnchors(ctx, pattern, seam, screen);
   ctx.restore();
+}
+
+/**
+ * Draws one seam as a coloured pair: both sides carry the same hue and number, plus the stitching
+ * direction arrow, so pairs stay readable without a long connector across the pane.
+ */
+function drawSeam(
+  ctx: CanvasRenderingContext2D, pattern: Pattern, seam: Seam,
+  screen: (p: Vec2) => Vec2, color: string, index?: number,
+): void {
+  // A highlighted seam (no number) is stroked solid so it reads over the slanted dashes.
+  if (index === undefined) {
+    for (const side of [seam.a, seam.b]) {
+      drawSeamInterval(ctx, pattern, side, screen, color, 3);
+    }
+  } else {
+    strokeSeamSide(ctx, pattern, seam.a, screen, color);
+    strokeSeamSide(ctx, pattern, seam.b, screen, color);
+  }
+
+  ctx.save();
+  drawSeamAnchors(ctx, pattern, seam, screen, color);
+  ctx.restore();
+
+  if (index === undefined) return;
+  drawSeamTag(ctx, pattern, seam.a, screen, String(index), color, 1);
+  drawSeamTag(ctx, pattern, seam.b, screen, String(index), color, seam.flip ? -1 : 1);
 }
 
 /** Paired ticks at each side's anchor point, joined so a mis-set anchor is visible. */
 function drawSeamAnchors(
-  ctx: CanvasRenderingContext2D, pattern: Pattern, seam: Seam, screen: (p: Vec2) => Vec2,
+  ctx: CanvasRenderingContext2D, pattern: Pattern, seam: Seam, screen: (p: Vec2) => Vec2, color: string,
 ): void {
   if (seam.a.anchorT === undefined || seam.b.anchorT === undefined) return;
   const at = pointAtT(pattern, seam.a.edgeId, seam.a.anchorT);
@@ -1054,8 +1433,8 @@ function drawSeamAnchors(
   if (!at || !bt) return;
   const sa = screen(at), sb = screen(bt);
   ctx.setLineDash([]);
-  ctx.strokeStyle = '#ffd75e';
-  ctx.fillStyle = '#ffd75e';
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   ctx.moveTo(sa.x, sa.y);
@@ -1068,19 +1447,119 @@ function drawSeamAnchors(
   }
 }
 
+/** Yellow preview of the element a press would pick; panels also get a faint tint. */
 function drawHover(
   ctx: CanvasRenderingContext2D, scene: SceneState, screen: (p: Vec2) => Vec2,
 ): void {
-  const { pattern, hoverPointId } = scene;
-  if (!hoverPointId) return;
-  const point = pattern.points[hoverPointId];
-  if (!point) return;
-  const s = screen(point.pos);
-  ctx.strokeStyle = '#ffd75e';
+  const hover = scene.hover;
+  if (!hover) return;
+  const { pattern } = scene;
+  if (hover.kind === 'element') {
+    if (hover.elementKind === 'annotation') {
+      const note = pattern.annotations?.[hover.id];
+      if (note) drawAnnotationFrame(ctx, screen(note.pos), 'rgba(255,215,94,0.7)', 2.5);
+      return;
+    }
+    const shape = elementHoverPaths(pattern, hover.elementKind, hover.id);
+    if (shape) drawElementHover(ctx, shape, screen, scene.view.scale);
+    return;
+  }
+  const ring = hover.kind === 'point' ? pattern.points[hover.id]?.pos
+    : hover.kind === 'internalVertex' ? pattern.internalLines[hover.lineId]?.points[hover.index]
+      : null;
+  const path = hover.kind === 'edge' ? sampleEdge(pattern, hover.id)
+    : hover.kind === 'internal' ? pattern.internalLines[hover.id]?.points ?? []
+      : hover.kind === 'panel' && pattern.panels[hover.id]
+        ? samplePanelOutline(pattern, pattern.panels[hover.id]!) : [];
+  if (!ring && path.length < 2) return;
+
+  ctx.save();
+  ctx.strokeStyle = scene.hoverDelete && hover.kind === 'point' ? '#ff6b6b' : 'rgba(255,215,94,0.7)';
+  ctx.lineWidth = ring ? 1.5 : 2.5;
+  ctx.setLineDash([]);
+  if (ring) {
+    const s = screen(ring);
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, 7, 0, Math.PI * 2);
+    ctx.stroke();
+  } else {
+    ctx.beginPath();
+    path.forEach((p, i) => {
+      const s = screen(p);
+      if (i === 0) ctx.moveTo(s.x, s.y); else ctx.lineTo(s.x, s.y);
+    });
+    if (hover.kind === 'panel') {
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(255,215,94,0.07)';
+      ctx.fill();
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** Yellow pre-highlight of one production element's sampled strokes, rings and closed frames. */
+function drawElementHover(
+  ctx: CanvasRenderingContext2D,
+  shape: { paths: Vec2[][]; closed?: boolean; radius?: number },
+  screen: (p: Vec2) => Vec2, scale: number,
+): void {
+  const paths = shape.paths.filter(path => path.length > 0);
+  if (paths.length === 0) return;
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,215,94,0.7)';
+  ctx.fillStyle = 'rgba(255,215,94,0.07)';
+  ctx.lineWidth = 2.5;
+  ctx.setLineDash([]);
+  for (const path of paths) {
+    if (path.length === 1) {
+      const s = screen(path[0]!);
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, shape.radius ? Math.max(7, shape.radius * scale) : 7, 0, Math.PI * 2);
+      ctx.stroke();
+      continue;
+    }
+    ctx.beginPath();
+    path.forEach((p, i) => {
+      const s = screen(p);
+      if (i === 0) ctx.moveTo(s.x, s.y); else ctx.lineTo(s.x, s.y);
+    });
+    if (shape.closed) {
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** Ghost of the production mark a mark-tool press would place at the landing point. */
+function drawMarkHint(
+  ctx: CanvasRenderingContext2D, scene: SceneState, screen: (p: Vec2) => Vec2,
+): void {
+  const hint = scene.markHint;
+  if (!hint) return;
+  const s = screen(hint.pos);
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,215,94,0.9)';
   ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.arc(s.x, s.y, 7, 0, Math.PI * 2);
-  ctx.stroke();
+  if (hint.kind === 'notch') {
+    ctx.beginPath();
+    ctx.moveTo(s.x - 4, s.y - 4); ctx.lineTo(s.x, s.y); ctx.lineTo(s.x + 4, s.y - 4);
+    ctx.stroke();
+  } else {
+    ctx.setLineDash([3, 2]);
+    ctx.beginPath();
+    ctx.moveTo(s.x - 12, s.y - 8); ctx.lineTo(s.x + 12, s.y - 8);
+    ctx.lineTo(s.x + 12, s.y + 8); ctx.lineTo(s.x - 12, s.y + 8);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(s.x - 7, s.y); ctx.lineTo(s.x + 7, s.y);
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 function drawGhost(

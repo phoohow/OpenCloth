@@ -23,30 +23,38 @@ import { comboOf } from './menu/shortcuts';
 import { Icon, type IconName } from './icons';
 import { reportActionError } from './widgets/toast';
 
-/** One pattern or pin tool: toolbar glyph, tooltip and the tool it selects. */
-type ToolSpec = { key: ToolType; label: string; icon: IconName };
+/**
+ * One pattern or pin tool: toolbar glyph, display name and the tool it selects.
+ * `hint` states how to operate the tool; leave it out when the name says enough.
+ */
+type ToolSpec = { key: ToolType; label: string; icon: IconName; hint?: string };
 
 /** Slot-wide 2D tools; the line and shape groups sit between these two blocks. */
 const TOOLS_2D: ToolSpec[] = [
-  { key: 'select', label: '选择 (点击/Ctrl加选)', icon: 'select' },
-  { key: 'point', label: '线上加点', icon: 'add-point' },
-  { key: 'internalLine', label: '内部线', icon: 'internal-line' },
-  { key: 'dart', label: '省道', icon: 'dart' },
-  { key: 'seam', label: '缝合', icon: 'seam' },
-  { key: 'topstitch', label: '明线 (单击轮廓边)', icon: 'topstitch' },
+  { key: 'select', label: '选择', icon: 'select', hint: '单击选中，Ctrl 加选' },
+  { key: 'internalLine', label: '内部线', icon: 'internal-line', hint: '单击版片后逐点单击，Enter 结束' },
+  { key: 'dart', label: '省道', icon: 'dart', hint: '依次单击两条相邻轮廓边与省尖' },
+  { key: 'seam', label: '缝合', icon: 'seam', hint: '依次单击两条边，再各点一个端点定缝纫方向' },
+  { key: 'topstitch', label: '明线', icon: 'topstitch', hint: '单击轮廓边' },
+];
+
+/** Vertex tools sharing one toolbar slot; the icon follows the armed tool, as in the other groups. */
+const POINT_TOOLS: ToolSpec[] = [
+  { key: 'point', label: '增加顶点', icon: 'add-point', hint: '单击轮廓边' },
+  { key: 'deletePoint', label: '删除顶点', icon: 'remove-point', hint: '单击顶点' },
 ];
 
 /** Line tools sharing one toolbar slot. */
 const LINE_TOOLS: ToolSpec[] = [
-  { key: 'line', label: '直线 (Enter闭合/Esc取消/Backspace退点)', icon: 'line' },
-  { key: 'curve', label: '曲线 (Ctrl+单击插入曲线点)', icon: 'curve' },
+  { key: 'line', label: '直线', icon: 'line', hint: '逐点单击，Enter 闭合，Esc 取消，Backspace 退点' },
+  { key: 'curve', label: '曲线', icon: 'curve', hint: '逐点单击，Enter 闭合，Esc 取消' },
 ];
 
 /** Shape tools sharing one toolbar slot. */
 const SHAPE_TOOLS: ToolSpec[] = [
-  { key: 'rect', label: '矩形', icon: 'rect' },
-  { key: 'circle', label: '圆', icon: 'circle' },
-  { key: 'ellipse', label: '椭圆', icon: 'ellipse' },
+  { key: 'rect', label: '矩形', icon: 'rect', hint: '按住拖动绘制' },
+  { key: 'circle', label: '圆', icon: 'circle', hint: '按住拖动绘制' },
+  { key: 'ellipse', label: '椭圆', icon: 'ellipse', hint: '按住拖动绘制' },
 ];
 
 /** Drafting display layers toggled without touching the model. */
@@ -85,10 +93,10 @@ const MARQUEE_KINDS: Array<{ kind: PatternElementKind; label: string }> = [
 ];
 
 /** Tools that mark production information onto existing geometry. */
-const MARK_TOOLS: Array<{ key: ToolType; label: string }> = [
-  { key: 'notch', label: '刀口：单击轮廓边' },
-  { key: 'annotation', label: '文字注释：单击版片' },
-  { key: 'measure', label: '尺寸线：单击两个点' },
+const MARK_TOOLS: Array<{ key: ToolType; label: string; hint: string }> = [
+  { key: 'notch', label: '刀口', hint: '单击轮廓边' },
+  { key: 'annotation', label: '文字注释', hint: '单击版片' },
+  { key: 'measure', label: '尺寸线', hint: '依次单击两个顶点' },
 ];
 
 /** Structure operations, some arming a tool and some acting on the current selection. */
@@ -98,26 +106,26 @@ type StructureAction =
   | 'fillet' | 'break' | 'connect' | 'merge-collinear' | 'simplify' | 'offset-line' | 'loop-panel'
   | 'rhombus-dart' | 'blend-start' | 'blend-end';
 
-const STRUCTURE_ITEMS: Array<{ key: StructureAction; label: string }> = [
-  { key: 'split', label: '轮廓分割（画切割线后回车）' },
-  { key: 'hole', label: '开内孔（画闭合环后回车）' },
-  { key: 'mirror-y', label: '沿纵向镜像复制' },
-  { key: 'mirror-x', label: '沿横向镜像复制' },
-  { key: 'mirror-edge', label: '沿选中边镜像复制' },
-  { key: 'sync-mirror', label: '同步镜像片' },
-  { key: 'merge', label: '合并选中的两片' },
-  { key: 'from-edges', label: '由选中边成片' },
-  { key: 'multi-seam', label: '多段缝合（首条边分段对多片边）' },
-  { key: 'fillet', label: '选中角点倒圆角' },
-  { key: 'break', label: '断开选中顶点' },
-  { key: 'connect', label: '连接选中两个端点' },
-  { key: 'merge-collinear', label: '合并选中共线边' },
-  { key: 'simplify', label: '简化选中曲线' },
-  { key: 'offset-line', label: '沿选中边生成等距内部线' },
-  { key: 'loop-panel', label: '闭合内部线独立成片' },
-  { key: 'rhombus-dart', label: '在选中边上开菱形省' },
-  { key: 'blend-start', label: '接角圆顺：选中缝合的起点' },
-  { key: 'blend-end', label: '接角圆顺：选中缝合的终点' },
+const STRUCTURE_ITEMS: Array<{ key: StructureAction; label: string; hint?: string }> = [
+  { key: 'split', label: '轮廓分割', hint: '选中版片后逐点单击画线，Enter 执行' },
+  { key: 'hole', label: '开内孔', hint: '选中版片后逐点单击画闭合环，Enter 执行' },
+  { key: 'mirror-y', label: '纵向镜像', hint: '选中一个版片' },
+  { key: 'mirror-x', label: '横向镜像', hint: '选中一个版片' },
+  { key: 'mirror-edge', label: '沿边镜像', hint: '选中一个版片和一条轴边' },
+  { key: 'sync-mirror', label: '同步镜像', hint: '选中源版片' },
+  { key: 'merge', label: '合并版片', hint: '选中两个版片' },
+  { key: 'from-edges', label: '由边成片', hint: '选中三条以上首尾相接的边' },
+  { key: 'multi-seam', label: '多段缝合', hint: '按顺序选中一条基准边和多条目标边' },
+  { key: 'fillet', label: '倒圆角', hint: '选中角点后输入半径' },
+  { key: 'break', label: '断开顶点', hint: '选中一个顶点' },
+  { key: 'connect', label: '连接端点', hint: '选中两个自由端点' },
+  { key: 'merge-collinear', label: '合并共线边', hint: '选中两条以上共线相邻边' },
+  { key: 'simplify', label: '简化曲线', hint: '选中曲线边后输入容差' },
+  { key: 'offset-line', label: '等距内部线', hint: '选中一条基准边后输入距离' },
+  { key: 'loop-panel', label: '内部线成片', hint: '选中一条闭合内部线' },
+  { key: 'rhombus-dart', label: '菱形省', hint: '选中一条边后输入省量与省长' },
+  { key: 'blend-start', label: '接角圆顺（起）', hint: '选中一条缝合' },
+  { key: 'blend-end', label: '接角圆顺（终）', hint: '选中一条缝合' },
 ];
 
 /** Prompts one comma-separated number list, e.g. offsets in centimetres. */
@@ -127,9 +135,9 @@ function promptNumbers(title: string, initial: string): number[] {
   return raw.split(/[,，\s]+/).map(Number).filter(Number.isFinite);
 }
 
-const TOOLS_3D: Array<{ key: ToolType; label: string; icon: IconName }> = [
-  { key: 'pin', label: '打PIN 固定布料点', icon: 'pin' },
-  { key: 'unpin', label: '拔PIN 释放布料点', icon: 'unpin' },
+const TOOLS_3D: Array<{ key: ToolType; label: string; icon: IconName; hint?: string }> = [
+  { key: 'pin', label: '打PIN', icon: 'pin', hint: '悬停布料出现圆圈时单击' },
+  { key: 'unpin', label: '拔PIN', icon: 'unpin', hint: '单击已有 PIN' },
 ];
 
 /** View preset entries shown in the 3D toolbar, each labelled with its keypad combo. */
@@ -259,12 +267,13 @@ export function Toolbar2D() {
 
   return (
     <div style={styles.bar}>
-      {TOOLS_2D.slice(0, 2).map(t => (
+      {TOOLS_2D.slice(0, 1).map(t => (
         <ToolButton key={t.key} tool={t} active={activeTool === t.key} onPick={setTool} />
       ))}
+      <ToolGroup tools={POINT_TOOLS} activeTool={activeTool} onPick={setTool} />
       <ToolGroup tools={LINE_TOOLS} activeTool={activeTool} onPick={setTool} />
       <ToolGroup tools={SHAPE_TOOLS} activeTool={activeTool} onPick={setTool} />
-      {TOOLS_2D.slice(2).map(t => (
+      {TOOLS_2D.slice(1).map(t => (
         <ToolButton key={t.key} tool={t} active={activeTool === t.key} onPick={setTool} />
       ))}
       <TrimTool
@@ -274,12 +283,20 @@ export function Toolbar2D() {
       />
       <Dropdown
         label="结构"
-        items={STRUCTURE_ITEMS.map(i => ({ key: i.key, label: `${structureChecked(i.key, activeTool) ? '✓ ' : '　'}${i.label}` }))}
+        items={STRUCTURE_ITEMS.map(i => ({
+          key: i.key,
+          label: `${structureChecked(i.key, activeTool) ? '✓ ' : '　'}${i.label}`,
+          note: i.hint,
+        }))}
         onPick={key => runStructure(key as StructureAction)}
       />
       <Dropdown
         label="标记"
-        items={MARK_TOOLS.map(m => ({ key: m.key, label: `${activeTool === m.key ? '✓ ' : '　'}${m.label}` }))}
+        items={MARK_TOOLS.map(m => ({
+          key: m.key,
+          label: `${activeTool === m.key ? '✓ ' : '　'}${m.label}`,
+          note: m.hint,
+        }))}
         onPick={key => setTool(key as ToolType)}
       />
 
@@ -304,7 +321,7 @@ export function Toolbar2D() {
         items={DISPLAY_LAYERS.map(l => ({ key: l.key, label: `${displayOptions[l.key] ? '✓ ' : '　'}${l.label}` }))}
         onPick={key => setDisplayOption(key as DisplayLayer, !displayOptions[key as DisplayLayer])}
       />
-      <button style={styles.textBtn} title="适配版型范围 (F)" onClick={requestFit}>适应</button>
+      <button style={styles.textBtn} title="单击适配版型范围 (F)" onClick={requestFit}>适应</button>
     </div>
   );
 }
@@ -341,7 +358,7 @@ function CheckMenu() {
 
   return (
     <div ref={anchorRef} style={{ position: 'relative' }}>
-      <button style={styles.textBtn} title="检查轮廓、缝合、省道与放码" onClick={() => (issues === null ? open() : setIssues(null))}>
+      <button style={styles.textBtn} title="单击展开问题列表" onClick={() => (issues === null ? open() : setIssues(null))}>
         检查<Icon name="chevron-down" size={11} style={{ marginLeft: 4 }} />
       </button>
       <MenuPopup open={issues !== null} anchor={anchorRef} onClose={() => setIssues(null)}>
@@ -377,7 +394,9 @@ function AutoMenu() {
     const pattern = useProjectStore.getState().project.pattern;
     const offsets = placePanelsAuto(pattern, { gapCm: 4 });
     if (offsets.length === 0) return;
+    // A draped panel's height comes from its drape anchor, so its row position is not visible.
     const cmds = offsets
+      .map(o => (pattern.panels[o.panelId]?.drape ? { ...o, dy: 0 } : o))
       .filter(o => o.dx !== 0 || o.dy !== 0)
       .map(o => new MovePanelsCommand([o.panelId], { x: o.dx, y: o.dy }));
     if (cmds.length === 0) return;
@@ -430,7 +449,7 @@ function AutoMenu() {
 
   return (
     <div ref={anchorRef} style={{ position: 'relative' }}>
-      <button style={styles.textBtn} title="按布纹区域排位，并给出缝合建议" onClick={toggle}>
+      <button style={styles.textBtn} title="单击展开自动排位与缝合建议" onClick={toggle}>
         智能<Icon name="chevron-down" size={11} style={{ marginLeft: 4 }} />
       </button>
       <MenuPopup open={scan !== null} anchor={anchorRef} onClose={() => setScan(null)}>
@@ -533,8 +552,8 @@ export function Toolbar3D({ engineRef }: { engineRef: MutableRefObject<GarmentEn
           badge={t.key === 'pin' && pinCount > 0 ? { count: pinCount, label: `已打 ${pinCount} 个` } : undefined}
         />
       ))}
-      <button style={styles.textBtn} title="释放全部 PIN" disabled={clearing} onClick={() => void clearPins()}>{clearing ? '清除中…' : '清除PIN'}</button>
-      <button style={styles.textBtn} title="按当前工程重建布料网格" disabled={rebuilding} onClick={() => void rebuildCloth()}>{rebuilding ? '重建中…' : '重建网格'}</button>
+      <button style={styles.textBtn} title="单击释放全部 PIN" disabled={clearing} onClick={() => void clearPins()}>{clearing ? '清除中…' : '清除PIN'}</button>
+      <button style={styles.textBtn} title="单击按当前工程重建布料网格" disabled={rebuilding} onClick={() => void rebuildCloth()}>{rebuilding ? '重建中…' : '重建网格'}</button>
       <div style={styles.spacer} />
       <Dropdown
         label="视角"
@@ -564,12 +583,13 @@ export function Toolbar3D({ engineRef }: { engineRef: MutableRefObject<GarmentEn
 }
 
 function ToolButton({ tool, active, onPick, badge }: {
-  tool: { key: ToolType; label: string; icon: IconName };
+  tool: { key: ToolType; label: string; icon: IconName; hint?: string };
   active: boolean;
   onPick: (t: ToolType) => void;
   /** Count drawn after the icon; the button widens to hold it. */
   badge?: { count: number; label: string };
 }) {
+  const hover = [tool.label, tool.hint, badge?.label].filter(Boolean).join(' · ');
   return (
     <button
       style={{
@@ -577,7 +597,7 @@ function ToolButton({ tool, active, onPick, badge }: {
         ...(badge ? styles.toolBtnCounted : null),
         ...(active ? styles.toolBtnActive : null),
       }}
-      title={badge ? `${tool.label} · ${badge.label}` : tool.label}
+      title={hover}
       onClick={() => onPick(tool.key)}
     >
       <Icon name={tool.icon} size={15} />
@@ -592,12 +612,12 @@ function ToolGroup({ tools, activeTool, onPick }: {
   activeTool: ToolType;
   onPick: (t: ToolType) => void;
 }) {
-  const current = tools.find(t => t.key === activeTool) ?? tools[0];
+  const current = tools.find(t => t.key === activeTool) ?? tools[0]!;
   return (
     <ToolMenu
       icon={current.icon}
-      title={`${current.label} (箭头切换工具)`}
-      options={tools.map(t => ({ key: t.key, label: t.label }))}
+      title={[current.label, current.hint].filter(Boolean).join(' · ')}
+      options={tools.map(t => ({ key: t.key, label: t.label, hint: t.hint }))}
       current={tools.some(t => t.key === activeTool) ? activeTool : ''}
       onPick={key => onPick(key as ToolType)}
     />
@@ -613,7 +633,7 @@ function TrimTool({ active, kind, onPick }: {
   return (
     <ToolMenu
       icon="trim"
-      title={`辅料：${TRIM_KIND_LABELS[kind]} (点击版片放置，箭头换类型)`}
+      title={`${TRIM_KIND_LABELS[kind]} · 单击版片放置`}
       options={TRIM_KINDS.map(k => ({ key: k, label: TRIM_KIND_LABELS[k] }))}
       current={active ? kind : ''}
       onPick={key => onPick(key as TrimKind)}
@@ -625,7 +645,7 @@ function TrimTool({ active, kind, onPick }: {
 function ToolMenu({ icon, title, options, current, onPick }: {
   icon: IconName;
   title: string;
-  options: Array<{ key: string; label: string }>;
+  options: Array<{ key: string; label: string; hint?: string }>;
   current: string;
   onPick: (key: string) => void;
 }) {
@@ -645,6 +665,7 @@ function ToolMenu({ icon, title, options, current, onPick }: {
         {options.map(o => (
           <div
             key={o.key}
+            title={o.hint}
             style={{ ...styles.menuItem, ...(o.key === current ? styles.menuItemActive : null) }}
             onClick={() => { onPick(o.key); setOpen(false); }}
           >
@@ -701,14 +722,16 @@ function MenuPopup({ open, anchor, onClose, children }: {
   if (!open || rect === null) return null;
   const spaceBelow = window.innerHeight - rect.bottom;
   const upward = spaceBelow < MIN_PANEL_SPACE;
+  // Right-aligned to the button, but never so close to the left edge that the menu is squeezed.
+  const right = Math.min(window.innerWidth - rect.right, window.innerWidth - MENU_MIN_WIDTH - MENU_EDGE);
   return createPortal(
     <>
       <div style={styles.backdrop} onClick={onClose} />
       <div
         style={{
           ...styles.menuPopup,
-          right: window.innerWidth - rect.right,
-          maxWidth: window.innerWidth - rect.right - MENU_EDGE,
+          right,
+          maxWidth: window.innerWidth - right - MENU_EDGE,
           ...(upward
             ? { bottom: window.innerHeight - rect.top + 2, maxHeight: rect.top - MENU_EDGE }
             : { top: rect.bottom + 2, maxHeight: spaceBelow - MENU_EDGE }),
@@ -722,6 +745,9 @@ function MenuPopup({ open, anchor, onClose, children }: {
 }
 
 const MENU_EDGE = 8;
+
+/** Narrowest a popup may get when its button sits near the left edge of the window. */
+const MENU_MIN_WIDTH = 300;
 
 /** Room below the button under which the panel is flipped to open upwards. */
 const MIN_PANEL_SPACE = 160;

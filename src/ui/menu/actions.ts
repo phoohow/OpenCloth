@@ -19,6 +19,7 @@ import type { GarmentEngine, CameraPreset } from '../../core/engine/garmentEngin
 import { renderScene } from '../../render/renderer/rendererContext';
 import type { RendererContext } from '../../render/renderer/rendererContext';
 import type { CameraProjection, Pattern, Project } from '../../core/model/types';
+import { reportActionError } from '../widgets/toast';
 
 interface MenuActionContext {
   engineRef: MutableRefObject<GarmentEngine | null>;
@@ -318,7 +319,7 @@ export function createMenuActions(refs: MenuActionContext): MenuActions {
         useProjectStore.getState().executeCommand(cmd);
         useUIStore.getState().clearSelection();
       } catch (err) {
-        alert(`删除失败：${(err as Error).message}`);
+        reportActionError(err, '删除失败');
       }
     },
     selectAllPanels: () => useUIStore.getState().select(allPanelIds()),

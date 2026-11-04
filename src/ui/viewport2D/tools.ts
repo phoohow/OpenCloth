@@ -11,6 +11,9 @@ export type PolylineMode = 'line' | 'split' | 'hole';
 /** Intake width applied when a dart is drawn by clicking; editable afterwards in the panel. */
 export const DEFAULT_DART_INTAKE_CM = 2;
 
+/** Arc-length fraction where a new notch lands on its edge; editable afterwards by dragging. */
+export const NOTCH_MID_T = 0.5;
+
 /** One dart leg: a position on an outline edge. */
 export interface DartLeg {
   edgeId: string;
@@ -31,16 +34,44 @@ export function orderedDartLegs(pattern: Pattern, first: DartLeg, second: DartLe
   return null;
 }
 
+/** One side of a seam being drawn: its edge interval and the end the stitching starts from. */
+export interface SeamSide {
+  edgeId: string;
+  t0: number;
+  t1: number;
+  /** Sewing runs from the low-t end when true, from the high-t end when false; unset until picked. */
+  startLow?: boolean;
+}
+
 /** Pointer state machine of the drafting tools; one gesture at a time, cleared on tool switch. */
 export type DraftState =
   | null
-  | { tool: 'pen'; points: Vec2[]; cursor: Vec2; smoothNext: boolean }
+  | { tool: 'pen'; points: Vec2[]; cursor: Vec2; curve: boolean }
   | { tool: 'shape'; shape: 'rect' | 'circle' | 'ellipse'; start: Vec2; current: Vec2 }
   | { tool: 'polyline'; mode: PolylineMode; panelId: string; points: Vec2[]; cursor: Vec2 }
   | { tool: 'dart'; panelId: string; leg1: { edgeId: string; t: number } | null; leg2: { edgeId: string; t: number } | null; cursor: Vec2 }
-  | { tool: 'seam'; pickA: { edgeId: string; t0: number; t1: number } | null; drag: { edgeId: string; start: Vec2; current: Vec2 } | null }
+  | { tool: 'seam'; sides: SeamSide[]; drag: { edgeId: string; start: Vec2; current: Vec2 } | null }
   | { tool: 'measure'; pointAId: string | null; cursor: Vec2 }
   | { tool: 'handleDrag'; pointId: string; which: 'in' | 'out'; cursor: Vec2 };
+
+/**
+ * Loop through a freehand stroke: repeated positions are dropped, including a last point that lands
+ * on the first, so a double click or a snapped closing point cannot add a zero-length edge.
+ */
+export function cleanDraftLoop(points: readonly Vec2[]): Vec2[] {
+  const loop: Vec2[] = [];
+  for (const point of points) {
+    const previous = loop[loop.length - 1];
+    if (previous && Math.hypot(previous.x - point.x, previous.y - point.y) < 1e-6) continue;
+    loop.push(point);
+  }
+  while (loop.length > 1) {
+    const first = loop[0]!, last = loop[loop.length - 1]!;
+    if (Math.hypot(first.x - last.x, first.y - last.y) >= 1e-6) break;
+    loop.pop();
+  }
+  return loop;
+}
 
 /** Whether a draft leaves the tool armed for the next stroke instead of finishing. */
 export function draftIsIdle(draft: DraftState): boolean {
@@ -48,7 +79,7 @@ export function draftIsIdle(draft: DraftState): boolean {
   switch (draft.tool) {
     case 'pen': return draft.points.length === 0;
     case 'polyline': return draft.points.length === 0;
-    case 'seam': return !draft.pickA;
+    case 'seam': return draft.sides.length === 0;
     case 'measure': return !draft.pointAId;
     default: return true;
   }

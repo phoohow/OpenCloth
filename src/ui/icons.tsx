@@ -3,7 +3,7 @@ import { memo, type CSSProperties } from 'react';
 /** Every UI glyph; each one is the file `assets/icons/<name>.svg`. */
 export const ICON_NAMES = [
   // 2D pattern tools
-  'select', 'add-point', 'line', 'curve', 'internal-line', 'dart', 'seam', 'pan',
+  'select', 'add-point', 'remove-point', 'line', 'curve', 'internal-line', 'dart', 'seam', 'pan',
   'rect', 'circle', 'ellipse', 'print', 'topstitch', 'trim',
   // 3D fitting tools
   'pin', 'unpin', 'move',
