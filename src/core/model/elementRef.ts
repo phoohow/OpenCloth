@@ -1,4 +1,5 @@
 import type { Pattern } from './types';
+import { patternDocument } from './document/patternDocument';
 
 /** Selectable element kinds in the 2D drafting workspace. */
 export type PatternElementKind = 'panel' | 'point' | 'edge' | 'internal' | 'dart' | 'seam' | 'notch' | 'annotation' | 'measurement' | 'print' | 'topstitch' | 'trim';
@@ -43,42 +44,16 @@ export function idsOfKind(selection: readonly string[], kind: PatternElementKind
  * selected points, edges and pattern objects.
  */
 export function affectedPanelIds(pattern: Pattern, selection: readonly string[]): string[] {
+  const document = patternDocument(pattern);
   const panels = new Set(idsOfKind(selection, 'panel'));
-  for (const edgeId of idsOfKind(selection, 'edge')) {
-    for (const panel of Object.values(pattern.panels)) {
-      if (panel.outlineEdgeIds.includes(edgeId) || (panel.holes ?? []).some(l => l.includes(edgeId))) panels.add(panel.id);
-    }
-  }
-  for (const pointId of idsOfKind(selection, 'point')) {
-    for (const panel of Object.values(pattern.panels)) {
-      if (panel.outlineEdgeIds.some(eid => {
-        const e = pattern.edges[eid];
-        return e && (e.startPointId === pointId || e.endPointId === pointId);
-      })) panels.add(panel.id);
-    }
-  }
-  for (const seamId of idsOfKind(selection, 'seam')) {
-    const seam = pattern.seams[seamId];
-    if (!seam) continue;
-    for (const end of [seam.a, seam.b]) {
-      for (const panel of Object.values(pattern.panels)) {
-        if (panel.outlineEdgeIds.includes(end.edgeId)) panels.add(panel.id);
-      }
-    }
-  }
-  for (const lineId of idsOfKind(selection, 'internal')) {
-    for (const panel of Object.values(pattern.panels)) {
-      if (panel.internalLineIds.includes(lineId)) panels.add(panel.id);
-    }
-  }
-  for (const dartId of idsOfKind(selection, 'dart')) {
-    for (const panel of Object.values(pattern.panels)) {
-      if (panel.dartIds.includes(dartId)) panels.add(panel.id);
-    }
-  }
+  for (const edgeId of idsOfKind(selection, 'edge')) document.panelsOfEdge(edgeId).forEach(id => panels.add(id));
+  for (const pointId of idsOfKind(selection, 'point')) document.panelsOfPoint(pointId).forEach(id => panels.add(id));
+  for (const seamId of idsOfKind(selection, 'seam')) document.panelsOfSeam(seamId).forEach(id => panels.add(id));
+  for (const lineId of idsOfKind(selection, 'internal')) document.panelsOfInternalLine(lineId).forEach(id => panels.add(id));
+  for (const dartId of idsOfKind(selection, 'dart')) document.panelsOfDart(dartId).forEach(id => panels.add(id));
   for (const kind of ['print', 'topstitch', 'trim'] as const) {
     for (const id of idsOfKind(selection, kind)) {
-      const owner = pattern[kind === 'print' ? 'prints' : kind === 'topstitch' ? 'topstitches' : 'trims'][id]?.panelId;
+      const owner = document.panelOfMarking(kind, id);
       if (owner) panels.add(owner);
     }
   }

@@ -60,7 +60,8 @@ export class ClothPicker {
 
   /** Ray through a normalized device coordinate point of the main camera. */
   screenRay(ndcX: number, ndcY: number): THREE.Ray | null {
-    const { camera, canvas } = this.ctx;
+    const camera = this.ctx.view.camera;
+    const { canvas } = this.ctx.surface;
     if (!canvas.clientHeight) return null;
     this.raycaster.setFromCamera({ x: ndcX, y: ndcY } as unknown as THREE.Vector2, camera);
     return this.raycaster.ray.clone();
@@ -68,8 +69,8 @@ export class ClothPicker {
 
   /** World units per screen pixel at the ray origin, for a screen-stable pick radius. */
   private screenWorldScale(origin: THREE.Vector3): number {
-    const height = Math.max(this.ctx.canvas.clientHeight, 1);
-    const camera = this.ctx.camera;
+    const height = Math.max(this.ctx.surface.canvas.clientHeight, 1);
+    const camera = this.ctx.view.camera;
     if (isOrthographic(camera)) {
       return (camera.top - camera.bottom) / camera.zoom / height;
     }
@@ -221,19 +222,19 @@ export class ClothPicker {
   /** Frames the scene box from the current view direction; keeps orbit direction, resets distance. */
   frameScene(direction?: THREE.Vector3, up?: THREE.Vector3): void {
     const { ctx } = this;
-    const { camera, controls } = ctx;
+    const { camera, controls } = ctx.view;
     const box = this.sceneBounds();
     const center = box.getCenter(new THREE.Vector3());
     const dir = viewDirection(camera.position, controls.target, direction);
     const frame = toViewFrame(dir, up ?? camera.up);
     const aspect = viewportAspect(ctx);
-    const fit = fitCameraToBox(box, frame, ctx.perspectiveCamera.fov, aspect);
+    const fit = fitCameraToBox(box, frame, ctx.view.perspectiveCamera.fov, aspect);
 
     camera.up.copy(frame.up);
     camera.position.copy(center).add(frame.direction.clone().multiplyScalar(fit.distance));
     controls.target.copy(center);
-    ctx.orthoViewHeight = fit.viewHeight;
-    ctx.orthographicCamera.zoom = 1;
+    ctx.view.orthoViewHeight = fit.viewHeight;
+    ctx.view.orthographicCamera.zoom = 1;
     syncOrthoFrustum(ctx, aspect);
     controls.update();
   }

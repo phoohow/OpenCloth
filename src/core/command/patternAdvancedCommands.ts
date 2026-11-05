@@ -1,6 +1,6 @@
 import type { ProjectContext } from './command';
 import type { InternalLine, Panel, Pattern, PatternEdge, PatternPoint, Vec2 } from '../model/types';
-import { buildPatternGraph, type PatternGraph } from '../model/patternGraph';
+import { PatternTopology } from '../model/patternTopology';
 import { genId } from '../model/defaults';
 import { SnapshotCommand } from './patternSnapshot';
 import { addClosedLineOutline, makePanel, newEdge, newPoint, placeRight } from './patternCreateCommands';
@@ -66,21 +66,19 @@ function panelsOwningAny(pattern: Pattern, edgeIds: Iterable<string>): Panel[] {
 }
 
 /** Outline or hole edges of some panel that end or start at a point. */
-function incidentOutlineEdges(pattern: Pattern, graph: PatternGraph, pointId: string): Set<string> {
+function incidentOutlineEdges(topology: PatternTopology, pointId: string): Set<string> {
   const ids = new Set<string>();
-  for (const [edgeId, locations] of graph.edgeLocations) {
-    if (locations.length === 0) continue;
-    const edge = pattern.edges[edgeId];
-    if (edge && (edge.startPointId === pointId || edge.endPointId === pointId)) ids.add(edgeId);
+  for (const ref of topology.edgesOf(pointId)) {
+    if (topology.isOnLoop(ref.edgeId)) ids.add(ref.edgeId);
   }
   return ids;
 }
 
 /** Edge ids of a point that sit on a panel outline or hole. */
-function outlineEdgesOfPoint(pattern: Pattern, graph: PatternGraph, pointId: string): string[] {
-  return (graph.pointRefs.get(pointId) ?? [])
+function outlineEdgesOfPoint(topology: PatternTopology, pointId: string): string[] {
+  return topology.edgesOf(pointId)
     .map(ref => ref.edgeId)
-    .filter(id => pattern.edges[id] !== undefined && (graph.edgeLocations.get(id)?.length ?? 0) > 0);
+    .filter(edgeId => topology.isOnLoop(edgeId));
 }
 
 /**
@@ -296,11 +294,11 @@ export class BreakPointCommand extends SnapshotCommand {
   protected apply(pattern: Pattern, ctx: ProjectContext): void {
     const point = pattern.points[this.pointId];
     if (!point) throw new Error('顶点不存在，无法断开');
-    const graph = buildPatternGraph(pattern);
-    const incident = incidentOutlineEdges(pattern, graph, this.pointId);
+    const topology = new PatternTopology(pattern);
+    const incident = incidentOutlineEdges(topology, this.pointId);
     if (incident.size < 2) throw new Error('该顶点相连的轮廓边不足，无法断开');
 
-    const leaving = this.edgeIds?.length ? this.namedLeaving(incident) : this.autoLeaving(pattern, graph, incident);
+    const leaving = this.edgeIds?.length ? this.namedLeaving(incident) : this.autoLeaving(pattern, topology, incident);
     if (leaving.size === 0 || leaving.size >= incident.size) throw new Error('断开需保留经过该顶点的部分轮廓边');
 
     const duplicateId = genId('pt');
@@ -336,12 +334,12 @@ export class BreakPointCommand extends SnapshotCommand {
   }
 
   /** Moves every contour after the first one through the vertex: other panels or extra loops. */
-  private autoLeaving(pattern: Pattern, graph: PatternGraph, incident: Set<string>): Set<string> {
+  private autoLeaving(pattern: Pattern, topology: PatternTopology, incident: Set<string>): Set<string> {
     const panels = new Set<string>();
-    for (const edgeId of incident) for (const location of graph.edgeLocations.get(edgeId) ?? []) panels.add(location.panelId);
+    for (const edgeId of incident) for (const panelId of topology.panelsOfEdge(edgeId)) panels.add(panelId);
     if (panels.size >= 2) {
       const keeper = [...panels][0];
-      return new Set([...incident].filter(id => !(graph.edgeLocations.get(id) ?? []).some(l => l.panelId === keeper)));
+      return new Set([...incident].filter(id => !topology.panelsOfEdge(id).includes(keeper)));
     }
     const panel = pattern.panels[[...panels][0]];
     const chains = closedChains(pattern, panel.outlineEdgeIds);
@@ -365,9 +363,9 @@ export class ConnectPointsCommand extends SnapshotCommand {
     if (!a || !b) throw new Error('端点不存在，无法连接');
     if (this.pointIdA === this.pointIdB) throw new Error('两个端点是同一个点');
 
-    const graph = buildPatternGraph(pattern);
-    const edgesA = outlineEdgesOfPoint(pattern, graph, this.pointIdA);
-    const edgesB = outlineEdgesOfPoint(pattern, graph, this.pointIdB);
+    const topology = new PatternTopology(pattern);
+    const edgesA = outlineEdgesOfPoint(topology, this.pointIdA);
+    const edgesB = outlineEdgesOfPoint(topology, this.pointIdB);
     if (edgesA.length === 0 || edgesB.length === 0) throw new Error('端点不在任何轮廓上，无法连接');
     if (edgesA.length > 2 || edgesB.length > 2) throw new Error('端点连着多条轮廓链，不是开放端点，无法连接');
     for (const edge of Object.values(pattern.edges)) {
@@ -959,8 +957,8 @@ export class OffsetInternalLineCommand extends SnapshotCommand {
     if (this.distancesCm.length === 0) throw new Error('至少需要一个等距距离');
     for (const d of this.distancesCm) if (!(d > 0)) throw new Error('等距距离需为正数');
 
-    const graph = buildPatternGraph(pattern);
-    const panelId = (graph.edgeLocations.get(this.edgeId) ?? [])[0]?.panelId;
+    const topology = new PatternTopology(pattern);
+    const panelId = topology.panelOfEdge(this.edgeId);
     const panel = panelId ? pattern.panels[panelId] : undefined;
     if (!panel) throw new Error('边不属于任何版片，无法生成等距线');
 

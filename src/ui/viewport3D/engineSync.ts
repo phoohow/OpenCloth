@@ -8,8 +8,8 @@ import {
   noteDrawnFrame, noteRayTraceState, noteRayTracingSamples, noteRayTracingUnsupported, noteSimSteps,
   useProjectStore, useSimStore, useUIStore,
 } from '../../store/stores';
-import { normalizeLights, normalizeRayTracing } from '../../core/model/defaults';
-import { computeClothSignature } from '../../store/projectStore';
+import { normalizeRayTracing } from '../../core/model/defaults';
+import { ChangeSet } from '../../core/change/changeSet';
 import { AVATAR_NODE_ID } from '../sceneTree';
 import { rayTraceFailureLabel } from '../optionTables';
 import type { CameraConfig, Pattern, Project, Vec3 } from '../../core/model/types';
@@ -24,11 +24,7 @@ export function syncSelectionOverlay(engine: GarmentEngine, pattern: Pattern, se
 /** Falls back to rasterization when the ray tracing pipeline cannot run. */
 export function recoverWithRaster(ctx: RendererContext, error: unknown, report: (message: string) => void): void {
   console.error('WebGPU ray tracing failed:', error);
-  ctx.rayTracer?.dispose();
-  ctx.rayTracer = null;
-  // A kept creation promise would reinstall this disposed tracer on the next switch.
-  ctx.rayTracerLoading = null;
-  ctx.renderMode = 'shaded';
+  ctx.ray.recoverToRaster();
   if (useUIStore.getState().renderMode === 'raytraced') useUIStore.getState().setRenderMode('shaded');
   if (error instanceof RayTracingUnsupportedError) {
     const capability = { ok: false, failure: error.failure, detail: error.detail };
@@ -38,24 +34,6 @@ export function recoverWithRaster(ctx: RendererContext, error: unknown, report: 
   }
   report('光线追踪运行失败，已切回光栅化模式。');
 }
-
-/** Comparable snapshot of the project fields that drive scene sync. */
-function projectSignals(state: { project: Project; clothSignature: string }) {
-  const project = state.project;
-  const lights = project.scene.lights;
-  const render = project.scene.render;
-  return {
-    cloth: state.clothSignature,
-    dt: project.scene.simulation.dt,
-    avatar: project.avatar.display,
-    env: `${lights.iblObjectKey ?? lights.iblUrl ?? 'bundled'}:${lights.iblName ?? ''}`,
-    light: JSON.stringify([normalizeLights(lights), lights.iblEnabled, lights.iblIntensity, render.toneMapping]),
-    ray: JSON.stringify(normalizeRayTracing(render.rayTracing)),
-    references: JSON.stringify(project.scene.referenceObjects ?? []),
-  };
-}
-
-type ProjectSignals = ReturnType<typeof projectSignals>;
 
 /** Playback time is published to the store at this interval instead of every tick. */
 const PLAYED_PUBLISH_MS = 100;
@@ -71,7 +49,6 @@ export class EngineSync {
   private cancelled = false;
   private raf = 0;
   private rebuildSeq = 0;
-  private last: ProjectSignals;
   private unsubscribes: (() => void)[] = [];
   /** Newest in-flight drag pattern; the frame loop applies it at most once per frame. */
   private pendingPreviewPattern: Pattern | null = null;
@@ -106,7 +83,6 @@ export class EngineSync {
     builtFrom: Project,
   ) {
     const state = useProjectStore.getState();
-    this.last = projectSignals({ project: builtFrom, clothSignature: computeClothSignature(builtFrom) });
     this.lastLoadToken = state.loadToken;
 
     const handleProjectState = (next: ReturnType<typeof useProjectStore.getState>) => {
@@ -115,56 +91,19 @@ export class EngineSync {
         this.lastLoadToken = next.loadToken;
         this.applyProjectCamera(project);
       }
-      const signals = projectSignals(next);
-      if (signals.cloth !== this.last.cloth) {
-        this.last.cloth = signals.cloth;
-        // The committed pattern supersedes any drag preview still queued.
-        this.previewQueued = false;
-        this.previewApplied = false;
-        this.pendingPreviewPattern = null;
-        this.rebuildCloth(project);
-      }
-      if (signals.dt !== this.last.dt) {
-        this.last.dt = signals.dt;
-        this.engine.applyTimeStep(project);
-      }
-      if (signals.avatar !== this.last.avatar) {
-        this.last.avatar = signals.avatar;
-        this.engine.applyAvatarDisplay(project.avatar.display);
-      }
-      if (signals.env !== this.last.env) {
-        this.last.env = signals.env;
-        void this.engine.applyEnvironment(project);
-      }
-      if (signals.light !== this.last.light) {
-        this.last.light = signals.light;
-        applyLightConfig(this.ctx, project.scene.lights, project.scene.render);
-      }
-      if (signals.ray !== this.last.ray) {
-        this.last.ray = signals.ray;
-        this.ctx.rayConfig = normalizeRayTracing(project.scene.render.rayTracing);
-        void setRayTracingConfig(this.ctx, this.ctx.rayConfig).catch(error => this.recover(error));
-      }
-      if (signals.references !== this.last.references) {
-        this.last.references = signals.references;
-        void this.engine.reconcileReferences(project).then(() => {
-          if (!this.cancelled) useUIStore.getState().bumpRefObjects();
-        });
-      }
-      // Materials, panel visibility and seam threads re-read the live project every commit.
-      this.applyDrawState(project);
+      this.applyChange(project, next.changes);
     };
     this.unsubscribes.push(useProjectStore.subscribe(handleProjectState));
 
     const onCameraChange = () => this.scheduleCameraPersist();
-    this.ctx.controls.addEventListener('change', onCameraChange);
-    this.unsubscribes.push(() => this.ctx.controls.removeEventListener('change', onCameraChange));
+    this.ctx.view.controls.addEventListener('change', onCameraChange);
+    this.unsubscribes.push(() => this.ctx.view.controls.removeEventListener('change', onCameraChange));
 
     this.unsubscribes.push(useUIStore.subscribe((state, previous) => {
       if (state.renderMode !== previous?.renderMode) {
         void setRendererMode(this.ctx, state.renderMode).catch(error => this.recover(error));
         // Cloth materials follow the display mode.
-        this.applyDrawState(useProjectStore.getState().project);
+        this.applyDrawState(useProjectStore.getState().project, ChangeSet.of(['cloth.fabric']));
       }
       if (state.cameraProjection !== previous?.cameraProjection) {
         this.engine.setProjection(state.cameraProjection);
@@ -284,22 +223,62 @@ export class EngineSync {
     this.engine.previewEditPattern({ ...project, pattern }, tier);
   }
 
-  /** Re-reads materials, visibility and thread overlays from the project; all paths are signature-guarded. */
-  private applyDrawState(project: Project): void {
+  /** Applies one project revision to the runtime, touching only the concerns it changed. */
+  private applyChange(project: Project, change: ChangeSet): void {
+    if (change.has('cloth.geometry') || change.has('cloth.constraints')) {
+      // The committed pattern supersedes any drag preview still queued.
+      this.previewQueued = false;
+      this.previewApplied = false;
+      this.pendingPreviewPattern = null;
+      this.rebuildCloth(project);
+    }
+    if (change.has('scene.simulation')) this.engine.applyTimeStep(project);
+    if (change.has('avatar.look')) this.engine.applyAvatarDisplay(project.avatar.display);
+    if (change.has('scene.environment')) void this.engine.applyEnvironment(project);
+    if (change.has('scene.light')) applyLightConfig(this.ctx, project.scene.lights, project.scene.render);
+    if (change.has('scene.render')) this.applyRayConfig(project);
+    if (change.has('scene.references')) {
+      void this.engine.reconcileReferences(project).then(() => {
+        if (!this.cancelled) useUIStore.getState().bumpRefObjects();
+      });
+    }
+    this.applyDrawState(project, change);
+  }
+
+  /** Reinstalls the path-tracing configuration when the project asks for a different one. */
+  private applyRayConfig(project: Project): void {
+    const next = normalizeRayTracing(project.scene.render.rayTracing);
+    if (JSON.stringify(next) === JSON.stringify(this.ctx.ray.config)) return;
+    this.ctx.ray.config = next;
+    void setRayTracingConfig(this.ctx, next).catch(error => this.recover(error));
+  }
+
+  /** Re-reads materials, visibility and overlays for the concerns the revision touched. */
+  private applyDrawState(project: Project, change: ChangeSet): void {
     const renderMode = useUIStore.getState().renderMode;
-    this.engine.applyFabrics(project, renderMode);
-    this.engine.applyAvatarAppearance(project.avatar.appearance);
-    this.engine.applyAvatarSoftness(project);
-    this.engine.applyLayerThickness(project);
-    this.engine.applyPanelVisibility(project);
-    this.engine.applySeamStitchVisibility(project);
-    this.engine.applyTopstitchThreads(project);
-    this.engine.applyTrimInstances(project);
+    if (change.has('cloth.fabric') || change.has('cloth.geometry')) {
+      this.engine.applyFabrics(project, renderMode);
+    }
+    if (change.has('avatar.look')) {
+      this.engine.applyAvatarAppearance(project.avatar.appearance);
+      this.engine.applyAvatarSoftness(project);
+    }
+    if (change.has('cloth.layer')) this.engine.applyLayerThickness(project);
+    if (change.has('cloth.visibility') || change.has('cloth.geometry') || change.has('cloth.fabric')) {
+      this.engine.applyPanelVisibility(project);
+    }
+    if (change.has('cloth.constraints') || change.has('cloth.geometry') || change.has('cloth.marking')) {
+      this.engine.applySeamStitchVisibility(project);
+    }
+    if (change.has('cloth.marking') || change.has('cloth.geometry')) {
+      this.engine.applyTopstitchThreads(project);
+      this.engine.applyTrimInstances(project);
+    }
     syncSelectionOverlay(this.engine, project.pattern, useUIStore.getState().selection);
   }
 
   private recover(error: unknown): void {
-    if (!this.ctx.disposed) recoverWithRaster(this.ctx, error, this.report);
+    if (!this.ctx.surface.disposed) recoverWithRaster(this.ctx, error, this.report);
   }
 
   /** Restores the camera saved with a freshly loaded project. */
@@ -308,7 +287,7 @@ export class EngineSync {
     if (!camera) return;
     this.applyingCamera = true;
     try {
-      if (camera.projection !== this.ctx.projection) {
+      if (camera.projection !== this.ctx.view.projection) {
         useUIStore.getState().setCameraProjection(camera.projection);
       }
       this.engine.setCameraState(camera);
@@ -391,21 +370,21 @@ export class EngineSync {
         if (stats) simState.setPressureStats(stats);
       }
 
-      this.ctx.controls.update();
+      this.ctx.view.controls.update();
       // Physics keeps running while the pane is hidden; only the draw is skipped.
-      const drawn = this.ctx.canvas.clientWidth > 0 && this.ctx.canvas.clientHeight > 0;
+      const drawn = this.ctx.surface.canvas.clientWidth > 0 && this.ctx.surface.canvas.clientHeight > 0;
       if (drawn) {
         try {
           renderScene(this.ctx);
         } catch (error) {
-          if (this.ctx.renderMode !== 'raytraced') throw error;
+          if (this.ctx.ray.mode !== 'raytraced') throw error;
           this.recover(error);
           renderScene(this.ctx);
         }
         noteDrawnFrame('3d', performance.now());
       }
-      const samples = drawn && this.ctx.renderMode === 'raytraced' ? this.ctx.rayTracer?.sampleCount ?? 0 : 0;
-      noteRayTracingSamples(samples, this.ctx.rayTracer?.isAccumulating ?? false, performance.now());
+      const samples = drawn && this.ctx.ray.mode === 'raytraced' ? this.ctx.ray.tracer?.sampleCount ?? 0 : 0;
+      noteRayTracingSamples(samples, this.ctx.ray.tracer?.isAccumulating ?? false, performance.now());
       noteRayTraceState(rayTraceState(this.ctx));
     } finally {
       // Queued after the awaited work so one frame never overlaps the next.

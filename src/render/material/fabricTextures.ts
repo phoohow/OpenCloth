@@ -1,16 +1,6 @@
 import * as THREE from 'three/webgpu';
 import type { Vec2 } from '../../core/model/types';
-
-/** Cache entry for one map data URL: the decode promise and the number of live handles. */
-interface ImageEntry {
-  refs: number;
-  promise: Promise<HTMLImageElement | null>;
-}
-
-/** Decoded images keyed by data URL, so a rebind reuses the decode instead of parsing it again. */
-const imageCache = new Map<string, ImageEntry>();
-/** Image loads the exporters wait on before reading textures. */
-const pendingLoads = new Set<Promise<HTMLImageElement | null>>();
+import { retainImage } from '../imageStore';
 
 /** Texture owned by one material for one map slot. */
 export interface FabricTextureHandle {
@@ -32,7 +22,7 @@ export function acquireFabricTexture(
   offset: Vec2,
   onReady: (texture: THREE.Texture) => void,
 ): FabricTextureHandle {
-  const entry = acquireImage(url);
+  const lease = retainImage(url);
   let texture: THREE.Texture | null = null;
   let released = false;
 
@@ -53,7 +43,7 @@ export function acquireFabricTexture(
     onReady(texture);
   };
 
-  void entry.promise.then(bind);
+  void lease.ready.then(bind);
 
   return {
     get texture() { return texture; },
@@ -68,38 +58,7 @@ export function acquireFabricTexture(
       released = true;
       texture?.dispose();
       texture = null;
-      entry.refs -= 1;
-      if (entry.refs <= 0) imageCache.delete(url);
+      lease.release();
     },
   };
-}
-
-/** Resolves after every map image requested so far has finished loading or failed. */
-export async function whenFabricTexturesReady(): Promise<void> {
-  while (pendingLoads.size > 0) await Promise.all([...pendingLoads]);
-}
-
-/** Increments the cache reference for a data URL, decoding it on first use. */
-function acquireImage(url: string): ImageEntry {
-  const cached = imageCache.get(url);
-  if (cached) {
-    cached.refs += 1;
-    return cached;
-  }
-  const promise = loadImage(url);
-  const entry: ImageEntry = { refs: 1, promise };
-  imageCache.set(url, entry);
-  pendingLoads.add(promise);
-  void promise.then(() => pendingLoads.delete(promise));
-  return entry;
-}
-
-/** Loads a data URL into an image element; a broken image resolves null so the cloth keeps shading. */
-function loadImage(url: string): Promise<HTMLImageElement | null> {
-  return new Promise(resolve => {
-    const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => resolve(null);
-    image.src = url;
-  });
 }

@@ -22,7 +22,7 @@ test('自动着装并导出截图', async ({ page }) => {
   const downloadPromise = page.waitForEvent('download');
   await page.getByText('文件', { exact: true }).click();
   await page.getByText('导出', { exact: true }).click();
-  await page.getByText('导出截图 PNG', { exact: true }).click();
+  await page.getByText('图像：截图 PNG', { exact: true }).click();
   const download = await downloadPromise;
 
   expect(download.suggestedFilename()).toMatch(/\.png$/);

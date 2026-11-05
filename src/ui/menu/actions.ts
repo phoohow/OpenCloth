@@ -308,35 +308,35 @@ export function createMenuActions(refs: MenuActionContext): MenuActions {
     exportGlb: () => {
       const ctx = refs.ctxRef.current;
       if (!ctx) return;
-      void exportGLB(ctx.scene, `${project().meta.name}.glb`, { includeAvatar: false, includeMaterial: true });
+      void exportGLB(ctx.surface.scene, `${project().meta.name}.glb`, { includeAvatar: false, includeMaterial: true });
     },
     exportObj: () => {
       const ctx = refs.ctxRef.current;
       if (!ctx) return;
-      exportOBJ(ctx.scene, `${project().meta.name}.obj`, { includeAvatar: false, includeMaterial: true });
+      exportOBJ(ctx.surface.scene, `${project().meta.name}.obj`, { includeAvatar: false, includeMaterial: true });
     },
     exportFbx: () => {
       const ctx = refs.ctxRef.current;
       if (!ctx) return;
-      exportFBX(ctx.scene, `${project().meta.name}.fbx`, { includeAvatar: false, includeMaterial: false });
+      exportFBX(ctx.surface.scene, `${project().meta.name}.fbx`, { includeAvatar: false, includeMaterial: false });
     },
     exportUsd: () => {
       const ctx = refs.ctxRef.current;
       if (!ctx) return;
-      exportUSD(ctx.scene, `${project().meta.name}.usda`, { includeAvatar: false, includeMaterial: false });
+      exportUSD(ctx.surface.scene, `${project().meta.name}.usda`, { includeAvatar: false, includeMaterial: false });
     },
     screenshot: () => {
       const ctx = refs.ctxRef.current;
       if (!ctx) return;
       renderScene(ctx);
-      exportScreenshot(ctx.canvas, `${project().meta.name}.png`);
+      exportScreenshot(ctx.surface.canvas, `${project().meta.name}.png`);
     },
     exportAnimation: () => {
       const ctx = refs.ctxRef.current;
       if (!ctx) return;
       alert('开始录制 5 秒动画…');
       // The viewport keeps drawing each frame, so a paused simulation records its current state.
-      void recordCanvasToWebM(ctx.canvas, `${project().meta.name}.webm`).then(result => {
+      void recordCanvasToWebM(ctx.surface.canvas, `${project().meta.name}.webm`).then(result => {
         if (result === 'unsupported') alert('当前浏览器不支持画布录制');
       });
     },

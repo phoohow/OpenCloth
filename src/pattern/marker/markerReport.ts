@@ -1,4 +1,5 @@
 import type { Vec2 } from '../../core/model/types';
+import { csvTable } from '../../core/text/csv';
 import type { MarkerLayout, MarkerPlacement } from './markerLayout';
 
 /** Cost input for a marker report; prices are per running metre of fabric. */
@@ -93,13 +94,7 @@ export function markerReportCsv(report: MarkerReport): string {
   for (const panel of report.panels) {
     rows.push([panel.name, String(panel.count), panel.areaM2.toFixed(4)]);
   }
-  return rows.map(row => row.map(csvCell).join(',')).join('\r\n');
-}
-
-/** Escapes one CSV cell; quotes are doubled and cells containing separators are quoted. */
-function csvCell(value: string): string {
-  if (!/[",\r\n]/.test(value)) return value;
-  return `"${value.replace(/"/g, '""')}"`;
+  return csvTable(rows);
 }
 
 /** Total placed outline area; exposed for callers that already have placements. */

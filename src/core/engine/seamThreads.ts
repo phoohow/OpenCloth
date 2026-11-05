@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
 import type { Seam } from '../model/types';
-import type { SeamPair } from './mergedCloth';
+import type { SeamPair } from '../build/seamPair';
 
 /** Thread overlay drawn between paired seam edges; it dims as a seam closes. */
 export class SeamThreads {

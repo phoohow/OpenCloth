@@ -1,4 +1,4 @@
-export { computeClothSignature, useProjectStore } from './projectStore';
+export { useProjectStore } from './projectStore';
 export { useSimStore } from './simStore';
 export {
   FPS_SAMPLE_MS, noteDrawnFrame, noteRayTraceState, noteRayTracingSamples,

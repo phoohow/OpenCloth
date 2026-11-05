@@ -81,7 +81,8 @@ export class ClothInteraction {
   hoverPinAtScreen(ndcX: number, ndcY: number, radiusPx = PIN_HOVER_RADIUS_PX): number | null {
     const positions = this.host.positions();
     if (!positions) return null;
-    const { camera, canvas } = this.host.renderer;
+    const camera = this.host.renderer.view.camera;
+    const { canvas } = this.host.renderer.surface;
     const width = canvas.clientWidth;
     const height = canvas.clientHeight;
     if (!width || !height) return null;
@@ -115,7 +116,7 @@ export class ClothInteraction {
   ): boolean {
     const offset = index * 3;
     if (offset + 2 >= positions.length) return true;
-    const camera = this.host.renderer.camera;
+    const camera = this.host.renderer.view.camera;
     const point = this.point.set(positions[offset]!, positions[offset + 1]!, positions[offset + 2]!);
     const distance = camera.position.distanceTo(point);
     this.direction.copy(point).sub(camera.position).divideScalar(distance || 1);
@@ -148,7 +149,7 @@ export class ClothInteraction {
     const weights = grabWeightsAround(positions, center, DRAG_GRAB_RADIUS_M, DRAG_GRAB_STRENGTH);
     if (!simulator.setGrab(weights, [center.x, center.y, center.z])) return false;
     this.drag = { center, plane: new THREE.Plane().setFromNormalAndCoplanarPoint(normal, center), particle: hit.index };
-    this.marker.show(hit.index, positions, this.host.renderer.scene, this.host.renderer.camera);
+    this.marker.show(hit.index, positions, this.host.renderer.surface.scene, this.host.renderer.view.camera);
     return true;
   }
 
@@ -173,7 +174,7 @@ export class ClothInteraction {
   /** Releases the drag; the cloth keeps the velocity the pull gave it. */
   endDrag(): void {
     this.drag = null;
-    this.marker.hide(this.host.renderer.scene);
+    this.marker.hide(this.host.renderer.surface.scene);
     this.host.simulator()?.clearGrab();
   }
 
@@ -184,12 +185,12 @@ export class ClothInteraction {
 
   /** Keeps the grabbed-point marker on its particle after a readback. */
   syncMarker(positions: Float32Array | null): void {
-    this.marker.sync(positions, this.host.renderer.camera);
+    this.marker.sync(positions, this.host.renderer.view.camera);
   }
 
   /** Ends the drag and frees the marker. */
   dispose(): void {
     this.endDrag();
-    this.marker.dispose(this.host.renderer.scene);
+    this.marker.dispose(this.host.renderer.surface.scene);
   }
 }

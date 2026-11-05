@@ -82,7 +82,7 @@ export function Viewport3D({ onEngineReady }: Viewport3DProps) {
         return;
       }
       ctxRef.current = ctx;
-      ctx.rayConfig = normalizeRayTracing(initial.scene.render.rayTracing);
+      ctx.ray.config = normalizeRayTracing(initial.scene.render.rayTracing);
 
       applyLightConfig(ctx, initial.scene.lights, initial.scene.render);
 
@@ -131,7 +131,7 @@ export function Viewport3D({ onEngineReady }: Viewport3DProps) {
         resizeRenderer(ctxRef.current, w, h);
       });
       ro.observe(container);
-      ctx.resizeObserver = ro;
+      ctx.surface.resizeObserver = ro;
     }
 
     init();

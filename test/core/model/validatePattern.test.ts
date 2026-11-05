@@ -3,7 +3,7 @@ import { vec2, type Panel, type Pattern } from '../../../src/core/model/types';
 import { createDefaultProject } from '../../../src/core/model/defaults';
 import { createStarterProject } from '../../../src/pattern/template/starterProject';
 import { seamInterval, validatePattern, type PatternIssueCode } from '../../../src/core/model/validatePattern';
-import { buildPatternGraph, panelOfEdge, panelsOfEdge } from '../../../src/core/model/patternGraph';
+import { PatternTopology } from '../../../src/core/model/patternTopology';
 
 /** Builds one valid triangular panel; `p` prefixes the ids so several panels can coexist. */
 function addTriangle(pattern: Pattern, p: string, counterclockwise = true): Panel {
@@ -150,21 +150,21 @@ describe('validatePattern', () => {
   });
 });
 
-describe('buildPatternGraph', () => {
+describe('PatternTopology', () => {
   it('indexes edge ownership and point references', () => {
     const pattern = makePattern();
     addTriangle(pattern, 'p');
-    const graph = buildPatternGraph(pattern);
-    expect(panelsOfEdge(graph, 'e1')).toEqual(['p']);
-    expect(panelOfEdge(graph, 'e1')).toBe('p');
-    expect(panelOfEdge(graph, 'missing')).toBeNull();
-    expect(graph.pointRefs.get('p2')?.length).toBe(2);
+    const topology = new PatternTopology(pattern);
+    expect(topology.panelsOfEdge('e1')).toEqual(['p']);
+    expect(topology.panelOfEdge('e1')).toBe('p');
+    expect(topology.panelOfEdge('missing')).toBeNull();
+    expect(topology.edgesOf('p2')?.length).toBe(2);
   });
 
   it('lists both panels for a shared outline edge', () => {
     const pattern = makePattern();
     const a = addTriangle(pattern, 'a');
     pattern.panels.b = { ...a, id: 'b', name: 'b' };
-    expect(panelsOfEdge(buildPatternGraph(pattern), 'e1')).toEqual(['a', 'b']);
+    expect(new PatternTopology(pattern).panelsOfEdge('e1')).toEqual(['a', 'b']);
   });
 });

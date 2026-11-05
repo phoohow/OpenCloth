@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 import type { FabricAppearance, Pattern, Print, Vec2 } from '../../core/model/types';
 import { computeBBox } from '../../pattern/geom/vec2';
 import { samplePanelOutline } from '../../pattern/panel/panelBuilder';
+import { imageAt } from '../imageStore';
 
 /** Longest canvas side of a composed panel texture, in pixels. */
 const COMPOSITE_MAX_SIDE = 1024;
@@ -9,13 +10,6 @@ const COMPOSITE_MAX_SIDE = 1024;
 const COMPOSITE_MIN_SIDE = 64;
 /** Tiles drawn per axis, so an extreme fabric tiling cannot stall a repaint. */
 const MAX_MAP_TILES = 32;
-
-/** Decoded artwork and map images, keyed by their data URL. */
-const imageCache = new Map<string, HTMLImageElement>();
-/** URLs whose decode failed, so they are not retried on every repaint. */
-const failedImages = new Set<string>();
-/** URLs currently decoding. */
-const pendingImages = new Set<string>();
 
 /** Placement of one print rectangle in a panel's normalised UV square. */
 export interface PrintPlacement {
@@ -146,12 +140,12 @@ export function drawComposite(
 
   const albedo = app.maps?.albedo;
   if (albedo) {
-    const image = loadImage(albedo, onImageReady);
+    const image = imageAt(albedo, onImageReady);
     if (image) drawTiledMap(ctx, image, width, height, app.uvTiling, app.uvOffset);
   }
 
   for (const placement of placements) {
-    const image = loadImage(placement.imageUrl, onImageReady);
+    const image = imageAt(placement.imageUrl, onImageReady);
     if (image) drawArtwork(ctx, image, width, height, panelSizeCm, placement);
   }
 }
@@ -221,26 +215,4 @@ function canvasSize(sizeCm: Vec2): { width: number; height: number } {
   return aspect >= 1
     ? { width: COMPOSITE_MAX_SIDE, height: Math.max(COMPOSITE_MIN_SIDE, Math.round(COMPOSITE_MAX_SIDE / aspect)) }
     : { width: Math.max(COMPOSITE_MIN_SIDE, Math.round(COMPOSITE_MAX_SIDE * aspect)), height: COMPOSITE_MAX_SIDE };
-}
-
-/** Decoded image for a data URL; starts the decode on first use and reports it once. */
-function loadImage(url: string, onReady: () => void): HTMLImageElement | null {
-  if (!url || failedImages.has(url)) return null;
-  const cached = imageCache.get(url);
-  if (cached) return cached.complete && cached.naturalWidth > 0 ? cached : null;
-  if (pendingImages.has(url)) return null;
-
-  pendingImages.add(url);
-  const image = new Image();
-  image.onload = () => {
-    pendingImages.delete(url);
-    imageCache.set(url, image);
-    onReady();
-  };
-  image.onerror = () => {
-    pendingImages.delete(url);
-    failedImages.add(url);
-  };
-  image.src = url;
-  return null;
 }

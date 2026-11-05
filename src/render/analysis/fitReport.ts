@@ -1,3 +1,4 @@
+import { csvTable } from '../../core/text/csv';
 import type { FitStats, FitThresholds } from './fit';
 
 /** Builds a two-column CSV summary of one fit check, ready for a spreadsheet. */
@@ -21,11 +22,5 @@ export function fitReportCsv(
     ['平均间隙(cm)', stats.meanCm.toFixed(3)],
     ['最大间隙(cm)', stats.maxCm.toFixed(3)],
   ];
-  return rows.map(([label, value]) => `${csvCell(label)},${csvCell(value)}`).join('\r\n');
-}
-
-/** Quotes a CSV cell when it contains a separator, quote or newline. */
-function csvCell(value: string): string {
-  if (!/[",\r\n]/.test(value)) return value;
-  return `"${value.replace(/"/g, '""')}"`;
+  return csvTable(rows);
 }

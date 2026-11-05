@@ -1,4 +1,5 @@
 import type { PomPoint, SizeDef } from '../core/model/types';
+import { csvTable, type CsvRow } from '../core/text/csv';
 import { pomReportRows, type PomCsvUpdate, type PomTable } from '../pattern/pom/pomTable';
 
 /** Writes the size-chart matrix: one POM per row, one size per column. */
@@ -11,7 +12,7 @@ export function pomMatrixCsv(table: PomTable): string {
       return typeof value === 'number' ? value.toFixed(2) : '';
     }),
   ]);
-  return [header, ...rows].map(row => row.map(csvCell).join(',')).join('\r\n');
+  return csvTable([header, ...rows]);
 }
 
 /** Writes one report row per POM and size, with the difference from the base size. */
@@ -22,22 +23,20 @@ export function pomReportCsv(projectName: string, table: PomTable, now = new Dat
     ['日期', now.toISOString()],
     ['基码', baseLabel],
   ];
-  const lines: string[] = meta.map(([label, value]) => `${csvCell(label)},${csvCell(value)}`);
-  lines.push(['测量点', '部位', '尺码', '数值(cm)', '差值(cm)', '公式'].map(csvCell).join(','));
+  const rows: CsvRow[] = [...meta, ['测量点', '部位', '尺码', '数值(cm)', '差值(cm)', '公式']];
   for (const row of pomReportRows(table)) {
-    lines.push([
+    rows.push([
       row.name,
       row.part,
       row.sizeLabel,
       row.valueCm === null ? '' : row.valueCm.toFixed(2),
       row.diffCm === null ? '' : row.diffCm.toFixed(2),
       row.formula ?? '',
-    ].map(csvCell).join(','));
+    ]);
   }
-  return lines.join('\r\n');
+  return csvTable(rows);
 }
 
-/** One value read from a size-chart CSV. */
 /** Parsed size-chart CSV, with rows that could not be applied. */
 export interface PomCsvParse {
   updates: PomCsvUpdate[];
@@ -120,10 +119,4 @@ function splitCsvLine(line: string): string[] {
   }
   cells.push(current);
   return cells;
-}
-
-/** Quotes a CSV cell when it contains a separator, quote or newline. */
-function csvCell(value: string): string {
-  if (!/[",\r\n]/.test(value)) return value;
-  return `"${value.replace(/"/g, '""')}"`;
 }

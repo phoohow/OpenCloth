@@ -1,3 +1,4 @@
+import { csvTable, type CsvRow } from '../../core/text/csv';
 import type { PressureStats } from './pressure';
 
 /** Samples kept per dynamic-fit run; older frames are dropped past this cap. */
@@ -66,10 +67,9 @@ export function dynamicPressureCsv(
     ['采样帧数', String(frames.length)],
   ];
   const columns = ['时间(ms)', '仿真帧', '顶点数', '接触顶点', '最小压力(kPa)', '平均压力(kPa)', '最大压力(kPa)'];
-  const lines = header.map(([label, value]) => `${csvCell(label)},${csvCell(value)}`);
-  lines.push(columns.join(','));
+  const rows: CsvRow[] = [...header, columns];
   for (const frame of frames) {
-    lines.push([
+    rows.push([
       frame.timeMs.toFixed(0),
       String(frame.frame),
       String(frame.vertices),
@@ -77,13 +77,8 @@ export function dynamicPressureCsv(
       frame.minKpa.toFixed(2),
       frame.meanKpa.toFixed(2),
       frame.maxKpa.toFixed(2),
-    ].map(csvCell).join(','));
+    ]);
   }
-  return lines.join('\r\n');
+  return csvTable(rows);
 }
 
-/** Quotes a CSV cell when it contains a separator, quote or newline. */
-function csvCell(value: string): string {
-  if (!/[",\r\n]/.test(value)) return value;
-  return `"${value.replace(/"/g, '""')}"`;
-}

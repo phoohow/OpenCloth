@@ -1,9 +1,11 @@
 import type { Dart, Pattern, Project, Seam } from '../model/types';
 import type { PanelMesh } from '../../pattern/panel/panelBuilder';
 import { edgeVertexRun, meshSpacingCm, panelCreaseEdges, toTriangleMesh } from '../../pattern/panel/panelBuilder';
-import type { ClothSimInput } from '../../sim/clothSimulator';
-import type { Constraint } from '../../sim/buffers/constraintBuilder';
 import type { TriangleMesh } from '../../pattern/triangulate/triangulate';
+import type { Constraint } from '../build/constraint';
+import type { ClothSimInput } from '../../sim/simTypes';
+import type { SeamPair } from '../build/seamPair';
+import { ParticleLayout, type PanelSlice } from '../build/particleLayout';
 import { fabricForPanel } from '../model/fabric';
 import { panelCollisionLayer, panelThicknessCm } from '../model/layers';
 import { collapseSeamPairs, type VertexRef } from '../../pattern/drape/sewnTargets';
@@ -14,28 +16,20 @@ import { flatRestPositions, initialPositions3D, posedPositions3D, type BodyLandm
 /** Compliance of a stitched dart leg pair, as strong as a fully tight seam. */
 const DART_STITCH_STRENGTH = 1;
 
-/** One merged particle pair stitched together, by a seam or by a closing dart. */
-export interface SeamPair {
-  p0: number;
-  p1: number;
-  /** Gap between the pair in the initial layout, in meters. */
-  open: number;
-  /** Seam record the pair belongs to, or the dart record when it stitches dart legs. */
-  seamId: string;
-  /** Dart whose two legs the pair stitches; set instead of a seam pairing. */
-  dartId?: string;
-}
-
-/** Cloth built from every panel mesh: merged simulation input plus the index maps panels share. */
-export class MergedCloth {
+/**
+ * Every panel merged into one cloth: the particle space, the triangle ownership and the
+ * constraints that stitch pieces together. This is the only object that knows a panel occupies
+ * a contiguous slice of the merged arrays.
+ */
+export class ClothAssembly {
   /** Simulation input covering all panels. */
   input: ClothSimInput | null = null;
+  /** Panels and their slices, in merge order. */
+  layout: ParticleLayout = ParticleLayout.of([], 0);
   /** Initial (unsewn) merged particle positions in meters, shared with the render mesh. */
   positions: Float32Array = new Float32Array(0);
   /** Wrapped positions with every seam pair collapsed onto one point; the dressing glide aims here. */
   dressPositions: Float32Array = new Float32Array(0);
-  /** panelId → [startVertex, endVertex) in the merged particle array. */
-  panelRanges: Map<string, [number, number]> = new Map();
   /** panelId → merged vertex indices of the panel's triangles. */
   panelTriangles: Map<string, number[]> = new Map();
   /** Owning panel of each merged triangle, indexed by triangle number. */
@@ -47,14 +41,7 @@ export class MergedCloth {
 
   /** Merges the panel meshes into one simulation input and rebuilds every derived map. */
   build(project: Project, panelMeshes: Map<string, PanelMesh>, landmarks: BodyLandmarkCache): ClothSimInput | null {
-    this.input = null;
-    this.positions = new Float32Array(0);
-    this.dressPositions = new Float32Array(0);
-    this.wrappedPositions = new Float32Array(0);
-    this.panelRanges.clear();
-    this.panelTriangles.clear();
-    this.trianglePanelIds = [];
-    this.seamPairs = [];
+    this.reset();
 
     let totalVertices = 0;
     let totalTriangles = 0;
@@ -69,6 +56,7 @@ export class MergedCloth {
     const indices = new Uint32Array(totalTriangles * 3);
     const uvs = new Float32Array(totalVertices * 2);
     const panels: ClothSimInput['panels'] = [];
+    const slices: PanelSlice[] = [];
     const panelIds = Array.from(panelMeshes.keys());
 
     let vertexOffset = 0;
@@ -107,12 +95,13 @@ export class MergedCloth {
         thicknessMeters: panelThicknessCm(project, panel) / 100,
         ...(creaseEdges.length > 0 ? { creaseEdges } : {}),
       });
-      this.panelRanges.set(panelId, [vertexOffset, vertexOffset + mesh.vertexCount]);
+      slices.push({ panelId, start: vertexOffset, end: vertexOffset + mesh.vertexCount });
 
       vertexOffset += mesh.vertexCount;
       indexOffset += mesh.indices.length;
     }
 
+    this.layout = ParticleLayout.of(slices, totalVertices);
     this.positions = initial;
     this.wrappedPositions = wrapped;
     const seamConstraints = this.buildClosingConstraints(project, panelMeshes, panelIds);
@@ -141,8 +130,8 @@ export class MergedCloth {
     const panelIds = input.panels.map(panel => panel.panelId);
     for (const panelId of panelIds) {
       const mesh = panelMeshes.get(panelId);
-      const range = this.panelRanges.get(panelId);
-      if (!mesh || !range || range[1] - range[0] !== mesh.vertexCount) return false;
+      const range = this.layout.rangeOf(panelId);
+      if (!mesh || !range || range.end - range.start !== mesh.vertexCount) return false;
     }
 
     for (const panel of input.panels) {
@@ -155,12 +144,9 @@ export class MergedCloth {
     return true;
   }
 
-  /** Panel owning a particle, or null when unmapped. */
+  /** Panel owning a particle, resolved in constant time. */
   panelIdForParticle(particleIndex: number): string | null {
-    for (const [panelId, range] of this.panelRanges) {
-      if (particleIndex >= range[0] && particleIndex < range[1]) return panelId;
-    }
-    return null;
+    return this.layout.panelAt(particleIndex);
   }
 
   /** Merged vertex indices of the listed panels' triangles, concatenated in selection order. */
@@ -176,6 +162,17 @@ export class MergedCloth {
       cursor += list.length;
     }
     return triangles;
+  }
+
+  private reset(): void {
+    this.input = null;
+    this.layout = ParticleLayout.of([], 0);
+    this.positions = new Float32Array(0);
+    this.dressPositions = new Float32Array(0);
+    this.wrappedPositions = new Float32Array(0);
+    this.panelTriangles.clear();
+    this.trianglePanelIds = [];
+    this.seamPairs = [];
   }
 
   /**
@@ -200,13 +197,6 @@ export class MergedCloth {
       }
     }
 
-    const vertexOffsets = new Map<string, number>();
-    let offset = 0;
-    for (const panelId of panelIds) {
-      vertexOffsets.set(panelId, offset);
-      offset += panelMeshes.get(panelId)?.vertexCount ?? 0;
-    }
-
     for (const seam of Object.values(pattern.seams) as Seam[]) {
       // An open edge marks intent only; its sides stay unstitched.
       if (seam.type === 'free') continue;
@@ -214,8 +204,8 @@ export class MergedCloth {
       const b = edgeToPanel.get(seam.b.edgeId);
       if (!a || !b) continue;
 
-      const offA = vertexOffsets.get(a.panelId) ?? 0;
-      const offB = vertexOffsets.get(b.panelId) ?? 0;
+      const offA = this.layout.rangeOf(a.panelId)?.start ?? 0;
+      const offB = this.layout.rangeOf(b.panelId)?.start ?? 0;
       const vertsA = intervalVertices(a.vertices, seam.a.t0, seam.a.t1, this.positions, offA);
       const vertsBRaw = intervalVertices(b.vertices, seam.b.t0, seam.b.t1, this.positions, offB);
       const vertsB = seam.flip ? [...vertsBRaw].reverse() : vertsBRaw;
@@ -249,7 +239,7 @@ export class MergedCloth {
       const panel = pattern.panels[panelId];
       const panelMesh = panelMeshes.get(panelId);
       if (!panel || !panelMesh) continue;
-      const off = vertexOffsets.get(panelId) ?? 0;
+      const off = this.layout.rangeOf(panelId)?.start ?? 0;
       for (const dartId of panel.dartIds) {
         const dart = pattern.darts[dartId];
         if (!dart?.closing) continue;

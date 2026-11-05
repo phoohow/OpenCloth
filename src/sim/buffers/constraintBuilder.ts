@@ -2,15 +2,9 @@ import type { FabricPhysics } from '../../core/model/types';
 import type { TriangleMesh } from '../../pattern/triangulate/triangulate';
 import { buildAdjacency } from '../../pattern/triangulate/triangulate';
 
-/** GPU constraint: p0, p1, restLength, compliance (16-byte aligned). */
-export interface Constraint {
-  p0: number;
-  p1: number;
-  restLength: number;
-  compliance: number;
-  /** Distance beyond which the constraint tears; absent constraints never tear. */
-  tearLength?: number;
-}
+import type { Constraint } from '../../core/build/constraint';
+
+export type { Constraint };
 
 /** Constraint groups of a mesh, split by how the solver applies them. */
 export interface ConstraintSet {

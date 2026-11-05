@@ -1,5 +1,6 @@
 import type { Panel, Pattern, Project } from '../core/model/types';
 import { TRIM_KIND_LABELS } from '../core/model/defaults';
+import { csvTable, type CsvRow } from '../core/text/csv';
 import { panelOutlineWithAllowance, sampleOutline, samplePanelOutline } from './panel/panelBuilder';
 import { polygonArea } from './marker/markerReport';
 import { edgeIntervalLength } from './geom/edgeSample';
@@ -160,16 +161,11 @@ export function bomTotals(rows: BomRow[]): BomTotals {
 /** Fixed CSV column order, shared by the export and the preview. */
 const CSV_HEADERS = ['类别', '名称', '规格', '单位', '数量', '单价', '金额', '备注'];
 
-/** Quotes a cell when it holds a comma, a quote or a line break. */
-function csvCell(value: string): string {
-  return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
-}
-
 /** Serialises the rows as a UTF-8 CSV with a BOM so Excel reads the Chinese column names. */
 export function bomCsv(rows: BomRow[]): string {
-  const lines = [CSV_HEADERS.join(',')];
+  const table: CsvRow[] = [CSV_HEADERS];
   for (const row of rows) {
-    lines.push([
+    table.push([
       row.category,
       row.name,
       row.spec,
@@ -178,7 +174,7 @@ export function bomCsv(rows: BomRow[]): string {
       row.unitPrice === null ? '' : row.unitPrice.toFixed(2),
       row.amount === null ? '' : row.amount.toFixed(2),
       row.note,
-    ].map(csvCell).join(','));
+    ]);
   }
-  return '\ufeff' + lines.join('\r\n');
+  return '\ufeff' + csvTable(table);
 }

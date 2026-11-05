@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { Project } from '../model/types';
 import type { ClothSimInput } from '../../sim/clothSimulator';
-import type { SeamPair } from './mergedCloth';
+import type { SeamPair } from '../build/seamPair';
 import { SeamThreads } from './seamThreads';
 import { TopstitchThreads, topstitchSegments } from './topstitchThreads';
 import { TrimInstances, trimInstances } from './trimInstances';

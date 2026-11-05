@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { computeClothSignature } from '../../src/store/projectStore';
+import { diffProject } from '../../src/core/change/diffProject';
+import type { ChangeSet } from '../../src/core/change/changeSet';
 import { panelGeometrySignature } from '../../src/pattern/panel/panelMeshSignature';
 import { createDefaultProject, createEmptyPattern } from '../../src/core/model/defaults';
 import { vec2, vec3, type Pattern, type Project } from '../../src/core/model/types';
@@ -58,26 +59,26 @@ function makeProject(): Project {
   return project;
 }
 
+function changeAfter(mutate: (project: Project) => void): ChangeSet {
+  const before = makeProject();
+  const after = structuredClone(before);
+  mutate(after);
+  return diffProject(before, after);
+}
+
 function expectRebuild(mutate: (project: Project) => void): void {
-  const project = makeProject();
-  const before = computeClothSignature(project);
-  mutate(project);
-  expect(computeClothSignature(project)).not.toBe(before);
+  expect(changeAfter(mutate).has('cloth.geometry')).toBe(true);
 }
 
 function expectNoRebuild(mutate: (project: Project) => void): void {
-  const project = makeProject();
-  const before = computeClothSignature(project);
-  mutate(project);
-  expect(computeClothSignature(project)).toBe(before);
+  expect(changeAfter(mutate).has('cloth.geometry')).toBe(false);
 }
 
 /** Simulates a field the record type does not declare yet. */
 function withExtraField<T extends object>(record: T, key: string, value: unknown): T {
   return { ...record, [key]: value } as T;
 }
-
-describe('computeClothSignature draw-only fields', () => {
+describe('diffProject draw-only fields', () => {
   it('keeps the signature when names of pattern objects change', () => {
     expectNoRebuild(project => {
       project.pattern.panels.panel_a.name = '后片';
@@ -90,11 +91,14 @@ describe('computeClothSignature draw-only fields', () => {
     });
   });
 
-  it('keeps the signature when panel visibility and seam stitch visibility toggle', () => {
-    expectNoRebuild(project => {
+  it('reports visibility without rebuilding the cloth', () => {
+    const change = changeAfter(project => {
       project.pattern.panels.panel_a.visible = false;
       project.pattern.seams.seam_1.stitchVisible = false;
     });
+    expect(change.has('cloth.geometry')).toBe(false);
+    expect(change.has('cloth.visibility')).toBe(true);
+    expect(change.panelIds.has('panel_a')).toBe(true);
   });
 
   it('keeps the signature when the avatar name, display mode and transform change', () => {
@@ -117,7 +121,7 @@ describe('computeClothSignature draw-only fields', () => {
   });
 });
 
-describe('computeClothSignature rebuild fields', () => {
+describe('diffProject rebuild fields', () => {
   it('changes the signature when a panel transform changes', () => {
     expectRebuild(project => {
       project.pattern.panels.panel_a.transform = {
@@ -275,14 +279,14 @@ describe('computeClothSignature rebuild fields', () => {
     });
   });
 
-  it('is unchanged for a structural clone of the same project', () => {
+  it('reports nothing for a structural clone of the same project', () => {
     const project = makeProject();
-    expect(computeClothSignature(structuredClone(project))).toBe(computeClothSignature(project));
+    expect(diffProject(project, structuredClone(project)).list()).toEqual([]);
   });
 });
 
-describe('computeClothSignature other subsystem fields', () => {
-  it('keeps the signature when fabric appearance, physics or name change', () => {
+describe('diffProject other subsystem fields', () => {
+  it('reports fabric changes without rebuilding the cloth', () => {
     expectNoRebuild(project => {
       const fabric = Object.values(project.fabrics)[0];
       fabric.appearance.baseColor = '#112233';
@@ -292,6 +296,10 @@ describe('computeClothSignature other subsystem fields', () => {
       fabric.physics.bendingStiffness = 0.9;
       fabric.name = '改名面料';
     });
+    expect(changeAfter(project => {
+      const fabric = Object.values(project.fabrics)[0];
+      fabric.appearance.roughness = 0.1;
+    }).has('cloth.fabric')).toBe(true);
   });
 
   it('keeps the signature when lights or the environment light change', () => {
@@ -315,8 +323,8 @@ describe('computeClothSignature other subsystem fields', () => {
     });
   });
 
-  it('keeps the signature when solver runtime settings change', () => {
-    expectNoRebuild(project => {
+  it('reports solver runtime settings without rebuilding the cloth', () => {
+    const change = changeAfter(project => {
       project.scene.simulation.gravity = vec3(0, 0, 0);
       project.scene.simulation.wind = { direction: vec3(0, 0, 1), speed: 5 };
       project.scene.simulation.dt = 1 / 120;
@@ -324,6 +332,8 @@ describe('computeClothSignature other subsystem fields', () => {
       project.scene.simulation.constraintIterations = 10;
       project.scene.simulation.avatarCollision = false;
     });
+    expect(change.has('scene.simulation')).toBe(true);
+    expect(change.has('cloth.geometry')).toBe(false);
   });
 
   it('keeps the signature when reference objects change', () => {
@@ -333,7 +343,7 @@ describe('computeClothSignature other subsystem fields', () => {
   });
 });
 
-describe('computeClothSignature default classification for new fields', () => {
+describe('diffProject default classification for new fields', () => {
   it('ignores fields added under the draw-only key names at any depth', () => {
     expectNoRebuild(project => {
       project.pattern.panels.panel_a = withExtraField(project.pattern.panels.panel_a, 'display', 'hidden');
@@ -353,6 +363,9 @@ describe('computeClothSignature default classification for new fields', () => {
   });
 
   it('ignores draw-only production markings and lock state', () => {
+    expect(changeAfter(project => {
+      project.pattern.notches.n1.t = 0.4;
+    }).has('cloth.marking')).toBe(true);
     expectNoRebuild(project => {
       project.pattern.panels.panel_a.locked = true;
     });

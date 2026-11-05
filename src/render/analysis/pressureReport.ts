@@ -1,3 +1,4 @@
+import { csvTable } from '../../core/text/csv';
 import type { PressureStats } from './pressure';
 
 /** Scale and wording of one pressure report. */
@@ -35,11 +36,5 @@ export function pressureReportCsv(
     rows.push([`版片 ${name} 平均压力(kPa)`, panel.meanKpa.toFixed(2)]);
     rows.push([`版片 ${name} 最大压力(kPa)`, panel.maxKpa.toFixed(2)]);
   }
-  return rows.map(([label, value]) => `${csvCell(label)},${csvCell(value)}`).join('\r\n');
-}
-
-/** Quotes a CSV cell when it contains a separator, quote or newline. */
-function csvCell(value: string): string {
-  if (!/[",\r\n]/.test(value)) return value;
-  return `"${value.replace(/"/g, '""')}"`;
+  return csvTable(rows);
 }

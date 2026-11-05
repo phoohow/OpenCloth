@@ -4,12 +4,13 @@ import type { PanelClipboard } from '../core/command/panelClipboard';
 import type { RecentSummary, AutosaveSummary } from '../io/projectArchive';
 import { CommandHistory, type Command } from '../core/command/command';
 import { createStarterProject } from '../pattern/template';
-import { avatarBodySignature } from '../core/engine/clothSignatures';
+import { ChangeSet } from '../core/change/changeSet';
+import { diffProject } from '../core/change/diffProject';
 
 interface ProjectStore {
   project: Project;
-  /** Rebuild key for everything the cloth geometry depends on; see `computeClothSignature`. */
-  clothSignature: string;
+  /** What the last revision changed; the viewport dispatches on it. */
+  changes: ChangeSet;
   history: CommandHistory;
   /** Copied panels waiting to be pasted. */
   clipboard: PanelClipboard | null;
@@ -36,29 +37,9 @@ interface ProjectStore {
   redoLabel: () => string | null;
 }
 
-/**
- * One comparable string over everything a cloth rebuild reads: the pattern minus
- * draw-only flags, names and production markings, the avatar fields that shape the body
- * (display, name and transform sync to the scene without a rebuild) and the global mesh
- * resolution.
- */
-export function computeClothSignature(project: Project): string {
-  const drawOnly = new Set([
-    'display', 'visible', 'stitchVisible', 'name', 'locked',
-    'notches', 'annotations', 'measurements', 'threadColor',
-    'prints', 'topstitches', 'trims',
-  ]);
-  const pattern = JSON.stringify(project.pattern, (key, value) => (drawOnly.has(key) ? undefined : value));
-  const body = avatarBodySignature(project.avatar);
-  return `${pattern}|${body}|${project.scene.simulation.meshResolutionCm ?? null}|${project.scene.simulation.meshSampling ?? null}`;
-}
-
 /** Commits a finished command draft as the new immutable project state. */
-function commit(draft: Project, stamp: boolean): Partial<ProjectStore> {
-  const project: Project = stamp
-    ? { ...draft, meta: { ...draft.meta, modifiedAt: new Date().toISOString() } }
-    : { ...draft };
-  return { project, clothSignature: computeClothSignature(project) };
+function commit(draft: Project, stamp: boolean): Project {
+  return stamp ? { ...draft, meta: { ...draft.meta, modifiedAt: new Date().toISOString() } } : { ...draft };
 }
 
 /** Project data plus the undo history that mutates it. */
@@ -66,7 +47,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
   const starter = createStarterProject();
   return {
     project: starter,
-    clothSignature: computeClothSignature(starter),
+    changes: ChangeSet.all(Object.keys(starter.pattern.panels)),
     history: new CommandHistory(),
     clipboard: null,
     recent: [],
@@ -77,19 +58,24 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
       const { project, history } = get();
       const draft = structuredClone(project);
       history.execute(cmd, { project: draft });
-      set(commit(draft, true));
+      const next = commit(draft, true);
+      set({ project: next, changes: diffProject(project, next) });
     },
 
     undo() {
       const { project, history } = get();
       const draft = structuredClone(project);
-      if (history.undo({ project: draft })) set(commit(draft, false));
+      if (!history.undo({ project: draft })) return;
+      const next = commit(draft, false);
+      set({ project: next, changes: diffProject(project, next) });
     },
 
     redo() {
       const { project, history } = get();
       const draft = structuredClone(project);
-      if (history.redo({ project: draft })) set(commit(draft, false));
+      if (!history.redo({ project: draft })) return;
+      const next = commit(draft, false);
+      set({ project: next, changes: diffProject(project, next) });
     },
 
     loadProject(project) {
@@ -97,14 +83,14 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
       set({
         project,
         clipboard: null,
-        clothSignature: computeClothSignature(project),
+        changes: ChangeSet.all(Object.keys(project.pattern.panels)),
         loadToken: get().loadToken + 1,
       });
     },
 
     setCamera(camera) {
       const { project } = get();
-      set({ project: { ...project, scene: { ...project.scene, camera } } });
+      set({ project: { ...project, scene: { ...project.scene, camera } }, changes: ChangeSet.empty() });
     },
 
     setClipboard: (clip) => set({ clipboard: clip }),

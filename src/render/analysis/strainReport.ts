@@ -1,3 +1,4 @@
+import { csvTable } from '../../core/text/csv';
 import type { StrainStats } from './strain';
 
 /** Limits of one fabric written into a strain report. */
@@ -42,11 +43,5 @@ export function strainReportCsv(
     rows.push([`面料 ${fabric.name} 拉伸上限(%)`, (fabric.stretchLimit * 100).toFixed(2)]);
     rows.push([`面料 ${fabric.name} 压缩上限(%)`, (fabric.compressionLimit * 100).toFixed(2)]);
   }
-  return rows.map(([label, value]) => `${csvCell(label)},${csvCell(value)}`).join('\r\n');
-}
-
-/** Quotes a CSV cell when it contains a separator, quote or newline. */
-function csvCell(value: string): string {
-  if (!/[",\r\n]/.test(value)) return value;
-  return `"${value.replace(/"/g, '""')}"`;
+  return csvTable(rows);
 }

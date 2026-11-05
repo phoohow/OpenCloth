@@ -1,5 +1,5 @@
 import type { Pattern, Seam } from './types';
-import { buildPatternGraph, type PatternGraph } from './patternGraph';
+import { PatternTopology, type EdgeLocation } from './patternTopology';
 /** Invariant violations that block a command from committing. */
 export type TopologyErrorCode =
   | 'dangling_edge'
@@ -57,20 +57,20 @@ export interface ValidateOptions {
  */
 export function validatePattern(pattern: Pattern, options: ValidateOptions = {}): PatternIssue[] {
   const issues: PatternIssue[] = [];
-  const graph = buildPatternGraph(pattern);
+  const topology = new PatternTopology(pattern);
 
-  checkOutlines(pattern, graph, issues);
-  checkOwnership(pattern, graph, issues, options.allowOpen ?? false);
-  checkSeams(pattern, graph, issues);
-  checkDarts(pattern, graph, issues);
+  checkOutlines(pattern, topology, issues);
+  checkOwnership(pattern, topology, issues, options.allowOpen ?? false);
+  checkSeams(pattern, topology, issues);
+  checkDarts(pattern, topology, issues);
 
   return issues;
 }
 
 /** Walks every panel outline for closure, minimum size, duplicates and endpoint continuity. */
-function checkOutlines(pattern: Pattern, graph: PatternGraph, issues: PatternIssue[]): void {
+function checkOutlines(pattern: Pattern, topology: PatternTopology, issues: PatternIssue[]): void {
   for (const panel of Object.values(pattern.panels)) {
-    const chain = graph.outline.get(panel.id) ?? [];
+    const chain = topology.outlineOf(panel.id);
     if (chain.length < 3) {
       issues.push({ code: 'outline_too_short', targetId: panel.id, message: `版片「${panel.name}」的轮廓只有 ${chain.length} 条边，至少需要 3 条` });
     }
@@ -89,7 +89,7 @@ function checkOutlines(pattern: Pattern, graph: PatternGraph, issues: PatternIss
 function checkChain(
   pattern: Pattern,
   panelId: string,
-  chain: { edgeId: string }[],
+  chain: readonly EdgeLocation[],
   issues: PatternIssue[],
 ): void {
   if (chain.length === 0) return;
@@ -124,7 +124,7 @@ function checkChain(
 /** Every edge and point must be owned, directly or through a panel outline. */
 function checkOwnership(
   pattern: Pattern,
-  graph: PatternGraph,
+  topology: PatternTopology,
   issues: PatternIssue[],
   allowOpen: boolean,
 ): void {
@@ -139,16 +139,16 @@ function checkOwnership(
   }
 
   for (const edge of Object.values(pattern.edges)) {
-    const onOutline = (graph.edgeLocations.get(edge.id)?.length ?? 0) > 0;
+    const onOutline = topology.isOnLoop(edge.id);
     if (!onOutline && !ownedEdges.has(edge.id) && !allowOpen) {
       issues.push({ code: 'orphan_edge', targetId: edge.id, message: `边 ${edge.id} 不属于任何轮廓、缝合或省道` });
     }
   }
 
   for (const point of Object.values(pattern.points)) {
-    const refs = graph.pointRefs.get(point.id) ?? [];
+    const refs = topology.edgesOf(point.id);
     const used = refs.some(ref =>
-      (graph.edgeLocations.get(ref.edgeId)?.length ?? 0) > 0
+      topology.isOnLoop(ref.edgeId)
       || ownedEdges.has(ref.edgeId)
       || (allowOpen && !!pattern.edges[ref.edgeId]),
     );
@@ -159,7 +159,7 @@ function checkOwnership(
 }
 
 /** Seam edges must exist and be outlined; per-edge intervals must be legal and disjoint. */
-function checkSeams(pattern: Pattern, graph: PatternGraph, issues: PatternIssue[]): void {
+function checkSeams(pattern: Pattern, topology: PatternTopology, issues: PatternIssue[]): void {
   const intervalsPerEdge = new Map<string, { seamId: string; t0: number; t1: number }[]>();
 
   for (const seam of Object.values(pattern.seams)) {
@@ -168,7 +168,7 @@ function checkSeams(pattern: Pattern, graph: PatternGraph, issues: PatternIssue[
         issues.push({ code: 'seam_missing_edge', targetId: seam.id, message: `缝合 ${seam.id} 引用了不存在的边 ${edgeId}` });
         continue;
       }
-      if ((graph.edgeLocations.get(edgeId)?.length ?? 0) === 0) {
+      if (!topology.isOnLoop(edgeId)) {
         issues.push({ code: 'seam_unowned_edge', targetId: seam.id, message: `缝合 ${seam.id} 的边 ${edgeId} 不属于任何版片` });
       }
       const [t0, t1] = seamInterval(seam, side);
@@ -193,7 +193,7 @@ function checkSeams(pattern: Pattern, graph: PatternGraph, issues: PatternIssue[
 }
 
 /** Dart legs and tip must resolve, and all belong to one panel. */
-function checkDarts(pattern: Pattern, graph: PatternGraph, issues: PatternIssue[]): void {
+function checkDarts(pattern: Pattern, topology: PatternTopology, issues: PatternIssue[]): void {
   for (const dart of Object.values(pattern.darts)) {
     if (!pattern.points[dart.tipId]) {
       issues.push({ code: 'dart_missing_ref', targetId: dart.id, message: `省道 ${dart.id} 的省尖点 ${dart.tipId} 不存在` });
@@ -205,7 +205,7 @@ function checkDarts(pattern: Pattern, graph: PatternGraph, issues: PatternIssue[
         issues.push({ code: 'dart_missing_ref', targetId: dart.id, message: `省道 ${dart.id} 引用了不存在的省边 ${legId}` });
         continue;
       }
-      const panelId = graph.edgeLocations.get(legId)?.[0]?.panelId ?? null;
+      const panelId = topology.panelOfEdge(legId);
       if (panelId === null) {
         issues.push({ code: 'dart_missing_ref', targetId: dart.id, message: `省道 ${dart.id} 的省边 ${legId} 不属于任何版片` });
       } else if (owner === null) {
