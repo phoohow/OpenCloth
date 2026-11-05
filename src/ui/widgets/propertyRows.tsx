@@ -365,11 +365,12 @@ const styles: Record<string, React.CSSProperties> = {
   popup: {
     position: 'absolute', inset: 0, width: '100%', height: '100%', appearance: 'none', WebkitAppearance: 'none',
     background: '#2a2a30', border: '1px solid #3a3a42', borderRadius: 3, color: 'transparent',
+    // The native select is only a click target; its own text stays invisible behind the glyph.
     cursor: 'pointer', fontSize: 1, padding: 0,
   },
   popupGlyph: {
     position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-    color: '#bbb', fontSize: 9, pointerEvents: 'none',
+    color: '#bbb', fontSize: 'var(--oc-fs-note)', pointerEvents: 'none',
   },
   popupOption: { color: '#ddd', background: '#2a2a30', fontSize: 'var(--oc-fs-micro)' },
   valueText: { color: '#999', fontSize: 'var(--oc-fs-micro)' },

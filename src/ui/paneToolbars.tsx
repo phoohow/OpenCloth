@@ -4,21 +4,20 @@ import { displayModeOf, useProjectStore, useSimStore, useUIStore, usePerfStore, 
 import type { GarmentEngine, CameraPreset } from '../core/engine/garmentEngine';
 import type { CameraProjection, EditPreviewTier } from '../core/model/types';
 import {
-  BreakPointCommand, BlendSeamJointCommand, CompositeCommand, ConnectPointsCommand, CreateFreeSeamCommand,
-  CreateMultiSeamCommand, CreatePanelFromEdgesCommand, FilletCornersCommand,
-  MergeCollinearEdgesCommand, MirrorPanelCommand, MergePanelsCommand, MovePanelsCommand,
-  OffsetInternalLineCommand, PanelFromInternalLoopCommand, RhombusDartCommand, SimplifyCurveCommand,
-  SyncMirrorCommand, validateGrading, type MirrorAxis, type SeamPart,
+  CompositeCommand, CreateFreeSeamCommand, validateGrading,
 } from '../core/command/patternCommands';
-import { placePanelsAuto } from '../pattern/auto/autoPlace';
 import { seamCandidates, type SeamCandidate, type SeamScanResult, type SeamScanSkipped } from '../pattern/auto/autoSeam';
+import { MARK_ITEMS, STRUCTURE_ITEMS, autoPlacePanels, runStructure, type StructureAction } from './commands/patternOps';
 import { TRIM_KIND_LABELS, TRIM_KINDS } from '../core/model/defaults';
 import type { TrimKind } from '../core/model/types';
 import { validatePattern } from '../core/model/validatePattern';
 import { seamWarnings } from '../pattern/seam/seamWarnings';
-import { elementNodeId, idsOfKind, type PatternElementKind } from './elementSelection';
+import { elementNodeId, type PatternElementKind } from './elementSelection';
 import type { DisplayOptions } from './viewport2D/render';
-import { CAMERA_PRESETS, CAMERA_PROJECTIONS, DISPLAY_MODES, EDIT_PREVIEW_TIERS, rayTracingUnavailableReason } from './optionTables';
+import {
+  CAMERA_PRESETS, CAMERA_PROJECTIONS, DISPLAY_LAYER_OPTIONS, DISPLAY_MODES, EDIT_PREVIEW_TIERS,
+  rayTracingUnavailableReason,
+} from './optionTables';
 import { comboOf } from './menu/shortcuts';
 import { Icon, type IconName } from './icons';
 import { reportActionError } from './widgets/toast';
@@ -57,25 +56,6 @@ const SHAPE_TOOLS: ToolSpec[] = [
   { key: 'ellipse', label: '椭圆', icon: 'ellipse', hint: '按住拖动绘制' },
 ];
 
-/** Drafting display layers toggled without touching the model. */
-type DisplayLayer = keyof DisplayOptions;
-
-const DISPLAY_LAYERS: Array<{ key: DisplayLayer; label: string }> = [
-  { key: 'internal', label: '内部线' },
-  { key: 'darts', label: '省道' },
-  { key: 'seamAllowance', label: '缝份线' },
-  { key: 'notches', label: '刀口' },
-  { key: 'grain', label: '布纹线' },
-  { key: 'annotations', label: '注释' },
-  { key: 'measurements', label: '尺寸线' },
-  { key: 'gradingOverlay', label: '齐码套叠' },
-  { key: 'seamJoin', label: '拼接预览' },
-  { key: 'prints', label: '印花' },
-  { key: 'topstitches', label: '明线' },
-  { key: 'trims', label: '辅料' },
-  { key: 'wireframe', label: '网格线' },
-];
-
 /** Element kinds a marquee rectangle can collect, with their row labels. */
 const MARQUEE_KINDS: Array<{ kind: PatternElementKind; label: string }> = [
   { kind: 'panel', label: '版片' },
@@ -92,52 +72,11 @@ const MARQUEE_KINDS: Array<{ kind: PatternElementKind; label: string }> = [
   { kind: 'trim', label: '辅料' },
 ];
 
-/** Tools that mark production information onto existing geometry. */
-const MARK_TOOLS: Array<{ key: ToolType; label: string; hint: string }> = [
-  { key: 'notch', label: '刀口', hint: '单击轮廓边' },
-  { key: 'annotation', label: '文字注释', hint: '单击版片' },
-  { key: 'measure', label: '尺寸线', hint: '依次单击两个顶点' },
-];
-
-/** Structure operations, some arming a tool and some acting on the current selection. */
-type StructureAction =
-  | 'split' | 'hole'
-  | 'mirror-y' | 'mirror-x' | 'mirror-edge' | 'sync-mirror' | 'merge' | 'from-edges' | 'multi-seam'
-  | 'fillet' | 'break' | 'connect' | 'merge-collinear' | 'simplify' | 'offset-line' | 'loop-panel'
-  | 'rhombus-dart' | 'blend-start' | 'blend-end';
-
-const STRUCTURE_ITEMS: Array<{ key: StructureAction; label: string; hint?: string }> = [
-  { key: 'split', label: '轮廓分割', hint: '选中版片后逐点单击画线，Enter 执行' },
-  { key: 'hole', label: '开内孔', hint: '选中版片后逐点单击画闭合环，Enter 执行' },
-  { key: 'mirror-y', label: '纵向镜像', hint: '选中一个版片' },
-  { key: 'mirror-x', label: '横向镜像', hint: '选中一个版片' },
-  { key: 'mirror-edge', label: '沿边镜像', hint: '选中一个版片和一条轴边' },
-  { key: 'sync-mirror', label: '同步镜像', hint: '选中源版片' },
-  { key: 'merge', label: '合并版片', hint: '选中两个版片' },
-  { key: 'from-edges', label: '由边成片', hint: '选中三条以上首尾相接的边' },
-  { key: 'multi-seam', label: '多段缝合', hint: '按顺序选中一条基准边和多条目标边' },
-  { key: 'fillet', label: '倒圆角', hint: '选中角点后输入半径' },
-  { key: 'break', label: '断开顶点', hint: '选中一个顶点' },
-  { key: 'connect', label: '连接端点', hint: '选中两个自由端点' },
-  { key: 'merge-collinear', label: '合并共线边', hint: '选中两条以上共线相邻边' },
-  { key: 'simplify', label: '简化曲线', hint: '选中曲线边后输入容差' },
-  { key: 'offset-line', label: '等距内部线', hint: '选中一条基准边后输入距离' },
-  { key: 'loop-panel', label: '内部线成片', hint: '选中一条闭合内部线' },
-  { key: 'rhombus-dart', label: '菱形省', hint: '选中一条边后输入省量与省长' },
-  { key: 'blend-start', label: '接角圆顺（起）', hint: '选中一条缝合' },
-  { key: 'blend-end', label: '接角圆顺（终）', hint: '选中一条缝合' },
-];
-
-/** Prompts one comma-separated number list, e.g. offsets in centimetres. */
-function promptNumbers(title: string, initial: string): number[] {
-  const raw = prompt(title, initial);
-  if (!raw) return [];
-  return raw.split(/[,，\s]+/).map(Number).filter(Number.isFinite);
-}
-
 const TOOLS_3D: Array<{ key: ToolType; label: string; icon: IconName; hint?: string }> = [
   { key: 'pin', label: '打PIN', icon: 'pin', hint: '悬停布料出现圆圈时单击' },
   { key: 'unpin', label: '拔PIN', icon: 'unpin', hint: '单击已有 PIN' },
+  { key: 'sketch3d', label: '3D 线稿笔', icon: 'pen', hint: '在布料上拖动，松手后落到所属版片的内部线' },
+  { key: 'measure3d', label: '3D 测量', icon: 'ruler', hint: '依次单击布料表面两点' },
 ];
 
 /** View preset entries shown in the 3D toolbar, each labelled with its keypad combo. */
@@ -174,96 +113,8 @@ export function Toolbar2D() {
   const setDisplayOption = useUIStore(s => s.setDisplayOption);
   const marqueeKinds = useUIStore(s => s.marqueeKinds);
   const setMarqueeKinds = useUIStore(s => s.setMarqueeKinds);
-  const selection = useUIStore(s => s.selection);
   const trimKind = useUIStore(s => s.trimKind);
   const setTrimKind = useUIStore(s => s.setTrimKind);
-
-  /** Runs one structure operation, arming a tool or dispatching a command for the selection. */
-  const runStructure = (action: StructureAction) => {
-    if (action === 'split' || action === 'hole') {
-      setTool(action);
-      return;
-    }
-    const pattern = useProjectStore.getState().project.pattern;
-    const execute = useProjectStore.getState().executeCommand;
-    const panels = idsOfKind(selection, 'panel').filter(id => !!pattern.panels[id]);
-    const edges = idsOfKind(selection, 'edge').filter(id => !!pattern.edges[id]);
-    const points = idsOfKind(selection, 'point').filter(id => !!pattern.points[id]);
-    try {
-      if (action === 'mirror-y' || action === 'mirror-x') {
-        if (panels.length !== 1) throw new Error('请先选中一个要镜像的版片');
-        execute(new MirrorPanelCommand(panels[0]!, action === 'mirror-y' ? 'y' : 'x'));
-      } else if (action === 'mirror-edge') {
-        if (panels.length !== 1 || edges.length !== 1) throw new Error('请选中一个版片和一条轴边');
-        execute(new MirrorPanelCommand(panels[0]!, edges[0]! as MirrorAxis));
-      } else if (action === 'sync-mirror') {
-        if (panels.length !== 1) throw new Error('请先选中源版片');
-        execute(new SyncMirrorCommand(panels[0]!));
-      } else if (action === 'merge') {
-        if (panels.length !== 2) throw new Error('请选中两个版片');
-        execute(new MergePanelsCommand([panels[0]!, panels[1]!]));
-      } else if (action === 'multi-seam') {
-        if (edges.length < 3) throw new Error('请选中一条基准边和至少两条目标边');
-        const [aId, ...bIds] = edges;
-        const parts: SeamPart[] = bIds.map((edgeBId, i) => ({
-          edgeBId,
-          tB0: 0,
-          tB1: 1,
-          tA0: i / bIds.length,
-          tA1: (i + 1) / bIds.length,
-        }));
-        execute(new CreateMultiSeamCommand(aId!, parts));
-      } else if (action === 'from-edges') {
-        if (edges.length < 3) throw new Error('请至少选中三条首尾相接的边');
-        execute(new CreatePanelFromEdgesCommand(edges));
-      } else if (action === 'fillet') {
-        if (points.length === 0) throw new Error('请先选中角点');
-        const input = prompt('圆角半径(cm)', '1.5');
-        const radius = Number(input);
-        if (!(radius > 0)) return;
-        execute(new FilletCornersCommand(points, radius));
-      } else if (action === 'break') {
-        if (points.length !== 1) throw new Error('请选中一个要断开的顶点');
-        execute(new BreakPointCommand(points[0]!));
-      } else if (action === 'connect') {
-        if (points.length !== 2) throw new Error('请选中两个自由端点');
-        execute(new ConnectPointsCommand(points[0]!, points[1]!));
-      } else if (action === 'merge-collinear') {
-        if (edges.length < 2) throw new Error('请选中两条以上共线相邻边');
-        execute(new MergeCollinearEdgesCommand(edges));
-      } else if (action === 'simplify') {
-        if (edges.length === 0) throw new Error('请选中要简化的曲线边');
-        const [deviation] = promptNumbers('拟合容差(cm)', '0.05');
-        execute(new SimplifyCurveCommand(edges, { ...(deviation > 0 ? { maxDeviationCm: deviation } : {}) }));
-      } else if (action === 'offset-line') {
-        if (edges.length !== 1) throw new Error('请选中一条基准边');
-        const distances = promptNumbers('等距距离(cm)，可多个', '1, 2').filter(v => v > 0);
-        if (distances.length === 0) return;
-        execute(new OffsetInternalLineCommand(edges[0]!, distances));
-      } else if (action === 'loop-panel') {
-        const lineIds = idsOfKind(selection, 'internal');
-        if (lineIds.length !== 1) throw new Error('请选中一条闭合内部线');
-        const owner = Object.values(pattern.panels).find(p => p.internalLineIds.includes(lineIds[0]!));
-        if (!owner) throw new Error('内部线没有所属版片');
-        execute(new PanelFromInternalLoopCommand(owner.id, lineIds[0]!));
-      } else if (action === 'rhombus-dart') {
-        if (edges.length !== 1) throw new Error('请选中省所在的边');
-        const panel = Object.values(pattern.panels).find(p => p.outlineEdgeIds.includes(edges[0]!));
-        if (!panel) throw new Error('这条边不属于任何版片');
-        const [intake, length] = promptNumbers('省量与省长(cm)', '2, 8');
-        if (!(intake > 0) || !(length > 0)) return;
-        execute(new RhombusDartCommand(panel.id, edges[0]!, 0.5, intake, length));
-      } else if (action === 'blend-start' || action === 'blend-end') {
-        const seams = idsOfKind(selection, 'seam').filter(id => !!pattern.seams[id]);
-        if (seams.length !== 1) throw new Error('请选中一条缝合');
-        const radius = Number(prompt('圆顺半径(cm)', '1.5'));
-        if (!(radius > 0)) return;
-        execute(new BlendSeamJointCommand(seams[0]!, action === 'blend-start' ? 'start' : 'end', radius));
-      }
-    } catch (err) {
-      reportActionError(err);
-    }
-  };
 
   return (
     <div style={styles.bar}>
@@ -292,7 +143,7 @@ export function Toolbar2D() {
       />
       <Dropdown
         label="标记"
-        items={MARK_TOOLS.map(m => ({
+        items={MARK_ITEMS.map(m => ({
           key: m.key,
           label: `${activeTool === m.key ? '✓ ' : '　'}${m.label}`,
           note: m.hint,
@@ -300,7 +151,7 @@ export function Toolbar2D() {
         onPick={key => setTool(key as ToolType)}
       />
 
-      <CheckMenu />
+      <ProblemMenu />
       <AutoMenu />
       <div style={styles.spacer} />
       <Dropdown
@@ -317,9 +168,9 @@ export function Toolbar2D() {
         }}
       />
       <Dropdown
-        label="图层"
-        items={DISPLAY_LAYERS.map(l => ({ key: l.key, label: `${displayOptions[l.key] ? '✓ ' : '　'}${l.label}` }))}
-        onPick={key => setDisplayOption(key as DisplayLayer, !displayOptions[key as DisplayLayer])}
+        label="显示"
+        items={DISPLAY_LAYER_OPTIONS.map(l => ({ key: l.key, label: `${displayOptions[l.key] ? '✓ ' : '　'}${l.label}` }))}
+        onPick={key => setDisplayOption(key as keyof DisplayOptions, !displayOptions[key as keyof DisplayOptions])}
       />
       <button style={styles.textBtn} title="单击适配版型范围 (F)" onClick={requestFit}>适应</button>
     </div>
@@ -331,8 +182,8 @@ function structureChecked(action: StructureAction, activeTool: ToolType): boolea
   return action === 'split' ? activeTool === 'split' : action === 'hole' ? activeTool === 'hole' : false;
 }
 
-/** Topology and grading checks, computed when the menu opens; a row selects the offending object. */
-function CheckMenu() {
+/** Topology and grading problems, computed when the list opens; a row selects the offending object. */
+function ProblemMenu() {
   const [issues, setIssues] = useState<CheckIssue[] | null>(null);
   const anchorRef = useRef<HTMLDivElement>(null);
 
@@ -359,7 +210,7 @@ function CheckMenu() {
   return (
     <div ref={anchorRef} style={{ position: 'relative' }}>
       <button style={styles.textBtn} title="单击展开问题列表" onClick={() => (issues === null ? open() : setIssues(null))}>
-        检查<Icon name="chevron-down" size={11} style={{ marginLeft: 4 }} />
+        问题<Icon name="chevron-down" size={11} style={{ marginLeft: 4 }} />
       </button>
       <MenuPopup open={issues !== null} anchor={anchorRef} onClose={() => setIssues(null)}>
         {issues?.length === 0 && <div style={styles.menuItem}>未发现问题</div>}
@@ -388,24 +239,6 @@ function AutoMenu() {
   const [scan, setScan] = useState<SeamScanResult | null>(null);
   const anchorRef = useRef<HTMLDivElement>(null);
   const candidates = scan?.candidates ?? null;
-
-  /** Groups panels by drape region and moves them as one undo step. */
-  const autoPlace = () => {
-    const pattern = useProjectStore.getState().project.pattern;
-    const offsets = placePanelsAuto(pattern, { gapCm: 4 });
-    if (offsets.length === 0) return;
-    // A draped panel's height comes from its drape anchor, so its row position is not visible.
-    const cmds = offsets
-      .map(o => (pattern.panels[o.panelId]?.drape ? { ...o, dy: 0 } : o))
-      .filter(o => o.dx !== 0 || o.dy !== 0)
-      .map(o => new MovePanelsCommand([o.panelId], { x: o.dx, y: o.dy }));
-    if (cmds.length === 0) return;
-    try {
-      useProjectStore.getState().executeCommand(new CompositeCommand('自动排位', cmds));
-    } catch (err) {
-      reportActionError(err);
-    }
-  };
 
   const accept = (candidate: SeamCandidate) => {
     try {
@@ -450,10 +283,10 @@ function AutoMenu() {
   return (
     <div ref={anchorRef} style={{ position: 'relative' }}>
       <button style={styles.textBtn} title="单击展开自动排位与缝合建议" onClick={toggle}>
-        智能<Icon name="chevron-down" size={11} style={{ marginLeft: 4 }} />
+        自动<Icon name="chevron-down" size={11} style={{ marginLeft: 4 }} />
       </button>
       <MenuPopup open={scan !== null} anchor={anchorRef} onClose={() => setScan(null)}>
-        <div style={styles.menuItem} onClick={() => { autoPlace(); setScan(null); }}>自动排位</div>
+        <div style={styles.menuItem} onClick={() => { autoPlacePanels(); setScan(null); }}>自动排位</div>
         {candidates?.length === 0 && <div style={styles.menuItem}>没有可匹配的缝合建议</div>}
         {candidates?.length === 0 && scan && <div style={styles.menuNote}>{seamEmptyHint(scan.skipped)}</div>}
         {candidates !== null && candidates.length > 0 && (
@@ -487,7 +320,7 @@ function seamSkippedNote(skipped: SeamScanSkipped): string | null {
 
 /** Explains an empty candidate list and points at the semantic control that fixes it. */
 function seamEmptyHint(skipped: SeamScanSkipped): string {
-  if (skipped.unlabeled > 0) return '多数边没有语义标注；选中边后在属性编辑器的「语义」下拉中设置，再试一次。';
+  if (skipped.unlabeled > 0) return '多数边没有语义标注；选中边后在属性面板的「语义」下拉中设置，再试一次。';
   if (skipped.alreadySeamed > 0) return '可匹配的边都已有缝口；请先删除旧缝口或检查边的语义标注。';
   return '边已标注语义，但长度与方向差异过大，暂无可用建议。';
 }
@@ -503,10 +336,7 @@ export function Toolbar3D({ engineRef }: { engineRef: MutableRefObject<GarmentEn
   const editPreview = useUIStore(s => s.editPreview);
   const setEditPreview = useUIStore(s => s.setEditPreview);
   const pinsVersion = useSimStore(s => s.pinsVersion);
-  const bumpPins = useSimStore(s => s.bumpPins);
   const rayUnavailable = rayTracingUnavailableReason(usePerfStore(s => s.rayUnsupported3D));
-  const [clearing, setClearing] = useState(false);
-  const [rebuilding, setRebuilding] = useState(false);
 
   // The pinned set lives on the solver, so the count refreshes when the version token moves.
   const pinCount = useMemo(
@@ -514,32 +344,6 @@ export function Toolbar3D({ engineRef }: { engineRef: MutableRefObject<GarmentEn
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [pinsVersion],
   );
-
-  const clearPins = async () => {
-    const engine = engineRef.current;
-    if (!engine) return;
-    setClearing(true);
-    try {
-      await engine.clearPins();
-      bumpPins();
-    } finally {
-      setClearing(false);
-    }
-  };
-
-  const rebuildCloth = async () => {
-    const engine = engineRef.current;
-    if (!engine) return;
-    setRebuilding(true);
-    try {
-      await engine.initSimulator(useProjectStore.getState().project);
-      engine.resetSimulation();
-      useSimStore.getState().reset();
-      bumpPins();
-    } finally {
-      setRebuilding(false);
-    }
-  };
 
   return (
     <div style={styles.bar}>
@@ -552,8 +356,6 @@ export function Toolbar3D({ engineRef }: { engineRef: MutableRefObject<GarmentEn
           badge={t.key === 'pin' && pinCount > 0 ? { count: pinCount, label: `已打 ${pinCount} 个` } : undefined}
         />
       ))}
-      <button style={styles.textBtn} title="单击释放全部 PIN" disabled={clearing} onClick={() => void clearPins()}>{clearing ? '清除中…' : '清除PIN'}</button>
-      <button style={styles.textBtn} title="单击按当前工程重建布料网格" disabled={rebuilding} onClick={() => void rebuildCloth()}>{rebuilding ? '重建中…' : '重建网格'}</button>
       <div style={styles.spacer} />
       <Dropdown
         label="视角"
@@ -573,7 +375,7 @@ export function Toolbar3D({ engineRef }: { engineRef: MutableRefObject<GarmentEn
         onPick={key => setDisplayMode(key as DisplayMode)}
       />
       <Dropdown
-        label="编辑预览"
+        label="拖动预览"
         items={EDIT_PREVIEW_ITEMS}
         value={editPreview}
         onPick={key => setEditPreview(key as EditPreviewTier)}
@@ -758,16 +560,16 @@ const styles: Record<string, React.CSSProperties> = {
   toolBtn: { flex: '0 0 auto', width: 26, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: '1px solid transparent', borderRadius: 3, color: '#bbb', cursor: 'pointer' },
   toolBtnActive: { background: '#2a4a6a', border: '1px solid #4da6ff', color: '#fff' },
   toolBtnCounted: { width: 'auto', minWidth: 26, padding: '0 6px', gap: 4 },
-  toolCount: { color: '#4da6ff', fontSize: 10, fontVariantNumeric: 'tabular-nums' },
-  textBtn: { flex: '0 0 auto', whiteSpace: 'nowrap', padding: '3px 6px', background: '#2a2a30', border: '1px solid #3a3a42', borderRadius: 3, color: '#ccc', cursor: 'pointer', fontSize: 11 },
+  toolCount: { color: '#4da6ff', fontSize: 'var(--oc-fs-note)', fontVariantNumeric: 'tabular-nums' },
+  textBtn: { flex: '0 0 auto', whiteSpace: 'nowrap', padding: '3px 6px', background: '#2a2a30', border: '1px solid #3a3a42', borderRadius: 3, color: '#ccc', cursor: 'pointer', fontSize: 'var(--oc-fs-micro)' },
   backdrop: { position: 'fixed', inset: 0, zIndex: 900 },
   menuPopup: {
     position: 'fixed', width: 'max-content', minWidth: 140, overflowY: 'auto',
     background: '#2a2a30', border: '1px solid #3a3a42', borderRadius: 4, zIndex: 901,
     boxShadow: '0 4px 12px rgba(0,0,0,0.5)', padding: '2px 0',
   },
-  menuItem: { padding: '7px 12px', fontSize: 12, color: '#ccc', cursor: 'pointer' },
-  menuNote: { padding: '6px 12px', fontSize: 11, color: '#8a93a3', cursor: 'default', whiteSpace: 'normal', lineHeight: 1.5, maxWidth: 340 },
+  menuItem: { padding: '7px 12px', fontSize: 'var(--oc-fs-body)', color: '#ccc', cursor: 'pointer' },
+  menuNote: { padding: '6px 12px', fontSize: 'var(--oc-fs-micro)', color: '#8a93a3', cursor: 'default', whiteSpace: 'normal', lineHeight: 1.5, maxWidth: 340 },
   menuItemDisabled: { color: '#666', cursor: 'default' },
   menuItemActive: { color: '#4da6ff', background: '#2a3a4a' },
 };

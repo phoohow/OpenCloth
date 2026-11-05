@@ -11,6 +11,7 @@ export type LayerRole =
   | 'notch'
   | 'drill'
   | 'annotation'
+  | 'topstitch'
   | 'ignore';
 
 /** Exact AAMA AVX layer names to roles. */
@@ -30,6 +31,7 @@ export const AAMA_LAYERS: Record<string, LayerRole> = {
   '041-NOTCH2': 'notch',
   '042-DRILL': 'drill',
   '043-DRILL2': 'drill',
+  '030-TOPSTITCH': 'topstitch',
   '070-TEXT': 'annotation',
   '071-ANNOTATION': 'annotation',
 };
@@ -47,6 +49,7 @@ export const ASTM_LAYERS: Record<string, LayerRole> = {
   'GRAIN-LINE': 'grainline',
   NOTCH: 'notch',
   DRILL: 'drill',
+  TOPSTITCH: 'topstitch',
   ANNOTATION: 'annotation',
   TEXT: 'annotation',
 };
@@ -66,6 +69,7 @@ export const LAYER_NAMES: Record<DxfConvention, Partial<Record<LayerRole, string
     grainline: '031-GRAINLINE',
     notch: '040-NOTCH',
     drill: '042-DRILL',
+    topstitch: '030-TOPSTITCH',
     annotation: '070-TEXT',
   },
   ASTM: {
@@ -76,12 +80,14 @@ export const LAYER_NAMES: Record<DxfConvention, Partial<Record<LayerRole, string
     grainline: 'GRAIN-LINE',
     notch: 'NOTCH',
     drill: 'DRILL',
+    topstitch: 'TOPSTITCH',
     annotation: 'TEXT',
   },
 };
 
 /** Keyword inference used when a layer name is not in the convention table. */
 function inferRole(normalized: string): LayerRole {
+  if (normalized.includes('TOPSTITCH')) return 'topstitch';
   if (normalized.includes('DRILL')) return 'drill';
   if (normalized.includes('NOTCH')) return 'notch';
   if (normalized.startsWith('04')) return normalized.includes('DRILL') ? 'drill' : 'notch';

@@ -9,7 +9,7 @@ import {
 import { MenuDialogs } from './menu/menuDialogs';
 import { formatClockTime } from './timeFormat';
 import { Icon } from './icons';
-import { useProjectStore, useUIStore } from '../store/stores';
+import { displayModeOf, useProjectStore, useUIStore } from '../store/stores';
 
 /** Top menu bar: dropdowns, submenus, check marks, shortcut column and keyboard navigation. */
 export function Menubar({ actions }: { actions: MenuActions }) {
@@ -26,6 +26,11 @@ export function Menubar({ actions }: { actions: MenuActions }) {
   const layout = useUIStore(s => s.layout);
   const focus = useUIStore(s => s.focus);
   const propTab = useUIStore(s => s.propTab);
+  const activeTool = useUIStore(s => s.activeTool);
+  const displayMode = useUIStore(displayModeOf);
+  const editPreview = useUIStore(s => s.editPreview);
+  const displayOptions = useUIStore(s => s.displayOptions);
+  const cameraProjection = useUIStore(s => s.cameraProjection);
   const selection = useUIStore(s => s.selection);
   const showTemplatePanel = useUIStore(s => s.showTemplatePanel);
   const showScenePanel = useUIStore(s => s.showScenePanel);
@@ -40,6 +45,11 @@ export function Menubar({ actions }: { actions: MenuActions }) {
       layout,
       focus,
       propTab,
+      activeTool,
+      displayMode,
+      editPreview,
+      displayOptions,
+      cameraProjection,
       showTemplatePanel,
       showScenePanel,
       showPropertiesPanel,
@@ -59,7 +69,8 @@ export function Menubar({ actions }: { actions: MenuActions }) {
       autosaves,
     };
     return buildMenus(state, actions);
-  }, [project, recent, autosaves, clipboard, history, layout, focus, propTab, selection,
+  }, [project, recent, autosaves, clipboard, history, layout, focus, propTab, activeTool, displayMode,
+    editPreview, displayOptions, cameraProjection, selection,
     showTemplatePanel, showScenePanel, showPropertiesPanel, showTimeline,
     autoSaveSeconds, lastAutosaveAt, actions]);
 
@@ -193,6 +204,7 @@ function renderEntries(
     rows.push(
       <div
         key={entry.id}
+        title={entry.note}
         style={{
           ...styles.item,
           ...(entry.disabled ? styles.itemDisabled : null),
@@ -267,10 +279,10 @@ function Submenu({ entries, nav, setNav, closeMenus, menus }: SubmenuProps) {
 
 const styles: Record<string, React.CSSProperties> = {
   bar: { height: 40, background: '#1a1a1e', borderBottom: '1px solid #333', display: 'flex', alignItems: 'center', padding: '0 12px', gap: 2, position: 'relative' },
-  logo: { fontWeight: 700, fontSize: 16, color: '#4da6ff', marginRight: 16, letterSpacing: 1 },
+  logo: { fontWeight: 700, fontSize: 'var(--oc-fs-dialog-title)', color: '#4da6ff', marginRight: 16, letterSpacing: 1 },
   menu: { position: 'relative', cursor: 'pointer', padding: '5px 10px', borderRadius: 4 },
   menuOpen: { background: '#2a4a6a' },
-  menuLabel: { fontSize: 13, color: '#ccc' },
+  menuLabel: { fontSize: 'var(--oc-fs-label)', color: '#ccc' },
   menuLabelActive: { color: '#fff' },
   dropdown: {
     position: 'absolute', top: '100%', left: 0, marginTop: 4, background: '#2a2a30',
@@ -284,22 +296,22 @@ const styles: Record<string, React.CSSProperties> = {
   },
   submenuFlipped: { left: 'auto', right: '100%', marginLeft: 0, marginRight: 6 },
   item: {
-    display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px 7px 8px', fontSize: 13,
+    display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px 7px 8px', fontSize: 'var(--oc-fs-label)',
     color: '#ccc', cursor: 'pointer', position: 'relative', whiteSpace: 'nowrap',
   },
   itemHover: { background: '#2a4a6a', color: '#fff' },
   itemDisabled: { color: '#5d5d66', cursor: 'default' },
   gutter: { width: 12, height: 12, flex: '0 0 auto', display: 'flex', alignItems: 'center', color: '#4da6ff' },
   label: { flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' },
-  accel: { color: '#7d7d88', fontSize: 12, marginLeft: 18 },
+  accel: { color: '#7d7d88', fontSize: 'var(--oc-fs-body)', marginLeft: 18 },
   caret: { color: '#888', flex: '0 0 auto' },
   sep: { height: 1, background: '#3a3a42', margin: '4px 8px' },
   spacer: { flex: 1 },
-  status: { fontSize: 11, color: '#777', marginRight: 14 },
+  status: { fontSize: 'var(--oc-fs-micro)', color: '#777', marginRight: 14 },
   projectName: {
     position: 'absolute', left: '50%', top: 0, bottom: 0, transform: 'translateX(-50%)',
     display: 'flex', alignItems: 'center', maxWidth: '34%', overflow: 'hidden',
     textOverflow: 'ellipsis', whiteSpace: 'nowrap', pointerEvents: 'none',
-    fontSize: 12, color: '#888',
+    fontSize: 'var(--oc-fs-body)', color: '#888',
   },
 };

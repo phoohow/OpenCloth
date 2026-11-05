@@ -1,11 +1,16 @@
 import { useEffect, type RefObject } from 'react';
 import type { GarmentEngine } from '../../core/engine/garmentEngine';
-import { useSimStore, useUIStore } from '../../store/stores';
+import type { Vec2 } from '../../core/model/types';
+import { AddInternalLineCommand } from '../../core/command/patternStructureCommands';
+import { samplePanelOutline } from '../../pattern/panel/panelBuilder';
+import { useProjectStore, useSimStore, useUIStore } from '../../store/stores';
+import { pointInPolygon } from '../viewport2D/hitTest';
+import { reportActionError } from '../widgets/toast';
 import { isTapGesture } from '../mobile/mobileUi';
 import { CLAMP_CURSOR, OPEN_CLAMP_CURSOR, PIN_CURSOR, UNPIN_CURSOR } from './cursors';
 
 /** What a pointer press would do where it currently hovers. */
-type HoverMode = 'camera' | 'drag' | 'pin' | 'unpin';
+type HoverMode = 'camera' | 'drag' | 'pin' | 'unpin' | 'sketch' | 'measure';
 
 interface Hover {
   mode: HoverMode;
@@ -14,6 +19,9 @@ interface Hover {
 }
 
 const CAMERA: Hover = { mode: 'camera', pin: null };
+
+/** Shortest pattern-space distance between two samples of one sketch stroke, in centimetres. */
+const SKETCH_STEP_CM = 0.15;
 
 /** Pointer modifiers that select a gesture without touching the toolbar. */
 interface Modifiers {
@@ -79,6 +87,8 @@ export function useClothPicking(
       }
       // Cloth hidden behind the body is not a surface the pointer can act on.
       if (!engine.hoverClothAtScreen(x, y)) return CAMERA;
+      if (tool === 'sketch3d') return { mode: 'sketch', pin: null };
+      if (tool === 'measure3d') return { mode: 'measure', pin: null };
       if (tool === 'pin' || mods.alt) return { mode: 'pin', pin: null };
       // No tool selected: a running simulation turns the pointer into a grip on the cloth.
       if (touch || !useSimStore.getState().isPlaying) return CAMERA;
@@ -92,6 +102,12 @@ export function useClothPicking(
     let pointerConsumed = false;
     /** Pointer currently pulling the cloth, or null. */
     let dragPointer: number | null = null;
+    /** Pointer drawing a 3D sketch stroke, or null. */
+    let sketchPointer: number | null = null;
+    /** Panel the current sketch run belongs to. */
+    let sketchPanelId: string | null = null;
+    /** Pattern-space samples collected for the current panel of a sketch stroke. */
+    let sketchPoints: Vec2[] = [];
 
     /** Last cursor written, so repeated hover passes do not touch the DOM again. */
     let cursor = '';
@@ -107,6 +123,7 @@ export function useClothPicking(
       if (mode === 'drag') return OPEN_CLAMP_CURSOR;
       if (mode === 'pin') return PIN_CURSOR;
       if (mode === 'unpin') return UNPIN_CURSOR;
+      if (mode === 'sketch' || mode === 'measure') return 'crosshair';
       return 'default';
     };
 
@@ -151,6 +168,63 @@ export function useClothPicking(
       });
     };
 
+    /** Commits the samples collected for one panel of a sketch stroke as an internal line. */
+    const commitSketchRun = () => {
+      const panelId = sketchPanelId;
+      const points = sketchPoints;
+      sketchPanelId = null;
+      sketchPoints = [];
+      if (!panelId || points.length < 2) return;
+      const pattern = useProjectStore.getState().project.pattern;
+      const panel = pattern.panels[panelId];
+      if (!panel) return;
+      const outline = samplePanelOutline(pattern, panel);
+      const inside = points
+        .map(point => clampIntoPanel(outline, point))
+        .filter((point): point is Vec2 => point !== null);
+      if (inside.length < 2) return;
+      try {
+        useProjectStore.getState().executeCommand(new AddInternalLineCommand(panelId, inside));
+      } catch (err) {
+        reportActionError(err);
+      }
+    };
+
+    /** Adds one surface sample to the running sketch stroke, splitting it when it leaves the panel. */
+    const extendSketch = (ndcX: number, ndcY: number) => {
+      const walked = engineRef.current?.extendSketchStroke(ndcX, ndcY);
+      if (!walked) return;
+      if (walked.panelId !== sketchPanelId) {
+        commitSketchRun();
+        sketchPanelId = walked.panelId;
+        sketchPoints = [];
+      }
+      const last = sketchPoints[sketchPoints.length - 1];
+      if (last && Math.hypot(walked.point.x - last.x, walked.point.y - last.y) < SKETCH_STEP_CM) return;
+      sketchPoints.push(walked.point);
+    };
+
+    /** Drops the running sketch stroke and its overlay. */
+    const cancelSketch = () => {
+      const pointerId = sketchPointer;
+      sketchPointer = null;
+      sketchPanelId = null;
+      sketchPoints = [];
+      engineRef.current?.endSketchStroke();
+      if (pointerId !== null && canvas.hasPointerCapture(pointerId)) canvas.releasePointerCapture(pointerId);
+      refreshHover();
+    };
+
+    /** Ends the stroke the pointer drew and commits what it collected. */
+    const finishSketch = (e: PointerEvent) => {
+      if (sketchPointer === null || e.pointerId !== sketchPointer) return;
+      sketchPointer = null;
+      engineRef.current?.endSketchStroke();
+      if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
+      commitSketchRun();
+      refreshHover();
+    };
+
     const onPointerMove = (e: PointerEvent) => {
       mods = { alt: e.altKey, shift: e.shiftKey };
       pointer = { x: e.clientX, y: e.clientY };
@@ -158,6 +232,12 @@ export function useClothPicking(
         if (e.pointerId !== dragPointer) return;
         const { x, y } = toNdc(e.clientX, e.clientY);
         engineRef.current?.moveClothDrag(x, y);
+        return;
+      }
+      if (sketchPointer !== null) {
+        if (e.pointerId !== sketchPointer) return;
+        const { x, y } = toNdc(e.clientX, e.clientY);
+        extendSketch(x, y);
         return;
       }
       if (e.pointerType === 'touch') return;
@@ -168,8 +248,8 @@ export function useClothPicking(
     // so stopPropagation suppresses orbit only for cloth drags and pin clicks.
     const onPointerDown = (e: PointerEvent) => {
       pointerConsumed = false;
-      // One drag at a time: a second finger must not restart the grab elsewhere.
-      if (dragPointer !== null) return;
+      // One gesture at a time: a second finger must not restart the grab elsewhere.
+      if (dragPointer !== null || sketchPointer !== null) return;
       const engine = engineRef.current;
       if (!engine || e.button !== 0) return;
       const touch = e.pointerType === 'touch';
@@ -187,6 +267,26 @@ export function useClothPicking(
         e.preventDefault();
         setCursor(CLAMP_CURSOR);
         canvas.setPointerCapture(e.pointerId);
+        return;
+      }
+
+      if (target.mode === 'sketch') {
+        const started = engine.beginSketchStroke(x, y);
+        if (!started) return;
+        pointerConsumed = true;
+        e.stopPropagation();
+        e.preventDefault();
+        sketchPointer = e.pointerId;
+        sketchPanelId = started.panelId;
+        sketchPoints = [started.point];
+        canvas.setPointerCapture(e.pointerId);
+        return;
+      }
+
+      if (target.mode === 'measure') {
+        pointerConsumed = true;
+        e.stopPropagation();
+        useUIStore.getState().setMeasure3d(engine.measureAtScreen(x, y));
         return;
       }
 
@@ -215,15 +315,22 @@ export function useClothPicking(
       finishDrag(e.pointerId);
     };
 
-    // Focus loss delivers no pointerup, so a held drag has to be released here.
+    // Focus loss delivers no pointerup, so a held drag or sketch has to be released here.
     const onWindowBlur = () => {
       pointer = null;
       if (dragPointer !== null) finishDrag(dragPointer);
-      else applyHover(CAMERA);
+      else if (sketchPointer !== null) {
+        sketchPointer = null;
+        engineRef.current?.endSketchStroke();
+        commitSketchRun();
+        applyHover(CAMERA);
+      } else {
+        applyHover(CAMERA);
+      }
     };
 
     const onPointerLeave = () => {
-      if (dragPointer !== null) return;
+      if (dragPointer !== null || sketchPointer !== null) return;
       pointer = null;
       applyHover(CAMERA);
     };
@@ -233,6 +340,16 @@ export function useClothPicking(
       if (!e.altKey && !e.shiftKey && !mods.alt && !mods.shift) return;
       mods = { alt: e.altKey, shift: e.shiftKey };
       scheduleHover();
+    };
+
+    /** Escape drops the pending measurement or the stroke being drawn. */
+    const onEscape = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (useUIStore.getState().activeTool === 'measure3d') {
+        engineRef.current?.clearMeasurement();
+        useUIStore.getState().setMeasure3d(null);
+      }
+      if (sketchPointer !== null) cancelSketch();
     };
 
     const onDoubleClick = (e: MouseEvent) => {
@@ -266,10 +383,19 @@ export function useClothPicking(
     const onStoreChange = () => {
       const ui = useUIStore.getState();
       const sim = useSimStore.getState();
-      if (ui.activeTool === lastTool && sim.isPlaying === lastPlaying && sim.pinsVersion === lastPins) return;
+      const toolChanged = ui.activeTool !== lastTool;
+      if (!toolChanged && sim.isPlaying === lastPlaying && sim.pinsVersion === lastPins) return;
+      const leavingMeasure = toolChanged && lastTool === 'measure3d';
+      const leavingSketch = toolChanged && sketchPointer !== null;
+      // Record the new state first: the cleanup below writes the same store and must not re-enter.
       lastTool = ui.activeTool;
       lastPlaying = sim.isPlaying;
       lastPins = sim.pinsVersion;
+      if (leavingMeasure) {
+        engineRef.current?.clearMeasurement();
+        ui.setMeasure3d(null);
+      }
+      if (leavingSketch) cancelSketch();
       scheduleHover();
     };
     const unsubUI = useUIStore.subscribe(onStoreChange);
@@ -282,9 +408,12 @@ export function useClothPicking(
     canvas.addEventListener('pointerleave', onPointerLeave);
     canvas.addEventListener('pointerup', onCanvasPointerUp);
     canvas.addEventListener('pointerup', endDrag);
+    canvas.addEventListener('pointerup', finishSketch);
     canvas.addEventListener('pointercancel', onCanvasPointerCancel);
     canvas.addEventListener('pointercancel', endDrag);
+    canvas.addEventListener('pointercancel', finishSketch);
     window.addEventListener('keydown', onKeyChange);
+    window.addEventListener('keydown', onEscape);
     window.addEventListener('keyup', onKeyChange);
     window.addEventListener('blur', onWindowBlur);
     return () => {
@@ -295,9 +424,12 @@ export function useClothPicking(
       canvas.removeEventListener('pointerleave', onPointerLeave);
       canvas.removeEventListener('pointerup', onCanvasPointerUp);
       canvas.removeEventListener('pointerup', endDrag);
+      canvas.removeEventListener('pointerup', finishSketch);
       canvas.removeEventListener('pointercancel', onCanvasPointerCancel);
       canvas.removeEventListener('pointercancel', endDrag);
+      canvas.removeEventListener('pointercancel', finishSketch);
       window.removeEventListener('keydown', onKeyChange);
+      window.removeEventListener('keydown', onEscape);
       window.removeEventListener('keyup', onKeyChange);
       window.removeEventListener('blur', onWindowBlur);
       unsubUI();
@@ -308,3 +440,20 @@ export function useClothPicking(
     };
   }, [canvasRef, containerRef, engineRef]);
 }
+
+/** Moves a pattern point inside the panel outline by stepping toward the outline centre. */
+function clampIntoPanel(outline: Vec2[], point: Vec2): Vec2 | null {
+  if (pointInPolygon(outline, point)) return point;
+  if (outline.length === 0) return null;
+  const centre = outline.reduce(
+    (sum, p) => ({ x: sum.x + p.x / outline.length, y: sum.y + p.y / outline.length }),
+    { x: 0, y: 0 },
+  );
+  for (let step = 1; step <= 8; step++) {
+    const t = step / 8;
+    const candidate = { x: point.x + (centre.x - point.x) * t, y: point.y + (centre.y - point.y) * t };
+    if (pointInPolygon(outline, candidate)) return candidate;
+  }
+  return null;
+}
+

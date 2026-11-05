@@ -1,0 +1,20 @@
+{
+  "name": "OpenCloth - 服装设计平台",
+  "short_name": "OpenCloth",
+  "description": "浏览器内的服装制版、缝合与 3D 试衣工具",
+  "lang": "zh-CN",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#1a1a1e",
+  "theme_color": "#1a1a1e",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

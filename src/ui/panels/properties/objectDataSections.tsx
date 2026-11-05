@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
 import { useProjectStore, useSimStore, useUIStore } from '../../../store/stores';
 import type {
-  Annotation, Avatar, Dart, EdgeSemantic, EdgeType, InternalLine, LightType, Measurement,
-  Notch, Panel, Pattern, PatternEdge, PatternPoint, Print, Project, SceneLight, Seam, SeamType,
-  Topstitch, Trim, TrimKind, Vec2,
+  Annotation, Avatar, Dart, EdgeSemantic, EdgeType, GarmentLayer, InternalLine, LightType,
+  Measurement, Notch, Panel, Pattern, PatternEdge, PatternPoint, Print, Project, SceneLight, Seam,
+  SeamType, Topstitch, Trim, TrimKind, Vec2,
 } from '../../../core/model/types';
 import {
   AddSizeCommand, ApplySizeCommand, DeleteAnnotationCommand, DeleteElementsCommand,
@@ -16,8 +16,8 @@ import {
 } from '../../../core/command/patternCommands';
 import type { Command } from '../../../core/command/command';
 import {
-  BUNDLED_AVATARS, LIGHT_TYPES, LIGHT_TYPE_LABELS, SEAM_TYPES, SEAM_TYPE_LABELS,
-  TRIM_KINDS, TRIM_KIND_LABELS, normalizeLights,
+  BUNDLED_AVATARS, GARMENT_LAYERS, GARMENT_LAYER_LABELS, LIGHT_TYPES, LIGHT_TYPE_LABELS,
+  SEAM_TYPES, SEAM_TYPE_LABELS, TRIM_KINDS, TRIM_KIND_LABELS, normalizeLights,
 } from '../../../core/model/defaults';
 import { edgeLength, measurementValue } from '../../../pattern/geom/edgeSample';
 import { arcSpan } from '../../../pattern/geom/arc';
@@ -40,19 +40,11 @@ import { NumberField, Vec3Field } from '../../widgets/numberField';
 import { reportActionError } from '../../widgets/toast';
 import { CAMERA_PROJECTIONS } from '../../optionTables';
 import { bodyLandmarks } from '../../../avatar/landmarks';
+import { cloneJoints, POSE_PRESETS, posePresetParams } from '../../../avatar/pose';
+import { panelCollisionLayer } from '../../../core/model/layers';
 import { panelHeightOffsets, panelOffsetCm, pointHeightOffsetCm } from '../../viewport2D/panelHeight';
 import { CUSTOM_MODEL, PROCEDURAL_MODEL, toDeg, toRad } from './constants';
 import { styles } from './styles';
-
-/** Full-body pose presets: arm rake, leg splay and lateral lean, in degrees. */
-const POSE_PRESETS: Array<{
-  key: string; label: string; armDeg: number; legDeg: number; leanDeg: number;
-}> = [
-  { key: 'relaxed', label: '自然', armDeg: 7, legDeg: 2, leanDeg: 0 },
-  { key: 'a-pose', label: 'A 型', armDeg: 25, legDeg: 4, leanDeg: 0 },
-  { key: 't-pose', label: 'T 型', armDeg: 90, legDeg: 6, leanDeg: 0 },
-  { key: 'stance', label: '侧立', armDeg: 7, legDeg: 12, leanDeg: 5 },
-];
 
 /** The rows a kind adds beyond identity and transform. */
 export function ObjectData({ project, nodeId, kind, engineRef }: {
@@ -239,11 +231,20 @@ export function PanelMeshData({ project, panelId }: { project: Project; panelId:
         </Row>
       </Section>
       <Section title="碰撞">
+        <SelectRow label="结构层" value={panel.layer ?? ''}
+          options={[
+            { value: '', label: '未指定' },
+            ...GARMENT_LAYERS.map(layer => ({ value: layer, label: GARMENT_LAYER_LABELS[layer] })),
+          ]}
+          onChange={v => setPanel(
+            v ? '设置结构层' : '清除结构层',
+            v ? { layer: v as GarmentLayer, collisionLayer: undefined } : { layer: undefined },
+          )} />
         <Row label="碰撞层">
-          <NumberField value={panel.collisionLayer ?? 0} step={1} precision={0} min={0} max={9} title="0 为最内层；层差越大，自碰撞把外层推得越远"
+          <NumberField value={panelCollisionLayer(panel)} step={1} precision={0} min={0} max={9} title="0 为最内层；层差越大，自碰撞把外层推得越远"
             onCommit={v => setPanel('修改碰撞层', { collisionLayer: Math.round(v) })} />
         </Row>
-        <div style={styles.note}>布料自碰撞开启时，碰撞层 0 为最内层，层差每加 1 按「层间距」额外分开一段距离。</div>
+        <div style={styles.note}>结构层决定默认碰撞层（里布 0 / 填充 1 / 外壳 2）与碰撞间隙；手动填写的碰撞层优先。未指定结构层的片沿用工程里的「布料厚度」。</div>
       </Section>
     </>
   );
@@ -264,6 +265,9 @@ export function PanelDrapeData({ project, panelId }: { project: Project; panelId
 const drapeRegionLabel = (region: 'torso' | 'arm' | 'leg' | 'neck'): string =>
   ({ torso: '躯干', arm: '手臂', leg: '腿', neck: '领口' }[region]);
 
+/** Joint rotation fields the avatar sliders edit. */
+type JointKey = 'shoulderFlexRad' | 'elbowBendRad' | 'hipFlexRad' | 'kneeBendRad';
+
 function AvatarData({ project, engineRef }: { project: Project; engineRef: EngineRef }) {
   const avatar = project.avatar;
 
@@ -274,6 +278,17 @@ function AvatarData({ project, engineRef }: { project: Project; engineRef: Engin
     (ctx, value) => { ctx.project.avatar = { ...value }; },
     { ...avatar, ...patch },
   );
+
+  /** Joint angle of one side in degrees. */
+  const jointDeg = (side: 'left' | 'right', key: JointKey) =>
+    toDeg(avatar.params.joints?.[side]?.[key] ?? 0);
+
+  /** Writes one joint angle, keeping the other joints and the global pose. */
+  const setJoint = (side: 'left' | 'right', key: JointKey, label: string, degrees: number) => {
+    const joints = cloneJoints(avatar.params.joints) ?? {};
+    joints[side] = { ...joints[side], [key]: toRad(degrees) };
+    setAvatar(label, { params: { ...avatar.params, joints } });
+  };
 
   return (
     <>
@@ -295,25 +310,36 @@ function AvatarData({ project, engineRef }: { project: Project; engineRef: Engin
           onChange={v => setAvatar('修改腿部开合', { params: { ...avatar.params, poseLegSpreadRad: toRad(v) } })} />
         <SliderRow label="躯干倾斜" min={-20} max={20} step={1} unit="°" value={toDeg(avatar.params.poseTorsoLeanRad ?? 0)} commitOnRelease
           onChange={v => setAvatar('修改躯干倾斜', { params: { ...avatar.params, poseTorsoLeanRad: toRad(v) } })} />
+        <div style={styles.note}>肩与肘</div>
+        <SliderRow label="左肩前摆" min={-80} max={80} step={1} unit="°" value={jointDeg('left', 'shoulderFlexRad')} commitOnRelease
+          onChange={v => setJoint('left', 'shoulderFlexRad', '修改左肩', v)} />
+        <SliderRow label="右肩前摆" min={-80} max={80} step={1} unit="°" value={jointDeg('right', 'shoulderFlexRad')} commitOnRelease
+          onChange={v => setJoint('right', 'shoulderFlexRad', '修改右肩', v)} />
+        <SliderRow label="左肘弯曲" min={0} max={135} step={1} unit="°" value={jointDeg('left', 'elbowBendRad')} commitOnRelease
+          onChange={v => setJoint('left', 'elbowBendRad', '修改左肘', v)} />
+        <SliderRow label="右肘弯曲" min={0} max={135} step={1} unit="°" value={jointDeg('right', 'elbowBendRad')} commitOnRelease
+          onChange={v => setJoint('right', 'elbowBendRad', '修改右肘', v)} />
+        <div style={styles.note}>髋与膝</div>
+        <SliderRow label="左髋前摆" min={-80} max={80} step={1} unit="°" value={jointDeg('left', 'hipFlexRad')} commitOnRelease
+          onChange={v => setJoint('left', 'hipFlexRad', '修改左髋', v)} />
+        <SliderRow label="右髋前摆" min={-80} max={80} step={1} unit="°" value={jointDeg('right', 'hipFlexRad')} commitOnRelease
+          onChange={v => setJoint('right', 'hipFlexRad', '修改右髋', v)} />
+        <SliderRow label="左膝弯曲" min={0} max={120} step={1} unit="°" value={jointDeg('left', 'kneeBendRad')} commitOnRelease
+          onChange={v => setJoint('left', 'kneeBendRad', '修改左膝', v)} />
+        <SliderRow label="右膝弯曲" min={0} max={120} step={1} unit="°" value={jointDeg('right', 'kneeBendRad')} commitOnRelease
+          onChange={v => setJoint('right', 'kneeBendRad', '修改右膝', v)} />
         <Row label="姿态预设">
           <ButtonRow>
             {POSE_PRESETS.map(preset => (
               <SmallButton
                 key={preset.key}
-                title={`手臂 ${preset.armDeg}° · 腿 ${preset.legDeg}° · 躯干 ${preset.leanDeg}°`}
-                onClick={() => setAvatar('切换姿态', {
-                  params: {
-                    ...avatar.params,
-                    poseArmAngleRad: toRad(preset.armDeg),
-                    poseLegSpreadRad: toRad(preset.legDeg),
-                    poseTorsoLeanRad: toRad(preset.leanDeg),
-                  },
-                })}
+                title={`手臂 ${preset.armDeg}° · 腿 ${preset.legDeg}° · 躯干 ${preset.leanDeg}°${preset.joints ? ' · 关节' : ''}`}
+                onClick={() => setAvatar('切换姿态', { params: posePresetParams(avatar.params, preset) })}
               >{preset.label}</SmallButton>
             ))}
           </ButtonRow>
         </Row>
-        <div style={styles.note}>体型与姿态改动都会重建模特、布料与模拟状态。</div>
+        <div style={styles.note}>关节角度只作用于程序模特；导入模特请用动态合身的动画播放。体型与姿态改动都会重建模特、布料与模拟状态。</div>
       </Section>
     </>
   );

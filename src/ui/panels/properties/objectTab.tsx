@@ -20,7 +20,7 @@ import { styles } from './styles';
 import { AvatarMaterialTab, MaterialTab, panelFabric } from './materialTab';
 import { LightPlacementData, ObjectData, PanelDrapeData, PanelManageRows, PanelMeshData } from './objectDataSections';
 import { AvatarPhysics, FabricPhysics } from './physicsTabs';
-import { ProjectTab, RenderTab } from './sceneRenderTabs';
+import { PatternTab, ProjectTab, RenderTab } from './sceneRenderTabs';
 
 /** Property panel for the tab of one selected scene object. */
 export function selectedBody(tab: PropTab, project: Project, nodeId: string, node: SceneNode, engineRef: EngineRef) {
@@ -45,6 +45,8 @@ export function selectedBody(tab: PropTab, project: Project, nodeId: string, nod
       return <TransformTab project={project} nodeId={nodeId} kind={node.kind} engineRef={engineRef} />;
     case 'render':
       return <RenderTab project={project} />;
+    case 'pattern':
+      return <PatternTab project={project} engineRef={engineRef} />;
     default:
       return <ProjectTab project={project} engineRef={engineRef} />;
   }

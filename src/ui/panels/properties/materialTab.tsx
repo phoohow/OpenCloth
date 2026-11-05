@@ -6,13 +6,21 @@ import { fabricList, panelsUsingFabric, uniqueFabricName } from '../../../core/m
 import { AddFabricCommand, AssignFabricCommand, DetachFabricCommand } from '../../../core/command/fabricCommands';
 import type { Command } from '../../../core/command/command';
 import { readImageAsPngDataUrl } from '../../../io/imageData';
+import { downloadTextFile } from '../../../io/codec';
 import { patchValue, type EngineRef } from '../../sceneCommands';
 import { Vec2Field } from '../../widgets/numberField';
 import { Icon } from '../../icons';
 import {
   ColorRow, FileRow, FlexSelect, Hint, IconButton, InlineText, PopupSelect, Row, Section,
-  SelectRow, SliderRow, SlotRow, ValueButton,
+  SelectRow, SliderRow, SlotRow, SmallButton, ValueButton,
 } from '../../widgets/propertyRows';
+import { samplePanelOutline } from '../../../pattern/panel/panelBuilder';
+import { computeBBox } from '../../../pattern/geom/vec2';
+import {
+  KNIT_STITCHES, KNIT_STITCH_LABELS, knitChartCsv, knitNeedleCount, knitOf, knitRowCount,
+  type KnitStitch,
+} from '../../../core/model/knit';
+import { knitTextureDataUrl } from '../../../render/material/knitTexture';
 
 // ===== Material tab ("材质") =====
 
@@ -90,6 +98,33 @@ export function MaterialTab({ project, panelId, engineRef }: {
     appearance({ maps: { ...prev, [slot]: null, fileNames } });
   };
   const maps = fabric?.appearance.maps ?? {};
+  const knit = knitOf(fabric);
+  const knitBox = panel ? computeBBox(samplePanelOutline(project.pattern, panel)) : null;
+  const knitNeedles = knitBox ? knitNeedleCount(knitBox.max.x - knitBox.min.x, knit) : 0;
+  const knitRows = knitBox ? knitRowCount(knitBox.max.y - knitBox.min.y, knit) : 0;
+
+  /** Writes one knit-spec patch onto the material record. */
+  const setKnit = (patch: Partial<typeof knit>) => setFabric('修改针织组织', {
+    ...fabric!, knit: { ...knit, ...patch },
+  });
+
+  /** Renders the stitch tile into the albedo slot and resets UV tiling to one tile per panel. */
+  const makeKnitTexture = () => {
+    const url = knitTextureDataUrl(knit);
+    if (!url) return;
+    appearance({
+      maps: { ...maps, albedo: url, fileNames: { ...maps.fileNames, albedo: '针织组织.png' } },
+      uvTiling: { x: 1, y: 1 },
+    });
+  };
+
+  const exportKnitChart = () => {
+    downloadTextFile(
+      `${fabric!.name}-组织图.csv`,
+      '\ufeff' + knitChartCsv(knit, knitNeedles, knitRows),
+      'text/csv;charset=utf-8',
+    );
+  };
 
   /** One texture slot row; it sits directly under the parameter it modulates. */
   const mapRow = (slot: FabricMapSlot) => (
@@ -145,40 +180,57 @@ export function MaterialTab({ project, panelId, engineRef }: {
         </SlotRow>
       </Section>
       {fabric ? (
-        <Section title="外观">
-          <ColorRow label="基础色" value={fabric.appearance.baseColor} onChange={v => appearance({ baseColor: v })} />
-          {mapRow('albedo')}
-          <SliderRow label="粗糙度" min={0} max={1} step={0.01} value={fabric.appearance.roughness}
-            onChange={v => appearance({ roughness: v })} />
-          {mapRow('roughness')}
-          <SliderRow label="金属度" min={0} max={1} step={0.01} value={fabric.appearance.metallic}
-            onChange={v => appearance({ metallic: v })} />
-          {mapRow('metallic')}
-          <SliderRow label="法线强度" min={0} max={2} step={0.05} value={fabric.appearance.normalScale}
-            onChange={v => appearance({ normalScale: v })} />
-          {mapRow('normal')}
-          <SliderRow label="光泽强度" min={0} max={1} step={0.01} value={fabric.appearance.sheenIntensity}
-            onChange={v => appearance({ sheenIntensity: v })} />
-          <ColorRow label="光泽色" value={fabric.appearance.sheenColor} onChange={v => appearance({ sheenColor: v })} />
-          <SliderRow label="光泽粗糙度" min={0} max={1} step={0.01} value={fabric.appearance.sheenRoughness}
-            onChange={v => appearance({ sheenRoughness: v })} />
-          <SliderRow label="透光" min={0} max={1} step={0.01} value={fabric.appearance.transmission}
-            onChange={v => appearance({ transmission: v })} />
-          <SliderRow label="厚度" min={0} max={5} step={0.01} unit="mm" value={fabric.appearance.thickness}
-            onChange={v => appearance({ thickness: v })} />
-          <SliderRow label="清漆" min={0} max={1} step={0.01} value={fabric.appearance.clearcoat}
-            onChange={v => appearance({ clearcoat: v })} />
-          <SliderRow label="清漆粗糙度" min={0} max={1} step={0.01} value={fabric.appearance.clearcoatRoughness}
-            onChange={v => appearance({ clearcoatRoughness: v })} />
-          <SliderRow label="各向异性" min={0} max={1} step={0.01} value={fabric.appearance.anisotropy}
-            onChange={v => appearance({ anisotropy: v })} />
-          <SliderRow label="虹彩" min={0} max={1} step={0.01} value={fabric.appearance.iridescence}
-            onChange={v => appearance({ iridescence: v })} />
-          <Vec2Field label="平铺" value={fabric.appearance.uvTiling} step={0.1} precision={2} min={0.01}
-            title="UV 平铺次数，最小 0.01" onCommit={v => appearance({ uvTiling: v })} />
-          <Vec2Field label="偏移" value={fabric.appearance.uvOffset} step={0.1} precision={2}
-            title="UV 偏移" onCommit={v => appearance({ uvOffset: v })} />
-        </Section>
+        <>
+          <Section title="外观">
+            <ColorRow label="基础色" value={fabric.appearance.baseColor} onChange={v => appearance({ baseColor: v })} />
+            {mapRow('albedo')}
+            <SliderRow label="粗糙度" min={0} max={1} step={0.01} value={fabric.appearance.roughness}
+              onChange={v => appearance({ roughness: v })} />
+            {mapRow('roughness')}
+            <SliderRow label="金属度" min={0} max={1} step={0.01} value={fabric.appearance.metallic}
+              onChange={v => appearance({ metallic: v })} />
+            {mapRow('metallic')}
+            <SliderRow label="法线强度" min={0} max={2} step={0.05} value={fabric.appearance.normalScale}
+              onChange={v => appearance({ normalScale: v })} />
+            {mapRow('normal')}
+            <SliderRow label="光泽强度" min={0} max={1} step={0.01} value={fabric.appearance.sheenIntensity}
+              onChange={v => appearance({ sheenIntensity: v })} />
+            <ColorRow label="光泽色" value={fabric.appearance.sheenColor} onChange={v => appearance({ sheenColor: v })} />
+            <SliderRow label="光泽粗糙度" min={0} max={1} step={0.01} value={fabric.appearance.sheenRoughness}
+              onChange={v => appearance({ sheenRoughness: v })} />
+            <SliderRow label="透光" min={0} max={1} step={0.01} value={fabric.appearance.transmission}
+              onChange={v => appearance({ transmission: v })} />
+            <SliderRow label="厚度" min={0} max={5} step={0.01} unit="mm" value={fabric.appearance.thickness}
+              onChange={v => appearance({ thickness: v })} />
+            <SliderRow label="清漆" min={0} max={1} step={0.01} value={fabric.appearance.clearcoat}
+              onChange={v => appearance({ clearcoat: v })} />
+            <SliderRow label="清漆粗糙度" min={0} max={1} step={0.01} value={fabric.appearance.clearcoatRoughness}
+              onChange={v => appearance({ clearcoatRoughness: v })} />
+            <SliderRow label="各向异性" min={0} max={1} step={0.01} value={fabric.appearance.anisotropy}
+              onChange={v => appearance({ anisotropy: v })} />
+            <SliderRow label="虹彩" min={0} max={1} step={0.01} value={fabric.appearance.iridescence}
+              onChange={v => appearance({ iridescence: v })} />
+            <Vec2Field label="平铺" value={fabric.appearance.uvTiling} step={0.1} precision={2} min={0.01}
+              title="UV 平铺次数，最小 0.01" onCommit={v => appearance({ uvTiling: v })} />
+            <Vec2Field label="偏移" value={fabric.appearance.uvOffset} step={0.1} precision={2}
+              title="UV 偏移" onCommit={v => appearance({ uvOffset: v })} />
+          </Section>
+          <Section title="针织组织">
+            <SelectRow label="组织" value={knit.stitch}
+              options={KNIT_STITCHES.map(stitch => ({ value: stitch, label: KNIT_STITCH_LABELS[stitch] }))}
+              onChange={v => setKnit({ stitch: v as KnitStitch })} />
+            <SliderRow label="横向密度" unit="针/10cm" min={2} max={30} step={1}
+              value={knit.needleGauge} commitOnRelease onChange={v => setKnit({ needleGauge: v })} />
+            <SliderRow label="纵向密度" unit="行/10cm" min={2} max={40} step={1}
+              value={knit.rowGauge} commitOnRelease onChange={v => setKnit({ rowGauge: v })} />
+            <Row label="本片针数">{`${knitNeedles} 针 × ${knitRows} 行`}</Row>
+            <Row label="">
+              <SmallButton onClick={makeKnitTexture} title="按组织与密度生成灰度针织贴图并写入基础色贴图槽">生成针织贴图</SmallButton>
+              <SmallButton onClick={exportKnitChart} title="按本片尺寸与密度导出组织图 CSV">导出组织图 CSV</SmallButton>
+            </Row>
+            <Hint>针织贴图是灰度组织，乘以基础色显示；组织图按当前片净轮廓的宽高与密度换算针数与行数。</Hint>
+          </Section>
+        </>
       ) : (
         <Hint>这个版片还没有材质，点右侧下拉换用一个，或用「＋」建一个。</Hint>
       )}

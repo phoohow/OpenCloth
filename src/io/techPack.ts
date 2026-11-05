@@ -1,12 +1,16 @@
 import type { Fabric, Measurement, Pattern, Project, Seam, SeamType, SizeDef, Vec2 } from '../core/model/types';
-import { EDGE_SEMANTIC_LABELS, SEAM_TYPE_LABELS, TRIM_KIND_LABELS } from '../core/model/defaults';
-import { samplePanelOutline } from '../pattern/panel/panelBuilder';
-import { edgeIntervalLength, measurementValue } from '../pattern/geom/edgeSample';
+import {
+  DEFAULT_COMPRESSION_LIMIT, DEFAULT_CONTACT_FRICTION, DEFAULT_STRETCH_LIMIT,
+  EDGE_SEMANTIC_LABELS, SEAM_TYPE_LABELS, TRIM_KIND_LABELS,
+} from '../core/model/defaults';
+import { samplePanelOutline, sampleOutline, panelGrainLine } from '../pattern/panel/panelBuilder';
+import { edgeIntervalLength, measurementValue, sampleEdge } from '../pattern/geom/edgeSample';
 import { orderedSizes } from '../pattern/grading/grading';
 import { buildMarkerLayout } from '../pattern/marker/markerLayout';
 import { buildMarkerReport } from '../pattern/marker/markerReport';
 import { bomQuantityText, bomTotals, buildBom, panelAreas, type BomRow } from '../pattern/bom';
-import { assemblePdf, CM_PT, pdfNum, rectPath, textOps, textWidthPt } from './pdf/pdfDocument';
+import { buildPomTable, pomReportRows } from '../pattern/pom/pomTable';
+import { assemblePdf, CM_PT, closedPath, openPath, pdfNum, rectPath, textOps, textWidthPt } from './pdf/pdfDocument';
 
 /** Inputs of the tech pack summary and PDF; every field has a production default. */
 export interface TechPackOptions {
@@ -51,6 +55,11 @@ export interface TechPackFabricRow {
   shearStiffness: number;
   damping: number;
   creaseStiffness: number | null;
+  contactFriction: number;
+  /** Relative elongation tolerance, as a ratio. */
+  stretchLimit: number;
+  /** Relative compression tolerance, as a ratio. */
+  compressionLimit: number;
 }
 
 /** One seam with both panel/edge descriptions and its sewing parameters. */
@@ -117,6 +126,8 @@ export interface TechPackTopstitchRow {
   name: string;
   panelName: string;
   edge: string;
+  /** Interval along the edge as percentages. */
+  interval: string;
   offsetMm: number;
   spacingMm: number;
   rows: number;
@@ -131,9 +142,46 @@ export interface TechPackTrimRow {
   panelName: string;
   kindLabel: string;
   sizeMm: number;
+  /** Pattern-plane position in centimetres, formatted for the sheet. */
+  positionCm: string;
   color: string;
   quantity: number;
   unitPrice: number | null;
+}
+
+/** One POM value of one size, as printed in the POM table. */
+export interface TechPackPomRow {
+  id: string;
+  name: string;
+  part: string;
+  sizeLabel: string;
+  valueCm: number | null;
+  /** Difference from the base size, in centimetres. */
+  diffCm: number | null;
+  formula: string | null;
+}
+
+/** One panel outline prepared for the style and operation drawings. */
+export interface TechPackStylePanel {
+  id: string;
+  name: string;
+  outline: Vec2[];
+  holes: Vec2[][];
+  grain: Vec2[] | null;
+}
+
+/** One sewing operation, with the sampled edge intervals its diagram highlights. */
+export interface TechPackOperationRow {
+  step: number;
+  panelAId: string;
+  panelBId: string;
+  panelAName: string;
+  panelBName: string;
+  edgeA: Vec2[];
+  edgeB: Vec2[];
+  typeLabel: string;
+  allowanceCm: number;
+  gather: boolean;
 }
 
 /** Everything the tech pack prints, computed from the live project. */
@@ -144,6 +192,8 @@ export interface TechPackData {
   baseSizeLabel: string | null;
   activeSizeLabel: string | null;
   panels: TechPackPanelRow[];
+  stylePanels: TechPackStylePanel[];
+  operations: TechPackOperationRow[];
   fabrics: TechPackFabricRow[];
   seams: TechPackSeamRow[];
   prints: TechPackPrintRow[];
@@ -152,6 +202,7 @@ export interface TechPackData {
   bom: BomRow[];
   marker: TechPackMarkerSummary;
   measurements: TechPackMeasurementRow[];
+  pom: TechPackPomRow[];
 }
 
 const MEASUREMENT_KIND_LABELS: Record<Measurement['kind'], string> = {
@@ -231,6 +282,19 @@ function markerSummary(pattern: Pattern, options: TechPackOptions): TechPackMark
   }
 }
 
+/** Points of one edge interval, sampled between `t0` and `t1`; empty when the edge is missing. */
+function edgeIntervalPoints(pattern: Pattern, edgeId: string, t0: number, t1: number): Vec2[] {
+  if (!pattern.edges[edgeId]) return [];
+  const pts = sampleEdge(pattern, edgeId);
+  if (pts.length < 2) return [];
+  const total = pts.length - 1;
+  const from = Math.min(t0, t1);
+  const to = Math.max(t0, t1);
+  const start = Math.max(0, Math.floor(from * total));
+  const end = Math.min(total, Math.max(start + 1, Math.ceil(to * total)));
+  return pts.slice(start, end + 1);
+}
+
 /** Builds the tech pack summary: sizes, panels, materials, seams, marker usage and measurements. */
 export function buildTechPackData(project: Project, options: TechPackOptions = {}): TechPackData {
   const pattern = project.pattern;
@@ -248,6 +312,18 @@ export function buildTechPackData(project: Project, options: TechPackOptions = {
     .sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN'))
     .map(panel => ({ id: panel.id, name: panel.name, quantity: 1, ...panelAreas(pattern, panel) }));
 
+  const stylePanels: TechPackStylePanel[] = panels.map(row => {
+    const panel = pattern.panels[row.id]!;
+    const outline = samplePanelOutline(pattern, panel);
+    return {
+      id: row.id,
+      name: row.name,
+      outline,
+      holes: (panel.holes ?? []).map(loop => sampleOutline(pattern, loop)),
+      grain: panelGrainLine(panel, outline),
+    };
+  });
+
   const fabrics = Object.values(project.fabrics)
     .sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN'))
     .map((fabric: Fabric): TechPackFabricRow => ({
@@ -260,6 +336,9 @@ export function buildTechPackData(project: Project, options: TechPackOptions = {
       shearStiffness: fabric.physics.shearStiffness,
       damping: fabric.physics.damping,
       creaseStiffness: typeof fabric.physics.creaseStiffness === 'number' ? fabric.physics.creaseStiffness : null,
+      contactFriction: fabric.physics.contactFriction ?? DEFAULT_CONTACT_FRICTION,
+      stretchLimit: fabric.physics.stretchLimit ?? DEFAULT_STRETCH_LIMIT,
+      compressionLimit: fabric.physics.compressionLimit ?? DEFAULT_COMPRESSION_LIMIT,
     }));
 
   const owner = edgeOwners(pattern);
@@ -288,6 +367,23 @@ export function buildTechPackData(project: Project, options: TechPackOptions = {
     };
   });
 
+  const operations: TechPackOperationRow[] = Object.values(pattern.seams).map((seam, index) => {
+    const panelAId = owner.get(seam.a.edgeId) ?? '';
+    const panelBId = owner.get(seam.b.edgeId) ?? '';
+    return {
+      step: index + 1,
+      panelAId,
+      panelBId,
+      panelAName: panelAId ? pattern.panels[panelAId]?.name ?? '—' : '—',
+      panelBName: panelBId ? pattern.panels[panelBId]?.name ?? '—' : '—',
+      edgeA: edgeIntervalPoints(pattern, seam.a.edgeId, seam.a.t0, seam.a.t1),
+      edgeB: edgeIntervalPoints(pattern, seam.b.edgeId, seam.b.t0, seam.b.t1),
+      typeLabel: SEAM_TYPE_LABELS[seam.type],
+      allowanceCm: Math.max(allowanceOf(pattern, seam.a.edgeId, panelAId), allowanceOf(pattern, seam.b.edgeId, panelBId)),
+      gather: isGatherSeam(seam),
+    };
+  });
+
   const measurements: TechPackMeasurementRow[] = [];
   for (const measurement of Object.values(pattern.measurements)) {
     const value = measurementValue(pattern, measurement);
@@ -301,6 +397,16 @@ export function buildTechPackData(project: Project, options: TechPackOptions = {
       unit: measurement.kind === 'angle' ? 'deg' : 'cm',
     });
   }
+
+  const pom = pomReportRows(buildPomTable(project)).map((row): TechPackPomRow => ({
+    id: row.pomId,
+    name: row.name,
+    part: row.part,
+    sizeLabel: row.sizeLabel,
+    valueCm: row.valueCm,
+    diffCm: row.diffCm,
+    formula: row.formula,
+  }));
 
   const prints: TechPackPrintRow[] = Object.values(pattern.prints)
     .filter(print => {
@@ -328,6 +434,7 @@ export function buildTechPackData(project: Project, options: TechPackOptions = {
       name: stitch.name ?? '明线',
       panelName: pattern.panels[stitch.panelId]?.name ?? '—',
       edge: describeEdge(pattern, stitch.edgeId),
+      interval: `${Math.round(stitch.t0 * 100)}% – ${Math.round(stitch.t1 * 100)}%`,
       offsetMm: stitch.offsetMm,
       spacingMm: stitch.spacingMm,
       rows: stitch.rows,
@@ -347,6 +454,7 @@ export function buildTechPackData(project: Project, options: TechPackOptions = {
       panelName: pattern.panels[trim.panelId]?.name ?? '—',
       kindLabel: TRIM_KIND_LABELS[trim.kind],
       sizeMm: trim.sizeMm,
+      positionCm: `${trim.pos.x.toFixed(1)}, ${trim.pos.y.toFixed(1)}`,
       color: trim.color,
       quantity: trim.qty,
       unitPrice: typeof trim.unitPrice === 'number' && Number.isFinite(trim.unitPrice) ? trim.unitPrice : null,
@@ -359,6 +467,8 @@ export function buildTechPackData(project: Project, options: TechPackOptions = {
     baseSizeLabel: baseSize?.label ?? null,
     activeSizeLabel: activeSize?.label ?? null,
     panels,
+    stylePanels,
+    operations,
     fabrics,
     seams,
     prints,
@@ -367,6 +477,7 @@ export function buildTechPackData(project: Project, options: TechPackOptions = {
     bom: buildBom(project),
     marker: markerSummary(pattern, options),
     measurements,
+    pom,
   };
 }
 
@@ -493,6 +604,133 @@ function gatherText(row: TechPackSeamRow): string {
   return row.gatherRatio !== null ? `是（比例 ${row.gatherRatio.toFixed(2)}）` : '是';
 }
 
+/** Page-point rectangle a drawing is fitted into. */
+interface DrawBox {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** Axis-aligned bounds of a point set; null when it is empty. */
+function pointBounds(points: Vec2[]): { minX: number; minY: number; maxX: number; maxY: number } | null {
+  if (points.length === 0) return null;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const p of points) {
+    if (p.x < minX) minX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y > maxY) maxY = p.y;
+  }
+  return { minX, minY, maxX, maxY };
+}
+
+/** Maps pattern coordinates into a page-point box, keeping the aspect ratio and centring the result. */
+function boxMapper(points: Vec2[], box: DrawBox, pad = 5): (p: Vec2) => Vec2 {
+  const bounds = pointBounds(points);
+  if (!bounds) return () => ({ x: box.x + box.w / 2, y: box.y + box.h / 2 });
+  const width = Math.max(bounds.maxX - bounds.minX, 1e-6);
+  const height = Math.max(bounds.maxY - bounds.minY, 1e-6);
+  const scale = Math.min((box.w - pad * 2) / width, (box.h - pad * 2) / height);
+  const ox = box.x + (box.w - width * scale) / 2;
+  const oy = box.y + (box.h - height * scale) / 2;
+  return p => ({ x: ox + (p.x - bounds.minX) * scale, y: oy + (p.y - bounds.minY) * scale });
+}
+
+/** Grey closed outline with the holes punched inside it. */
+function drawOutline(sheet: Sheet, outline: Vec2[], holes: Vec2[][], map: (p: Vec2) => Vec2): void {
+  if (outline.length < 3) return;
+  sheet.ops.push('0.25 G\n' + closedPath(outline.map(map)));
+  for (const hole of holes) {
+    if (hole.length >= 3) sheet.ops.push(closedPath(hole.map(map)));
+  }
+  sheet.ops.push('0 G\n');
+}
+
+/** Dashed grain line, drawn in a lighter grey. */
+function drawGrain(sheet: Sheet, grain: Vec2[], map: (p: Vec2) => Vec2): void {
+  if (grain.length < 2) return;
+  sheet.ops.push('0.55 G\n[2 2] 0 d\n' + openPath(grain.map(map)) + '[] 0 d\n0 G\n');
+}
+
+/** Style drawing: every visible panel outline, its holes and grain line, labelled with its name. */
+function drawStyleSection(sheet: Sheet, data: TechPackData): void {
+  heading(sheet, '款式图', data.projectName);
+  if (data.stylePanels.length === 0) {
+    line(sheet, '无可见版片', data.projectName, { grey: 0.35 });
+    return;
+  }
+  const columns = 3;
+  const cellW = CONTENT_W / columns;
+  const cellH = 132;
+  data.stylePanels.forEach((panel, index) => {
+    const column = index % columns;
+    if (column === 0) ensure(sheet, cellH + 18, data.projectName);
+    const box: DrawBox = {
+      x: MARGIN_PT + column * cellW,
+      y: sheet.y - cellH,
+      w: cellW,
+      h: cellH - 14,
+    };
+    const all = [...panel.outline, ...panel.holes.flat(), ...(panel.grain ?? [])];
+    const map = boxMapper(all, box);
+    drawOutline(sheet, panel.outline, panel.holes, map);
+    if (panel.grain) drawGrain(sheet, panel.grain, map);
+    sheet.ops.push(textOps({ x: box.x + 3, y: box.y + 5 }, 7.5, panel.name, 0, 'cjk'));
+    if (column === columns - 1 || index === data.stylePanels.length - 1) sheet.y -= cellH + 10;
+  });
+}
+
+/** One operation card: both pieces side by side, the seamed intervals in red and an arrow between them. */
+function drawOperationCard(
+  sheet: Sheet, data: TechPackData, op: TechPackOperationRow, box: DrawBox,
+): void {
+  const byId = new Map(data.stylePanels.map(panel => [panel.id, panel]));
+  const panels = [byId.get(op.panelAId), byId.get(op.panelBId)].filter(
+    (panel): panel is TechPackStylePanel => panel !== undefined,
+  );
+  const all = [...panels.flatMap(panel => panel.outline), ...op.edgeA, ...op.edgeB];
+  if (all.length === 0) return;
+  const map = boxMapper(all, { x: box.x, y: box.y + 14, w: box.w, h: box.h - 30 });
+  for (const panel of panels) drawOutline(sheet, panel.outline, panel.holes, map);
+
+  sheet.ops.push('1 0 0 RG\n');
+  for (const edge of [op.edgeA, op.edgeB]) {
+    if (edge.length >= 2) sheet.ops.push(openPath(edge.map(map)));
+  }
+  const midA = op.edgeA[Math.floor(op.edgeA.length / 2)];
+  const midB = op.edgeB[Math.floor(op.edgeB.length / 2)];
+  if (midA && midB) sheet.ops.push(openPath([map(midA), map(midB)]));
+  sheet.ops.push('0 G\n');
+
+  const title = `工序 ${op.step} · ${op.typeLabel} · 缝份 ${op.allowanceCm.toFixed(1)} cm${op.gather ? ' · 缩缝' : ''}`;
+  sheet.ops.push(textOps({ x: box.x + 3, y: box.y + box.h - 2 }, 7.5, title, 0, 'cjk'));
+  sheet.ops.push(textOps({ x: box.x + 3, y: box.y + 4 }, 7, `${op.panelAName} → ${op.panelBName}`, 0, 'cjk'));
+}
+
+/** Operation drawing: numbered sewing steps, two cards per row. */
+function drawOperationSection(sheet: Sheet, data: TechPackData): void {
+  heading(sheet, '工序图', data.projectName);
+  if (data.operations.length === 0) {
+    line(sheet, '无缝合工序', data.projectName, { grey: 0.35 });
+    return;
+  }
+  const columns = 2;
+  const cellW = CONTENT_W / columns;
+  const cellH = 152;
+  data.operations.forEach((op, index) => {
+    const column = index % columns;
+    if (column === 0) ensure(sheet, cellH + 12, data.projectName);
+    drawOperationCard(sheet, data, op, {
+      x: MARGIN_PT + column * cellW,
+      y: sheet.y - cellH,
+      w: cellW,
+      h: cellH - 8,
+    });
+    if (column === columns - 1 || index === data.operations.length - 1) sheet.y -= cellH;
+  });
+}
+
 /** Lays out the tech pack pages; data formatting happens in the table row builders below. */
 function renderTechPack(data: TechPackData): Uint8Array {
   const sheet: Sheet = { pages: [], ops: [], y: PAGE_HEIGHT_PT - MARGIN_PT };
@@ -507,6 +745,9 @@ function renderTechPack(data: TechPackData): Uint8Array {
   const active = data.activeSizeLabel ? `　当前码 ${data.activeSizeLabel}` : '';
   line(sheet, `尺码表：${sizeLabels}（${chart}）${active}`, name, { size: 9 });
   sheet.y -= 6;
+
+  drawStyleSection(sheet, data);
+  drawOperationSection(sheet, data);
 
   heading(sheet, '版片', name);
   if (data.panels.length === 0) {
@@ -542,6 +783,16 @@ function renderTechPack(data: TechPackData): Uint8Array {
       String(fabric.massPerArea), fabric.stretchStiffness.toFixed(2), fabric.bendingStiffness.toFixed(2),
       fabric.shearStiffness.toFixed(2), fabric.damping.toFixed(3),
       fabric.creaseStiffness === null ? '—' : fabric.creaseStiffness.toFixed(2),
+    ]), name);
+    const limitColumns: Column[] = [
+      { title: '材质', width: 120 },
+      { title: '接触摩擦', width: 90, align: 'right' },
+      { title: '拉伸上限(%)', width: 130, align: 'right' },
+      { title: '压缩上限(%)', width: 130, align: 'right' },
+    ];
+    table(sheet, limitColumns, data.fabrics.map(fabric => [
+      fabric.name, fabric.contactFriction.toFixed(2),
+      (fabric.stretchLimit * 100).toFixed(1), (fabric.compressionLimit * 100).toFixed(1),
     ]), name);
   }
 
@@ -592,15 +843,16 @@ function renderTechPack(data: TechPackData): Uint8Array {
     line(sheet, '无明线', name, { grey: 0.35 });
   } else {
     const columns: Column[] = [
-      { title: '版片', width: 100 },
-      { title: '边', width: 130 },
-      { title: '偏移(mm)', width: 80, align: 'right' },
-      { title: '行距(mm)', width: 70, align: 'right' },
-      { title: '行数', width: 50, align: 'right' },
-      { title: '长度(cm)', width: 80, align: 'right' },
+      { title: '版片', width: 90 },
+      { title: '边', width: 100 },
+      { title: '区间', width: 80 },
+      { title: '偏移(mm)', width: 65, align: 'right' },
+      { title: '行距(mm)', width: 55, align: 'right' },
+      { title: '行数', width: 35, align: 'right' },
+      { title: '长度(cm)', width: 60, align: 'right' },
     ];
     table(sheet, columns, data.topstitches.map(stitch => [
-      stitch.panelName, stitch.edge,
+      stitch.panelName, stitch.edge, stitch.interval,
       stitch.offsetMm.toFixed(1), stitch.spacingMm.toFixed(1), String(stitch.rows), stitch.lengthCm.toFixed(1),
     ]), name);
   }
@@ -610,17 +862,18 @@ function renderTechPack(data: TechPackData): Uint8Array {
     line(sheet, '无辅料', name, { grey: 0.35 });
   } else {
     const columns: Column[] = [
-      { title: '版片', width: 100 },
-      { title: '名称', width: 110 },
-      { title: '类型', width: 70 },
-      { title: '直径(mm)', width: 70, align: 'right' },
-      { title: '数量', width: 50, align: 'right' },
-      { title: '单价', width: 60, align: 'right' },
-      { title: '颜色', width: 50 },
+      { title: '版片', width: 80 },
+      { title: '名称', width: 90 },
+      { title: '类型', width: 55 },
+      { title: '直径(mm)', width: 55, align: 'right' },
+      { title: '位置(cm)', width: 80, align: 'right' },
+      { title: '数量', width: 40, align: 'right' },
+      { title: '单价', width: 55, align: 'right' },
+      { title: '颜色', width: 45 },
     ];
     table(sheet, columns, data.trims.map(trim => [
-      trim.panelName, trim.name, trim.kindLabel, trim.sizeMm.toFixed(1), String(trim.quantity),
-      trim.unitPrice === null ? '—' : trim.unitPrice.toFixed(2), trim.color,
+      trim.panelName, trim.name, trim.kindLabel, trim.sizeMm.toFixed(1), trim.positionCm,
+      String(trim.quantity), trim.unitPrice === null ? '—' : trim.unitPrice.toFixed(2), trim.color,
     ]), name);
   }
 
@@ -662,7 +915,27 @@ function renderTechPack(data: TechPackData): Uint8Array {
     ];
     if (marker.cost !== null) rows.push([`面料成本 (${marker.currency})`, marker.cost.toFixed(2)]);
     table(sheet, [{ title: '项目', width: 220 }, { title: '数值', width: 290, align: 'right' }], rows, name);
-    line(sheet, `缩率 ${marker.shrinkPercent}%　片间距 ${marker.gapCm} cm　允许旋转 90°`, name, { size: 7.5, grey: 0.4, gap: 1.4 });
+    line(sheet, `缩率 ${marker.shrinkPercent}%　片间距 ${marker.gapCm} cm　旋转 0° / 90°`, name, { size: 7.5, grey: 0.4, gap: 1.4 });
+  }
+
+  if (data.pom.length > 0) {
+    heading(sheet, 'POM 尺寸表', name);
+    const columns: Column[] = [
+      { title: '测量点', width: 120 },
+      { title: '部位', width: 70 },
+      { title: '尺码', width: 50 },
+      { title: '数值(cm)', width: 80, align: 'right' },
+      { title: '差值(cm)', width: 80, align: 'right' },
+      { title: '公式', width: 100 },
+    ];
+    table(sheet, columns, data.pom.map(row => [
+      row.name,
+      row.part,
+      row.sizeLabel,
+      row.valueCm === null ? '—' : row.valueCm.toFixed(2),
+      row.diffCm === null ? '—' : row.diffCm.toFixed(2),
+      row.formula ?? '',
+    ]), name);
   }
 
   heading(sheet, '版片测量', name);

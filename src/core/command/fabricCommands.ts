@@ -74,6 +74,29 @@ export class AddFabricCommand implements Command {
   }
 }
 
+/** Creates a material from a saved asset record and wears it on the listed panels. */
+export class AddFabricRecordCommand implements Command {
+  readonly label: string;
+  private previous: PanelSnapshot = [];
+
+  constructor(private readonly panelIds: string[], private readonly fabric: Fabric) {
+    this.label = `新增素材材质（${fabric.name}）`;
+  }
+
+  execute(ctx: ProjectContext): void {
+    this.previous = capture(ctx, this.panelIds);
+    ctx.project.fabrics = { ...ctx.project.fabrics, [this.fabric.id]: structuredClone(this.fabric) };
+    wear(ctx, this.panelIds, this.fabric.id);
+  }
+
+  undo(ctx: ProjectContext): void {
+    const rest = { ...ctx.project.fabrics };
+    delete rest[this.fabric.id];
+    ctx.project.fabrics = rest;
+    for (const panel of this.previous) writePanel(ctx, panel);
+  }
+}
+
 /** Gives the listed panels their own copy of the material they share. */
 export class DetachFabricCommand implements Command {
   readonly label: string;

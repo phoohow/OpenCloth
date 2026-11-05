@@ -195,19 +195,19 @@ function collectExpandableIds(node: SceneNode): string[] {
 const styles: Record<string, React.CSSProperties> = {
   outliner: { display: 'flex', flexDirection: 'column', minHeight: 0, height: '100%', overflow: 'hidden' },
   header: { flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 6, height: 26, padding: '0 6px 0 8px', borderBottom: '1px solid #333' },
-  title: { fontSize: 11, color: '#4da6ff', letterSpacing: 1 },
+  title: { fontSize: 'var(--oc-fs-micro)', color: '#4da6ff', letterSpacing: 1 },
   miniBtn: { marginLeft: 'auto', width: 22, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: '1px solid #3a3a42', borderRadius: 3, color: '#999', cursor: 'pointer' },
   body: { flex: 1, overflowY: 'auto', padding: '2px 2px 6px' },
-  row: { display: 'flex', alignItems: 'center', gap: 3, height: 22, paddingRight: 4, borderRadius: 3, cursor: 'pointer', fontSize: 11, color: '#ccc' },
+  row: { display: 'flex', alignItems: 'center', gap: 3, height: 22, paddingRight: 4, borderRadius: 3, cursor: 'pointer', fontSize: 'var(--oc-fs-micro)', color: '#ccc' },
   rowActive: { background: '#2a4a6a', color: '#fff', boxShadow: 'inset 0 0 0 1px #4da6ff' },
   chevron: { width: 12, height: 22, flex: '0 0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888' },
   eye: { width: 18, height: 22, flex: '0 0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', padding: 0 },
   label: { flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-  note: { flex: '0 0 auto', fontSize: 10, color: '#7a8496', padding: '0 2px' },
+  note: { flex: '0 0 auto', fontSize: 'var(--oc-fs-note)', color: '#7a8496', padding: '0 2px' },
   addRow: { flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 2 },
   addSelect: {
     height: 16, maxWidth: 62, background: '#2a2a30', border: '1px solid #3a3a42', borderRadius: 3,
-    color: '#aaa', fontSize: 10, padding: '0 2px',
+    color: '#aaa', fontSize: 'var(--oc-fs-note)', padding: '0 2px',
   },
   addBtn: {
     width: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -215,5 +215,5 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#bbb', cursor: 'pointer', padding: 0,
   },
   addBtnDisabled: { color: '#555', cursor: 'default' },
-  count: { fontSize: 10, color: '#777' },
+  count: { fontSize: 'var(--oc-fs-note)', color: '#777' },
 };

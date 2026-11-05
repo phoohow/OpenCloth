@@ -182,22 +182,22 @@ const styles: Record<string, React.CSSProperties> = {
   topRow: { display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 },
   menuBtn: {
     flex: '0 0 auto', padding: '6px 12px', background: '#2a2a30',
-    border: '1px solid #3a3a42', borderRadius: 5, color: '#ddd', fontSize: 14, cursor: 'pointer',
+    border: '1px solid #3a3a42', borderRadius: 5, color: '#ddd', fontSize: 'var(--oc-fs-heading)', cursor: 'pointer',
   },
   projectName: {
-    flex: '1 1 auto', minWidth: 0, fontSize: 14, color: '#eee',
+    flex: '1 1 auto', minWidth: 0, fontSize: 'var(--oc-fs-heading)', color: '#eee',
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
   },
   readout: {
-    flex: '0 0 auto', fontSize: 12, color: '#4da6ff',
+    flex: '0 0 auto', fontSize: 'var(--oc-fs-body)', color: '#4da6ff',
     fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',
   },
   readoutDim: { color: '#8a94a6' },
   statusRow: { display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 },
-  status: { flex: '0 0 auto', fontSize: 12 },
+  status: { flex: '0 0 auto', fontSize: 'var(--oc-fs-body)' },
   selectionChip: {
     flex: '1 1 auto', minWidth: 0, textAlign: 'right', padding: '2px 0',
-    background: 'transparent', border: 'none', color: '#9ab', fontSize: 12,
+    background: 'transparent', border: 'none', color: '#9ab', fontSize: 'var(--oc-fs-body)',
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer',
   },
   stage: { flex: '1 1 auto', minHeight: 0, position: 'relative', overflow: 'hidden', background: '#252528' },
@@ -211,7 +211,7 @@ const styles: Record<string, React.CSSProperties> = {
     background: 'rgba(32,32,36,0.9)', border: '1px solid #3a3a42',
     borderRadius: 24, color: '#ccc', cursor: 'pointer',
   },
-  floatLabel: { fontSize: 10, color: '#9ab' },
+  floatLabel: { fontSize: 'var(--oc-fs-note)', color: '#9ab' },
   dock: {
     flex: '0 0 auto', display: 'flex', alignItems: 'stretch', gap: 6, padding: '8px 8px',
     paddingBottom: 'calc(8px + env(safe-area-inset-bottom))',
@@ -226,10 +226,10 @@ const styles: Record<string, React.CSSProperties> = {
   dockBtnPrimary: { flex: '1.4 1 0', background: '#2a4a6a', border: '1px solid #4da6ff', color: '#fff' },
   dockBtnActive: { border: '1px solid #4da6ff', color: '#fff' },
   dockBtnDisabled: { opacity: 0.4, cursor: 'default' },
-  dockLabel: { fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' },
+  dockLabel: { fontSize: 'var(--oc-fs-micro)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' },
   loading: {
     position: 'absolute', inset: 0, zIndex: 6, display: 'flex', flexDirection: 'column',
-    alignItems: 'center', justifyContent: 'center', gap: 14, color: '#888', fontSize: 14,
+    alignItems: 'center', justifyContent: 'center', gap: 14, color: '#888', fontSize: 'var(--oc-fs-heading)',
     background: 'rgba(26,26,30,0.88)',
   },
   spinner: {

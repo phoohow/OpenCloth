@@ -4,7 +4,7 @@ import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { bundledAssetUrl } from '../core/assets/bundledAssetUrls';
 
 /** Supported model file formats. */
-export type ModelFormat = 'glb' | 'gltf' | 'obj';
+export type ModelFormat = 'glb' | 'gltf' | 'obj' | 'fbx';
 
 /** A loaded model, normalized and ready to be added to the scene. */
 export interface LoadedModel {
@@ -13,6 +13,8 @@ export interface LoadedModel {
   triangleCount: number;
   /** World-space bounds after normalization. */
   bbox: THREE.Box3;
+  /** Motion clips carried by the file, empty when it holds none. */
+  animations: THREE.AnimationClip[];
 }
 
 /** Normalization and naming applied while loading. */
@@ -32,7 +34,7 @@ const GLB_MAGIC = [0x67, 0x6c, 0x54, 0x46];
 /** Resolves the format from the extension, falling back to GLB magic bytes. */
 export function detectFormat(filename: string, bytes?: Uint8Array): ModelFormat {
   const ext = baseName(filename).split('.').pop()?.toLowerCase() ?? '';
-  if (ext === 'glb' || ext === 'gltf' || ext === 'obj') return ext;
+  if (ext === 'glb' || ext === 'gltf' || ext === 'obj' || ext === 'fbx') return ext;
   if (filename.startsWith('data:')) {
     const comma = filename.indexOf(',');
     const mime = (comma > 5 ? filename.slice(5, comma) : '').split(';')[0]?.toLowerCase() ?? '';
@@ -94,16 +96,19 @@ export async function loadModelFromFile(file: File, opts: LoadModelOptions = {})
   const format = detectFormat(file.name, new Uint8Array(buffer));
 
   if (format === 'obj') {
-    return finishLoaded(new OBJLoader().parse(decodeText(buffer)), 'obj', file.name, opts);
+    return finishLoaded(new OBJLoader().parse(decodeText(buffer)), 'obj', file.name, opts, []);
+  }
+  if (format === 'fbx') {
+    return finishLoaded(await parseFBX(buffer), 'fbx', file.name, opts, []);
   }
   if (format === 'gltf') {
     const text = decodeText(buffer);
     assertEmbeddedGltf(text, file.name);
-    const root = await parseGLTF(text, '');
-    return finishLoaded(root, 'gltf', file.name, opts);
+    const parsed = await parseGLTF(text, '');
+    return finishLoaded(parsed.scene, 'gltf', file.name, opts, parsed.animations);
   }
-  const root = await parseGLTF(buffer, '');
-  return finishLoaded(root, 'glb', file.name, opts);
+  const parsed = await parseGLTF(buffer, '');
+  return finishLoaded(parsed.scene, 'glb', file.name, opts, parsed.animations);
 }
 
 /** Loads a model over HTTP; sibling .gltf resources resolve against the URL directory. */
@@ -114,17 +119,20 @@ export async function loadModelFromUrl(url: string, opts: LoadModelOptions = {})
   const format = detectFormat(url, new Uint8Array(buffer));
 
   if (format === 'obj') {
-    return finishLoaded(new OBJLoader().parse(decodeText(buffer)), 'obj', url, opts);
+    return finishLoaded(new OBJLoader().parse(decodeText(buffer)), 'obj', url, opts, []);
+  }
+  if (format === 'fbx') {
+    return finishLoaded(await parseFBX(buffer), 'fbx', url, opts, []);
   }
   const data = format === 'gltf' ? decodeText(buffer) : buffer;
-  const root = await parseGLTF(data, directoryOf(url));
-  return finishLoaded(root, format, url, opts);
+  const parsed = await parseGLTF(data, directoryOf(url));
+  return finishLoaded(parsed.scene, format, url, opts, parsed.animations);
 }
 
 /** Loads a multi-file .gltf by mapping sibling files to object URLs. */
 export async function loadModelFromFiles(files: File[], opts: LoadModelOptions = {}): Promise<LoadedModel> {
-  const modelFiles = files.filter(f => /\.(glb|gltf|obj)$/i.test(f.name));
-  if (modelFiles.length === 0) throw new Error('No .glb, .gltf or .obj file found');
+  const modelFiles = files.filter(f => /\.(glb|gltf|obj|fbx)$/i.test(f.name));
+  if (modelFiles.length === 0) throw new Error('No .glb, .gltf, .obj or .fbx file found');
 
   const gltfFile = modelFiles.find(f => f.name.toLowerCase().endsWith('.gltf'));
   if (!gltfFile) return loadModelFromFile(modelFiles[0], opts);
@@ -143,8 +151,8 @@ export async function loadModelFromFiles(files: File[], opts: LoadModelOptions =
     }
   }
   try {
-    const root = await parseGLTF(JSON.stringify(json), '');
-    return finishLoaded(root, 'gltf', gltfFile.name, opts);
+    const parsed = await parseGLTF(JSON.stringify(json), '');
+    return finishLoaded(parsed.scene, 'gltf', gltfFile.name, opts, parsed.animations);
   } finally {
     for (const url of objectUrls) URL.revokeObjectURL(url);
   }
@@ -156,24 +164,45 @@ interface GltfJson {
   images?: { uri?: string }[];
 }
 
-/** Wraps a loader result in a named, normalized group. */
-function finishLoaded(root: THREE.Object3D, format: ModelFormat, source: string, opts: LoadModelOptions): LoadedModel {
+/** Wraps a loader result in a named, normalized group carrying the file's motion clips. */
+function finishLoaded(
+  root: THREE.Object3D,
+  format: ModelFormat,
+  source: string,
+  opts: LoadModelOptions,
+  animations: THREE.AnimationClip[],
+): LoadedModel {
   const group = new THREE.Group();
   group.name = opts.name ?? stripExtension(baseName(source));
   group.add(root);
   normalizeGroup(group, opts);
+  group.animations = animations;
   return {
     group,
     format,
     triangleCount: countTriangles(group),
     bbox: new THREE.Box3().setFromObject(group),
+    animations,
   };
 }
 
-function parseGLTF(data: ArrayBuffer | string, resourcePath: string): Promise<THREE.Object3D> {
+function parseGLTF(
+  data: ArrayBuffer | string,
+  resourcePath: string,
+): Promise<{ scene: THREE.Object3D; animations: THREE.AnimationClip[] }> {
   return new Promise((resolve, reject) => {
-    new GLTFLoader().parse(data, resourcePath, gltf => resolve(gltf.scene), reject);
+    new GLTFLoader().parse(
+      data, resourcePath,
+      gltf => resolve({ scene: gltf.scene, animations: gltf.animations ?? [] }),
+      reject,
+    );
   });
+}
+
+/** Parses an FBX file; the loader is loaded on demand to keep it out of the main bundle. */
+async function parseFBX(buffer: ArrayBuffer): Promise<THREE.Object3D> {
+  const { FBXLoader } = await import('three/examples/jsm/loaders/FBXLoader.js');
+  return new FBXLoader().parse(buffer, '');
 }
 
 /** Rejects .gltf files whose buffers or images reference sibling files. */

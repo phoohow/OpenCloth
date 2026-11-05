@@ -26,7 +26,8 @@ export {
 export {
   AddInternalLineCommand, OutlineSplitCommand, MergePanelsCommand, OutlineHoleCommand,
   RemoveHoleCommand, CreateDartCommand, MoveDartTipCommand, TransferDartCommand,
-  MirrorPanelCommand, SyncMirrorCommand, DeleteElementsCommand, ScalePanelCommand, type MirrorAxis,
+  MirrorPanelCommand, SyncMirrorCommand, DeleteElementsCommand, ScalePanelCommand,
+  PanelBooleanCommand, type MirrorAxis, type PanelBooleanOp,
 } from './patternStructureCommands';
 export {
   CreateLineSeamCommand, CreateFreeSeamCommand, CreateMultiSeamCommand, FlipSeamSideCommand,

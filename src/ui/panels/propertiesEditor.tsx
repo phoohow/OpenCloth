@@ -4,7 +4,7 @@ import { parseElementNodeId } from '../elementSelection';
 import { PROP_TAB_OPTIONS } from '../optionTables';
 import type { EngineRef } from '../sceneCommands';
 import { selectedBody } from './properties/objectTab';
-import { ProjectTab, RenderTab } from './properties/sceneRenderTabs';
+import { PatternTab, ProjectTab, RenderTab } from './properties/sceneRenderTabs';
 import { tabsForKind } from './properties/constants';
 import { styles } from './properties/styles';
 import { Icon } from '../icons';
@@ -48,10 +48,12 @@ export function usePropsTarget(engineRef: EngineRef): PropsTarget {
   const fallbackTab = kind === null ? 'project' : allowedTabs[0];
   const tab = allowedTabs.includes(propTab) ? propTab : fallbackTab;
 
-  // A tab other than "工程" / "渲染" is selectable only with one resolved object.
+  // A tab other than "工程" / "版型" / "渲染" is selectable only with one resolved object.
   const body = node && nodeId
     ? selectedBody(tab, project, nodeId, node, engineRef)
-    : tab === 'render' ? <RenderTab project={project} /> : <ProjectTab project={project} engineRef={engineRef} />;
+    : tab === 'render' ? <RenderTab project={project} />
+      : tab === 'pattern' ? <PatternTab project={project} engineRef={engineRef} />
+        : <ProjectTab project={project} engineRef={engineRef} />;
 
   return {
     nodeId,

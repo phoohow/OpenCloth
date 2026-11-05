@@ -1,25 +1,51 @@
-import { displayModeOf, usePerfStore, useSimStore, useUIStore } from '../../../store/stores';
+import { useProjectStore, displayModeOf, usePerfStore, useSimStore, useUIStore } from '../../../store/stores';
 import type { Project } from '../../../core/model/types';
 import {
-  DEFAULT_CLOTH_THICKNESS_CM, DEFAULT_LAYER_SPACING_CM, DEFAULT_MESH_RESOLUTION_CM,
-  DEFAULT_MESH_SAMPLING, normalizeRayTracing,
+  DEFAULT_CLOTH_THICKNESS_CM, DEFAULT_COMPRESSION_LIMIT, DEFAULT_LAYER_SPACING_CM,
+  DEFAULT_MESH_RESOLUTION_CM, DEFAULT_MESH_SAMPLING, DEFAULT_STRETCH_LIMIT, normalizeRayTracing,
 } from '../../../core/model/defaults';
+import { AutoAssignCollisionLayersCommand } from '../../../core/command/patternCommands';
 import { patchValue, setGlobalMeshResolution, setRayTracingConfig, setSimulationConfig, setToneMapping, type EngineRef } from '../../sceneCommands';
 import { SizeChart } from './objectDataSections';
+import { DynamicFitSection } from './dynamicFitSection';
+import { LayerSection } from './layerSection';
+import { PomSection } from './pomSection';
 import { DENOISE_MODELS, DISPLAY_MODES, MESH_SAMPLINGS, TONE_MAPPING, rayTracingUnavailableReason } from '../../optionTables';
-import { CheckRow, Row, Section, SelectRow, SliderRow, TextRow } from '../../widgets/propertyRows';
+import { ButtonRow, CheckRow, Row, Section, SelectRow, SliderRow, SmallButton, TextRow } from '../../widgets/propertyRows';
 import { downloadTextFile } from '../../../io/codec';
 import { fitReportCsv } from '../../../render/analysis/fitReport';
+import { DEFAULT_PRESSURE_KPA_PER_MM } from '../../../render/analysis/pressure';
+import { pressureReportCsv } from '../../../render/analysis/pressureReport';
 import { strainReportCsv } from '../../../render/analysis/strainReport';
+import { reportActionError } from '../../widgets/toast';
 import { styles } from './styles';
 
-// ===== Project and render tabs ("工程" / "渲染") =====
+// ===== Pattern, project and render tabs ("版型" / "工程" / "渲染") =====
 
-/** Project summary, global simulation and the size chart. */
+/** Size chart, points of measure and the grading rules that read them. */
+export function PatternTab({ project, engineRef }: { project: Project; engineRef: EngineRef }) {
+  return (
+    <>
+      <SizeChart project={project} engineRef={engineRef} />
+      <PomSection project={project} />
+    </>
+  );
+}
+
+/** Project summary, mesh generation, global simulation, construction layers and body animation. */
 export function ProjectTab({ project, engineRef }: { project: Project; engineRef: EngineRef }) {
   const sim = project.scene.simulation;
   const panels = Object.values(project.pattern.panels);
   const refs = project.scene.referenceObjects ?? [];
+
+  const autoAssignLayers = () => {
+    try {
+      useProjectStore.getState().executeCommand(new AutoAssignCollisionLayersCommand());
+      useUIStore.getState().showToast('已按缝合关系识别碰撞层');
+    } catch (err) {
+      reportActionError(err, '自动识别碰撞层失败');
+    }
+  };
 
   return (
     <>
@@ -51,15 +77,21 @@ export function ProjectTab({ project, engineRef }: { project: Project; engineRef
           onChange={v => setSimulationConfig('修改迭代次数', { constraintIterations: Math.round(v) })} />
         <CheckRow label="布料自碰撞" checked={sim.selfCollision !== false}
           onChange={v => setSimulationConfig('修改布料自碰撞', { selfCollision: v })} />
+        <CheckRow label="缝合断裂" checked={sim.seamTearing === true}
+          onChange={v => setSimulationConfig(v ? '开启缝合断裂' : '关闭缝合断裂', { seamTearing: v })} />
         <SliderRow label="布料厚度" min={0} max={1} step={0.05} unit="cm"
           value={sim.clothThicknessCm ?? DEFAULT_CLOTH_THICKNESS_CM}
           onChange={v => setSimulationConfig('修改布料厚度', { clothThicknessCm: v })} />
         <SliderRow label="层间距" min={0} max={2} step={0.1} unit="cm"
           value={sim.layerSpacingCm ?? DEFAULT_LAYER_SPACING_CM}
           onChange={v => setSimulationConfig('修改层间距', { layerSpacingCm: v })} />
-        <div style={styles.note}>布料厚度同时抬高模特与地面的碰撞距离；层间距按相邻版片的「碰撞层」差值加大分离距离，0 为最内层。</div>
+        <ButtonRow>
+          <SmallButton onClick={autoAssignLayers} title="按缝合连通性与平均松量推断每片的碰撞层">自动识别碰撞层</SmallButton>
+        </ButtonRow>
+        <div style={styles.note}>布料厚度同时抬高模特与地面的碰撞距离；层间距按相邻版片的「碰撞层」差值加大分离距离，0 为最内层。缝合断裂开启后，拉伸超过缝合强度阈值的缝合对会解除约束。</div>
       </Section>
-      <SizeChart project={project} engineRef={engineRef} />
+      <LayerSection project={project} />
+      <DynamicFitSection project={project} engineRef={engineRef} />
     </>
   );
 }
@@ -77,7 +109,18 @@ export function RenderTab({ project }: { project: Project }) {
   const strainMin = useUIStore(s => s.strainMin);
   const strainMax = useUIStore(s => s.strainMax);
   const setStrainRange = useUIStore(s => s.setStrainRange);
+  const strainByFabric = useUIStore(s => s.strainByFabric);
+  const setStrainByFabric = useUIStore(s => s.setStrainByFabric);
   const strainStats = useSimStore(s => s.strainStats);
+  const pressureCheck = useUIStore(s => s.pressureCheck);
+  const pressureMaxKpa = useUIStore(s => s.pressureMaxKpa);
+  const setPressureMaxKpa = useUIStore(s => s.setPressureMaxKpa);
+  const pressureStats = useSimStore(s => s.pressureStats);
+  const fabricLimits = Object.values(project.fabrics).map(fabric => ({
+    name: fabric.name,
+    stretchLimit: fabric.physics.stretchLimit ?? DEFAULT_STRETCH_LIMIT,
+    compressionLimit: fabric.physics.compressionLimit ?? DEFAULT_COMPRESSION_LIMIT,
+  }));
   const rayUnavailable = rayTracingUnavailableReason(usePerfStore(s => s.rayUnsupported3D));
   const ray = normalizeRayTracing(project.scene.render.rayTracing);
 
@@ -121,26 +164,71 @@ export function RenderTab({ project }: { project: Project }) {
       )}
       {strainCheck && (
         <Section title="应变热图">
-          <SliderRow label="色标下限" min={-1} max={0} step={0.05} value={strainMin}
-            onChange={v => setStrainRange(v, strainMax)} />
-          <SliderRow label="色标上限" min={0} max={1} step={0.05} value={strainMax}
-            onChange={v => setStrainRange(strainMin, v)} />
+          <CheckRow label="按面料上限" checked={strainByFabric} onChange={setStrainByFabric} />
+          {!strainByFabric && (
+            <>
+              <SliderRow label="色标下限" min={-1} max={0} step={0.05} value={strainMin}
+                onChange={v => setStrainRange(v, strainMax)} />
+              <SliderRow label="色标上限" min={0} max={1} step={0.05} value={strainMax}
+                onChange={v => setStrainRange(strainMin, v)} />
+            </>
+          )}
           {strainStats && (
             <>
               <Row label="最小 / 最大 / 平均应变">
                 {strainStats.min.toFixed(4)} / {strainStats.max.toFixed(4)} / {strainStats.meanAbs.toFixed(4)}
               </Row>
+              {strainByFabric && (
+                <Row label="超限 拉伸 / 压缩">
+                  {strainStats.overStretch} / {strainStats.overCompression}
+                  {strainStats.vertices > 0
+                    ? `（${((strainStats.overStretch + strainStats.overCompression) / strainStats.vertices * 100).toFixed(1)}%）`
+                    : ''}
+                </Row>
+              )}
               <button
                 style={styles.action}
                 onClick={() => downloadTextFile(
                   `${project.meta.name}-应变报告.csv`,
-                  '\ufeff' + strainReportCsv(project.meta.name, strainStats, { min: strainMin, max: strainMax }),
+                  '\ufeff' + strainReportCsv(
+                    project.meta.name, strainStats, { min: strainMin, max: strainMax },
+                    { mode: strainByFabric ? 'fabric' : 'manual', fabrics: fabricLimits },
+                  ),
                   'text/csv;charset=utf-8',
                 )}
               >导出应变报告 CSV</button>
             </>
           )}
-          <div style={styles.note}>应变热图按每个顶点相邻边的长度变化着色：蓝色受压缩、白色无变形、红色被拉伸。基准取平坦版型，色标范围由上下限控制；与合身热图互斥。</div>
+          <div style={styles.note}>应变热图按每个顶点相邻边的长度变化着色：蓝色受压缩、白色无变形、红色被拉伸。通用模式用上下限作色标；按面料模式取每片面料自身的拉伸与压缩上限，并统计超限顶点。</div>
+        </Section>
+      )}
+      {pressureCheck && (
+        <Section title="压力热图">
+          <SliderRow label="色标上限" min={0.5} max={20} step={0.5} unit="kPa"
+            value={pressureMaxKpa} onChange={setPressureMaxKpa} />
+          {pressureStats && (
+            <>
+              <Row label="顶点 / 接触">{pressureStats.vertices} / {pressureStats.contactVertices}</Row>
+              <Row label="最小 / 平均 / 最大">
+                {pressureStats.minKpa.toFixed(2)} / {pressureStats.meanKpa.toFixed(2)} / {pressureStats.maxKpa.toFixed(2)} kPa
+              </Row>
+              <button
+                style={styles.action}
+                onClick={() => downloadTextFile(
+                  `${project.meta.name}-压力报告.csv`,
+                  '\ufeff' + pressureReportCsv(project.meta.name, pressureStats, {
+                    maxKpa: pressureMaxKpa,
+                    kpaPerMm: DEFAULT_PRESSURE_KPA_PER_MM,
+                    panelNames: Object.fromEntries(
+                      Object.values(project.pattern.panels).map(panel => [panel.id, panel.name]),
+                    ),
+                  }),
+                  'text/csv;charset=utf-8',
+                )}
+              >导出压力报告 CSV</button>
+            </>
+          )}
+          <div style={styles.note}>压力热图把碰撞阶段施加的法向接触修正量按每毫米 1 kPa 折算成估算压力，不是接触力求解结果；蓝色为轻接触，红色为高压。只有贴住模特或地面的顶点参与统计。</div>
         </Section>
       )}
       {displayMode === 'raytraced' && (

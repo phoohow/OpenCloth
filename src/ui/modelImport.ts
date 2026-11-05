@@ -3,7 +3,7 @@ import { putModelBlob } from '../io/objectStore';
 import type { GarmentEngine } from '../core/engine/garmentEngine';
 import { commitAvatarModel, commitEnvironmentImport, commitReferenceImport } from './sceneCommands';
 
-const MODEL_EXT = /\.(glb|gltf|obj)$/i;
+const MODEL_EXT = /\.(glb|gltf|obj|fbx)$/i;
 const ENV_EXT = /\.(hdr|exr|png|jpg|jpeg|webp)$/i;
 const IMAGE_MIME: Record<string, string> = {
   png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif',
@@ -33,7 +33,7 @@ export function openFilePicker(accept: string, multiple: boolean): Promise<File[
 
 /** Opens a native multi-select picker for model files; resolves null on cancel. */
 function pickModelFiles(): Promise<File[] | null> {
-  return openFilePicker('.glb,.gltf,.obj', true);
+  return openFilePicker('.glb,.gltf,.obj,.fbx', true);
 }
 
 /** Turns a picker selection into the single File the engine import API consumes. */
@@ -41,7 +41,7 @@ async function consolidateModelFiles(files: File[]): Promise<File> {
   const gltf = files.find(f => f.name.toLowerCase().endsWith('.gltf'));
   if (gltf) return embedGltfResources(gltf, files);
   const main = files.find(f => MODEL_EXT.test(f.name));
-  if (!main) throw new Error('未选择 .glb / .gltf / .obj 模型文件');
+  if (!main) throw new Error('未选择 .glb / .gltf / .obj / .fbx 模型文件');
   return main;
 }
 

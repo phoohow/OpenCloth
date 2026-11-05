@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { packIntegrateParams } from '../../src/sim/simUniforms';
+import { packCollideParams, packIntegrateParams } from '../../src/sim/simUniforms';
 import { FABRIC_PHYSICS_PRESETS, createDefaultProject } from '../../src/core/model/defaults';
 
 /** Uniforms of one integrate dispatch over 64 particles. */
@@ -31,5 +31,27 @@ describe('integrate params', () => {
     expect(data[11]).toBeCloseTo(config.wind.speed, 6);
     expect(data[12]).toBeCloseTo(FABRIC_PHYSICS_PRESETS.cotton.damping, 6);
     expect(data[13]).toBeCloseTo(0.5, 6);
+  });
+});
+
+describe('collide params', () => {
+  const body = {
+    capsuleCount: 0,
+    triangleCount: 1,
+    gridOrigin: [0, 0, 0] as [number, number, number],
+    gridCell: 0.1,
+    gridDims: [1, 1, 1] as [number, number, number],
+  };
+
+  it('writes the fabric contact friction and clamps it to 0..1', () => {
+    const config = createDefaultProject().scene.simulation;
+    expect(packCollideParams(config, 32, body, 0, 0.7)[4]).toBeCloseTo(0.7, 6);
+    expect(packCollideParams(config, 32, body, 0, -1)[4]).toBe(0);
+    expect(packCollideParams(config, 32, body, 0, 2)[4]).toBe(1);
+  });
+
+  it('falls back to the default friction when the value is missing', () => {
+    const config = createDefaultProject().scene.simulation;
+    expect(packCollideParams(config, 32, body, 0)[4]).toBeCloseTo(0.5, 6);
   });
 });

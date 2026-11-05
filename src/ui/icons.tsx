@@ -6,7 +6,7 @@ export const ICON_NAMES = [
   'select', 'add-point', 'remove-point', 'line', 'curve', 'internal-line', 'dart', 'seam', 'pan',
   'rect', 'circle', 'ellipse', 'print', 'topstitch', 'trim',
   // 3D fitting tools
-  'pin', 'unpin', 'move',
+  'pin', 'unpin', 'move', 'pen', 'ruler',
   // Properties tabs
   'cube', 'swatch', 'waves', 'sparkles', 'image', 'briefcase', 'scene',
   // Outliner nodes
@@ -20,7 +20,7 @@ export const ICON_NAMES = [
   // Transport
   'play', 'pause', 'reset', 'step',
   // Garment templates
-  't-shirt', 'shirt', 'dress', 'skirt', 'sleeve',
+  't-shirt', 'shirt', 'dress', 'skirt', 'sleeve', 'bag', 'shoe',
 ] as const;
 
 /** Name of one UI glyph, drawn from `assets/icons/<name>.svg`. */

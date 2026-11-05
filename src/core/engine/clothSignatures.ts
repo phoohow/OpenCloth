@@ -1,5 +1,6 @@
 import type { Avatar, Project, RenderMode } from '../model/types';
 import { fabricForPanel, panelPrints } from '../model/fabric';
+import { layerThicknessCm } from '../model/layers';
 import { panelGeometrySignature } from '../../pattern/panel/panelMeshSignature';
 import { FALLBACK_PHYSICS } from './clothConstants';
 
@@ -10,6 +11,7 @@ import { FALLBACK_PHYSICS } from './clothConstants';
 export function avatarBodySignature(avatar: Avatar): string {
   return JSON.stringify({
     ...avatar, name: undefined, display: undefined, transform: undefined, appearance: undefined,
+    softBody: undefined,
   });
 }
 
@@ -89,6 +91,15 @@ export function constraintSignature(project: Project): string {
     }),
   ]));
   return JSON.stringify([seams, darts, panels]);
+}
+
+/** Everything the per-particle collision clearance is built from. */
+export function layerThicknessSignature(project: Project): string {
+  return JSON.stringify([
+    layerThicknessCm(project),
+    project.scene.simulation.clothThicknessCm ?? null,
+    Object.values(project.pattern.panels).map(panel => [panel.id, panel.layer ?? null]),
+  ]);
 }
 
 /** panelId → geometry signature across the whole pattern. */

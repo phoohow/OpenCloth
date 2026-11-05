@@ -3,6 +3,7 @@ import { pointAtT } from '../../pattern/geom/edgeSample';
 import { edgeCurve, adaptiveSampleBezier } from '../../pattern/geom/bezier';
 import { adaptiveSampleArc } from '../../pattern/geom/arc';
 import { panelGrainLine, panelOutlineWithAllowance } from '../../pattern/panel/panelBuilder';
+import { topstitchRows } from '../../pattern/panel/productionGeometry';
 import { computeBBox, ensureCCW, perp, normalize, sub, dot } from '../../pattern/geom/vec2';
 import { resolveSize } from '../../core/command/gradingCommands';
 import {
@@ -386,6 +387,13 @@ function writePanelBlock(
     if (dot(normal, sub(at, center)) < 0) normal = { x: -normal.x, y: -normal.y };
     const layer = notch.style === 'drill' ? layerName('drill', convention) : layerName('notch', convention);
     writeLine(dxf, layer, { x: at.x - normal.x * 0.3, y: at.y - normal.y * 0.3 }, { x: at.x + normal.x * 0.2, y: at.y + normal.y * 0.2 });
+  }
+
+  for (const stitch of Object.values(pattern.topstitches ?? {})) {
+    if (stitch.panelId !== panel.id || stitch.visible === false) continue;
+    for (const row of topstitchRows(pattern, stitch)) {
+      writeOpenPolyline(dxf, layerName('topstitch', convention), row);
+    }
   }
 
   for (const annotation of Object.values(pattern.annotations ?? {})) {

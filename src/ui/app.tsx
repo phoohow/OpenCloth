@@ -11,7 +11,8 @@ import { PaneDivider } from './paneDivider';
 import { Toolbar2D, Toolbar3D } from './paneToolbars';
 import { ToastHost } from './widgets/toast';
 import { createMenuActions, refreshAutosaveList, refreshRecentList, restoreAutosaveOnStartup, shortcutActions, writeAutosave } from './menu/actions';
-import { menuOwnsKeyboard } from './menu/menuStore';
+import { menuOwnsKeyboard, useMenuStore } from './menu/menuStore';
+import { getCloudProject } from '../io/reviewStore';
 import { SHORTCUTS, matchShortcut } from './menu/shortcuts';
 import type { MenuActions } from './menu/actions';
 import { useUIStore, is3DFocus, isSplitLayout, leftPaneOf, isRightPanelShown,
@@ -73,6 +74,26 @@ export function App() {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [runShortcut]);
+
+  // A #review=<id> link opens the matching local review project; the hash is cleared so a
+  // reload does not reopen it, and later links pasted into the address bar still work.
+  useEffect(() => {
+    const openFromHash = () => {
+      const match = location.hash.match(/^#review=([^&]+)$/);
+      if (!match) return;
+      const projectId = decodeURIComponent(match[1]!);
+      history.replaceState(null, '', `${location.pathname}${location.search}`);
+      const menu = useMenuStore.getState();
+      if (menu.dialog === 'review' && menu.dialogParam === projectId) return;
+      void getCloudProject(projectId).then(project => {
+        if (project) menu.openDialog('review', projectId);
+        else useUIStore.getState().showToast('本机没有该共享项目，请让分享者导出审版包后导入');
+      });
+    };
+    openFromHash();
+    window.addEventListener('hashchange', openFromHash);
+    return () => window.removeEventListener('hashchange', openFromHash);
+  }, []);
 
   // Local archive is read once so 文件 ▸ 最近 populates and the last session is restored.
   useEffect(() => {
@@ -220,6 +241,6 @@ const styles: Record<string, React.CSSProperties> = {
   viewportContainer: { flex: 1, position: 'relative', overflow: 'hidden', background: '#252528', display: 'flex' },
   pane: { flexDirection: 'column', position: 'relative', overflow: 'hidden', minWidth: 0, height: '100%' },
   paneBody: { flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden' },
-  loading: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, color: '#888', fontSize: 14, background: 'rgba(26,26,30,0.85)' },
+  loading: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, color: '#888', fontSize: 'var(--oc-fs-heading)', background: 'rgba(26,26,30,0.85)' },
   spinner: { width: 32, height: 32, border: '3px solid #333', borderTopColor: '#4da6ff', borderRadius: '50%', animation: 'spin 1s linear infinite' },
 };

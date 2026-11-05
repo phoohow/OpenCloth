@@ -19,8 +19,8 @@ import {
   buildCreaseConstraints, buildPanelConstraints, createBatchedConstraints, rewriteBatches,
 } from './constraintBatches';
 import {
-  computeBaseInvMass, computeParticleDamping, computeParticleLayers, CONSTRAINT_GROUP_ORDER,
-  type ClothSimInput, type ConstraintGroup, type ConstraintGroupKind,
+  computeBaseInvMass, computeParticleDamping, computeParticleLayers, computeParticleThickness,
+  CONSTRAINT_GROUP_ORDER, type ClothSimInput, type ConstraintGroup, type ConstraintGroupKind,
 } from './simTypes';
 import { SelfCollisionSolver } from './selfCollision';
 
@@ -40,6 +40,8 @@ export class ClothSimulator {
   private velocityBuf!: GPUBuffer;
   private predictedBuf!: GPUBuffer;
   private normalsBuf!: GPUBuffer;
+  /** Largest normal indentation the body contact applied to each particle, in meters. */
+  private contactMoveBuf!: GPUBuffer;
   private indicesBuf!: GPUBuffer;
   /** Welded vertex groups and the triangles each one touches, read by the normals pass. */
   private groupStartBuf!: GPUBuffer;
@@ -70,6 +72,10 @@ export class ClothSimulator {
   private dampingBuf!: GPUBuffer;
   /** Per-particle pointer-drag weights read by the INTEGRATE pass. */
   private grabWeightBuf!: GPUBuffer;
+  /** Per-particle collision clearance read by the COLLIDE pass, in meters. */
+  private thicknessBuf!: GPUBuffer;
+  /** CPU mirror of the clearance, also used by the self-collision pass. */
+  private thicknessByParticle: Float32Array = new Float32Array(0);
 
   // Uniform buffers
   private integrateParamsBuf!: GPUBuffer;
@@ -95,8 +101,12 @@ export class ClothSimulator {
 
   private readbackBuf!: GPUBuffer;
   private readbackNormalsBuf!: GPUBuffer;
+  private readbackContactBuf!: GPUBuffer;
   private readPositions!: Float32Array;
   private readNormals!: Float32Array;
+  private readContact!: Float32Array;
+  /** Zero fill uploaded before the substeps of each frame. */
+  private contactZeros!: Float32Array<ArrayBuffer>;
 
   private particleCount = 0;
   private initialized = false;
@@ -152,6 +162,8 @@ export class ClothSimulator {
     this.baseInvMass = computeBaseInvMass(input, this.panelPhysics, pc);
     this.dampingBuf = createStorageBuffer(dev, computeParticleDamping(
       input, this.panelPhysics, pc, this.panelPhysics[0]?.damping ?? 0.02));
+    this.thicknessByParticle = computeParticleThickness(input, pc, clothThicknessMeters(config));
+    this.thicknessBuf = createStorageBuffer(dev, this.thicknessByParticle);
     this.grabWeights = new Float32Array(pc);
     this.grabWeightBuf = createStorageBuffer(dev, this.grabWeights);
 
@@ -180,6 +192,8 @@ export class ClothSimulator {
     this.velocityBuf = createStorageBuffer(dev, new Float32Array(pc * 4));
     this.predictedBuf = createStorageBuffer(dev, posData);
     this.normalsBuf = createStorageBuffer(dev, new Float32Array(pc * 4));
+    this.contactZeros = new Float32Array(pc);
+    this.contactMoveBuf = createStorageBuffer(dev, this.contactZeros);
 
     this.uploadIndices(input.indices);
 
@@ -241,8 +255,12 @@ export class ClothSimulator {
     this.readbackNormalsBuf = dev.createBuffer({
       size: pc * 16, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
     });
+    this.readbackContactBuf = dev.createBuffer({
+      size: Math.max(pc * 4, 4), usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+    });
     this.readPositions = new Float32Array(pc * 3);
     this.readNormals = new Float32Array(pc * 3);
+    this.readContact = new Float32Array(pc);
     this.cachePositions(input.positions);
 
     this.initialized = true;
@@ -286,6 +304,7 @@ export class ClothSimulator {
     const pc = this.particleCount;
     const result = this.selfCollisionSolver.resolve(this.readPositions, this.invMassMirror, this.layerByParticle, {
       thickness: this.clothThickness,
+      thicknesses: this.thicknessByParticle,
       layerSpacing: this.layerSpacing,
     });
     if (!result.moved) return;
@@ -359,12 +378,8 @@ export class ClothSimulator {
     this.positionsVersion++;
   }
 
-  /**
-   * Uploads the body mesh grid and switches body collision from the capsules to the triangles.
-   * Vertices widen to three vec4 slots per triangle for the storage-buffer stride.
-   */
-  private uploadMeshCollider(mesh: MeshCollider): void {
-    const dev = this.device;
+  /** Body triangles widened to three vec4 slots per triangle for the storage-buffer stride. */
+  private packMeshTriangles(mesh: MeshCollider): Float32Array {
     const vertices = new Float32Array(mesh.triangleCount * 12);
     for (let t = 0; t < mesh.triangleCount; t++) {
       const src = t * 9;
@@ -375,6 +390,16 @@ export class ClothSimulator {
         vertices[dst + k * 4 + 2] = mesh.vertices[src + k * 3 + 2]!;
       }
     }
+    return vertices;
+  }
+
+  /**
+   * Uploads the body mesh grid and switches body collision from the capsules to the triangles.
+   * Vertices widen to three vec4 slots per triangle for the storage-buffer stride.
+   */
+  private uploadMeshCollider(mesh: MeshCollider): void {
+    const dev = this.device;
+    const vertices = this.packMeshTriangles(mesh);
     this.meshTriangleBuf.destroy();
     this.cellStartBuf.destroy();
     this.cellTrianglesBuf.destroy();
@@ -400,7 +425,8 @@ export class ClothSimulator {
         this.grabWeightBuf]);
     this.collideBG = bind(L.collide,
       [this.predictedBuf, this.capsuleBuf, this.collideParamsBuf, this.prevPosBuf,
-        this.meshTriangleBuf, this.cellStartBuf, this.cellTrianglesBuf]);
+        this.meshTriangleBuf, this.cellStartBuf, this.cellTrianglesBuf, this.contactMoveBuf,
+        this.thicknessBuf]);
     this.updateBG = bind(L.update,
       [this.posInvMassBuf, this.prevPosBuf, this.velocityBuf, this.predictedBuf, this.updateParamsBuf,
         this.dampingBuf]);
@@ -536,6 +562,10 @@ export class ClothSimulator {
     const frameStart = this.time;
     this.time += config.dt;
     this.applySelfCollisionConfig(config);
+    // Contact pressure keeps the deepest indentation of this frame, so the buffer starts at zero.
+    if (this.contactZeros.length === pc) {
+      dev.queue.writeBuffer(this.contactMoveBuf, 0, this.contactZeros);
+    }
 
     const wg = (n: number) => Math.ceil(n / 256);
 
@@ -576,7 +606,7 @@ export class ClothSimulator {
       // Body collision; the floor plane is always active and always dispatched
       {
         dev.queue.writeBuffer(this.collideParamsBuf, 0,
-          packCollideParams(subConfig, pc, this.collideBody, this.floorY));
+          packCollideParams(subConfig, pc, this.collideBody, this.floorY, fabric.contactFriction));
         const pass = encoder.beginComputePass();
         pass.setPipeline(this.pipelines.collide);
         pass.setBindGroup(0, this.collideBG);
@@ -615,9 +645,10 @@ export class ClothSimulator {
       nPass.end();
     }
 
-    // Read back positions and normals
+    // Read back positions, normals and the contact move of the frame
     encoder.copyBufferToBuffer(this.posInvMassBuf, 0, this.readbackBuf, 0, pc * 16);
     encoder.copyBufferToBuffer(this.normalsBuf, 0, this.readbackNormalsBuf, 0, pc * 16);
+    encoder.copyBufferToBuffer(this.contactMoveBuf, 0, this.readbackContactBuf, 0, pc * 4);
 
     dev.queue.submit([encoder.finish()]);
   }
@@ -702,9 +733,11 @@ export class ClothSimulator {
       await Promise.all([
         this.readbackBuf.mapAsync(GPUMapMode.READ),
         this.readbackNormalsBuf.mapAsync(GPUMapMode.READ),
+        this.readbackContactBuf.mapAsync(GPUMapMode.READ),
       ]);
       const posData = new Float32Array(this.readbackBuf.getMappedRange());
       const normData = new Float32Array(this.readbackNormalsBuf.getMappedRange());
+      const contactData = new Float32Array(this.readbackContactBuf.getMappedRange());
 
       for (let i = 0; i < pc; i++) {
         this.readPositions[i * 3] = posData[i * 4];
@@ -713,9 +746,11 @@ export class ClothSimulator {
         this.readNormals[i * 3] = normData[i * 4];
         this.readNormals[i * 3 + 1] = normData[i * 4 + 1];
         this.readNormals[i * 3 + 2] = normData[i * 4 + 2];
+        this.readContact[i] = contactData[i];
       }
       this.readbackBuf.unmap();
       this.readbackNormalsBuf.unmap();
+      this.readbackContactBuf.unmap();
       this.applySelfCollision();
       this.resolveSeamTears();
       this.positionsVersion++;
@@ -743,6 +778,8 @@ export class ClothSimulator {
     this.device.queue.writeBuffer(this.prevPosBuf, 0, data);
     this.device.queue.writeBuffer(this.predictedBuf, 0, data);
     this.device.queue.writeBuffer(this.velocityBuf, 0, new Float32Array(pc * 4));
+    this.device.queue.writeBuffer(this.contactMoveBuf, 0, this.contactZeros);
+    this.readContact.fill(0);
     this.cachePositions(initialPositions);
     this.time = 0;
     this.setSeamProgress(0);
@@ -840,6 +877,83 @@ export class ClothSimulator {
   /** Latest CPU readback positions (flat xyz); does not trigger a GPU readback. */
   getReadbackPositions(): Float32Array {
     return this.readPositions;
+  }
+
+  /** Latest per-particle contact indentation in meters, as read back with the last step. */
+  getReadbackContact(): Float32Array {
+    return this.readContact;
+  }
+
+  /**
+   * Replaces the body mesh triangle positions used by collision, e.g. after soft-body
+   * deformation. The triangle grid and cell assignment stay as they are.
+   */
+  updateMeshColliderVertices(vertices: Float32Array): void {
+    if (!this.initialized) return;
+    if (vertices.byteLength !== this.meshTriangleBuf.size) return;
+    this.device.queue.writeBuffer(
+      this.meshTriangleBuf, 0, vertices.buffer as ArrayBuffer, vertices.byteOffset, vertices.byteLength,
+    );
+  }
+
+  /** Replaces the per-particle collision clearance, e.g. after construction-layer thickness changes. */
+  setParticleThickness(values: Float32Array): boolean {
+    if (!this.initialized || values.length !== this.particleCount) return false;
+    this.thicknessByParticle = new Float32Array(values);
+    this.device.queue.writeBuffer(
+      this.thicknessBuf, 0, this.thicknessByParticle.buffer as ArrayBuffer,
+      this.thicknessByParticle.byteOffset, this.thicknessByParticle.byteLength,
+    );
+    return true;
+  }
+
+  /**
+   * Replaces the body collision grid after the body moved, e.g. while an avatar animation plays.
+   * The triangle count must match; buffers are recreated when their size changed.
+   */
+  refreshMeshCollider(mesh: MeshCollider): boolean {
+    if (!this.initialized || mesh.triangleCount !== this.collideBody.triangleCount) return false;
+    const dev = this.device;
+    const vertices = this.packMeshTriangles(mesh);
+    if (this.meshTriangleBuf.size === vertices.byteLength) {
+      dev.queue.writeBuffer(
+        this.meshTriangleBuf, 0, vertices.buffer as ArrayBuffer, vertices.byteOffset, vertices.byteLength,
+      );
+    } else {
+      this.meshTriangleBuf.destroy();
+      this.meshTriangleBuf = createStorageBuffer(dev, vertices);
+    }
+    const cellsFit = this.cellStartBuf.size === mesh.cellStart.byteLength
+      && this.cellTrianglesBuf.size === mesh.cellTriangles.byteLength;
+    if (cellsFit) {
+      dev.queue.writeBuffer(
+        this.cellStartBuf, 0, mesh.cellStart.buffer as ArrayBuffer, mesh.cellStart.byteOffset, mesh.cellStart.byteLength,
+      );
+      dev.queue.writeBuffer(
+        this.cellTrianglesBuf, 0, mesh.cellTriangles.buffer as ArrayBuffer,
+        mesh.cellTriangles.byteOffset, mesh.cellTriangles.byteLength,
+      );
+    } else {
+      this.cellStartBuf.destroy();
+      this.cellTrianglesBuf.destroy();
+      this.cellStartBuf = createStorageBuffer(dev, mesh.cellStart);
+      this.cellTrianglesBuf = createStorageBuffer(dev, mesh.cellTriangles);
+    }
+    this.collideBody = {
+      capsuleCount: this.capsuleCount,
+      triangleCount: mesh.triangleCount,
+      gridOrigin: mesh.origin,
+      gridCell: mesh.cell,
+      gridDims: mesh.dims,
+    };
+    if (!cellsFit) {
+      this.collideBG = this.bindGroup(this.pipelines.layouts.collide, [
+        this.predictedBuf, this.capsuleBuf, this.collideParamsBuf, this.prevPosBuf,
+        this.meshTriangleBuf, this.cellStartBuf, this.cellTrianglesBuf, this.contactMoveBuf,
+        this.thicknessBuf,
+      ]);
+    }
+    return true;
   }
 
   /**
@@ -949,12 +1063,12 @@ export class ClothSimulator {
     this.initialized = false;
     const buffers: (GPUBuffer | undefined)[] = [
       this.posInvMassBuf, this.prevPosBuf, this.velocityBuf, this.predictedBuf, this.normalsBuf,
-      this.indicesBuf, this.groupStartBuf, this.groupTrianglesBuf, this.groupOfParticleBuf,
-      this.capsuleBuf, this.dampingBuf, this.grabWeightBuf,
+      this.contactMoveBuf, this.indicesBuf, this.groupStartBuf, this.groupTrianglesBuf, this.groupOfParticleBuf,
+      this.capsuleBuf, this.dampingBuf, this.grabWeightBuf, this.thicknessBuf,
       this.meshTriangleBuf, this.cellStartBuf, this.cellTrianglesBuf,
       this.integrateParamsBuf, this.collideParamsBuf, this.updateParamsBuf, this.normalsParamsBuf,
       this.pinIndicesBuf, this.pinInvMassBuf, this.pinParamsBuf,
-      this.readbackBuf, this.readbackNormalsBuf,
+      this.readbackBuf, this.readbackNormalsBuf, this.readbackContactBuf,
     ];
     for (const group of this.groups.values()) buffers.push(...group.batched.buffers, ...group.paramBufs);
     this.groups.clear();

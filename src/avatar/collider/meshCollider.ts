@@ -206,8 +206,15 @@ function buildGrid(
   return { origin, cell, dims, cellStart, cellTriangles, vertices, triangleCount, maxPerCell };
 }
 
+/** Grid layout of a collider, kept so a moved body can be re-bucketed into the same cells. */
+export interface MeshGridSpec {
+  origin: [number, number, number];
+  cell: number;
+  dims: [number, number, number];
+}
+
 /** Indexes flat triangle vertices (nine floats per triangle) into a uniform grid. */
-export function buildMeshCollider(vertices: Float32Array, cell?: number): MeshCollider | null {
+export function buildMeshCollider(vertices: Float32Array, cell?: number, margin = 0): MeshCollider | null {
   const triangleCount = Math.floor(vertices.length / 9);
   if (triangleCount === 0) return null;
 
@@ -221,6 +228,10 @@ export function buildMeshCollider(vertices: Float32Array, cell?: number): MeshCo
     if (v > max[axis]) max[axis] = v;
   }
   if (!Number.isFinite(min[0]) || min[0] > max[0]) return null;
+  for (let axis = 0; axis < 3; axis++) {
+    min[axis] -= margin;
+    max[axis] += margin;
+  }
 
   const trimmed = vertices.length === triangleCount * 9 ? vertices : vertices.slice(0, triangleCount * 9);
   let edge = cell ?? meanEdgeCell(trimmed, triangleCount);
@@ -240,6 +251,44 @@ export function buildMeshCollider(vertices: Float32Array, cell?: number): MeshCo
     edge *= 0.7;
   }
   return null;
+}
+
+/** Re-buckets moved triangles into an existing grid; null when the spec is empty. */
+export function reindexMeshCollider(vertices: Float32Array, spec: MeshGridSpec): MeshCollider | null {
+  const triangleCount = Math.floor(vertices.length / 9);
+  if (triangleCount === 0) return null;
+  const { origin, cell, dims } = spec;
+  const cells = dims[0] * dims[1] * dims[2];
+  if (cells <= 0 || cells > MAX_CELLS) return null;
+
+  const counts = new Uint32Array(cells);
+  for (let t = 0; t < triangleCount; t++) {
+    triangleCellRange(vertices, t, origin, cell, dims);
+    for (let iz = cellRange[2]; iz <= cellRange[5]; iz++) {
+      for (let iy = cellRange[1]; iy <= cellRange[4]; iy++) {
+        const row = (iz * dims[1] + iy) * dims[0];
+        for (let ix = cellRange[0]; ix <= cellRange[3]; ix++) counts[row + ix]++;
+      }
+    }
+  }
+
+  const cellStart = new Uint32Array(cells + 1);
+  for (let c = 0; c < cells; c++) cellStart[c + 1] = cellStart[c] + counts[c];
+  const cursor = cellStart.slice(0, cells);
+  const cellTriangles = new Uint32Array(cellStart[cells]);
+  for (let t = 0; t < triangleCount; t++) {
+    triangleCellRange(vertices, t, origin, cell, dims);
+    for (let iz = cellRange[2]; iz <= cellRange[5]; iz++) {
+      for (let iy = cellRange[1]; iy <= cellRange[4]; iy++) {
+        const row = (iz * dims[1] + iy) * dims[0];
+        for (let ix = cellRange[0]; ix <= cellRange[3]; ix++) {
+          cellTriangles[cursor[row + ix]++] = t;
+        }
+      }
+    }
+  }
+
+  return { origin, cell, dims, cellStart, cellTriangles, vertices, triangleCount };
 }
 
 /**

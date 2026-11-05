@@ -5,8 +5,8 @@ import { DEFAULT_CLOTH_THICKNESS_CM, DEFAULT_LAYER_SPACING_CM } from '../core/mo
 const MAX_SPEED = 6;
 /** Distance a particle is kept outside capsule and floor surfaces, in meters. */
 const SURFACE_OFFSET = 0.005;
-/** Tangential pull toward the previous frame position on contact. */
-const CONTACT_FRICTION = 0.5;
+/** Tangential pull toward the previous frame position on contact, used when a fabric sets none. */
+const DEFAULT_CONTACT_FRICTION = 0.5;
 
 /** INTEGRATE SimParams block: 80 bytes; the drag target only counts while its w flag is 1. */
 export function packIntegrateParams(
@@ -71,6 +71,7 @@ export function packCollideParams(
   particleCount: number,
   body: CollideBody,
   floorY: number,
+  friction = DEFAULT_CONTACT_FRICTION,
 ): Float32Array<ArrayBuffer> {
   const data = new Float32Array(16);
   const u32 = new Uint32Array(data.buffer);
@@ -80,8 +81,9 @@ export function packCollideParams(
   u32[1] = particleCount;
   u32[2] = triangles > 0 || !on ? 0 : body.capsuleCount;
   data[3] = SURFACE_OFFSET;
-  data[4] = CONTACT_FRICTION;
+  data[4] = Number.isFinite(friction) ? Math.min(1, Math.max(0, friction)) : DEFAULT_CONTACT_FRICTION;
   data[5] = floorY;
+  // Global value kept for the uniform layout; COLLIDE reads the per-particle thickness buffer.
   data[6] = clothThicknessMeters(config);
   u32[7] = triangles;
   data[8] = body.gridOrigin[0];

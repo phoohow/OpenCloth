@@ -1,75 +1,52 @@
-import type { Fabric, Notch, Pattern, Project } from '../core/model/types';
+import type { Project } from '../core/model/types';
+import { LEGACY_PROJECT_FORMAT_VERSION, PROJECT_FORMAT_VERSION } from '../core/model/format';
+import { normalizeFabrics, normalizeLayers, normalizePattern, normalizePoms } from '../core/model/normalize';
+import { migrateProjectDocument } from './migrations';
 
 /** Encodes and decodes a Project as .ocproj.json. */
 export const projectCodec = {
+  /** Always stamps the current format version, without touching the argument. */
   encode(project: Project): string {
-    return JSON.stringify(JSON.parse(JSON.stringify(project)), null, 2);
+    const draft = JSON.parse(JSON.stringify(project)) as Project;
+    draft.formatVersion = PROJECT_FORMAT_VERSION;
+    return JSON.stringify(draft, null, 2);
   },
 
+  /**
+   * Normalizes a parsed document to the current schema. Files without `formatVersion`
+   * are read as the legacy version; a newer version is refused rather than half-read.
+   * Between the two, `io/migrations.ts` walks the document up to the current version.
+   *
+   * Topology is deliberately not validated here: a pattern with a broken outline should still
+   * open so the problem list can show it, rather than locking the user out of their own file.
+   */
   decode(json: string): Project {
     const raw = JSON.parse(json);
     if (!raw.meta || !raw.pattern || !raw.fabrics || !raw.avatar || !raw.scene) {
       throw new Error('无效的工程文件：缺少必要字段');
     }
+    const version = readFormatVersion(raw.formatVersion);
+    if (version > PROJECT_FORMAT_VERSION) {
+      throw new Error(`工程文件格式版本 ${version} 高于本版本支持的 ${PROJECT_FORMAT_VERSION}，请升级 OpenCloth 后再打开`);
+    }
+    migrateProjectDocument(raw, version);
     const project = raw as Project;
     project.pattern = normalizePattern(project.pattern);
     project.fabrics = normalizeFabrics(project.fabrics);
+    project.poms = normalizePoms(project.poms);
+    project.layerThicknessCm = normalizeLayers(project.layerThicknessCm);
+    project.formatVersion = PROJECT_FORMAT_VERSION;
     return project;
   },
 };
 
-/** Fills the material appearance collections a parsed fabric may omit. */
-export function normalizeFabrics(fabrics: Record<string, Fabric>): Record<string, Fabric> {
-  for (const fabric of Object.values(fabrics ?? {})) {
-    if (!fabric?.appearance) continue;
-    fabric.appearance.maps ??= {};
-    fabric.appearance.uvTiling ??= { x: 1, y: 1 };
-    fabric.appearance.uvOffset ??= { x: 0, y: 0 };
-    fabric.appearance.transmission ??= 0;
-    fabric.appearance.thickness ??= 0.4;
-    fabric.appearance.clearcoat ??= 0;
-    fabric.appearance.clearcoatRoughness ??= 0.5;
-    fabric.appearance.anisotropy ??= 0;
-    fabric.appearance.iridescence ??= 0;
-    fabric.appearance.sheenRoughness ??= 0.4;
+/** Reads the declared version, treating a missing field as the version before it existed. */
+function readFormatVersion(value: unknown): number {
+  if (value === undefined) return LEGACY_PROJECT_FORMAT_VERSION;
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+    throw new Error('无效的工程文件：formatVersion 不是有效版本号');
   }
-  return fabrics;
-}
-
-/** Fills collections and panel fields that a parsed or imported pattern may omit. */
-export function normalizePattern(pattern: Pattern): Pattern {
-  pattern.notches ??= {} as Record<string, Notch>;
-  pattern.annotations ??= {};
-  pattern.measurements ??= {};
-  pattern.prints ??= {};
-  pattern.topstitches ??= {};
-  pattern.trims ??= {};
-  for (const panel of Object.values(pattern.panels ?? {})) {
-    panel.holes ??= [];
-  }
-  // Drop marks whose owner no longer exists.
-  for (const [id, print] of Object.entries(pattern.prints)) {
-    print.repeat ??= { x: 1, y: 1 };
-    print.opacity ??= 1;
-    print.angleDeg ??= 0;
-    print.visible ??= true;
-    if (!pattern.panels[print.panelId]) delete pattern.prints[id];
-  }
-  for (const [id, stitch] of Object.entries(pattern.topstitches)) {
-    stitch.rows ??= 1;
-    stitch.spacingMm ??= 4;
-    stitch.stitchMm ??= 3;
-    stitch.gapMm ??= 2;
-    stitch.visible ??= true;
-    if (!pattern.panels[stitch.panelId] || !pattern.edges[stitch.edgeId]) delete pattern.topstitches[id];
-  }
-  for (const [id, trim] of Object.entries(pattern.trims)) {
-    trim.qty ??= 1;
-    trim.sizeMm ??= 12;
-    trim.visible ??= true;
-    if (!pattern.panels[trim.panelId]) delete pattern.trims[id];
-  }
-  return pattern;
+  return value;
 }
 
 /** Downloads text content as a browser file. */

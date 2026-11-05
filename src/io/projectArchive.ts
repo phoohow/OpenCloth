@@ -1,13 +1,23 @@
 import type { Project } from '../core/model/types';
 import { projectCodec } from './codec';
+import { requestResult, storageAvailable, withStores, type IdbSpec } from './idb';
 import { deleteModelBlob, listModelBlobKeys } from './objectStore';
 import { embedProjectAssets } from './projectPackage';
 
 /** IndexedDB archive of project snapshots: the recent-project list and the autosave snapshots. */
 
-const DB_NAME = 'oc-projects';
 const RECENT_STORE = 'recent';
 const AUTOSAVE_STORE = 'autosave';
+
+/** Opened by `io/idb.ts`, which keeps the connection and creates both stores on first use. */
+const SPEC: IdbSpec = {
+  name: 'oc-projects',
+  version: 1,
+  upgrade: db => {
+    if (!db.objectStoreNames.contains(RECENT_STORE)) db.createObjectStore(RECENT_STORE, { keyPath: 'id' });
+    if (!db.objectStoreNames.contains(AUTOSAVE_STORE)) db.createObjectStore(AUTOSAVE_STORE);
+  },
+};
 
 /** Entries kept in the recent-project list. */
 export const RECENT_LIMIT = 8;
@@ -37,42 +47,6 @@ export interface AutosaveRecord {
 /** One autosave snapshot without its payload. */
 export type AutosaveSummary = Omit<AutosaveRecord, 'json'>;
 
-function openDb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1);
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      if (!db.objectStoreNames.contains(RECENT_STORE)) db.createObjectStore(RECENT_STORE, { keyPath: 'id' });
-      if (!db.objectStoreNames.contains(AUTOSAVE_STORE)) db.createObjectStore(AUTOSAVE_STORE);
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-async function withStores<T>(stores: string[], mode: IDBTransactionMode, run: (tx: IDBTransaction) => T): Promise<T> {
-  const db = await openDb();
-  return new Promise<T>((resolve, reject) => {
-    const transaction = db.transaction(stores, mode);
-    let settled = false;
-    const result = run(transaction);
-    transaction.oncomplete = () => { settled = true; resolve(result); db.close(); };
-    transaction.onerror = () => { if (!settled) reject(transaction.error); };
-    transaction.onabort = () => { if (!settled) reject(transaction.error); };
-  });
-}
-
-function requestResult<T>(request: IDBRequest): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result as T);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-function storageAvailable(): boolean {
-  return typeof indexedDB !== 'undefined';
-}
-
 /** Newest first. */
 export function sortRecents(records: RecentRecord[]): RecentRecord[] {
   return [...records].sort((a, b) => b.savedAt.localeCompare(a.savedAt));
@@ -95,10 +69,10 @@ export async function pushRecent(project: Project): Promise<void> {
       savedAt: new Date().toISOString(),
       json: projectCodec.encode(embedded),
     };
-    const stale = await withStores([RECENT_STORE], 'readonly', tx =>
+    const stale = await withStores(SPEC, [RECENT_STORE], 'readonly', tx =>
       requestResult<RecentRecord[]>(tx.objectStore(RECENT_STORE).getAll() as IDBRequest));
     const next = pruneRecents(stale, record);
-    await withStores([RECENT_STORE], 'readwrite', tx => {
+    await withStores(SPEC, [RECENT_STORE], 'readwrite', tx => {
       const store = tx.objectStore(RECENT_STORE);
       store.clear();
       for (const entry of next) store.put(entry);
@@ -112,7 +86,7 @@ export async function pushRecent(project: Project): Promise<void> {
 export async function listRecent(): Promise<RecentSummary[]> {
   if (!storageAvailable()) return [];
   try {
-    const records = await withStores([RECENT_STORE], 'readonly', tx =>
+    const records = await withStores(SPEC, [RECENT_STORE], 'readonly', tx =>
       requestResult<RecentRecord[]>(tx.objectStore(RECENT_STORE).getAll() as IDBRequest));
     return sortRecents(records).map(({ id, name, savedAt }) => ({ id, name, savedAt }));
   } catch {
@@ -124,7 +98,7 @@ export async function listRecent(): Promise<RecentSummary[]> {
 export async function readRecent(id: string): Promise<string | null> {
   if (!storageAvailable()) return null;
   try {
-    const record = await withStores([RECENT_STORE], 'readonly', tx =>
+    const record = await withStores(SPEC, [RECENT_STORE], 'readonly', tx =>
       requestResult<RecentRecord | undefined>(tx.objectStore(RECENT_STORE).get(id) as IDBRequest));
     return record?.json ?? null;
   } catch {
@@ -136,7 +110,7 @@ export async function readRecent(id: string): Promise<string | null> {
 export async function clearRecent(): Promise<void> {
   if (!storageAvailable()) return;
   try {
-    await withStores([RECENT_STORE], 'readwrite', tx => { tx.objectStore(RECENT_STORE).clear(); });
+    await withStores(SPEC, [RECENT_STORE], 'readwrite', tx => { tx.objectStore(RECENT_STORE).clear(); });
   } catch {
     // Ignore clear failures when the store cannot be opened.
   }
@@ -159,12 +133,12 @@ export async function saveAutosave(project: Project): Promise<AutosaveRecord | n
     const embedded = await embedProjectAssets(project);
     const savedAt = new Date().toISOString();
     const record: AutosaveRecord = { id: savedAt, savedAt, json: projectCodec.encode(embedded) };
-    await withStores([AUTOSAVE_STORE], 'readwrite', tx => tx.objectStore(AUTOSAVE_STORE).put(record, record.id));
-    const stored = await withStores([AUTOSAVE_STORE], 'readonly', tx =>
+    await withStores(SPEC, [AUTOSAVE_STORE], 'readwrite', tx => tx.objectStore(AUTOSAVE_STORE).put(record, record.id));
+    const stored = await withStores(SPEC, [AUTOSAVE_STORE], 'readonly', tx =>
       requestResult<AutosaveRecord[]>(tx.objectStore(AUTOSAVE_STORE).getAll() as IDBRequest));
     const keep = pruneAutosaves(stored);
     const keepIds = new Set(keep.map(r => r.id));
-    await withStores([AUTOSAVE_STORE], 'readwrite', tx => {
+    await withStores(SPEC, [AUTOSAVE_STORE], 'readwrite', tx => {
       const store = tx.objectStore(AUTOSAVE_STORE);
       for (const entry of stored) if (!keepIds.has(entry.id)) store.delete(entry.id);
     });
@@ -178,7 +152,7 @@ export async function saveAutosave(project: Project): Promise<AutosaveRecord | n
 export async function listAutosaves(): Promise<AutosaveSummary[]> {
   if (!storageAvailable()) return [];
   try {
-    const records = await withStores([AUTOSAVE_STORE], 'readonly', tx =>
+    const records = await withStores(SPEC, [AUTOSAVE_STORE], 'readonly', tx =>
       requestResult<AutosaveRecord[]>(tx.objectStore(AUTOSAVE_STORE).getAll() as IDBRequest));
     return sortAutosaves(records).map(({ id, savedAt }) => ({ id, savedAt }));
   } catch {
@@ -191,11 +165,11 @@ export async function readAutosave(id?: string): Promise<AutosaveRecord | null> 
   if (!storageAvailable()) return null;
   try {
     if (id !== undefined) {
-      const record = await withStores([AUTOSAVE_STORE], 'readonly', tx =>
+      const record = await withStores(SPEC, [AUTOSAVE_STORE], 'readonly', tx =>
         requestResult<AutosaveRecord | undefined>(tx.objectStore(AUTOSAVE_STORE).get(id) as IDBRequest));
       return record ?? null;
     }
-    const records = await withStores([AUTOSAVE_STORE], 'readonly', tx =>
+    const records = await withStores(SPEC, [AUTOSAVE_STORE], 'readonly', tx =>
       requestResult<AutosaveRecord[]>(tx.objectStore(AUTOSAVE_STORE).getAll() as IDBRequest));
     return sortAutosaves(records)[0] ?? null;
   } catch {
@@ -225,14 +199,14 @@ export async function pruneOrphanBlobs(current: Project): Promise<void> {
   if (!storageAvailable()) return;
   try {
     const live = new Set(collectBlobKeys(current));
-    const records = await withStores([RECENT_STORE], 'readonly', tx =>
+    const records = await withStores(SPEC, [RECENT_STORE], 'readonly', tx =>
       requestResult<RecentRecord[]>(tx.objectStore(RECENT_STORE).getAll() as IDBRequest));
     for (const record of records) {
       try {
         for (const key of collectBlobKeys(JSON.parse(record.json))) live.add(key);
       } catch { /* A corrupt entry keeps nothing alive. */ }
     }
-    const autosaves = await withStores([AUTOSAVE_STORE], 'readonly', tx =>
+    const autosaves = await withStores(SPEC, [AUTOSAVE_STORE], 'readonly', tx =>
       requestResult<AutosaveRecord[]>(tx.objectStore(AUTOSAVE_STORE).getAll() as IDBRequest));
     for (const autosave of autosaves) {
       try {

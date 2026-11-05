@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  buildMeshCollider, closestPointOnTriangle, nearestMeshPoint, sampleMeshCollider,
+  buildMeshCollider, closestPointOnTriangle, nearestMeshPoint, reindexMeshCollider, sampleMeshCollider,
 } from '../../src/avatar/collider/meshCollider';
 
 /** Axis-aligned cube of edge `size` centred on the origin, wound outward. */
@@ -19,6 +19,34 @@ function cubeTriangles(size: number): Float32Array {
   }
   return new Float32Array(out);
 }
+
+describe('reindexMeshCollider', () => {
+  /** Copies triangles with every vertex shifted along x. */
+  function shiftX(vertices: Float32Array, dx: number): Float32Array {
+    const out = vertices.slice();
+    for (let i = 0; i < out.length; i += 3) out[i] += dx;
+    return out;
+  }
+
+  it('re-buckets moved triangles into the same grid', () => {
+    const collider = buildMeshCollider(cubeTriangles(0.2), undefined, 0.5)!;
+    const spec = { origin: collider.origin, cell: collider.cell, dims: collider.dims };
+    const moved = shiftX(collider.vertices, 0.5);
+    const movedCollider = reindexMeshCollider(moved, spec)!;
+    expect(movedCollider.triangleCount).toBe(collider.triangleCount);
+    expect(movedCollider.cellStart.length).toBe(collider.cellStart.length);
+
+    const hit = nearestMeshPoint(movedCollider, 0.6, 0.11, 0);
+    expect(hit).not.toBeNull();
+    expect(hit!.distance).toBeCloseTo(0.01, 3);
+    expect(hit!.side).toBe(1);
+  });
+
+  it('returns null when the grid would be empty', () => {
+    const spec = { origin: [0, 0, 0] as [number, number, number], cell: 0.05, dims: [0, 0, 0] as [number, number, number] };
+    expect(reindexMeshCollider(cubeTriangles(0.2), spec)).toBeNull();
+  });
+});
 
 describe('buildMeshCollider', () => {
   const collider = buildMeshCollider(cubeTriangles(0.2));

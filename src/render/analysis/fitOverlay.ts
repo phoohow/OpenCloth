@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { fitColor, type FitField } from './fit';
-import { strainColor } from './strain';
+import { pressureColor } from './pressure';
+import { strainColor, type StrainBounds } from './strain';
 
 /** Coloured copy of the cloth geometry that shows body clearance as a heatmap. */
 export class FitOverlay {
@@ -51,6 +52,31 @@ export class FitOverlay {
     const colors = this.colorAttr.array as Float32Array;
     for (let i = 0; i < strain.length && i < colors.length / 3; i++) {
       const [r, g, b] = strainColor(strain[i]!, min, max);
+      colors[i * 3] = r;
+      colors[i * 3 + 1] = g;
+      colors[i * 3 + 2] = b;
+    }
+    this.colorAttr.needsUpdate = true;
+  }
+
+  /** Writes strain colours with each vertex's own fabric tolerance as the ramp end. */
+  updateStrainBounds(strain: Float32Array, bounds: StrainBounds): void {
+    const colors = this.colorAttr.array as Float32Array;
+    const count = Math.min(strain.length, bounds.stretch.length, bounds.compression.length);
+    for (let i = 0; i < count && i < colors.length / 3; i++) {
+      const [r, g, b] = strainColor(strain[i]!, -bounds.compression[i]!, bounds.stretch[i]!);
+      colors[i * 3] = r;
+      colors[i * 3 + 1] = g;
+      colors[i * 3 + 2] = b;
+    }
+    this.colorAttr.needsUpdate = true;
+  }
+
+  /** Writes estimated contact pressure colours, neutral where the vertex is not touching. */
+  updatePressure(pressureKpa: Float32Array, maxKpa: number): void {
+    const colors = this.colorAttr.array as Float32Array;
+    for (let i = 0; i < pressureKpa.length && i < colors.length / 3; i++) {
+      const [r, g, b] = pressureColor(pressureKpa[i]!, maxKpa);
       colors[i * 3] = r;
       colors[i * 3 + 1] = g;
       colors[i * 3 + 2] = b;

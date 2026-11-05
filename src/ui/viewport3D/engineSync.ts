@@ -59,6 +59,8 @@ type ProjectSignals = ReturnType<typeof projectSignals>;
 
 /** Playback time is published to the store at this interval instead of every tick. */
 const PLAYED_PUBLISH_MS = 100;
+/** Frame delta is capped so a backgrounded tab does not jump the body animation. */
+const MAX_ANIMATION_DELTA_MS = 100;
 
 /**
  * Keeps the garment engine and renderer in sync with the stores and runs the frame loop.
@@ -83,6 +85,12 @@ export class EngineSync {
   private lastTickMs = 0;
   /** Playback time not yet published to the sim store, flushed every PLAYED_PUBLISH_MS. */
   private playedPending = 0;
+  /** Start of the previous frame, 0 before the first one; feeds the body animation delta. */
+  private lastFrameMs = 0;
+  /** Last time the animation state was published to the store. */
+  private animationPublishMs = 0;
+  /** Dynamic sampling switch the engine was last told about. */
+  private dynamicSamplingApplied = false;
   /** Load counter of the project the camera was last applied from. */
   private lastLoadToken = 0;
   /** Pending camera write; orbiting restarts it so only the settled view is stored. */
@@ -182,9 +190,17 @@ export class EngineSync {
       }
       if (state.strainCheck !== previous?.strainCheck
         || state.strainMin !== previous?.strainMin
-        || state.strainMax !== previous?.strainMax) {
-        const stats = this.engine.setStrainCheck(state.strainCheck, state.strainMin, state.strainMax);
+        || state.strainMax !== previous?.strainMax
+        || state.strainByFabric !== previous?.strainByFabric) {
+        const stats = this.engine.setStrainCheck(
+          state.strainCheck, state.strainMin, state.strainMax, state.strainByFabric,
+        );
         useSimStore.getState().setStrainStats(stats);
+      }
+      if (state.pressureCheck !== previous?.pressureCheck
+        || state.pressureMaxKpa !== previous?.pressureMaxKpa) {
+        const stats = this.engine.setPressureCheck(state.pressureCheck, state.pressureMaxKpa);
+        useSimStore.getState().setPressureStats(stats);
       }
     }));
 
@@ -237,8 +253,12 @@ export class EngineSync {
         useSimStore.getState().setFitStats(stats);
       }
       if (fit.strainCheck) {
-        const stats = this.engine.setStrainCheck(true, fit.strainMin, fit.strainMax);
+        const stats = this.engine.setStrainCheck(true, fit.strainMin, fit.strainMax, fit.strainByFabric);
         useSimStore.getState().setStrainStats(stats);
+      }
+      if (fit.pressureCheck) {
+        const stats = this.engine.setPressureCheck(true, fit.pressureMaxKpa);
+        useSimStore.getState().setPressureStats(stats);
       }
     })();
   }
@@ -269,9 +289,12 @@ export class EngineSync {
     const renderMode = useUIStore.getState().renderMode;
     this.engine.applyFabrics(project, renderMode);
     this.engine.applyAvatarAppearance(project.avatar.appearance);
+    this.engine.applyAvatarSoftness(project);
+    this.engine.applyLayerThickness(project);
     this.engine.applyPanelVisibility(project);
     this.engine.applySeamStitchVisibility(project);
     this.engine.applyTopstitchThreads(project);
+    this.engine.applyTrimInstances(project);
     syncSelectionOverlay(this.engine, project.pattern, useUIStore.getState().selection);
   }
 
@@ -332,6 +355,11 @@ export class EngineSync {
       }
     }
 
+    const frameDelta = this.lastFrameMs > 0 ? Math.min(tickStart - this.lastFrameMs, MAX_ANIMATION_DELTA_MS) : 0;
+    this.lastFrameMs = tickStart;
+    if (frameDelta > 0) this.engine.advanceAvatarAnimation(frameDelta);
+    this.syncAvatarAnimation(simState);
+
     try {
       this.applyEditPreview();
       if (simState.isPlaying) {
@@ -355,8 +383,12 @@ export class EngineSync {
       }
       if (useUIStore.getState().strainCheck) {
         const strain = useUIStore.getState();
-        const stats = this.engine.refreshStrain(strain.strainMin, strain.strainMax);
+        const stats = this.engine.refreshStrain(strain.strainMin, strain.strainMax, strain.strainByFabric);
         if (stats) simState.setStrainStats(stats);
+      }
+      if (useUIStore.getState().pressureCheck) {
+        const stats = this.engine.refreshPressure(useUIStore.getState().pressureMaxKpa);
+        if (stats) simState.setPressureStats(stats);
       }
 
       this.ctx.controls.update();
@@ -380,6 +412,31 @@ export class EngineSync {
       if (!this.cancelled) this.raf = requestAnimationFrame(this.loop);
     }
   };
+
+  /** Mirrors the body animation into the store and applies the dynamic sampling switch. */
+  private syncAvatarAnimation(simState: ReturnType<typeof useSimStore.getState>): void {
+    const info = this.engine.avatarAnimationInfo();
+    const current = simState.animation;
+    const changed = info.clipIndex !== current.clipIndex
+      || info.playing !== current.playing
+      || Math.abs(info.durationMs - current.durationMs) > 0.5
+      || info.clips.length !== current.clips.length
+      || info.clips.some((name, i) => name !== current.clips[i]);
+    const now = performance.now();
+    const due = info.playing && now - this.animationPublishMs >= PLAYED_PUBLISH_MS;
+    if (changed || due) {
+      this.animationPublishMs = now;
+      simState.setAnimationInfo(info);
+    }
+    if (this.engine.dynamicSampleCount !== simState.dynamicSamples) {
+      simState.setDynamicSamples(this.engine.dynamicSampleCount);
+    }
+    const sampling = useUIStore.getState().dynamicSampling;
+    if (sampling !== this.dynamicSamplingApplied) {
+      this.dynamicSamplingApplied = sampling;
+      this.engine.setDynamicFitSampling(sampling);
+    }
+  }
 
   /** Stops the frame loop and every store subscription. */
   dispose(): void {

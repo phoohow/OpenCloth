@@ -22,6 +22,8 @@ export interface MarkerLayoutOptions {
   allowRotate?: boolean;
   /** Rotation angles tried per piece, degrees counter-clockwise; overrides `allowRotate`. */
   angles?: number[];
+  /** Mirrors every piece across its own vertical axis; default false. */
+  flip?: boolean;
   /** Sizes to nest together; absent packs the pattern's current geometry only. */
   sizes?: MarkerSize[];
   /** Size the stored pattern geometry represents; defaults to base geometry. */
@@ -100,6 +102,7 @@ export function buildMarkerLayout(pattern: Pattern, options: MarkerLayoutOptions
     gapCm: options.gapCm,
     allowRotate: options.allowRotate ?? true,
     ...(options.angles ? { angles: options.angles } : {}),
+    ...(options.flip ? { flip: true } : {}),
   });
   return {
     fabricWidthCm,
@@ -111,8 +114,9 @@ export function buildMarkerLayout(pattern: Pattern, options: MarkerLayoutOptions
   };
 }
 
-/** Maps one piece-local point into marker coordinates, rotating by the placed angle. */
+/** Maps one piece-local point into marker coordinates, mirrored and rotated by the placed angle. */
 export function placePoint(piece: MarkerPiece, place: Placement, p: Vec2): Vec2 {
+  const localX = place.flipped ? piece.width - p.x : p.x;
   const rad = place.angleDeg * Math.PI / 180;
   const cos = Math.cos(rad);
   const sin = Math.sin(rad);
@@ -131,8 +135,8 @@ export function placePoint(piece: MarkerPiece, place: Placement, p: Vec2): Vec2 
     if (ry < minY) minY = ry;
   }
   return {
-    x: p.x * cos - p.y * sin - minX + place.x,
-    y: p.x * sin + p.y * cos - minY + place.y,
+    x: localX * cos - p.y * sin - minX + place.x,
+    y: localX * sin + p.y * cos - minY + place.y,
   };
 }
 

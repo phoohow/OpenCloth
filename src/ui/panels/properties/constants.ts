@@ -20,6 +20,7 @@ export function tabsForKind(kind: SceneNodeKind | null): PropTab[] {
     object: isObject,
     material: kind !== null && supportsMaterial(kind),
     simulator: kind !== null && supportsSimulator(kind),
+    pattern: true,
     transform: kind !== null && supportsTransform(kind),
     render: true,
     project: true,

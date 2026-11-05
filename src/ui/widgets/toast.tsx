@@ -31,7 +31,7 @@ const styles: Record<string, React.CSSProperties> = {
     position: 'fixed', bottom: 56, left: '50%', transform: 'translateX(-50%)',
     maxWidth: 'min(70vw, 460px)', padding: '8px 14px', borderRadius: 4,
     background: 'rgba(30, 30, 36, 0.94)', border: '1px solid #4a4a54',
-    color: '#e6e6ea', fontSize: 12, lineHeight: 1.5, textAlign: 'center',
+    color: '#e6e6ea', fontSize: 'var(--oc-fs-body)', lineHeight: 1.5, textAlign: 'center',
     boxShadow: '0 4px 16px rgba(0, 0, 0, 0.45)', pointerEvents: 'none', zIndex: 850,
   },
 };

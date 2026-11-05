@@ -1,5 +1,5 @@
 import type { Pattern } from '../../core/model/types';
-import { normalizePattern } from '../../io/codec';
+import { normalizePattern } from '../../core/model/normalize';
 import { validatePattern } from '../../core/model/validatePattern';
 
 const EDGE_TYPES = new Set(['line', 'bezier', 'arc']);

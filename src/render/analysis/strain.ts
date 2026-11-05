@@ -1,3 +1,5 @@
+import { DEFAULT_COMPRESSION_LIMIT, DEFAULT_STRETCH_LIMIT } from '../../core/model/defaults';
+
 /** Smallest rest edge length used as the strain denominator. */
 const MIN_REST_LENGTH = 1e-6;
 
@@ -62,29 +64,82 @@ export function computeVertexStrain(
   return result;
 }
 
+/** Per-vertex strain tolerance from each panel's fabric, both as positive magnitudes. */
+export interface StrainBounds {
+  stretch: Float32Array;
+  compression: Float32Array;
+}
+
+/** One merged panel range and the strain limits of its fabric. */
+export interface StrainBoundPanel {
+  vertexOffset: number;
+  vertexCount: number;
+  stretchLimit?: number;
+  compressionLimit?: number;
+}
+
+/** Clamps a fabric limit to a usable positive magnitude, falling back when it is missing. */
+function limitOf(value: number | undefined, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return fallback;
+  return Math.min(1, value);
+}
+
+/** Builds per-vertex strain limits; vertices outside every panel keep the default limits. */
+export function strainBounds(
+  vertexCount: number,
+  panels: ReadonlyArray<StrainBoundPanel>,
+): StrainBounds {
+  const stretch = new Float32Array(vertexCount).fill(DEFAULT_STRETCH_LIMIT);
+  const compression = new Float32Array(vertexCount).fill(DEFAULT_COMPRESSION_LIMIT);
+  for (const panel of panels) {
+    const stretchLimit = limitOf(panel.stretchLimit, DEFAULT_STRETCH_LIMIT);
+    const compressionLimit = limitOf(panel.compressionLimit, DEFAULT_COMPRESSION_LIMIT);
+    const end = Math.min(vertexCount, panel.vertexOffset + panel.vertexCount);
+    for (let i = Math.max(0, panel.vertexOffset); i < end; i++) {
+      stretch[i] = stretchLimit;
+      compression[i] = compressionLimit;
+    }
+  }
+  return { stretch, compression };
+}
+
 /** Aggregate strain numbers shown next to the heatmap. */
 export interface StrainStats {
   min: number;
   max: number;
   meanAbs: number;
+  /** Vertices with a finite strain sample. */
+  vertices: number;
+  /** Vertices stretched past their fabric's stretch limit; zero without bounds. */
+  overStretch: number;
+  /** Vertices compressed past their fabric's compression limit; zero without bounds. */
+  overCompression: number;
 }
 
-/** Summarizes finite strain values into their signed minimum, maximum and mean absolute value. */
-export function strainStats(strain: Float32Array): StrainStats {
+/** Summarizes finite strain values; over-limit counts need the per-vertex bounds. */
+export function strainStats(strain: Float32Array, bounds?: StrainBounds): StrainStats {
   let min = Number.POSITIVE_INFINITY;
   let max = Number.NEGATIVE_INFINITY;
   let sumAbs = 0;
-  let count = 0;
+  let vertices = 0;
+  let overStretch = 0;
+  let overCompression = 0;
+  const boundCount = bounds ? Math.min(bounds.stretch.length, bounds.compression.length) : 0;
   for (let i = 0; i < strain.length; i++) {
     const value = strain[i];
     if (!Number.isFinite(value)) continue;
     min = Math.min(min, value);
     max = Math.max(max, value);
     sumAbs += Math.abs(value);
-    count += 1;
+    vertices += 1;
+    if (i >= boundCount) continue;
+    if (value > bounds!.stretch[i]!) overStretch += 1;
+    else if (value < -bounds!.compression[i]!) overCompression += 1;
   }
-  if (count === 0) return { min: 0, max: 0, meanAbs: 0 };
-  return { min, max, meanAbs: sumAbs / count };
+  if (vertices === 0) {
+    return { min: 0, max: 0, meanAbs: 0, vertices: 0, overStretch: 0, overCompression: 0 };
+  }
+  return { min, max, meanAbs: sumAbs / vertices, vertices, overStretch, overCompression };
 }
 
 /**

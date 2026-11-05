@@ -15,8 +15,8 @@
     "test:coverage": "vitest run --coverage",
     "lint": "eslint src --ext .ts,.tsx",
     "typecheck": "tsc --noEmit",
-    "docs:audit": "node scripts/doc-audit.mjs",
-    "perf:baseline": "node scripts/selfcollision-baseline.mjs"
+    "perf:baseline": "node scripts/selfcollision-baseline.mjs",
+    "perf:gate": "vitest run test/sim/productionScale.test.ts"
   },
   "dependencies": {
     "oidn-webgpu": "^0.6.0",
@@ -43,6 +43,6 @@
     "eslint-plugin-react-hooks": "^5.1.0",
     "typescript": "^5.6.3",
     "vite": "^6.0.3",
-    "vitest": "^5.0.5"
+    "vitest": "^3.2.4"
   }
 }

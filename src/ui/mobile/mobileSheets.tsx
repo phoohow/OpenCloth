@@ -116,7 +116,7 @@ function CameraSheet({ actions, engineRef, onClose }: {
   );
 }
 
-/** Viewport display modes, the same set the desktop toolbar offers minus the strain heatmap. */
+/** Viewport display modes, the same set the desktop toolbar offers minus the strain and pressure heatmaps. */
 function DisplaySheet({ onClose }: { onClose: () => void }) {
   const displayMode = useUIStore(displayModeOf);
   const setDisplayMode = useUIStore(s => s.setDisplayMode);
@@ -130,16 +130,18 @@ function DisplaySheet({ onClose }: { onClose: () => void }) {
   return (
     <>
       <SheetGroup title="显示模式">
-        {DISPLAY_MODES.filter(mode => mode.value !== 'strainHeatmap').map(mode => (
-          <SheetButton
-            key={mode.value}
-            label={mode.value === 'raytraced' && rayUnavailable ? `${mode.label}（不支持）` : mode.label}
-            hint={mode.value === 'raytraced' ? rayUnavailable ?? undefined : undefined}
-            disabled={mode.value === 'raytraced' && !!rayUnavailable}
-            active={displayMode === mode.value}
-            onClick={() => { setDisplayMode(mode.value); onClose(); }}
-          />
-        ))}
+        {DISPLAY_MODES
+          .filter(mode => mode.value !== 'strainHeatmap' && mode.value !== 'pressureHeatmap')
+          .map(mode => (
+            <SheetButton
+              key={mode.value}
+              label={mode.value === 'raytraced' && rayUnavailable ? `${mode.label}（不支持）` : mode.label}
+              hint={mode.value === 'raytraced' ? rayUnavailable ?? undefined : undefined}
+              disabled={mode.value === 'raytraced' && !!rayUnavailable}
+              active={displayMode === mode.value}
+              onClick={() => { setDisplayMode(mode.value); onClose(); }}
+            />
+          ))}
       </SheetGroup>
       {fitOn && (
         <>
@@ -338,17 +340,17 @@ const styles: Record<string, React.CSSProperties> = {
     flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 10,
     padding: '4px 14px 8px', borderBottom: '1px solid #333',
   },
-  sheetTitle: { flex: 1, fontSize: 15, color: '#4da6ff', letterSpacing: 1 },
+  sheetTitle: { flex: 1, fontSize: 'var(--oc-fs-dialog-title)', color: '#4da6ff', letterSpacing: 1 },
   closeBtn: {
     padding: '6px 14px', background: '#2a2a30', border: '1px solid #3a3a42',
-    borderRadius: 4, color: '#ccc', fontSize: 13, cursor: 'pointer',
+    borderRadius: 4, color: '#ccc', fontSize: 'var(--oc-fs-label)', cursor: 'pointer',
   },
   sheetBody: {
     flex: '1 1 auto', minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch',
     padding: '4px 12px 12px',
   },
   group: { marginTop: 12 },
-  groupTitle: { fontSize: 12, color: '#7d7d88', letterSpacing: 1, margin: '0 2px 6px' },
+  groupTitle: { fontSize: 'var(--oc-fs-body)', color: '#7d7d88', letterSpacing: 1, margin: '0 2px 6px' },
   grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(104px, 1fr))', gap: 6 },
   cell: {
     display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'center', gap: 2,
@@ -357,12 +359,12 @@ const styles: Record<string, React.CSSProperties> = {
   },
   cellActive: { background: '#2a4a6a', border: '1px solid #4da6ff', color: '#fff' },
   cellDisabled: { opacity: 0.35, cursor: 'default' },
-  cellLabel: { fontSize: 14, lineHeight: 1.25 },
-  cellHint: { fontSize: 11, color: '#8a94a6' },
-  note: { fontSize: 12, color: '#8a8a94', lineHeight: 1.6, margin: '14px 2px 4px' },
+  cellLabel: { fontSize: 'var(--oc-fs-heading)', lineHeight: 1.25 },
+  cellHint: { fontSize: 'var(--oc-fs-micro)', color: '#8a94a6' },
+  note: { fontSize: 'var(--oc-fs-body)', color: '#8a8a94', lineHeight: 1.6, margin: '14px 2px 4px' },
   rangeRow: {
     display: 'flex', flexDirection: 'column', gap: 4, margin: '8px 2px',
-    fontSize: 12, color: '#bbb',
+    fontSize: 'var(--oc-fs-body)', color: '#bbb',
   },
   tabStrip: {
     display: 'flex', gap: 4, overflowX: 'auto', WebkitOverflowScrolling: 'touch',
@@ -371,12 +373,12 @@ const styles: Record<string, React.CSSProperties> = {
   tab: {
     flex: '0 0 auto', display: 'flex', alignItems: 'center', padding: '10px 14px',
     background: '#2a2a30', border: '1px solid #3a3a42', borderRadius: 6,
-    color: '#ccc', fontSize: 13, cursor: 'pointer',
+    color: '#ccc', fontSize: 'var(--oc-fs-label)', cursor: 'pointer',
   },
   tabActive: { background: '#2a4a6a', border: '1px solid #4da6ff', color: '#fff' },
   tabDisabled: { opacity: 0.35, cursor: 'default' },
   propsObjectName: {
-    fontSize: 13, color: '#4da6ff', padding: '8px 2px 6px',
+    fontSize: 'var(--oc-fs-label)', color: '#4da6ff', padding: '8px 2px 6px',
     borderBottom: '1px solid #333', marginBottom: 6,
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
   },

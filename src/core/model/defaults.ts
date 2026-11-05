@@ -1,8 +1,9 @@
+import { PROJECT_FORMAT_VERSION } from './format';
 import type {
   Project, Pattern, Fabric, Avatar, AvatarParams, SceneConfig, ObjectTransform,
   FabricPresetKey, FabricPhysics, FabricAppearance, RayTracingConfig, DenoiseModel,
   LightType, SceneLight, LightConfig, Vec3, SeamType, EdgeSemantic, TrimKind,
-  MeshSampling, SkinAppearance,
+  MeshSampling, SkinAppearance, GarmentLayer,
 } from './types';
 import { vec2, vec3 } from './types';
 
@@ -30,12 +31,31 @@ export function cloneTransform(t: ObjectTransform = IDENTITY_TRANSFORM): ObjectT
 
 // ============ Fabric presets ============
 
+/** Contact friction used when a fabric record does not set one. */
+export const DEFAULT_CONTACT_FRICTION = 0.5;
+/** Relative elongation used when a fabric record does not set one. */
+export const DEFAULT_STRETCH_LIMIT = 0.08;
+/** Relative compression used when a fabric record does not set one. */
+export const DEFAULT_COMPRESSION_LIMIT = 0.1;
+
 /** Solver parameters per fabric preset, in grams per square metre for the preset's weight. */
 export const FABRIC_PHYSICS_PRESETS: Record<FabricPresetKey, FabricPhysics> = {
-  cotton: { stretchStiffness: 0.9, bendingStiffness: 0.4, shearStiffness: 0.8, massPerArea: 180, damping: 0.02 },
-  silk: { stretchStiffness: 0.95, bendingStiffness: 0.15, shearStiffness: 0.85, massPerArea: 80, damping: 0.015 },
-  denim: { stretchStiffness: 0.8, bendingStiffness: 0.75, shearStiffness: 0.7, massPerArea: 400, damping: 0.03 },
-  knit: { stretchStiffness: 0.5, bendingStiffness: 0.25, shearStiffness: 0.4, massPerArea: 250, damping: 0.02 },
+  cotton: {
+    stretchStiffness: 0.9, bendingStiffness: 0.4, shearStiffness: 0.8, massPerArea: 180,
+    damping: 0.02, contactFriction: 0.55, stretchLimit: 0.08, compressionLimit: 0.1,
+  },
+  silk: {
+    stretchStiffness: 0.95, bendingStiffness: 0.15, shearStiffness: 0.85, massPerArea: 80,
+    damping: 0.015, contactFriction: 0.35, stretchLimit: 0.12, compressionLimit: 0.08,
+  },
+  denim: {
+    stretchStiffness: 0.8, bendingStiffness: 0.75, shearStiffness: 0.7, massPerArea: 400,
+    damping: 0.03, contactFriction: 0.7, stretchLimit: 0.06, compressionLimit: 0.06,
+  },
+  knit: {
+    stretchStiffness: 0.5, bendingStiffness: 0.25, shearStiffness: 0.4, massPerArea: 250,
+    damping: 0.02, contactFriction: 0.5, stretchLimit: 0.25, compressionLimit: 0.2,
+  },
 };
 
 /** Surface shading per fabric preset. */
@@ -176,6 +196,24 @@ export const DEFAULT_CLOTH_THICKNESS_CM = 0.2;
 /** Default extra separation per collision-layer step, in cm. */
 export const DEFAULT_LAYER_SPACING_CM = 0.4;
 
+/** Construction layers from the body outward. */
+export const GARMENT_LAYERS: GarmentLayer[] = ['lining', 'padding', 'shell'];
+
+/** Display names of the construction layers. */
+export const GARMENT_LAYER_LABELS: Record<GarmentLayer, string> = {
+  lining: '里布', padding: '填充', shell: '外壳',
+};
+
+/** Default collision clearance of each construction layer, in cm. */
+export const DEFAULT_LAYER_THICKNESS_CM: Record<GarmentLayer, number> = {
+  lining: 0.1, padding: 0.8, shell: 0.2,
+};
+
+/** Collision layer a construction layer starts from; lining sits innermost. */
+export const GARMENT_LAYER_COLLISION: Record<GarmentLayer, number> = {
+  lining: 0, padding: 1, shell: 2,
+};
+
 /** Display names of the light types, in the order the UI lists them. */
 export const LIGHT_TYPE_LABELS: Record<LightType, string> = {
   directional: '方向光',
@@ -275,6 +313,29 @@ const clampVec3 = (value: Vec3 | undefined, fallback: Vec3): Vec3 => ({
   y: clampNumber(value?.y, fallback.y, -100, 100),
   z: clampNumber(value?.z, fallback.z, -100, 100),
 });
+
+/**
+ * Fills and clamps the optional fabric physics fields a parsed project may omit.
+ * Missing values fall back to the fabric's own preset, cotton when the preset is unknown.
+ */
+export function normalizeFabricPhysics(
+  physics: Partial<FabricPhysics> | undefined,
+  presetKey: FabricPresetKey = 'cotton',
+): FabricPhysics {
+  const preset = FABRIC_PHYSICS_PRESETS[presetKey] ?? FABRIC_PHYSICS_PRESETS.cotton;
+  const base = physics ?? {};
+  return {
+    ...preset,
+    ...base,
+    contactFriction: clampNumber(
+      base.contactFriction, preset.contactFriction ?? DEFAULT_CONTACT_FRICTION, 0, 1,
+    ),
+    stretchLimit: clampNumber(base.stretchLimit, preset.stretchLimit ?? DEFAULT_STRETCH_LIMIT, 0.001, 1),
+    compressionLimit: clampNumber(
+      base.compressionLimit, preset.compressionLimit ?? DEFAULT_COMPRESSION_LIMIT, 0.001, 1,
+    ),
+  };
+}
 
 /** Sanitizes one persisted light, filling in anything the record lacks. */
 function normalizeLight(raw: Partial<SceneLight>, index: number): SceneLight {
@@ -380,6 +441,7 @@ export function createDefaultScene(): SceneConfig {
 export function createDefaultProject(name = '未命名工程'): Project {
   const fabric = createFabric('cotton');
   return {
+    formatVersion: PROJECT_FORMAT_VERSION,
     meta: {
       name,
       createdAt: new Date().toISOString(),
@@ -389,5 +451,7 @@ export function createDefaultProject(name = '未命名工程'): Project {
     fabrics: { [fabric.id]: fabric },
     avatar: createDefaultAvatar(),
     scene: createDefaultScene(),
+    poms: [],
+    layerThicknessCm: { ...DEFAULT_LAYER_THICKNESS_CM },
   };
 }

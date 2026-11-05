@@ -143,6 +143,9 @@ struct SurfaceHit {
   side: f32,
 };
 
+// Deep contact beyond this is treated as a penetration artifact rather than pressure.
+const MAX_CONTACT_MOVE = 0.02;
+
 @group(0) @binding(0) var<storage, read_write> predicted: array<vec4<f32>>;
 @group(0) @binding(1) var<storage, read> capsules: array<Capsule>;
 @group(0) @binding(2) var<uniform> params: SimParams;
@@ -150,6 +153,10 @@ struct SurfaceHit {
 @group(0) @binding(4) var<storage, read> meshTriangles: array<vec4<f32>>;
 @group(0) @binding(5) var<storage, read> cellStart: array<u32>;
 @group(0) @binding(6) var<storage, read> cellTriangles: array<u32>;
+// Largest normal indentation the body contact applied to this particle, in meters.
+@group(0) @binding(7) var<storage, read_write> contactMove: array<f32>;
+// Collision clearance of every particle, meters; a panel's construction layer sets it.
+@group(0) @binding(8) var<storage, read> thickness: array<f32>;
 
 fn pointSegmentClosest(p: vec3<f32>, a: vec3<f32>, b: vec3<f32>) -> vec3<f32> {
   let ab = b - a;
@@ -303,10 +310,11 @@ fn collide(@builtin(global_invocation_id) gid: vec3<u32>) {
   let i = gid.x;
   if (i >= params.particleCount) { return; }
 
-  var pos = predicted[i].xyz;
+  let start = predicted[i].xyz;
+  var pos = start;
   var moved = false;
-  // Cloth thickness adds to the clearance kept against every collision surface.
-  let clearance = params.surfaceOffset + params.clothThickness;
+  // Per-particle thickness adds to the clearance kept against every collision surface.
+  let clearance = params.surfaceOffset + thickness[i];
   let prev = prevPos[i].xyz;
 
   if (params.triangleCount > 0u) {
@@ -320,13 +328,20 @@ fn collide(@builtin(global_invocation_id) gid: vec3<u32>) {
       let len = length(off);
       var n = vec3<f32>(0.0, 1.0, 0.0);
       if (len > 1e-6) { n = off / len * hit.side; }
-      pos = applyFriction(hit.point + n * clearance, n, prev, params.friction);
+      let surfacePoint = hit.point + n * clearance;
+      let indent = max(dot(surfacePoint - start, n), 0.0);
+      contactMove[i] = max(contactMove[i], min(indent, MAX_CONTACT_MOVE));
+      pos = applyFriction(surfacePoint, n, prev, params.friction);
       moved = true;
     }
   } else if (params.capsuleCount > 0u) {
     let pushed = collideCapsules(pos, clearance);
     if (any(pushed != pos)) {
-      let n = normalize(pushed - pos);
+      let offset = pushed - pos;
+      let offsetLen = length(offset);
+      var n = vec3<f32>(0.0, 1.0, 0.0);
+      if (offsetLen > 1e-7) { n = offset / offsetLen; }
+      contactMove[i] = max(contactMove[i], min(offsetLen, MAX_CONTACT_MOVE));
       pos = applyFriction(pushed, n, prev, params.friction);
       moved = true;
     }
@@ -336,6 +351,7 @@ fn collide(@builtin(global_invocation_id) gid: vec3<u32>) {
   let floorLimit = params.floorY + clearance;
   if (pos.y < floorLimit) {
     let floorN = vec3<f32>(0.0, 1.0, 0.0);
+    contactMove[i] = max(contactMove[i], min(floorLimit - pos.y, MAX_CONTACT_MOVE));
     pos = applyFriction(vec3<f32>(pos.x, floorLimit, pos.z), floorN, prev, params.friction);
     pos.y = floorLimit;
     moved = true;

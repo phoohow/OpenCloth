@@ -20,6 +20,8 @@ export interface Placement {
   height: number;
   /** Rotation applied to the piece outline, degrees counter-clockwise. */
   angleDeg: number;
+  /** Mirrors the piece across its own vertical axis before rotation. */
+  flipped: boolean;
 }
 
 /** Result of `packPanels`. */
@@ -39,6 +41,8 @@ export interface PackOptions {
   allowRotate?: boolean;
   /** Rotation angles tried per piece, degrees counter-clockwise; includes 0. Defaults from `allowRotate`. */
   angles?: number[];
+  /** Mirrors every piece across its own vertical axis; default false. */
+  flip?: boolean;
 }
 
 interface Piece {
@@ -121,6 +125,7 @@ export function packPanels(items: PackItem[], fabricWidthCm: number, opts: PackO
       width: orientation.width,
       height: orientation.height,
       angleDeg: orientation.angleDeg,
+      flipped: opts.flip === true,
     });
     cursorX += orientation.width + gapCm;
     shelfHeight = Math.max(shelfHeight, orientation.height);

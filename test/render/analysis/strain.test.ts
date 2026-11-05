@@ -90,7 +90,8 @@ describe('computeVertexStrain', () => {
 
 describe('strainStats', () => {
   it('reports zeros for an empty input', () => {
-    expect(strainStats(new Float32Array(0))).toEqual({ min: 0, max: 0, meanAbs: 0 });
+    expect(strainStats(new Float32Array(0)))
+      .toEqual({ min: 0, max: 0, meanAbs: 0, vertices: 0, overStretch: 0, overCompression: 0 });
   });
 
   it('reports signed extremes and mean absolute value', () => {

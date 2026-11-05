@@ -17,7 +17,7 @@ function placement(name: string, width: number, height: number): MarkerPlacement
       ],
       grain: null,
     },
-    place: { itemId: name, x: 0, y: 0, width, height, angleDeg: 0 },
+    place: { itemId: name, x: 0, y: 0, width, height, angleDeg: 0, flipped: false },
   };
 }
 

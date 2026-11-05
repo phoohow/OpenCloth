@@ -56,8 +56,11 @@ export const SHORTCUTS: ShortcutDef[] = [
   { id: 'shortcuts', label: '快捷键总览', combo: 'F1', scope: '全局' },
   { id: 'menuFile', label: '打开文件菜单', combo: 'Alt+F', scope: '菜单栏' },
   { id: 'menuEdit', label: '打开编辑菜单', combo: 'Alt+E', scope: '菜单栏' },
+  { id: 'menuPattern', label: '打开版型菜单', combo: 'Alt+P', scope: '菜单栏' },
+  { id: 'menuTryOn', label: '打开试衣菜单', combo: 'Alt+T', scope: '菜单栏' },
   { id: 'menuView', label: '打开视图菜单', combo: 'Alt+V', scope: '菜单栏' },
   { id: 'menuWindow', label: '打开窗口菜单', combo: 'Alt+W', scope: '菜单栏' },
+  { id: 'menuCollab', label: '打开协作菜单', combo: 'Alt+C', scope: '菜单栏' },
   { id: 'menuHelp', label: '打开帮助菜单', combo: 'Alt+H', scope: '菜单栏' },
 ];
 

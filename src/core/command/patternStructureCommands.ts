@@ -12,6 +12,9 @@ import { addClosedLineOutline, makePanel, newEdge, newPoint } from './patternCre
 import { refitArcs } from './patternMoveGeometry';
 import { prunePattern } from './patternPrune';
 import { buildMirrorEdges, type MirrorAxis } from './patternSymmetry';
+import {
+  differencePolygons, intersectPolygons, unionPolygons, type PolygonList,
+} from '../../pattern/geom/polygonBoolean';
 
 export { prunePattern };
 export type { MirrorAxis };
@@ -140,6 +143,62 @@ export class MergePanelsCommand extends SnapshotCommand {
     a.holes = (rings.slice(1) ?? []).map(r => insertRing(pattern, r));
     delete pattern.panels[bId];
     prunePattern(pattern);
+  }
+}
+
+/** Boolean operation applied to the outlines of two panels. */
+export type PanelBooleanOp = 'union' | 'intersect' | 'difference';
+
+/** Result-panel suffix per boolean operation. */
+const BOOLEAN_LABELS: Record<PanelBooleanOp, string> = {
+  union: '并集',
+  intersect: '交集',
+  difference: '差集',
+};
+
+/** Applies one boolean to two outlines. */
+function booleanResult(a: Vec2[], b: Vec2[], op: PanelBooleanOp): PolygonList {
+  if (op === 'union') return unionPolygons([a, b]);
+  if (op === 'intersect') return intersectPolygons(a, b);
+  return differencePolygons(a, b);
+}
+
+/**
+ * Creates new panels from the boolean of two panel outlines. The operands stay untouched;
+ * every resulting region becomes its own panel, with holes kept as hole loops.
+ */
+export class PanelBooleanCommand extends SnapshotCommand {
+  readonly label = '形状布尔';
+  /** Panels created by the last apply, for selection afterwards. */
+  readonly resultPanelIds: string[] = [];
+
+  constructor(private panelIds: [string, string], private op: PanelBooleanOp) { super(); }
+
+  protected apply(pattern: Pattern, ctx: ProjectContext): void {
+    const [aId, bId] = this.panelIds;
+    if (aId === bId) throw new Error('请选中两个不同的版片');
+    const a = pattern.panels[aId];
+    const b = pattern.panels[bId];
+    if (!a || !b) throw new Error('参与布尔的版片不存在');
+    const result = booleanResult(samplePanelOutline(pattern, a), samplePanelOutline(pattern, b), this.op);
+    if (result.length === 0) throw new Error('布尔结果为空');
+
+    this.resultPanelIds.length = 0;
+    const label = BOOLEAN_LABELS[this.op];
+    for (const rings of result) {
+      const [outer, ...holes] = rings;
+      if (!outer || outer.length < 3) continue;
+      const panel = makePanel(
+        pattern, ctx,
+        { name: `${a.name} ${label}`, seamAllowanceCm: a.seamAllowanceCm },
+        insertRing(pattern, outer),
+      );
+      panel.fabricId = a.fabricId;
+      panel.meshResolutionCm = a.meshResolutionCm;
+      if (holes.length > 0) panel.holes = holes.map(hole => insertRing(pattern, hole));
+      this.resultPanelIds.push(panel.id);
+    }
+    if (this.resultPanelIds.length === 0) throw new Error('布尔结果没有有效轮廓');
   }
 }
 

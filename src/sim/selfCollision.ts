@@ -22,6 +22,8 @@ const INVALID_CELL = 0x7fffffff;
 export interface SelfCollisionParams {
   /** Minimum separation of two particles on the same layer. */
   thickness: number;
+  /** Per-particle clearance overriding `thickness` when its length matches the particle count. */
+  thicknesses?: Float32Array;
   /** Extra separation added per step of collision-layer difference. */
   layerSpacing: number;
   /** Candidate pairs visited per call; pairs beyond it are skipped. */
@@ -91,19 +93,23 @@ export class SelfCollisionSolver {
     const thickness = Math.max(0, params.thickness);
     const layerSpacing = Math.max(0, params.layerSpacing);
     if (!Number.isFinite(thickness) || !Number.isFinite(layerSpacing)) return empty;
+    const thicknesses = params.thicknesses?.length === count ? params.thicknesses : null;
     const maxPairs = Math.max(1, params.maxPairs ?? DEFAULT_MAX_PAIRS);
     const iterations = Math.max(1, Math.round(params.iterations ?? DEFAULT_ITERATIONS));
-    const cellSize = Math.max(thickness, MIN_CELL_SIZE);
 
     let minLayer = 255;
     let maxLayer = 0;
+    let maxThickness = thickness;
     for (let i = 0; i < count; i++) {
       const layer = layers[i] ?? 0;
       if (layer < minLayer) minLayer = layer;
       if (layer > maxLayer) maxLayer = layer;
+      const value = thicknesses ? thicknesses[i] ?? thickness : thickness;
+      if (value > maxThickness) maxThickness = value;
     }
+    const cellSize = Math.max(maxThickness, MIN_CELL_SIZE);
     // Rings needed so the widest layer gap is still inside the searched neighborhood.
-    const required = thickness + Math.max(0, maxLayer - minLayer) * layerSpacing;
+    const required = maxThickness + Math.max(0, maxLayer - minLayer) * layerSpacing;
     const searchRadius = Math.min(MAX_SEARCH_RADIUS, Math.max(1, Math.ceil(required / cellSize)));
     const reach = searchRadius * cellSize;
 
@@ -161,8 +167,11 @@ export class SelfCollisionSolver {
                 if (!Number.isFinite(dist2)) continue;
 
                 const layerDiff = Math.abs((layers[i] ?? 0) - (layers[j] ?? 0));
-                // The hash cannot see beyond its searched rings, so wider targets stop at that reach.
-                const spacing = Math.min(thickness + layerDiff * layerSpacing, reach);
+                // The thicker piece of the pair sets the clearance; the hash caps it at its reach.
+                const pairThickness = thicknesses
+                  ? Math.max(thicknesses[i] ?? thickness, thicknesses[j] ?? thickness)
+                  : thickness;
+                const spacing = Math.min(pairThickness + layerDiff * layerSpacing, reach);
                 if (dist2 >= spacing * spacing) continue;
 
                 const dist = Math.sqrt(dist2);

@@ -9,6 +9,8 @@ export interface MenuLeaf {
   disabled?: boolean;
   /** Submenu rows, one nesting level deep. */
   children?: MenuEntry[];
+  /** Hover text explaining what the row does or which selection it needs. */
+  note?: string;
   run?: () => void;
 }
 

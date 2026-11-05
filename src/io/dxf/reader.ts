@@ -1,6 +1,6 @@
 import type { Panel, Pattern, Vec2 } from '../../core/model/types';
 import { genId, createEmptyPattern, DEFAULT_MESH_RESOLUTION_CM } from '../../core/model/defaults';
-import { normalizePattern } from '../codec';
+import { normalizePattern } from '../../core/model/normalize';
 import { validatePattern } from '../../core/model/validatePattern';
 import { sampleEdge } from '../../pattern/geom/edgeSample';
 import { adaptiveSampleArc, arcFromThreePoints } from '../../pattern/geom/arc';

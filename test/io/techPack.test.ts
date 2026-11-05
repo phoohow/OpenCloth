@@ -210,14 +210,17 @@ describe('buildTechPackData', () => {
 });
 
 describe('buildTechPackPdf', () => {
-  it('writes an A4 PDF with the CJK font and one page for a short sheet', () => {
+  it('writes a valid A4 PDF with the CJK font and every section', () => {
     const { project } = sampleProject();
     const pdf = decode(buildTechPackPdf(project, { date: '2026-02-03' }));
     expectValidPdf(pdf);
     expect(pdf.startsWith('%PDF-1.4')).toBe(true);
     expect(pdf).toContain('/STSong-Light');
     expect(pdf).toContain('/F2');
-    expect(pdf).toContain('/Count 1');
+    // The page tree count has to agree with the page objects the document writes.
+    const pageCount = [...pdf.matchAll(/\/Type \/Page\b/g)].length;
+    expect(pageCount).toBeGreaterThanOrEqual(1);
+    expect(pdf).toContain(`/Count ${pageCount}`);
     const text = decodedText(pdf);
     for (const label of [
       '工艺单', '工程名', '尺码表', '版片', '材质', '缝合清单', '印花', '明线', '辅料', '物料清单',

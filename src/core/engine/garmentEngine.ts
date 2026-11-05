@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu';
-import type { Project, SimulationConfig, FabricPhysics, ObjectTransform, RenderMode, Vec3, CameraProjection, ReferenceObjectRef, EditPreviewTier, SkinAppearance } from '../model/types';
+import type { Project, SimulationConfig, FabricPhysics, ObjectTransform, RenderMode, Vec2, Vec3, CameraProjection, ReferenceObjectRef, EditPreviewTier, SkinAppearance } from '../model/types';
 import { type PanelMesh } from '../../pattern/panel/panelBuilder';
 import { getPanelMesh } from '../../pattern/panel/panelMeshCache';
 import { DEFAULT_MESH_RESOLUTION_CM } from '../model/defaults';
@@ -19,24 +19,32 @@ import {
 } from '../../render/renderer/rendererContext';
 import { AvatarStage } from './avatarStage';
 import { BodyLandmarkCache } from './initialPose';
-import { ClothPicker, type CameraPreset } from './clothPicker';
+import { ClothPicker, type CameraPreset, type ClothSurfacePick } from './clothPicker';
 import { MergedCloth } from './mergedCloth';
 import { EnvironmentStage } from './environmentStage';
 import { PinMarkers } from './pinMarkers';
 import { ClothInteraction } from './clothInteraction';
 import { ReferenceStage, type ReferenceObject } from './referenceStage';
-import { SeamThreads } from './seamThreads';
-import { TopstitchThreads, topstitchSegments } from './topstitchThreads';
+import { SoftBodyDeformer } from './softBody';
 import { SelectionOverlay } from './selectionOverlay';
+import { OverlayKit } from './overlayKit';
 import { DressingController } from './dressingController';
+import { AnalysisController } from './analysisController';
+import { DynamicFitSampler } from './dynamicFitSampler';
+import { AvatarMotion, type AvatarMotionInfo } from './avatarMotion';
+import { LayerBinding } from './layerBinding';
 import { appearanceSignature, avatarBodySignature, clothLayoutFingerprint, constraintSignature, geometrySignatures, physicsSignature, visibilitySignature, type ClothGroupRange } from './clothSignatures';
 import { timeAsync } from './engineTiming';
 import {
   FALLBACK_APPEARANCE, FALLBACK_PHYSICS, editPreviewResolutionCm,
 } from './clothConstants';
-import { computeFitField, fitStats, type FitStats } from '../../render/analysis/fit';
+import type { FitStats } from '../../render/analysis/fit';
 import { FitOverlay } from '../../render/analysis/fitOverlay';
-import { computeVertexStrain, strainStats, type StrainStats } from '../../render/analysis/strain';
+import type { StrainStats } from '../../render/analysis/strain';
+import type { PressureStats } from '../../render/analysis/pressure';
+import type { DynamicPressureFrame } from '../../render/analysis/dynamicPressure';
+import { trianglePointToPanel2D } from '../../pattern/geom/panelSurface';
+import { FrameCache, type CachedFrame } from '../../sim/frameCache';
 
 export type { CameraPreset, ReferenceObject };
 export { applyObjectTransform } from './objectTransforms';
@@ -44,6 +52,20 @@ export { DRESS_FRAMES, DRESS_GLIDE, RELAX_FRAMES, SEW_FRAMES } from './dressingS
 
 /** Key the merged cloth mesh is stored under. */
 const MERGED_MESH_KEY = '__merged__';
+
+/** A cloth surface point resolved to its panel's flat pattern coordinates. */
+export interface ClothSurfacePoint {
+  /** Owning panel id. */
+  panelId: string;
+  /** Pattern-space point, in centimetres. */
+  point: Vec2;
+}
+
+/** Pending 3D measurement: placed points and the distance once two exist, in centimetres. */
+export interface MeasureReading {
+  points: number;
+  distanceCm: number | null;
+}
 
 /** Default screen tolerance for particle picking, as a fraction of viewport height. */
 const DEFAULT_PICK_RADIUS_FACTOR = 0.03;
@@ -70,8 +92,19 @@ export class GarmentEngine {
   private pinMarkers = new PinMarkers();
   /** Hover, grab and pinned-point gestures on the cloth. */
   private interaction: ClothInteraction;
-  private seamThreads = new SeamThreads();
-  private topstitchThreads = new TopstitchThreads();
+  /** Seam threads, topstitch rows, trim instances and the two gesture overlays. */
+  private readonly overlays: OverlayKit;
+  /** Recent simulation frames kept for sequence export. */
+  private frameCache = new FrameCache(90);
+  /** Simulation time of the last cached frame, in seconds. */
+  private frameTimeSeconds = 0;
+  private softBody = new SoftBodyDeformer();
+  /** Frames between two soft-body passes; vertex and collider updates are heavier than a step. */
+  private softCountdown = 0;
+  /** Clip control, playback state and the collision grid that follows the pose. */
+  private readonly motion: AvatarMotion;
+  /** Pressure samples taken while the avatar animation plays. */
+  private readonly dynamicFit: DynamicFitSampler;
   /** Composed panel textures of the printed pieces, one per printing panel. */
   private printTextures = new Map<string, CompositeTextureHandle>();
 
@@ -89,20 +122,16 @@ export class GarmentEngine {
   private nonFiniteReported = false;
   /** Most recent finite readback; the dressing glide starts from what is actually drawn. */
   private lastGoodPositions: Float32Array = new Float32Array(0);
+  /** Normals read back with the last good frame, used to orient threads and trims. */
+  private lastGoodNormals: Float32Array = new Float32Array(0);
   /** Staged dressing animation state; null once the garment is unsewn or already dressed. */
   private dressing!: DressingController;
 
   /** Panel meshes built from the pattern, keyed by panel id in merged order. */
   private panelMeshes: Map<string, PanelMesh> = new Map();
   private clothMeshes: Map<string, ClothMeshManager> = new Map();
-  /** Heatmap mesh drawn in place of the fabric while the fit check is on. */
-  private fitOverlay: FitOverlay | null = null;
-  private fitVisible = false;
-  /** Frames between two clearance passes; the CPU check is heavier than one solver step. */
-  private fitCountdown = 0;
-  /** Strain heatmap toggle, sharing the one heatmap overlay with the fit check. */
-  private strainVisible = false;
-  private strainCountdown = 0;
+  /** Fit, strain and pressure channels, sharing one heatmap overlay. */
+  private readonly analysis: AnalysisController;
   /** Flat-pattern rest positions of every merged particle, the strain denominator. */
   private mergedRestPositions: Float32Array = new Float32Array(0);
   /** Material id behind each cloth geometry group slot, in first-use order. */
@@ -125,18 +154,36 @@ export class GarmentEngine {
   private appliedAppearance = '';
   /** Signature of the material physics currently loaded in the solver. */
   private appliedPhysics = '';
+  /** Per-particle clearance of the construction layers, as the solver currently holds it. */
+  private readonly layers = new LayerBinding();
   /** Signature of the seam, dart-closing and fold-crease constraint sets currently loaded in the solver. */
   private appliedConstraints = '';
-  /** Seam pair count the thread overlay was last built for; -1 when it is not attached. */
-  private threadedPairCount = -1;
-  /** Signature of the topstitch records and merged layout the overlay was built for. */
-  private appliedTopstitches = '';
 
   /** Translucent clone of the selected panels' triangles. */
   private selection = new SelectionOverlay();
   private avatarHighlighted = false;
 
   constructor(private rendererCtx: RendererContext) {
+    this.dynamicFit = new DynamicFitSampler({
+      isAnimating: () => this.avatar.isAnimating,
+      clipTimeSeconds: () => this.avatar.clipTimeSeconds,
+      contact: () => (this.simulator ? this.simulator.getReadbackContact() : null),
+      clothInput: () => this.mergedInput,
+    });
+    this.analysis = new AnalysisController({
+      lastGoodPositions: () => this.lastGoodPositions,
+      initialPositions: () => this.mergedPositions,
+      restPositions: () => this.mergedRestPositions,
+      clothInput: () => this.mergedInput,
+      collider: () => this.avatar.collider,
+      contact: () => (this.simulator ? this.simulator.getReadbackContact() : null),
+      revealCloth: visible => this.revealCloth(visible),
+    });
+    this.overlays = new OverlayKit(rendererCtx.scene);
+    this.motion = new AvatarMotion(this.avatar, {
+      installCollider: mesh => this.simulator?.refreshMeshCollider(mesh),
+      onPoseSettled: () => this.reattachSoftBody(),
+    });
     this.environment = new EnvironmentStage(rendererCtx);
     this.dressing = new DressingController({
       simulator: () => this.simulator,
@@ -379,6 +426,96 @@ export class GarmentEngine {
     this.avatar.applyDisplay(project.avatar.display);
     this.avatar.place(project.avatar.transform);
     this.avatar.highlight(this.avatarHighlighted);
+    this.softBody.attach(this.avatar.object, this.avatar.collider?.mesh ?? null);
+    this.softCountdown = 0;
+    this.motion.reset();
+    this.dynamicFit.clear();
+  }
+
+  /** Enables or restores the compressible chest and abdomen for the current avatar. */
+  applyAvatarSoftness(project: Project): void {
+    this.softBody.attach(this.avatar.object, this.avatar.collider?.mesh ?? null);
+    const enabled = project.avatar.softBody === true;
+    this.softBody.setEnabled(enabled);
+    this.softCountdown = 0;
+    if (!enabled) this.uploadSoftBodyCollider();
+  }
+
+  /** Pushes the deformed body triangles into the solver's collision buffer. */
+  private uploadSoftBodyCollider(): void {
+    const mesh = this.avatar.collider?.mesh;
+    if (mesh) this.simulator?.updateMeshColliderVertices(mesh.vertices);
+  }
+
+  /** Names of the motion clips the current body carries; empty for a static body. */
+  avatarAnimationClips(): string[] {
+    return this.motion.clipNames();
+  }
+
+  /** Playback state of the body animation, published to the panels. */
+  avatarAnimationInfo(): AvatarMotionInfo {
+    return this.motion.info();
+  }
+
+  /** Starts a motion clip on the current body. */
+  playAvatarAnimation(index: number): boolean {
+    return this.motion.play(index);
+  }
+
+  /** Holds the current body pose without advancing the clip. */
+  pauseAvatarAnimation(): void {
+    this.motion.pause();
+  }
+
+  /** Drops the active clip and leaves the body at its last pose. */
+  stopAvatarAnimation(): void {
+    this.motion.stop();
+  }
+
+  /** Rebinds soft deformation to the collider the animation left behind. */
+  private reattachSoftBody(): void {
+    this.softBody.attach(this.avatar.object, this.avatar.collider?.mesh ?? null);
+    this.softCountdown = 0;
+  }
+
+  /** Seeks the active clip to a time in milliseconds. */
+  seekAvatarAnimation(ms: number): void {
+    this.motion.seek(ms);
+  }
+
+  /**
+   * Advances the body animation and refreshes the collision grid every few frames.
+   * Returns true when the body pose moved.
+   */
+  advanceAvatarAnimation(dtMs: number): boolean {
+    return this.motion.advance(dtMs);
+  }
+
+  /** Turns per-frame pressure sampling on or off; turning it on keeps earlier samples. */
+  setDynamicFitSampling(enabled: boolean): void {
+    this.dynamicFit.setEnabled(enabled);
+  }
+
+  /** Drops every recorded dynamic-fit sample. */
+  clearDynamicFitSamples(): void {
+    this.dynamicFit.clear();
+  }
+
+  /** Samples recorded so far, oldest first. */
+  getDynamicFitSamples(): readonly DynamicPressureFrame[] {
+    return this.dynamicFit.samples;
+  }
+
+  /** Number of recorded dynamic-fit samples. */
+  get dynamicSampleCount(): number {
+    return this.dynamicFit.count;
+  }
+
+  /** Writes the per-particle clearance of the construction layers into the running solver. */
+  applyLayerThickness(project: Project, force = false): void {
+    this.layers.apply(
+      project, this.mergedInput, values => this.simulator?.setParticleThickness(values), force,
+    );
   }
 
   /** Builds the merged cloth render mesh and its seam threads. */
@@ -397,24 +534,24 @@ export class GarmentEngine {
     this.clothMeshes.set(MERGED_MESH_KEY, manager);
     this.bindClothMaterials(project, mode);
     this.rendererCtx.scene.add(manager.mesh);
-    this.fitOverlay = new FitOverlay(manager.geometry);
-    this.fitOverlay.setSlotCount(this.clothSlots.length);
-    this.rendererCtx.scene.add(this.fitOverlay.mesh);
-    this.updateHeatmapVisibility();
-    this.fitCountdown = 0;
-    this.strainCountdown = 0;
-    this.threadedPairCount = -1;
-    this.appliedTopstitches = '';
+    const overlay = new FitOverlay(manager.geometry);
+    this.rendererCtx.scene.add(overlay.mesh);
+    this.analysis.attach(overlay);
+    this.analysis.setSlotCount(this.clothSlots.length);
+    this.analysis.resetTimers();
+    this.overlays.reset();
     this.applySeamStitchVisibility(project);
     this.applyTopstitchThreads(project);
+    this.applyTrimInstances(project);
   }
 
   /** Takes the cloth render mesh the scene shows right now out of it and frees its buffers. */
   private removeRenderMesh(): void {
-    if (this.fitOverlay) {
-      this.rendererCtx.scene.remove(this.fitOverlay.mesh);
-      this.fitOverlay.dispose();
-      this.fitOverlay = null;
+    const overlay = this.analysis.mesh;
+    if (overlay) {
+      this.rendererCtx.scene.remove(overlay.mesh);
+      overlay.dispose();
+      this.analysis.detach();
     }
     this.clearPrintTextures();
     const previous = this.clothMeshes.get(MERGED_MESH_KEY);
@@ -454,7 +591,7 @@ export class GarmentEngine {
     });
 
     merged.setMaterials(materials);
-    this.fitOverlay?.setSlotCount(materials.length);
+    this.analysis.setSlotCount(materials.length);
     this.clothGroupRanges = ranges;
     merged.addGroups(ranges);
     this.clothSlots = plan.slots.map(clothMaterialSlotKey);
@@ -479,120 +616,79 @@ export class GarmentEngine {
       .map(group => ({ start: group.start, count: group.count, slot: group.slot })));
   }
 
-  /**
-   * Switches the cloth between fabric materials and the body-clearance heatmap.
-   * Returns the first summary when turning the overlay on.
-   */
+  /** Switches the cloth to the body-clearance heatmap; returns the first summary when on. */
   setFitCheck(enabled: boolean, tightCm: number, looseCm: number): FitStats | null {
-    if (enabled) this.strainVisible = false;
-    this.fitVisible = enabled;
-    this.updateHeatmapVisibility();
-    this.fitCountdown = 0;
-    return enabled ? this.refreshFit(tightCm, looseCm, true) : null;
+    return this.analysis.setFit(enabled, tightCm, looseCm);
   }
 
-  /** Shows, hides or fades the shared heatmap overlay and the cloth mesh underneath. */
-  private updateHeatmapVisibility(): void {
-    const on = this.fitVisible || this.strainVisible;
-    this.fitOverlay?.setVisible(on);
-    this.topstitchThreads.setVisible(!on);
-    const merged = this.clothMeshes.get(MERGED_MESH_KEY);
-    if (merged) merged.mesh.visible = !on;
-  }
-
-  /**
-   * Recomputes body clearance on the live positions every few frames while the overlay is on.
-   * Returns null when the overlay is off or this call was skipped by the throttle.
-   */
+  /** Recomputes body clearance when the throttle allows; null when off or skipped. */
   refreshFit(tightCm: number, looseCm: number, force = false): FitStats | null {
-    if (!this.fitVisible || !this.fitOverlay) return null;
-    if (!force && this.fitCountdown > 0) {
-      this.fitCountdown--;
-      return null;
-    }
-    this.fitCountdown = 5;
-    const collider = this.avatar.collider;
-    const positions = this.lastGoodPositions.length === this.mergedPositions.length && this.mergedPositions.length > 0
-      ? this.lastGoodPositions
-      : this.mergedPositions;
-    if (!collider || positions.length === 0) return null;
-    const field = computeFitField(positions, collider, { thresholds: { tightCm, looseCm } });
-    this.fitOverlay.update(field);
-    return fitStats(field);
+    return this.analysis.refreshFit(tightCm, looseCm, force);
   }
 
-  /**
-   * Switches the cloth between fabric materials and the strain heatmap.
-   * Returns the first summary when turning the overlay on.
-   */
-  setStrainCheck(enabled: boolean, min: number, max: number): StrainStats | null {
-    if (enabled) this.fitVisible = false;
-    this.strainVisible = enabled;
-    this.updateHeatmapVisibility();
-    this.strainCountdown = 0;
-    return enabled ? this.refreshStrain(min, max, true) : null;
+  /** Switches the cloth to the strain heatmap; returns the first summary when on. */
+  setStrainCheck(enabled: boolean, min: number, max: number, byFabric = false): StrainStats | null {
+    return this.analysis.setStrain(enabled, min, max, byFabric);
   }
 
-  /** Recomputes per-vertex strain on the live positions every few frames while the overlay is on. */
-  refreshStrain(min: number, max: number, force = false): StrainStats | null {
-    if (!this.strainVisible || !this.fitOverlay || !this.mergedInput) return null;
-    if (!force && this.strainCountdown > 0) {
-      this.strainCountdown--;
-      return null;
-    }
-    this.strainCountdown = 5;
-    const rest = this.mergedRestPositions;
-    const positions = this.lastGoodPositions.length === rest.length && rest.length > 0
-      ? this.lastGoodPositions
-      : rest;
-    if (rest.length === 0 || positions.length === 0) return null;
-    const strain = computeVertexStrain(rest, positions, this.mergedInput!.indices);
-    const stats = strainStats(strain);
-    this.fitOverlay.updateStrain(strain, min, max);
-    return stats;
+  /** Recomputes per-vertex strain when the throttle allows; null when off or skipped. */
+  refreshStrain(min: number, max: number, byFabric = false, force = false): StrainStats | null {
+    return this.analysis.refreshStrain(min, max, byFabric, force);
+  }
+
+  /** Switches the cloth to the estimated contact-pressure heatmap. */
+  setPressureCheck(enabled: boolean, maxKpa: number): PressureStats | null {
+    return this.analysis.setPressure(enabled, maxKpa);
+  }
+
+  /** Converts the contact readback into an estimated pressure; null when off or skipped. */
+  refreshPressure(maxKpa: number, force = false): PressureStats | null {
+    return this.analysis.refreshPressure(maxKpa, force);
+  }
+
+  /** Hides the cloth, its threads and its trims while a heatmap stands in for them. */
+  private revealCloth(visible: boolean): void {
+    this.overlays.setVisible(visible);
+    const merged = this.clothMeshes.get(MERGED_MESH_KEY);
+    if (merged) merged.mesh.visible = visible;
   }
 
   /**
    * Re-reads each seam record onto the thread overlay: color and viewport visibility, drawn
-   * over the positions the cloth currently holds. The overlay is rebuilt whenever the pair set
-   * changes size, which is what closing a dart does.
+   * over the positions the cloth currently holds.
    */
   applySeamStitchVisibility(project: Project): void {
     if (!this.mergedInput) {
-      this.threadedPairCount = 0;
-      this.seamThreads.detach(this.rendererCtx.scene);
+      this.overlays.reset();
       return;
     }
-    const pairs = this.cloth.seamPairs;
-    const positions = this.lastGoodPositions.length === this.mergedPositions.length && this.mergedPositions.length > 0
-      ? this.lastGoodPositions
-      : this.mergedPositions;
-    if (pairs.length !== this.threadedPairCount) {
-      this.threadedPairCount = pairs.length;
-      this.seamThreads.attach(this.rendererCtx.scene, pairs, positions, project.pattern.seams);
-      return;
-    }
-    this.seamThreads.setSeams(project.pattern.seams);
-    this.seamThreads.update(pairs, positions);
+    this.overlays.applySeams(project, this.cloth.seamPairs, this.overlayPositions());
   }
 
-  /**
-   * Rebuilds the topstitch overlay when its records or the merged layout change; otherwise moves
-   * it onto the positions the cloth currently holds.
-   */
+  /** Rebuilds the topstitch overlay when its records or the merged layout change. */
   applyTopstitchThreads(project: Project): void {
-    const input = this.mergedInput;
-    if (!input) return;
-    const positions = this.lastGoodPositions.length === this.mergedPositions.length && this.mergedPositions.length > 0
+    if (!this.mergedInput) return;
+    const positions = this.overlayPositions();
+    this.overlays.applyTopstitches(project, this.mergedInput, positions, this.overlayNormals(positions));
+  }
+
+  /** Rebuilds the 3D trim instances when their records or the merged layout change. */
+  applyTrimInstances(project: Project): void {
+    if (!this.mergedInput) return;
+    const positions = this.overlayPositions();
+    this.overlays.applyTrims(project, this.mergedInput, positions, this.overlayNormals(positions));
+  }
+
+  /** Positions the cloth overlays should follow: the last finite frame, else the initial layout. */
+  private overlayPositions(): Float32Array {
+    return this.lastGoodPositions.length === this.mergedPositions.length && this.mergedPositions.length > 0
       ? this.lastGoodPositions
       : this.mergedPositions;
-    const signature = topstitchSignature(project, input);
-    if (signature !== this.appliedTopstitches) {
-      this.appliedTopstitches = signature;
-      this.topstitchThreads.attach(this.rendererCtx.scene, topstitchSegments(project, input.panels), positions);
-      return;
-    }
-    this.topstitchThreads.update(positions);
+  }
+
+  /** Normals matching the given positions, or undefined when they are stale or absent. */
+  private overlayNormals(positions: Float32Array): Float32Array | undefined {
+    return this.lastGoodNormals.length === positions.length ? this.lastGoodNormals : undefined;
   }
 
   /** UV placements of a panel's visible prints; empty while its mesh is missing. */
@@ -708,6 +804,7 @@ export class GarmentEngine {
       await simulator.setup(input, this.avatar.collider, project.scene.simulation);
       this.simulator = simulator;
       this.simReady = true;
+      this.applyLayerThickness(project, true);
       this.appliedPhysics = physicsSignature(this.clothPanelIds(), project);
       this.simulatorLayout = clothLayoutFingerprint(this.mergedInput!, this.cloth.seamPairs.length);
       this.simulatorAvatar = this.appliedAvatar;
@@ -726,11 +823,12 @@ export class GarmentEngine {
 
   /** Runs one simulation step and writes the result to the render mesh. */
   async stepSimulation(config: SimulationConfig, fabric: FabricPhysics): Promise<void> {
-    if (!this.simulator || !this.simReady || this.stepping) return;
+    const simulator = this.simulator;
+    if (!simulator || !this.simReady || this.stepping) return;
     this.stepping = true;
     try {
-      this.simulator.step(config, fabric);
-      const { positions, normals } = await this.simulator.readback();
+      simulator.step(config, fabric);
+      const { positions, normals } = await simulator.readback();
       const badParticle = firstNonFinite(positions);
       // A non-finite frame makes every triangle degenerate, so the last good frame stays drawn.
       if (badParticle >= 0) {
@@ -745,9 +843,24 @@ export class GarmentEngine {
       this.clothMeshes.get(MERGED_MESH_KEY)?.updateFromSim(positions, normals);
       if (this.lastGoodPositions.length !== positions.length) this.lastGoodPositions = new Float32Array(positions.length);
       this.lastGoodPositions.set(positions);
-      this.seamThreads.update(this.cloth.seamPairs, positions);
-      this.topstitchThreads.update(positions);
-      this.pinMarkers.sync(this.simulator.getReadbackPositions());
+      if (this.lastGoodNormals.length !== normals.length) this.lastGoodNormals = new Float32Array(normals.length);
+      this.lastGoodNormals.set(normals);
+      this.frameTimeSeconds += config.dt;
+      this.frameCache.push(positions, this.frameTimeSeconds);
+      this.overlays.followSimulation(this.cloth.seamPairs, positions, normals);
+      // The animation drives the body pose, so soft deformation pauses while a clip plays.
+      if (this.softBody.active && !this.avatar.isAnimating) {
+        if (this.softCountdown <= 0) {
+          this.softCountdown = 8;
+          if (this.softBody.update(positions, simulator.getReadbackContact())) {
+            this.uploadSoftBodyCollider();
+          }
+        } else {
+          this.softCountdown--;
+        }
+      }
+      this.dynamicFit.sample();
+      this.pinMarkers.sync(simulator.getReadbackPositions());
       this.interaction.syncMarker(positions);
     } finally {
       this.stepping = false;
@@ -759,13 +872,18 @@ export class GarmentEngine {
     this.dressing.reset();
     if (!this.simulator || this.mergedPositions.length === 0) return;
     this.simulator.reset(this.mergedPositions);
+    this.softBody.restore();
+    this.uploadSoftBodyCollider();
+    this.softCountdown = 0;
     this.lastGoodPositions = this.mergedPositions.slice();
+    this.lastGoodNormals = new Float32Array(0);
     // The render mesh follows the initial positions in the same frame.
     this.clothMeshes.get(MERGED_MESH_KEY)?.resetTo(this.mergedPositions);
-    this.seamThreads.update(this.cloth.seamPairs, this.mergedPositions);
-    this.topstitchThreads.update(this.mergedPositions);
+    this.overlays.followRest(this.cloth.seamPairs, this.mergedPositions);
     this.pinMarkers.sync(this.mergedPositions);
     this.interaction.syncMarker(this.mergedPositions);
+    this.frameCache.clear();
+    this.frameTimeSeconds = 0;
   }
 
   /** True while a staged dressing animation is playing. */
@@ -846,6 +964,74 @@ export class GarmentEngine {
   /** Raycasts the cloth surface and returns the owning panel of the hit triangle. */
   pickPanelAtScreen(ndcX: number, ndcY: number): string | null {
     return this.picker.pickPanelAtScreen(ndcX, ndcY);
+  }
+
+  /** Cloth surface point under a screen position, in its panel's flat pattern coordinates. */
+  pickClothSurface2D(ndcX: number, ndcY: number): ClothSurfacePoint | null {
+    const picked = this.picker.pickSurfaceAtScreen(ndcX, ndcY);
+    return picked ? this.flatSurfacePoint(picked) : null;
+  }
+
+  /** Starts a 3D sketch stroke on the cloth; returns the pattern point the press landed on. */
+  beginSketchStroke(ndcX: number, ndcY: number): ClothSurfacePoint | null {
+    const picked = this.picker.pickSurfaceAtScreen(ndcX, ndcY);
+    const flat = picked ? this.flatSurfacePoint(picked) : null;
+    if (!picked || !flat) {
+      this.overlays.endSketch();
+      return null;
+    }
+    this.overlays.beginSketch(picked.world);
+    return flat;
+  }
+
+  /** Adds the cloth surface point under the pointer to the active sketch stroke. */
+  extendSketchStroke(ndcX: number, ndcY: number): ClothSurfacePoint | null {
+    const picked = this.picker.pickSurfaceAtScreen(ndcX, ndcY);
+    if (!picked) return null;
+    this.overlays.extendSketch(picked.world);
+    return this.flatSurfacePoint(picked);
+  }
+
+  /** Drops the sketch stroke overlay. */
+  endSketchStroke(): void {
+    this.overlays.endSketch();
+  }
+
+  /**
+   * Places one measurement point on the cloth surface. The third call starts a new measurement;
+   * the reading reports the distance once two points exist.
+   */
+  measureAtScreen(ndcX: number, ndcY: number): MeasureReading | null {
+    const picked = this.picker.pickSurfaceAtScreen(ndcX, ndcY);
+    if (!picked) return null;
+    const points = this.overlays.addMeasurePoint(picked.world);
+    if (points.length < 2) return { points: 1, distanceCm: null };
+    return { points: 2, distanceCm: points[0]!.distanceTo(points[1]!) * 100 };
+  }
+
+  /** Drops the measurement overlay and its placed points. */
+  clearMeasurement(): void {
+    this.overlays.clearMeasurement();
+  }
+
+  /** Captured simulation frames, oldest first. */
+  simulationFrames(): readonly CachedFrame[] {
+    return this.frameCache.frames();
+  }
+
+  /** Triangle indices of the merged cloth, or null before a build. */
+  clothIndices(): Uint32Array | null {
+    return this.mergedInput?.indices ?? null;
+  }
+
+  /** Flat pattern point of a surface pick, or null when the triangle has no panel. */
+  private flatSurfacePoint(picked: ClothSurfacePick): ClothSurfacePoint | null {
+    const panel = picked.panelSlot >= 0 ? this.mergedInput?.panels[picked.panelSlot] : null;
+    if (!panel) return null;
+    const point = trianglePointToPanel2D(
+      panel.vertexOffset, panel.mesh.positions, picked.particles, picked.weights,
+    );
+    return point ? { panelId: panel.panelId, point } : null;
   }
 
   /** Grabs the cloth under a screen point for a pointer drag; false when the point misses it. */
@@ -1000,24 +1186,28 @@ export class GarmentEngine {
 
   /** Removes and disposes the cloth meshes, seam threads, simulator and dressing run. */
   private clearCloth(): void {
-    this.seamThreads.detach(this.rendererCtx.scene);
-    this.topstitchThreads.detach(this.rendererCtx.scene);
+    this.overlays.reset();
+    this.overlays.endSketch();
+    this.clearMeasurement();
+    this.frameCache.clear();
+    this.frameTimeSeconds = 0;
     this.clearPrintTextures();
     this.dressing.reset();
     this.simulator?.destroy();
     this.simulator = null;
     this.lastGoodPositions = new Float32Array(0);
+    this.lastGoodNormals = new Float32Array(0);
     this.mergedRestPositions = new Float32Array(0);
-    this.fitVisible = false;
-    this.strainVisible = false;
+    this.analysis.resetFlags();
     for (const manager of this.clothMeshes.values()) {
       this.rendererCtx.scene.remove(manager.mesh);
       manager.dispose();
     }
-    if (this.fitOverlay) {
-      this.rendererCtx.scene.remove(this.fitOverlay.mesh);
-      this.fitOverlay.dispose();
-      this.fitOverlay = null;
+    const overlay = this.analysis.mesh;
+    if (overlay) {
+      this.rendererCtx.scene.remove(overlay.mesh);
+      overlay.dispose();
+      this.analysis.detach();
     }
     this.clothMeshes.clear();
     this.clothSlots = [];
@@ -1025,8 +1215,7 @@ export class GarmentEngine {
     this.appliedAppearance = '';
     this.appliedPhysics = '';
     this.appliedConstraints = '';
-    this.threadedPairCount = -1;
-    this.appliedTopstitches = '';
+    this.layers.reset();
     this.simReady = false;
   }
 
@@ -1071,17 +1260,6 @@ function mergedRestPositions(input: ClothSimInput): Float32Array {
     rest.set(panel.restPositions, panel.vertexOffset * 3);
   }
   return rest;
-}
-
-/** Topstitch records plus the merged layout the segment indices point into. */
-function topstitchSignature(project: Project, input: ClothSimInput): string {
-  const stitches = Object.values(project.pattern.topstitches ?? {}).map(stitch => JSON.stringify([
-    stitch.id, stitch.panelId, stitch.edgeId, stitch.t0, stitch.t1, stitch.offsetMm, stitch.spacingMm,
-    stitch.rows, stitch.color, stitch.stitchMm, stitch.gapMm, stitch.visible !== false,
-    project.pattern.panels[stitch.panelId]?.visible !== false,
-  ]));
-  const panels = input.panels.map(panel => `${panel.panelId}@${panel.vertexOffset}x${panel.mesh.vertexCount}`);
-  return JSON.stringify([stitches, panels]);
 }
 
 /** Index of the first non-finite readback component, or -1 when every position is finite. */

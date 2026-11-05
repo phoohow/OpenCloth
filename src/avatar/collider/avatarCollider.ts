@@ -1,5 +1,6 @@
 import type { AvatarParams } from '../../core/model/types';
 import { bodyLandmarks, type BodyEllipse, type BodyLandmarks } from '../landmarks';
+import { appliedLimbPose, armChain, legChain } from '../pose';
 import type { MeshCollider } from './meshCollider';
 
 export { fitCapsulesFromGroup } from './meshCapsuleFitter';
@@ -42,6 +43,27 @@ function widestEllipse(body: BodyLandmarks, y0: number, y1: number): BodyEllipse
   return { rx, rz };
 }
 
+/** Bounding box covering every capsule plus a margin, and the full body height. */
+function capsuleBounds(capsules: Capsule[], body: BodyLandmarks): AvatarCollider['bounds'] {
+  let reachX = 0;
+  let reachZ = 0;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const c of capsules) {
+    const rx = c.radius;
+    const rz = c.radiusZ ?? c.radius;
+    reachX = Math.max(reachX, Math.abs(c.ax) + rx, Math.abs(c.bx) + rx);
+    reachZ = Math.max(reachZ, rz);
+    minY = Math.min(minY, c.ay - rx, c.by - rx);
+    maxY = Math.max(maxY, c.ay + rx, c.by + rx);
+  }
+  const pad = 0.1;
+  return {
+    min: [-reachX - pad, minY - pad, -reachZ - pad],
+    max: [reachX + pad, Math.max(maxY, body.height) + pad, reachZ + pad],
+  };
+}
+
 /** Builds the capsule set from body measurement parameters. */
 export function generateAvatarCollider(params: AvatarParams): AvatarCollider {
   const body = bodyLandmarks(params);
@@ -72,51 +94,40 @@ export function generateAvatarCollider(params: AvatarParams): AvatarCollider {
   const headX = body.torsoCenterXAt(headC);
   cap(headX, headC - body.headH * 0.3, 0, headX, headC + body.headH * 0.3, 0, body.headH * 0.42);
 
-  // Legs: thigh and shin segments splayed outward about the hip joint.
-  const legX = body.hipX;
-  const legRake = body.legRakeRad;
-  for (const side of [-1, 1]) {
-    const angle = side * legRake;
-    const hip = { x: side * legX, y: body.legH };
-    const knee = {
-      x: hip.x + Math.sin(angle) * (body.legH - body.kneeY),
-      y: hip.y - Math.cos(angle) * (body.legH - body.kneeY),
-    };
-    const ankle = {
-      x: hip.x + Math.sin(angle) * (body.legH - 0.04),
-      y: hip.y - Math.cos(angle) * (body.legH - 0.04),
-    };
-    cap(hip.x, hip.y, 0, knee.x, knee.y, 0, body.legR, body.legR * 0.85);
-    cap(knee.x, knee.y, 0, ankle.x, ankle.y, 0, body.legR * 0.7, body.legR * 0.6);
+  // Legs: thigh and calf follow the hip and knee joints.
+  for (const side of [-1, 1] as const) {
+    const chain = legChain(body, side, appliedLimbPose(params.joints, side));
+    cap(
+      chain.root[0], chain.root[1], chain.root[2],
+      chain.mid[0], chain.mid[1], chain.mid[2],
+      body.legR, body.legR * 0.85,
+    );
+    cap(
+      chain.mid[0], chain.mid[1], chain.mid[2],
+      chain.end[0], chain.end[1], chain.end[2],
+      body.legR * 0.7, body.legR * 0.6,
+    );
   }
 
-  // Arms: shoulder ball plus raked upper arm and forearm along the pose angle.
+  // Arms: shoulder ball plus upper arm and forearm along the joint chain.
   const armR = body.armR;
-  const rake = body.armRakeRad;
-  const midX = Math.sin(rake) * body.armH * 0.5;
-  const midY = Math.cos(rake) * body.armH * 0.5;
-  const shoulderCenter = body.torsoCenterXAt(body.shoulderY);
-  for (const side of [-1, 1]) {
-    const sx = shoulderCenter + side * body.shoulderX;
-    cap(sx, body.shoulderY, 0, sx, body.shoulderY, 0, armR * 1.15, armR * 1.15);
-    cap(sx, body.shoulderY, 0, sx + side * midX, body.shoulderY - midY, 0, armR, armR * 0.9);
-    cap(sx + side * midX, body.shoulderY - midY, 0, sx + side * midX * 2, body.shoulderY - midY * 2, 0, armR * 0.7, armR * 0.65);
+  for (const side of [-1, 1] as const) {
+    const chain = armChain(body, side, appliedLimbPose(params.joints, side));
+    cap(chain.root[0], chain.root[1], chain.root[2],
+      chain.root[0], chain.root[1], chain.root[2], armR * 1.15, armR * 1.15);
+    cap(
+      chain.root[0], chain.root[1], chain.root[2],
+      chain.mid[0], chain.mid[1], chain.mid[2],
+      armR, armR * 0.9,
+    );
+    cap(
+      chain.mid[0], chain.mid[1], chain.mid[2],
+      chain.end[0], chain.end[1], chain.end[2],
+      armR * 0.7, armR * 0.65,
+    );
   }
 
-  const pad = 0.1;
-  const armReach = Math.abs(shoulderCenter) + body.shoulderX + Math.abs(Math.sin(rake)) * body.armH + armR;
-  const legReach = legX + Math.abs(Math.sin(legRake)) * body.legH + body.legR;
-  const leanReach = Math.max(
-    Math.abs(body.torsoCenterXAt(body.torsoTop)),
-    Math.abs(body.torsoCenterXAt(body.height)),
-  ) + body.chestR;
-  const reach = Math.max(armReach, legReach, leanReach);
-  const bounds = {
-    min: [-reach - pad, -pad, -body.hipR - pad] as [number, number, number],
-    max: [reach + pad, body.height + pad, body.hipR + pad] as [number, number, number],
-  };
-
-  return { capsules, bounds };
+  return { capsules, bounds: capsuleBounds(capsules, body) };
 }
 
 /** Packs capsules to match the WGSL Capsule struct: a = (start.xyz, radiusX), b = (end.xyz, radiusZ). */

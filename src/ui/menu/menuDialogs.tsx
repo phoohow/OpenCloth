@@ -12,12 +12,16 @@ import { exportMarkerSvg, exportPatternSvg } from '../../io/svgPattern';
 import { buildMarkerLayout } from '../../pattern/marker/markerLayout';
 import { buildMarkerReport, markerReportCsv } from '../../pattern/marker/markerReport';
 import { bomCsv, bomQuantityText, bomTotals, buildBom } from '../../pattern/bom';
+import { ReviewDialog } from './reviewDialog';
+import { AssetLibraryDialog } from './assetLibraryDialog';
+import { IntegrationDialog } from './integrationDialog';
 
 const SCOPE_ORDER: ShortcutScope[] = ['全局', '3D 视口', '2D 制版', '菜单栏'];
 
 /** Modal host for 帮助 ▸ 快捷键总览, 关于 OpenCloth and the pattern export options. */
 export function MenuDialogs() {
   const dialog = useMenuStore(s => s.dialog);
+  const dialogParam = useMenuStore(s => s.dialogParam);
   const closeDialog = useMenuStore(s => s.closeDialog);
 
   useEffect(() => {
@@ -35,10 +39,20 @@ export function MenuDialogs() {
   if (!dialog) return null;
   return (
     <div style={styles.backdrop} onClick={closeDialog}>
-      <div style={styles.panel} onClick={e => e.stopPropagation()}>
+      <div
+        style={{
+          ...styles.panel,
+          ...(dialog === 'review' ? styles.panelWide : null),
+          ...(dialog === 'assets' || dialog === 'integration' ? styles.panelMedium : null),
+        }}
+        onClick={e => e.stopPropagation()}
+      >
         {dialog === 'shortcuts' ? <ShortcutsDialog />
           : dialog === 'about' ? <AboutDialog />
           : dialog === 'exportBom' ? <BomDialog />
+          : dialog === 'review' ? <ReviewDialog initialProjectId={dialogParam} />
+          : dialog === 'assets' ? <AssetLibraryDialog />
+          : dialog === 'integration' ? <IntegrationDialog />
           : <PatternExportDialog kind={dialog} />}
         <div style={styles.footer}>
           <button style={styles.closeBtn} onClick={closeDialog}>关闭</button>
@@ -67,14 +81,23 @@ const MARKER_ANGLE_MODES = [
   { value: 'none', label: '仅 0°' },
   { value: '15', label: '0°–90°，每 15°' },
   { value: '5', label: '0°–90°，每 5°' },
+  { value: 'free', label: '自定义角度…' },
 ] as const;
 
 type MarkerAngleMode = typeof MARKER_ANGLE_MODES[number]['value'];
 
 /** Angles tried per piece for the chosen mode; undefined keeps the packer's 0°/90° default. */
-function markerAngles(mode: MarkerAngleMode): number[] | undefined {
+function markerAngles(mode: MarkerAngleMode, freeText: string): number[] | undefined {
   if (mode === 'default') return undefined;
   if (mode === 'none') return [0];
+  if (mode === 'free') {
+    const parsed = freeText
+      .split(/[,，\s]+/)
+      .map(Number)
+      .filter(value => Number.isFinite(value))
+      .map(value => ((value % 360) + 360) % 360);
+    return parsed.length > 0 ? [...new Set(parsed)] : [0];
+  }
   const step = Number(mode);
   return Array.from({ length: Math.round(90 / step) + 1 }, (_, index) => index * step);
 }
@@ -87,6 +110,8 @@ function PatternExportDialog({ kind }: { kind: ExportKind }) {
   const [shrink, setShrink] = useState('0');
   const [gap, setGap] = useState('0.5');
   const [angleMode, setAngleMode] = useState<MarkerAngleMode>('default');
+  const [freeAngles, setFreeAngles] = useState('0, 45, 90');
+  const [markerFlip, setMarkerFlip] = useState(false);
   const [markerFormat, setMarkerFormat] = useState<'svg' | 'dxf'>('svg');
   const [markerSizeScope, setMarkerSizeScope] = useState<'current' | 'chart'>('current');
   const [sizeScope, setSizeScope] = useState<'current' | 'chart'>('current');
@@ -111,12 +136,13 @@ function PatternExportDialog({ kind }: { kind: ExportKind }) {
       ? orderedSizes(project).map(size => ({ id: size.id, label: size.label }))
       : undefined;
     try {
-      const angles = markerAngles(angleMode);
+      const angles = markerAngles(angleMode, freeAngles);
       const layout = buildMarkerLayout(project.pattern, {
         fabricWidthCm: width,
         shrinkPercent: Number.isFinite(Number(shrink)) ? Number(shrink) : 0,
         gapCm: Number.isFinite(Number(gap)) && Number(gap) >= 0 ? Number(gap) : 0.5,
         allowRotate: true,
+        flip: markerFlip,
         ...(angles ? { angles } : {}),
         ...(sizes?.length ? { sizes, fromSizeId: project.activeSizeId } : {}),
       });
@@ -124,7 +150,7 @@ function PatternExportDialog({ kind }: { kind: ExportKind }) {
     } catch {
       return null;
     }
-  }, [kind, project, fabricWidth, shrink, gap, angleMode, price, markerSizeScope]);
+  }, [kind, project, fabricWidth, shrink, gap, angleMode, freeAngles, markerFlip, price, markerSizeScope]);
 
   /** Applied output scale of the PDF page the current options would produce. */
   const pdfScale = useMemo(() => {
@@ -155,12 +181,13 @@ function PatternExportDialog({ kind }: { kind: ExportKind }) {
       if (kind === 'exportMarker') {
         const width = Number(fabricWidth);
         if (!Number.isFinite(width) || width <= 0) { alert('请输入有效的面料幅宽(cm)'); return; }
-        const angles = markerAngles(angleMode);
+        const angles = markerAngles(angleMode, freeAngles);
         const options = {
           fabricWidthCm: width,
           shrinkPercent: Number.isFinite(Number(shrink)) ? Number(shrink) : 0,
           gapCm: Number.isFinite(Number(gap)) && Number(gap) >= 0 ? Number(gap) : 0.5,
           allowRotate: true,
+          flip: markerFlip,
           ...(angles ? { angles } : {}),
           ...(markerSizeScope === 'chart' && orderedSizes(project).length > 0
             ? {
@@ -243,6 +270,19 @@ function PatternExportDialog({ kind }: { kind: ExportKind }) {
                 ))}
               </select>
             </div>
+            {angleMode === 'free' && (
+              <div style={styles.row}>
+                <span style={styles.rowLabel}>角度列表(°)</span>
+                <input
+                  style={styles.input} type="text" placeholder="例如 0, 30, 60, 90"
+                  value={freeAngles} onChange={e => setFreeAngles(e.target.value)}
+                />
+              </div>
+            )}
+            <label style={styles.row}>
+              <input type="checkbox" checked={markerFlip} onChange={e => setMarkerFlip(e.target.checked)} />
+              <span style={styles.rowLabel}>每片翻转（反面朝上）</span>
+            </label>
             <div style={styles.row}>
               <span style={styles.rowLabel}>尺码范围</span>
               <select style={styles.select} value={markerSizeScope} onChange={e => setMarkerSizeScope(e.target.value as 'current' | 'chart')}>
@@ -533,6 +573,12 @@ const styles: Record<string, React.CSSProperties> = {
     width: 520, maxWidth: '92vw', maxHeight: 'min(84vh, 84dvh)', overflowY: 'auto', WebkitOverflowScrolling: 'touch',
     background: '#232328', border: '1px solid #3a3a42', borderRadius: 6,
     boxShadow: '0 12px 36px rgba(0,0,0,0.55)', padding: '14px 16px 12px',
+  },
+  panelWide: {
+    width: 900, height: 'min(84vh, 84dvh)', maxWidth: '96vw', display: 'flex', flexDirection: 'column', overflow: 'hidden',
+  },
+  panelMedium: {
+    width: 760, height: 'min(82vh, 82dvh)', maxWidth: '94vw', display: 'flex', flexDirection: 'column', overflow: 'hidden',
   },
   title: { fontSize: 'var(--oc-fs-dialog-title)', color: '#4da6ff', letterSpacing: 1, paddingBottom: 8, borderBottom: '1px solid #333' },
   body: { paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 10 },

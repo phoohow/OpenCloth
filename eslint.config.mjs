@@ -6,6 +6,18 @@ import globals from 'globals';
 /** Files linted by `npm run lint`. */
 const TS_FILES = ['src/**/*.ts', 'src/**/*.tsx'];
 
+/** Upward-relative prefixes a module under `src/` can use to reach a sibling layer. */
+const UP = ['..', '../..', '../../..'];
+
+/**
+ * Import specifiers that reach one of the named layer directories. The leading `../` is what
+ * makes this precise: a file *named* `pattern.ts` inside a layer (`./pattern`, `./types/pattern`)
+ * is a normal sibling module, while `../../pattern` is the layer and stays forbidden.
+ */
+function unreachable(names) {
+  return names.flatMap(name => UP.flatMap(up => [`${up}/${name}`, `${up}/${name}/**`]));
+}
+
 /** Builds the `no-restricted-imports` options for one layer boundary. */
 function boundary(group, layer, target) {
   return ['error', {
@@ -50,7 +62,7 @@ export default [
     files: ['src/core/model/**/*.ts'],
     rules: {
       'no-restricted-imports': boundary(
-        ['**/pattern', '**/pattern/**', '**/ui', '**/ui/**', '**/render', '**/render/**', '**/sim', '**/sim/**', '**/io', '**/io/**'],
+        unreachable(['pattern', 'ui', 'render', 'sim', 'io']),
         'core/model',
         'pattern, ui, render, sim or io',
       ),
@@ -59,21 +71,13 @@ export default [
   {
     files: ['src/pattern/**/*.ts', 'src/pattern/**/*.tsx'],
     rules: {
-      'no-restricted-imports': boundary(
-        ['**/ui', '**/ui/**'],
-        'pattern',
-        'ui',
-      ),
+      'no-restricted-imports': boundary(unreachable(['ui']), 'pattern', 'ui'),
     },
   },
   {
     files: ['src/sim/**/*.ts'],
     rules: {
-      'no-restricted-imports': boundary(
-        ['**/ui', '**/ui/**'],
-        'sim',
-        'ui',
-      ),
+      'no-restricted-imports': boundary(unreachable(['ui']), 'sim', 'ui'),
     },
   },
   {

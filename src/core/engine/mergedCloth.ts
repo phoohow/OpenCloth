@@ -5,6 +5,7 @@ import type { ClothSimInput } from '../../sim/clothSimulator';
 import type { Constraint } from '../../sim/buffers/constraintBuilder';
 import type { TriangleMesh } from '../../pattern/triangulate/triangulate';
 import { fabricForPanel } from '../model/fabric';
+import { panelCollisionLayer, panelThicknessCm } from '../model/layers';
 import { collapseSeamPairs, type VertexRef } from '../../pattern/drape/sewnTargets';
 import { seamBreakStretch } from '../../sim/seamStrength';
 import { FALLBACK_PHYSICS } from './clothConstants';
@@ -102,7 +103,8 @@ export class MergedCloth {
         positions3D: start,
         restPositions: flatRestPositions(mesh),
         physics: fabricForPanel(project, panelId)?.physics ?? FALLBACK_PHYSICS,
-        collisionLayer: panel.collisionLayer ?? 0,
+        collisionLayer: panelCollisionLayer(panel),
+        thicknessMeters: panelThicknessCm(project, panel) / 100,
         ...(creaseEdges.length > 0 ? { creaseEdges } : {}),
       });
       this.panelRanges.set(panelId, [vertexOffset, vertexOffset + mesh.vertexCount]);

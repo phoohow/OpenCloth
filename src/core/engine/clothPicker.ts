@@ -6,8 +6,25 @@ import {
 import {
   CAMERA_VIEW_FRAMES, fitCameraToBox, type CameraPreset, type ViewFrame,
 } from './cameraFit';
+import { barycentricWeights3D } from '../../pattern/geom/panelSurface';
 
 export type { CameraPreset, ViewFrame } from './cameraFit';
+
+/** Cloth surface hit: the triangle, its owning panel slot and the barycentric position on it. */
+export interface ClothSurfacePick {
+  /** Merged cloth triangle number. */
+  triangle: number;
+  /** Panel slot in merged order, or -1 when the triangle belongs to no panel. */
+  panelSlot: number;
+  /** Merged particle index of each triangle corner. */
+  particles: [number, number, number];
+  /** Barycentric weight of each corner, summing to 1. */
+  weights: [number, number, number];
+  /** Hit point in the cloth mesh's local space, in meters. */
+  local: THREE.Vector3;
+  /** Hit point in world space, in meters. */
+  world: THREE.Vector3;
+}
 
 /** Scene objects the camera framing is measured against, besides the cloth. */
 export interface PickTargets {
@@ -164,6 +181,37 @@ export class ClothPicker {
     return this.targets.trianglePanelIds()[hit.faceIndex ?? -1] ?? null;
   }
 
+  /** Cloth surface point under a screen position, with the panel and barycentric weights it belongs to. */
+  pickSurfaceAtScreen(ndcX: number, ndcY: number): ClothSurfacePick | null {
+    const mesh = this.targets.mesh();
+    const ray = this.screenRay(ndcX, ndcY);
+    if (!mesh || !ray) return null;
+    mesh.updateWorldMatrix(false, false);
+    const hit = this.surfaceHit(ray, mesh);
+    const face = hit?.face;
+    const triangle = hit?.faceIndex ?? -1;
+    if (!hit || !face || triangle < 0) return null;
+
+    const positions = mesh.geometry.getAttribute('position');
+    if (!positions) return null;
+    const local = mesh.worldToLocal(hit.point.clone());
+    const a = cornerOf(positions, face.a);
+    const b = cornerOf(positions, face.b);
+    const c = cornerOf(positions, face.c);
+    const weights = barycentricWeights3D([local.x, local.y, local.z], a, b, c);
+    if (!weights) return null;
+
+    const panelId = this.targets.trianglePanelIds()[triangle] ?? null;
+    return {
+      triangle,
+      panelSlot: panelId ? this.targets.panelIds().indexOf(panelId) : -1,
+      particles: [face.a, face.b, face.c],
+      weights: [weights[0], weights[1], weights[2]],
+      local,
+      world: hit.point.clone(),
+    };
+  }
+
   /** Moves the camera to a named preset view, framed on the whole scene box. */
   applyPreset(preset: CameraPreset): void {
     const frame = CAMERA_VIEW_FRAMES[preset];
@@ -196,6 +244,13 @@ export class ClothPicker {
     const box = new THREE.Box3().setFromObject(mesh);
     return box.isEmpty() ? null : box;
   }
+}
+
+/** Position attribute value of one vertex, as a triple. */
+function cornerOf(
+  positions: THREE.BufferAttribute | THREE.InterleavedBufferAttribute, index: number,
+): [number, number, number] {
+  return [positions.getX(index), positions.getY(index), positions.getZ(index)];
 }
 
 /** Distance from a flat-xyz particle array entry to a point. */

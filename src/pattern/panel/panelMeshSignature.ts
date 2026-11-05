@@ -37,7 +37,7 @@ export function panelGeometrySignature(
   }))].map(pointId => JSON.stringify(pattern.points[pointId] ?? pointId));
   return JSON.stringify([
     panel.outlineEdgeIds, panel.holes ?? [], panel.seamAllowanceCm, panel.meshResolutionCm,
-    panel.visible, panel.collisionLayer ?? 0, panel.placement ?? null,
+    panel.visible, panel.layer ?? null, panel.collisionLayer ?? null, panel.placement ?? null,
     panel.drape ?? null, panel.transform ?? null, edges, points,
     settings.meshResolutionCm ?? null, settings.meshSampling ?? null,
   ]);

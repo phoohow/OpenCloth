@@ -28,6 +28,12 @@ const statusHint = (layout: ViewLayout, tool: ToolType): string => {
   if (tool === 'unpin') {
     return '3D 试衣 · 悬停到已有 PIN 上出现叉号时点击即拔PIN，该点会同时高亮 · 其余位置照常旋转缩放 · 滚轮缩放 · 右键平移';
   }
+  if (tool === 'sketch3d') {
+    return '3D 试衣 · 在布料表面按住拖动画线，松手后落到所属版片的内部线 · 其余位置照常旋转缩放';
+  }
+  if (tool === 'measure3d') {
+    return '3D 试衣 · 单击布料表面两点测量直线距离，第三次单击重新开始，Esc 清除 · 其余位置照常旋转缩放';
+  }
   return isSplitLayout(layout)
     ? '3D 试衣 · 移动中悬停布料可用夹子拖拽 · 拖拽旋转 · 滚轮缩放 · 双击选片 · 快捷键需点击聚焦本窗格'
     : '3D 试衣 · 模拟中夹住布料可拖拽 · 拖拽旋转 · 滚轮缩放 · 右键平移 · Alt+点击打PIN · Alt+Shift+点击取消PIN · 双击选择版片 · 小键盘 2/8/4/6/0/5 正视/后视/左视/右视/仰视/俯视，1/3/7/9 四个 45° 侧视 · Esc取消选中';
@@ -45,6 +51,7 @@ export function Viewport3D({ onEngineReady }: Viewport3DProps) {
   const renderMode = useUIStore(s => s.renderMode);
   const layout = useUIStore(s => s.layout);
   const activeTool = useUIStore(s => s.activeTool);
+  const measure3d = useUIStore(s => s.measure3d);
   const rayState3D = usePerfStore(s => s.rayState3D);
 
   useEffect(() => {
@@ -151,15 +158,24 @@ export function Viewport3D({ onEngineReady }: Viewport3DProps) {
         <div style={{
           position: 'absolute', top: 8, left: 8, padding: '5px 8px', color: '#bde7ff',
           background: 'rgba(18, 39, 55, 0.84)', border: '1px solid #2f6d92',
-          borderRadius: 4, fontSize: 11, pointerEvents: 'none',
+          borderRadius: 4, fontSize: 'var(--oc-fs-micro)', pointerEvents: 'none',
         }}>光线追踪 · {rayTraceStateLabel(rayState3D) || '渐进采样'}</div>
+      )}
+      {measure3d && (
+        <div style={{
+          position: 'absolute', top: renderMode === 'raytraced' && !isMobileUi() ? 40 : 8, left: 8,
+          padding: '5px 8px', color: '#ffe2a6', background: 'rgba(55, 43, 18, 0.86)',
+          border: '1px solid #8a6030', borderRadius: 4, fontSize: 'var(--oc-fs-micro)', pointerEvents: 'none',
+        }}>
+          3D 测量 · {measure3d.distanceCm === null ? '已选第 1 点，单击第 2 点' : `${measure3d.distanceCm.toFixed(2)} cm`}
+        </div>
       )}
       {renderError && (
         <div style={{
           position: 'absolute', top: 8, right: 8, maxWidth: isMobileUi() ? '72%' : 360,
           padding: '7px 10px',
           color: '#ffd9a0', background: 'rgba(60, 38, 20, 0.92)', border: '1px solid #8a6030',
-          borderRadius: 4, fontSize: 12, pointerEvents: 'none',
+          borderRadius: 4, fontSize: 'var(--oc-fs-body)', pointerEvents: 'none',
         }}>{renderError}</div>
       )}
     </div>

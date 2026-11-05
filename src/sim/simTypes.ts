@@ -24,6 +24,8 @@ export interface ClothSimInput {
     physics: FabricPhysics;
     /** Collision layer of the piece, 0 is the innermost. */
     collisionLayer?: number;
+    /** Collision clearance of the piece in meters; absent uses the scene cloth thickness. */
+    thicknessMeters?: number;
     /**
      * Flat local mesh vertex index pairs [a, b, ...] of the triangle edges the panel's fold lines
      * cross; each pair becomes a stiff crease constraint.
@@ -96,6 +98,21 @@ export function computeParticleDamping(
     const end = Math.min(panel.vertexOffset + panel.mesh.vertexCount, particleCount);
     for (let i = panel.vertexOffset; i < end; i++) out[i] = value;
   });
+  return out;
+}
+
+/** Per-particle collision clearance in meters from each panel record. */
+export function computeParticleThickness(
+  input: ClothSimInput,
+  particleCount: number,
+  fallback: number,
+): Float32Array<ArrayBuffer> {
+  const out = new Float32Array(particleCount).fill(fallback);
+  for (const panel of input.panels) {
+    const value = panel.thicknessMeters ?? fallback;
+    const end = Math.min(panel.vertexOffset + panel.mesh.vertexCount, particleCount);
+    for (let i = panel.vertexOffset; i < end; i++) out[i] = value;
+  }
   return out;
 }
 

@@ -4,7 +4,9 @@ import type { StrainStats } from '../../../src/render/analysis/strain';
 
 describe('strainReportCsv', () => {
   it('lists the project, colour range and strain summary', () => {
-    const stats: StrainStats = { min: -0.1, max: 0.2, meanAbs: 0.05 };
+    const stats: StrainStats = {
+      min: -0.1, max: 0.2, meanAbs: 0.05, vertices: 3, overStretch: 0, overCompression: 0,
+    };
     const csv = strainReportCsv('连衣裙', stats, { min: -0.25, max: 0.25 });
     expect(csv).toContain('工程,连衣裙');
     expect(csv).toContain('色标下限,-0.250');

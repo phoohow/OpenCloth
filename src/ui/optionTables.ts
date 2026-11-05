@@ -2,6 +2,7 @@ import type { CameraPreset } from '../core/engine/garmentEngine';
 import type { CameraProjection, DenoiseModel, EditPreviewTier, MeshSampling, RenderMode, ToneMappingMode } from '../core/model/types';
 import type { PropTab, DisplayMode } from '../store/stores';
 import type { IconName } from './icons';
+import type { DisplayOptions } from './viewport2D/render';
 import type { RayTraceFailure, RayTraceState, RayTracingCapability } from '../render/renderer/rendererContext';
 
 /** One properties-editor tab: rail icon plus the Chinese label shared by rail and menu. */
@@ -11,14 +12,32 @@ export interface PropTabOption {
   label: string;
 }
 
-/** Properties-editor tabs in rail order; `prefs.ts` validates the persisted value against the same list. */
+/** Properties-editor tabs in rail order: identity, look, physics, pattern data, placement, render, project. */
 export const PROP_TAB_OPTIONS: PropTabOption[] = [
   { key: 'object', icon: 'cube', label: '对象' },
   { key: 'material', icon: 'swatch', label: '材质' },
   { key: 'simulator', icon: 'waves', label: '模拟' },
+  { key: 'pattern', icon: 'ruler', label: '版型' },
   { key: 'transform', icon: 'move', label: '变换' },
   { key: 'render', icon: 'image', label: '渲染' },
   { key: 'project', icon: 'briefcase', label: '工程' },
+];
+
+/** 2D display switches, shared by the 视图 ▸ 2D 显示 menu and the 2D toolbar dropdown. */
+export const DISPLAY_LAYER_OPTIONS: Array<{ key: keyof DisplayOptions; label: string }> = [
+  { key: 'internal', label: '内部线' },
+  { key: 'darts', label: '省道' },
+  { key: 'seamAllowance', label: '缝份线' },
+  { key: 'notches', label: '刀口' },
+  { key: 'grain', label: '布纹线' },
+  { key: 'annotations', label: '注释' },
+  { key: 'measurements', label: '标注尺寸' },
+  { key: 'prints', label: '印花' },
+  { key: 'topstitches', label: '明线' },
+  { key: 'trims', label: '辅料' },
+  { key: 'gradingOverlay', label: '齐码套叠' },
+  { key: 'seamJoin', label: '拼接预览' },
+  { key: 'wireframe', label: '网格线' },
 ];
 
 /** One 3D camera preset: engine key, menu/rail label and the shortcut/menu id. */
@@ -69,6 +88,7 @@ export const DISPLAY_MODES: Array<{ value: DisplayMode; label: string }> = [
   ...RENDER_MODES,
   { value: 'fitHeatmap', label: '合身热图' },
   { value: 'strainHeatmap', label: '应变热图' },
+  { value: 'pressureHeatmap', label: '压力热图' },
 ];
 
 /** Edit-preview tiers offered by the 3D toolbar; `prefs.ts` validates the persisted value against the same list. */

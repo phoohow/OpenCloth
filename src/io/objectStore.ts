@@ -1,30 +1,21 @@
+import { requestResult, withStores, type IdbSpec } from './idb';
+
 /** IndexedDB store for imported model files, keyed by object id. */
 
-const DB_NAME = 'oc-objects';
 const STORE_NAME = 'blobs';
 
-function openDb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1);
-    request.onupgradeneeded = () => {
-      if (!request.result.objectStoreNames.contains(STORE_NAME)) {
-        request.result.createObjectStore(STORE_NAME);
-      }
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
+/** Opened by `io/idb.ts`, which keeps the connection and creates `blobs` on first use. */
+const SPEC: IdbSpec = {
+  name: 'oc-objects',
+  version: 1,
+  upgrade: db => {
+    if (!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME);
+  },
+};
 
-async function withStore<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequest): Promise<T> {
-  const db = await openDb();
-  return new Promise<T>((resolve, reject) => {
-    const transaction = db.transaction(STORE_NAME, mode);
-    const request = run(transaction.objectStore(STORE_NAME));
-    request.onsuccess = () => resolve(request.result as T);
-    request.onerror = () => reject(request.error);
-    transaction.oncomplete = () => db.close();
-  });
+/** Runs one request against the blob store and resolves with its result. */
+function withStore<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequest): Promise<T> {
+  return withStores(SPEC, [STORE_NAME], mode, tx => requestResult(run(tx.objectStore(STORE_NAME))));
 }
 
 /** Saves a model file under the given id, replacing any previous content. */

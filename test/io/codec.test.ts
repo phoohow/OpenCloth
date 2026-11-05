@@ -3,6 +3,7 @@ import { projectCodec } from '../../src/io/codec';
 import { createDefaultProject, createFabric } from '../../src/core/model/defaults';
 import { generateTShirt, DEFAULT_TSHIRT_PARAMS } from '../../src/pattern/template/tShirtTemplate';
 import { samplePanelOutline } from '../../src/pattern/panel/panelBuilder';
+import { PROJECT_FORMAT_VERSION } from '../../src/core/model/format';
 
 describe('projectCodec 往返', () => {
   it('默认工程 encode→decode 深度相等', () => {
@@ -41,6 +42,33 @@ describe('projectCodec 往返', () => {
     const decoded = projectCodec.decode(projectCodec.encode(project));
     decoded.meta.name = '已修改';
     expect(project.meta.name).not.toBe('已修改');
+  });
+});
+
+describe('格式版本', () => {
+  it('encode 写入当前格式版本', () => {
+    const project = createDefaultProject();
+    const raw = JSON.parse(projectCodec.encode(project));
+    expect(raw.formatVersion).toBe(PROJECT_FORMAT_VERSION);
+  });
+
+  it('缺少 formatVersion 的文件按旧版本读取', () => {
+    const raw = JSON.parse(projectCodec.encode(createDefaultProject()));
+    delete raw.formatVersion;
+    const decoded = projectCodec.decode(JSON.stringify(raw));
+    expect(decoded.formatVersion).toBe(PROJECT_FORMAT_VERSION);
+  });
+
+  it('更高版本的文件被拒绝，而不是半读', () => {
+    const raw = JSON.parse(projectCodec.encode(createDefaultProject()));
+    raw.formatVersion = PROJECT_FORMAT_VERSION + 1;
+    expect(() => projectCodec.decode(JSON.stringify(raw))).toThrow(/高于本版本支持/);
+  });
+
+  it('版本号不是非负整数时报错', () => {
+    const raw = JSON.parse(projectCodec.encode(createDefaultProject()));
+    raw.formatVersion = 1.5;
+    expect(() => projectCodec.decode(JSON.stringify(raw))).toThrow(/formatVersion/);
   });
 });
 

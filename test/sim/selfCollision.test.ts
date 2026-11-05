@@ -140,6 +140,24 @@ describe('self collision projection', () => {
     expect(distance(twoLayers, 0, 1)).toBeCloseTo(0.01, 6);
   });
 
+  it('separates a pair by the thicker particle clearance', () => {
+    const solver = new SelfCollisionSolver(2);
+    const positions = new Float32Array([0, 0, 0, 0.001, 0, 0]);
+    solver.resolve(positions, new Float32Array([1, 1]), new Uint8Array(2), {
+      thickness: 0.002, thicknesses: new Float32Array([0.008, 0.002]), layerSpacing: 0,
+    });
+    expect(distance(positions, 0, 1)).toBeCloseTo(0.008, 6);
+  });
+
+  it('ignores a particle thickness array of the wrong length', () => {
+    const solver = new SelfCollisionSolver(2);
+    const positions = new Float32Array([0, 0, 0, 0.001, 0, 0]);
+    solver.resolve(positions, new Float32Array([1, 1]), new Uint8Array(2), {
+      thickness: 0.002, thicknesses: new Float32Array([0.05]), layerSpacing: 0,
+    });
+    expect(distance(positions, 0, 1)).toBeCloseTo(0.002, 6);
+  });
+
   it('keeps positions untouched with a zero thickness and no layer spacing', () => {
     const solver = new SelfCollisionSolver(2);
     const positions = new Float32Array([0, 0, 0, 0.0001, 0, 0]);

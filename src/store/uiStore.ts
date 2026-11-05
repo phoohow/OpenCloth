@@ -4,14 +4,25 @@ import type { PatternElementKind } from '../core/model/elementRef';
 import { pickPrefs, readPrefs, writePrefs } from './prefs';
 
 /** 2D drafting and 3D fitting tools; each pane owns a subset. */
-export type ToolType = 'select' | 'point' | 'deletePoint' | 'line' | 'curve' | 'internalLine' | 'dart' | 'seam' | 'pin' | 'unpin' | 'rect' | 'circle' | 'ellipse' | 'split' | 'hole' | 'notch' | 'annotation' | 'measure' | 'topstitch' | 'trim';
+export type ToolType = 'select' | 'point' | 'deletePoint' | 'line' | 'curve' | 'internalLine' | 'dart' | 'seam' | 'pin' | 'unpin' | 'sketch3d' | 'measure3d' | 'rect' | 'circle' | 'ellipse' | 'split' | 'hole' | 'notch' | 'annotation' | 'measure' | 'topstitch' | 'trim';
+
+/** Points placed in a pending 3D measurement, and the distance once two exist. */
+export interface MeasureReadout {
+  points: number;
+  /** Distance between the two placed points in centimetres, or null while only one exists. */
+  distanceCm: number | null;
+}
+
 /** Properties-editor tabs, one icon in the right-hand rail. Identity and data share `object`. */
-export type PropTab = 'object' | 'material' | 'simulator' | 'transform' | 'render' | 'project';
-/** Viewport display-mode value: a render mode or one of the two cloth analysis heatmaps. */
-export type DisplayMode = RenderMode | 'fitHeatmap' | 'strainHeatmap';
+export type PropTab = 'object' | 'material' | 'simulator' | 'pattern' | 'transform' | 'render' | 'project';
+/** Viewport display-mode value: a render mode or one of the three cloth analysis heatmaps. */
+export type DisplayMode = RenderMode | 'fitHeatmap' | 'strainHeatmap' | 'pressureHeatmap';
 
 /** Display-mode value the viewport controls show: the active heatmap, otherwise the render mode. */
-export function displayModeOf(state: { renderMode: RenderMode; fitCheck: boolean; strainCheck: boolean }): DisplayMode {
+export function displayModeOf(state: {
+  renderMode: RenderMode; fitCheck: boolean; strainCheck: boolean; pressureCheck: boolean;
+}): DisplayMode {
+  if (state.pressureCheck) return 'pressureHeatmap';
   if (state.fitCheck) return 'fitHeatmap';
   if (state.strainCheck) return 'strainHeatmap';
   return state.renderMode;
@@ -41,7 +52,7 @@ export function leftPaneOf(layout: ViewLayout): PaneId {
 
 /** Pane whose toolbar owns a tool. */
 export function toolPane(tool: ToolType): PaneId {
-  return tool === 'pin' || tool === 'unpin' ? '3d' : '2d';
+  return tool === 'pin' || tool === 'unpin' || tool === 'sketch3d' || tool === 'measure3d' ? '3d' : '2d';
 }
 
 /** Keyboard shortcuts go to one pane at a time; a split layout tracks focus. */
@@ -120,6 +131,14 @@ interface UIStore {
   strainMin: number;
   /** Upper bound of the strain colour ramp. */
   strainMax: number;
+  /** Colours and counts strain against each fabric's own limits instead of the manual range. */
+  strainByFabric: boolean;
+  /** Shows estimated contact pressure colours on the cloth. */
+  pressureCheck: boolean;
+  /** Upper end of the pressure colour scale, in kilopascals. */
+  pressureMaxKpa: number;
+  /** Records one pressure sample per step while the body animation plays. */
+  dynamicSampling: boolean;
   /** Pattern copy of the in-flight 2D drag; session-only transport to the 3D pane. */
   editPreviewPattern: Pattern | null;
   /** Grading delta copied from one point, pasted onto the selected points. Session-only. */
@@ -132,6 +151,8 @@ interface UIStore {
   autoSaveSeconds: number;
   /** Timestamp of the last autosave written to the local archive. */
   lastAutosaveAt: string | null;
+  /** Pending 3D measurement reading; null when no measurement is armed. */
+  measure3d: MeasureReadout | null;
   /** Transient message over the viewports; null when none is shown. */
   toast: ToastMessage | null;
   setLayout: (v: ViewLayout) => void;
@@ -148,6 +169,10 @@ interface UIStore {
   setFitThresholds: (tightCm: number, looseCm: number) => void;
   setStrainCheck: (on: boolean) => void;
   setStrainRange: (min: number, max: number) => void;
+  setStrainByFabric: (on: boolean) => void;
+  setPressureCheck: (on: boolean) => void;
+  setPressureMaxKpa: (maxKpa: number) => void;
+  setDynamicSampling: (on: boolean) => void;
   setEditPreviewPattern: (pattern: Pattern | null) => void;
   setGradingClipboard: (delta: Vec2 | null) => void;
   setSceneRatio: (r: number) => void;
@@ -168,6 +193,7 @@ interface UIStore {
   togglePropertiesPanel: () => void;
   toggleTimeline: () => void;
   setAutoSaveSeconds: (s: number) => void;
+  setMeasure3d: (r: MeasureReadout | null) => void;
   setLastAutosaveAt: (at: string | null) => void;
   showToast: (text: string) => void;
   dismissToast: () => void;
@@ -205,6 +231,10 @@ export const useUIStore = create<UIStore>((set, get) => ({
   strainCheck: false,
   strainMin: -0.25,
   strainMax: 0.25,
+  strainByFabric: false,
+  pressureCheck: false,
+  pressureMaxKpa: 5,
+  dynamicSampling: false,
   editPreviewPattern: null,
   gradingClipboard: null,
   displayOptions: {
@@ -218,6 +248,7 @@ export const useUIStore = create<UIStore>((set, get) => ({
   autoSaveSeconds: prefs.autoSaveSeconds,
   lastAutosaveAt: null,
   toast: null,
+  measure3d: null,
 
   setLayout: (v) => set({ layout: v }),
   setSplitRatio: (r) => set({ splitRatio: r }),
@@ -233,16 +264,32 @@ export const useUIStore = create<UIStore>((set, get) => ({
   setDisplayOption: (key, value) => set(s => ({ displayOptions: { ...s.displayOptions, [key]: value } })),
   setMarqueeKinds: (kinds) => set({ marqueeKinds: kinds }),
   setEditPreview: (tier) => set({ editPreview: tier }),
-  setFitCheck: (on) => set(s => ({ fitCheck: on, strainCheck: on ? false : s.strainCheck })),
+  setFitCheck: (on) => set(s => ({
+    fitCheck: on,
+    strainCheck: on ? false : s.strainCheck,
+    pressureCheck: on ? false : s.pressureCheck,
+  })),
   setFitThresholds: (tightCm, looseCm) => set({
     fitTightCm: Math.max(0, tightCm),
     fitLooseCm: Math.max(tightCm, looseCm),
   }),
-  setStrainCheck: (on) => set(s => ({ strainCheck: on, fitCheck: on ? false : s.fitCheck })),
+  setStrainCheck: (on) => set(s => ({
+    strainCheck: on,
+    fitCheck: on ? false : s.fitCheck,
+    pressureCheck: on ? false : s.pressureCheck,
+  })),
   setStrainRange: (min, max) => set({
     strainMin: Math.min(max, min),
     strainMax: Math.max(max, min),
   }),
+  setStrainByFabric: (on) => set({ strainByFabric: on }),
+  setPressureCheck: (on) => set(s => ({
+    pressureCheck: on,
+    fitCheck: on ? false : s.fitCheck,
+    strainCheck: on ? false : s.strainCheck,
+  })),
+  setPressureMaxKpa: (maxKpa) => set({ pressureMaxKpa: Math.max(0.5, Math.min(30, maxKpa)) }),
+  setDynamicSampling: (on) => set({ dynamicSampling: on }),
   setEditPreviewPattern: (pattern) => set({ editPreviewPattern: pattern }),
   setGradingClipboard: (delta) => set({ gradingClipboard: delta }),
   setSceneRatio: (r) => set({ sceneRatio: r }),
@@ -257,12 +304,14 @@ export const useUIStore = create<UIStore>((set, get) => ({
   setPropTab: (t) => set({ propTab: t }),
   // Heatmaps replace the cloth material, and the path tracer hides that overlay, so analysis modes stay on the raster path.
   setDisplayMode: (m) => {
-    if (m === 'fitHeatmap') {
-      set(s => ({ fitCheck: true, strainCheck: false, renderMode: s.renderMode === 'raytraced' ? 'shaded' : s.renderMode }));
+    if (m === 'pressureHeatmap') {
+      set(s => ({ pressureCheck: true, fitCheck: false, strainCheck: false, renderMode: s.renderMode === 'raytraced' ? 'shaded' : s.renderMode }));
+    } else if (m === 'fitHeatmap') {
+      set(s => ({ fitCheck: true, strainCheck: false, pressureCheck: false, renderMode: s.renderMode === 'raytraced' ? 'shaded' : s.renderMode }));
     } else if (m === 'strainHeatmap') {
-      set(s => ({ strainCheck: true, fitCheck: false, renderMode: s.renderMode === 'raytraced' ? 'shaded' : s.renderMode }));
+      set(s => ({ strainCheck: true, fitCheck: false, pressureCheck: false, renderMode: s.renderMode === 'raytraced' ? 'shaded' : s.renderMode }));
     } else {
-      set({ renderMode: m, fitCheck: false, strainCheck: false });
+      set({ renderMode: m, fitCheck: false, strainCheck: false, pressureCheck: false });
     }
   },
   setRenderMode: (m) => set({ renderMode: m }),
@@ -276,6 +325,7 @@ export const useUIStore = create<UIStore>((set, get) => ({
   togglePropertiesPanel: () => set(s => ({ showPropertiesPanel: !s.showPropertiesPanel })),
   toggleTimeline: () => set(s => ({ showTimeline: !s.showTimeline })),
   setAutoSaveSeconds: (s) => set({ autoSaveSeconds: s }),
+  setMeasure3d: (r) => set({ measure3d: r }),
   setLastAutosaveAt: (at) => set({ lastAutosaveAt: at }),
   showToast: (text) => set({ toast: { id: ++toastSeq, text } }),
   dismissToast: () => set({ toast: null }),

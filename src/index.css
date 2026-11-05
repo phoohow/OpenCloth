@@ -21,10 +21,18 @@ button {
   font-family: inherit;
 }
 
-/* Control sizes one shell-wide; the phone mode widens the values at the bottom. */
+/*
+ * Control sizes one shell-wide; the phone mode widens the values at the bottom.
+ * Type scale, small to large: note < micro < body < label < heading < dialog-title.
+ * Components pick a token by role, never by a literal pixel size, so the two shells
+ * stay in step when the phone values are widened.
+ */
 :root {
-  --oc-fs-micro: 11px;
   --oc-fs-note: 10px;
+  --oc-fs-micro: 11px;
+  --oc-fs-body: 12px;
+  --oc-fs-label: 13px;
+  --oc-fs-heading: 14px;
   --oc-fs-dialog-title: 15px;
   --oc-h-control: 20px;
   --oc-h-row: 22px;
@@ -36,8 +44,11 @@ button {
 }
 
 html[data-ui-mode="mobile"] {
-  --oc-fs-micro: 14px;
   --oc-fs-note: 12px;
+  --oc-fs-micro: 14px;
+  --oc-fs-body: 15px;
+  --oc-fs-label: 16px;
+  --oc-fs-heading: 17px;
   --oc-fs-dialog-title: 17px;
   --oc-h-control: 34px;
   --oc-h-row: 40px;
