@@ -81,7 +81,7 @@ e2e/         Playwright 用例
 assets/      内置模特、环境贴图、图标与降噪权重
 ```
 
-架构见 [docs/架构.md](docs/架构.md)，代码规范见 [docs/代码规范.md](docs/代码规范.md)，注释约定见 [AGENTS.md](AGENTS.md)。
+源码架构见 [docs/源码架构.md](docs/源码架构.md)，代码规范见 [docs/代码规范.md](docs/代码规范.md)，注释约定见 [AGENTS.md](AGENTS.md)。
 
 ## 素材署名
 

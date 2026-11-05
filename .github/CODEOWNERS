@@ -1,5 +1,5 @@
 # Module ownership. Replace role placeholders with real GitHub handles or teams
-# before enabling branch protection. Boundaries follow docs/架构.md §2-3.
+# before enabling branch protection. Boundaries follow docs/源码架构.md §1-2.
 
 /src/common/            @base-lib-owner
 /src/model/             @model-owner
