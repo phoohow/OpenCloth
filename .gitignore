@@ -1,10 +1,9 @@
-dist/*
-node_modules/*
-.vscode/*
-.verify/*
 .preview/*
 .probe/*
-tsconfig.tsbuildinfo
-test-results
+.verify/*
+.vscode/*
+dist/*
+node_modules/*
 playwright-report
-docs/draft
+test-results
+tsconfig.tsbuildinfo
