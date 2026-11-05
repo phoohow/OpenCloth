@@ -1,6 +1,6 @@
-import type { Pattern, Project, Vec2 } from '../../../src/core/model/types';
-import { createDefaultProject } from '../../../src/core/model/defaults';
-import type { ProjectContext } from '../../../src/core/command/command';
+import type { Pattern, Project, Vec2 } from '@/model/types';
+import { createDefaultProject } from '@/model/defaults';
+import type { ProjectContext } from '@/commands/command';
 
 /** Draft context over a caller-supplied pattern. */
 export function ctxOf(pattern: Pattern): ProjectContext {

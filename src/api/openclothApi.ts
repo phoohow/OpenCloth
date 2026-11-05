@@ -1,7 +1,8 @@
-import type { Project } from '../core/model/types';
-import { projectCodec } from '../io/codec';
-import { buildPlmPackage, type PlmPackage } from '../io/integration';
-import { useProjectStore } from '../store/stores';
+import type { Project } from '@/model/types';
+import { projectCodec } from '@/io/serialization';
+import { buildPlmPackage, type PlmPackage } from '@/io/exporters';
+import { projectCounts } from '@/io';
+import { useProjectStore } from '@/store';
 
 /** Project summary exposed to automation clients. */
 export interface OpenClothSummary {
@@ -40,13 +41,7 @@ export function installPublicApi(): void {
     },
     getSummary: () => {
       const project = useProjectStore.getState().project;
-      return {
-        name: project.meta.name,
-        panels: Object.keys(project.pattern.panels).length,
-        seams: Object.keys(project.pattern.seams).length,
-        fabrics: Object.keys(project.fabrics).length,
-        sizes: (project.sizes ?? []).length,
-      };
+      return { name: project.meta.name, ...projectCounts(project) };
     },
     getPlmPackage: () => buildPlmPackage(useProjectStore.getState().project),
   };

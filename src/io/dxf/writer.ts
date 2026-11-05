@@ -1,16 +1,16 @@
-import type { Panel, Pattern, SizeDef, Vec2 } from '../../core/model/types';
-import { pointAtT } from '../../pattern/geom/edgeSample';
-import { edgeCurve, adaptiveSampleBezier } from '../../pattern/geom/bezier';
-import { adaptiveSampleArc } from '../../pattern/geom/arc';
-import { panelGrainLine, panelOutlineWithAllowance } from '../../pattern/panel/panelBuilder';
-import { topstitchRows } from '../../pattern/panel/productionGeometry';
-import { computeBBox, ensureCCW, perp, normalize, sub, dot } from '../../pattern/geom/vec2';
-import { resolveSize } from '../../core/command/gradingCommands';
+import type { Panel, Pattern, SizeDef, Vec2 } from '@/model/types';
+import { pointAtT } from '@/pattern/geom';
+import { edgeCurve, adaptiveSampleBezier } from '@/pattern/geom';
+import { adaptiveSampleArc } from '@/common/geom/arc';
+import { panelGrainLine, panelOutlineWithAllowance } from '@/pattern/panel';
+import { topstitchRows } from '@/pattern/panel';
+import { computeBBox, ensureCCW, perp, normalize, sub, dot } from '@/common/geom';
+import { resolveSize } from '@/pattern/grading';
 import {
   buildMarkerLayout, placePoint, placedLabel, placedOutline,
   type MarkerLayoutOptions,
-} from '../../pattern/marker/markerLayout';
-import { layerName, type DxfConvention } from './layers';
+} from '@/pattern/marker';
+import { layerName, type DxfConvention } from '@/io/dxf/layers';
 
 /** Text encoding of the string values written to a DXF file. */
 export type DxfEncoding = 'utf-8' | 'ascii';

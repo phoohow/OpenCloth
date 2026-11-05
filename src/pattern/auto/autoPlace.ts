@@ -1,8 +1,8 @@
-import type { Panel, PanelDrape, Pattern, Vec2 } from '../../core/model/types';
-import { samplePanelOutline } from '../panel/panelBuilder';
-import { computeBBox } from '../geom/vec2';
-import { inferDrape } from '../drape/drapeInfer';
-import { layoutRows } from '../template/patternLayout';
+import type { Panel, PanelDrape, Pattern, Vec2 } from '@/model/types';
+import { samplePanelOutline } from '@/pattern/panel/panelBuilder';
+import { computeBBox } from '@/common/geom';
+import { inferDrape } from '@/pattern/drape/drapeInfer';
+import { layoutRows } from '@/pattern/template/patternLayout';
 
 /** Where a panel should move on the 2D table, in centimeters. */
 export interface PanelOffset {

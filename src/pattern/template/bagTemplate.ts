@@ -1,7 +1,7 @@
-import type { EdgeSemantic, Panel, Pattern } from '../../core/model/types';
-import { PatternBuilder } from './templateKit';
-import { layoutRows } from './patternLayout';
-import { cm, defineTemplate } from './garmentTemplate';
+import type { EdgeSemantic, Panel, Pattern } from '@/model/types';
+import { PatternBuilder } from '@/pattern/template/templateKit';
+import { layoutRows } from '@/pattern/template/patternLayout';
+import { cm, defineTemplate } from '@/pattern/template/garmentTemplate';
 
 /** Finished size, base depth and handle dimensions of a tote bag. */
 export interface ToteParams {

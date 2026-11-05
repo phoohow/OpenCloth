@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { normalizeRayTracing } from '../../core/model/defaults';
-import { usePerfStore, useProjectStore, useSimStore, useUIStore } from '../../store/stores';
-import { rayTraceStateLabel, SIM_STEP_OPTIONS, simStepLabel } from '../optionTables';
-import { setSimulationConfig } from '../sceneCommands';
-import { Icon } from '../icons';
+import { normalizeRayTracing } from '@/model';
+import { usePerfStore, useProjectStore, useSimStore, useUIStore } from '@/store';
+import { rayTraceStateLabel, SIM_STEP_OPTIONS, simStepLabel } from '@/ui/optionTables';
+import { setSimulationConfig } from '@/ui/sceneCommands';
+import { Icon } from '@/ui/icons';
 
 /** Playback bar for the cloth simulation: the 3D view's frame rate or per-pixel sample count and its elapsed cost, transport buttons, step length, frame, playback time and status. */
 export function Timeline() {

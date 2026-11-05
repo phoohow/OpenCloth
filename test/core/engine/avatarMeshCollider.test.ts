@@ -3,7 +3,7 @@ import {
   Bone, BufferGeometry, Float32BufferAttribute, Group, MeshBasicMaterial, Skeleton, SkinnedMesh, Uint16BufferAttribute,
 } from 'three/webgpu';
 import type { Object3D } from 'three/webgpu';
-import { meshColliderFromObject, meshTrianglesFromObject } from '../../../src/core/engine/avatarMeshCollider';
+import { meshColliderFromObject, meshTrianglesFromObject } from '@/runtime/avatarMeshCollider';
 
 describe('meshColliderFromObject', () => {
   /** Object3D stand-in exposing only what the extraction reads. */

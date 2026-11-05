@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_TSHIRT_PARAMS, generateTShirt } from '../../../src/pattern/template/tShirtTemplate';
-import { edgeLength } from '../../../src/pattern/geom/edgeSample';
+import { DEFAULT_TSHIRT_PARAMS, generateTShirt } from '@/pattern/template/tShirtTemplate';
+import { edgeLength } from '@/pattern/geom/edgeSample';
 
 /** Seam sides have to be the same length, or the stitches gather or stretch one of them. */
 describe('T-shirt seam lengths', () => {

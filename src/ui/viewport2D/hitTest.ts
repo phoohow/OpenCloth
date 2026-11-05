@@ -1,8 +1,8 @@
-import type { Pattern, Vec2 } from '../../core/model/types';
-import { sampleEdge, sampleEdgeInterval } from '../../pattern/panel/panelBuilder';
-import { pointAtT } from '../../pattern/geom/edgeSample';
-import { elementNodeId, idsOfKind, parseElementNodeId, type PatternElementKind } from '../../core/model/elementRef';
-import { NOTCH_MID_T, printFrame, topstitchRows, trimRadiusCm } from './tools';
+import type { Pattern, Vec2 } from '@/model/types';
+import { sampleEdge, sampleEdgeInterval } from '@/pattern/panel';
+import { pointAtT } from '@/pattern/geom';
+import { elementNodeId, idsOfKind, parseElementNodeId, type PatternElementKind } from '@/model';
+import { NOTCH_MID_T, printFrame, topstitchRows, trimRadiusCm } from '@/ui/viewport2D/tools';
 
 /** Production symbols that sit inside a panel outline, so they are picked before the panel fill. */
 export const PRODUCTION_KINDS: PatternElementKind[] = ['trim', 'print', 'topstitch'];

@@ -1,4 +1,4 @@
-import type { PanelDrape } from '../../core/model/types';
+import type { PanelDrape } from '@/model/types';
 
 /** Torso wrap segment centered on the body front; `180` covers the front half. */
 export function frontArc(spanDeg: number): Pick<PanelDrape, 'startDeg' | 'sweepDeg'> {

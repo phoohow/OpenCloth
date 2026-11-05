@@ -1,5 +1,5 @@
 import type { Object3D } from 'three/webgpu';
-import type { AvatarCollider, Capsule } from './avatarCollider';
+import type { AvatarCollider, Capsule } from '@/avatar/collider/types';
 
 /** Minimal structural view of a mesh; keeps capsule fitting free of runtime THREE use. */
 interface MeshLike {

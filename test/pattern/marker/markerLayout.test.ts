@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createEmptyPattern } from '../../../src/core/model/defaults';
-import { buildMarkerLayout } from '../../../src/pattern/marker/markerLayout';
+import { createEmptyPattern } from '@/model/defaults';
+import { buildMarkerLayout } from '@/pattern/marker/markerLayout';
 import { addSquare } from '../../core/command/fixtures';
 
 /** One square panel graded 2 cm wider at size L. */

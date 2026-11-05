@@ -1,5 +1,5 @@
-import type { PaneId, ViewLayout } from '../store/stores';
-import { isSplitLayout, leftPaneOf } from '../store/stores';
+import type { PaneId, ViewLayout } from '@/store';
+import { isSplitLayout, leftPaneOf } from '@/store';
 
 /** Width of a draggable divider between two panes or panels. */
 export const DIVIDER_WIDTH = 6;

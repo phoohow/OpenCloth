@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildMeshCollider, closestPointOnTriangle, nearestMeshPoint, reindexMeshCollider, sampleMeshCollider,
-} from '../../src/avatar/collider/meshCollider';
+} from '@/avatar/collider/meshCollider';
 
 /** Axis-aligned cube of edge `size` centred on the origin, wound outward. */
 function cubeTriangles(size: number): Float32Array {

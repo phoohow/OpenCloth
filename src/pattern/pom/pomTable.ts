@@ -1,8 +1,8 @@
-import type { Pattern, PomPoint, Project, SizeDef, Vec2 } from '../../core/model/types';
-import { orderedSizes } from '../grading/grading';
-import { edgeLength } from '../geom/edgeSample';
-import { evaluatePomFormula } from './formula';
-import { resolveSize } from '../../core/command/gradingCommands';
+import type { Pattern, PomPoint, Project, SizeDef, Vec2 } from '@/model/types';
+import { orderedSizes } from '@/pattern/grading/grading';
+import { edgeLength } from '@/pattern/geom/edgeSample';
+import { evaluatePomFormula } from '@/pattern/pom/formula';
+import { resolveSize } from '@/pattern/grading/resolveSize';
 
 /** One POM row of the computed table. */
 export interface PomValueRow {

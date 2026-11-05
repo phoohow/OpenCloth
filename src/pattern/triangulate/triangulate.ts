@@ -1,4 +1,4 @@
-import type { Vec2 } from '../../core/model/types';
+import type { Vec2 } from '@/model/types';
 
 /** Triangles over a flat [x, y, ...] polygon-space vertex buffer. */
 export interface TriangleMesh {

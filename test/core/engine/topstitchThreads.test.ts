@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { Project } from '../../../src/core/model/types';
-import { createDefaultProject, createEmptyPattern, FABRIC_PHYSICS_PRESETS } from '../../../src/core/model/defaults';
-import type { ClothSimInput } from '../../../src/sim/clothSimulator';
-import { topstitchSegments } from '../../../src/core/engine/topstitchThreads';
+import type { Project } from '@/model/types';
+import { createDefaultProject, createEmptyPattern, FABRIC_PHYSICS_PRESETS } from '@/model/defaults';
+import type { ClothSimInput } from '@/sim/clothSimulator';
+import { topstitchSegments } from '@/runtime/topstitchThreads';
 import { addSquare } from '../../core/command/fixtures';
 
 /** Four corner particles standing in for the square panel's simulation mesh. */

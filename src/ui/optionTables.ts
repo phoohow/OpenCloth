@@ -1,9 +1,12 @@
-import type { CameraPreset } from '../core/engine/garmentEngine';
-import type { CameraProjection, DenoiseModel, EditPreviewTier, MeshSampling, RenderMode, ToneMappingMode } from '../core/model/types';
-import type { PropTab, DisplayMode } from '../store/stores';
-import type { IconName } from './icons';
-import type { DisplayOptions } from './viewport2D/render';
-import type { RayTraceFailure, RayTraceState, RayTracingCapability } from '../render/renderer/rendererContext';
+import type { CameraPreset } from '@/runtime';
+import type {
+  CameraProjection, DenoiseModel, EditPreviewTier, GarmentLayer, MeshSampling, RenderMode, ToneMappingMode,
+} from '@/model/types';
+import { DEFAULT_SKIN_APPEARANCE } from '@/model';
+import type { PropTab, DisplayMode } from '@/store';
+import type { IconName } from '@/ui/icons';
+import type { DisplayOptions } from '@/ui/viewport2D/render';
+import type { RayTraceFailure, RayTraceState, RayTracingCapability } from '@/render/renderer';
 
 /** One properties-editor tab: rail icon plus the Chinese label shared by rail and menu. */
 export interface PropTabOption {
@@ -166,3 +169,16 @@ export function nextSimStep(dt: number): number {
   const index = SIM_STEP_OPTIONS.indexOf(dt);
   return SIM_STEP_OPTIONS[(index + 1) % SIM_STEP_OPTIONS.length];
 }
+
+/** Display names of the construction layers, body outward. */
+export const GARMENT_LAYER_LABELS: Record<GarmentLayer, string> = {
+  lining: '里布', padding: '填充', shell: '外壳',
+};
+
+/** Skin tones offered as one-click presets, light to deep. */
+export const SKIN_TONES: Array<{ key: string; label: string; color: string }> = [
+  { key: 'light', label: '浅肤', color: '#ecd3b9' },
+  { key: 'asian', label: '亚洲', color: DEFAULT_SKIN_APPEARANCE.color },
+  { key: 'warm', label: '暖棕', color: '#c89873' },
+  { key: 'deep', label: '深肤', color: '#8d5c3c' },
+];

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { ClothSimulator } from '../../src/sim/clothSimulator';
-import type { ClothSimInput } from '../../src/sim/simTypes';
-import type { Constraint } from '../../src/sim/buffers/constraintBuilder';
-import type { FabricPhysics } from '../../src/core/model/types';
-import { FABRIC_PHYSICS_PRESETS, createDefaultProject } from '../../src/core/model/defaults';
+import { ClothSimulator } from '@/sim/clothSimulator';
+import type { ClothSimInput } from '@/sim/simTypes';
+import type { Constraint } from '@/sim/buffers/constraintBuilder';
+import type { FabricPhysics } from '@/model/types';
+import { FABRIC_PHYSICS_PRESETS, createDefaultProject } from '@/model/defaults';
 
 // The simulator reads the WebGPU enums while creating resources.
 const globals = globalThis as unknown as Record<string, unknown>;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { Pattern, Project } from '../../src/core/model/types';
-import { createDefaultProject, createEmptyPattern, createFabric } from '../../src/core/model/defaults';
-import { bomCsv, bomQuantityText, bomTotals, buildBom, panelAreas } from '../../src/pattern/bom';
+import type { Pattern, Project } from '@/model/types';
+import { createDefaultProject, createEmptyPattern, createFabric } from '@/model/defaults';
+import { bomCsv, bomQuantityText, bomTotals, buildBom, panelAreas } from '@/pattern/bom';
 import { addSquare } from '../core/command/fixtures';
 
 /** Project with one 10 × 10 cm square on fabric `f`. */

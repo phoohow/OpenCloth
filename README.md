@@ -53,25 +53,35 @@ npm run preview
 | `npm run lint` | ESLint |
 | `npm run typecheck` | 类型检查 |
 | `npm run perf:gate` | 大面积布料的性能门禁 |
+| `npm run arch:report` | 输出依赖矩阵、循环与分层违例 |
+| `npm run arch:check` | 对照基线检查架构守卫（CI 必过） |
+| `npm run arch:baseline` | 重建架构基线（目录结构调整后使用） |
 
 ## 目录结构
 
 ```
 src/
-  core/     数据模型、命令与撤销、工程编解码
-  pattern/  版型几何、版片网格、POM 与排料
-  sim/      WebGPU 布料求解与碰撞
-  render/   光栅化与光线追踪渲染
-  avatar/   模特与姿态
-  io/       导入导出（DXF / PDF / GLB / 工程文件 / IndexedDB）
-  ui/       界面层（菜单、面板、2D/3D 视口）
-  store/    zustand 状态
-test/       单元测试
-e2e/        Playwright 用例
-assets/     内置模特、环境贴图、图标与降噪权重
+  common/    公共层：数学、几何、ID、文本、时间、单位、平台能力与端口类型（零业务依赖）
+  model/     领域数据契约、默认值、校验与场景配置 schema
+  pattern/   版型几何、模板、排料、放码、POM
+  analysis/  合身 / 应变 / 压力的纯计算
+  sim/       WebGPU 布料求解与碰撞
+  render/    光栅化、光追、材质与热图可视化
+  avatar/    模特参数、姿态与碰撞体
+  io/        序列化 serialization、导入导出 exporters/importers、本地存储 storage、DXF/PDF
+  runtime/   应用编排：GarmentEngine 与构建 / 仿真 / 渲染流水线
+  commands/  编辑命令与撤销
+  store/     zustand 应用状态
+  ui/        React 界面、2D/3D 视口、菜单
+  api/       window.opencloth 自动化门面
+  tools/     独立 Node CLI 工具
+scripts/     架构守卫、基线与工程脚本
+test/        单元测试（test/architecture 为架构约束）
+e2e/         Playwright 用例
+assets/      内置模特、环境贴图、图标与降噪权重
 ```
 
-代码规范见 [docs/代码规范.md](docs/代码规范.md)，注释约定见 [AGENTS.md](AGENTS.md)。
+架构见 [docs/架构.md](docs/架构.md)，代码规范见 [docs/代码规范.md](docs/代码规范.md)，注释约定见 [AGENTS.md](AGENTS.md)。
 
 ## 素材署名
 

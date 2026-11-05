@@ -1,5 +1,6 @@
-import type { SimulationConfig, FabricPhysics } from '../core/model/types';
-import { DEFAULT_CLOTH_THICKNESS_CM, DEFAULT_LAYER_SPACING_CM } from '../core/model/defaults';
+import type { SimulationConfig, FabricPhysics } from '@/model/types';
+import { DEFAULT_CLOTH_THICKNESS_CM, DEFAULT_LAYER_SPACING_CM } from '@/model';
+import { cmToM } from '@/common/units';
 
 /** Velocity clamp applied by the integrate and update passes, in meters per second. */
 const MAX_SPEED = 6;
@@ -43,14 +44,14 @@ export function packIntegrateParams(
 export function clothThicknessMeters(config: SimulationConfig): number {
   const cm = config.clothThicknessCm;
   const value = typeof cm === 'number' && Number.isFinite(cm) ? cm : DEFAULT_CLOTH_THICKNESS_CM;
-  return Math.min(1, Math.max(0, value)) / 100;
+  return cmToM(Math.min(1, Math.max(0, value)));
 }
 
 /** Extra separation per collision-layer step, in meters, clamped to 0–2 cm. */
 export function layerSpacingMeters(config: SimulationConfig): number {
   const cm = config.layerSpacingCm;
   const value = typeof cm === 'number' && Number.isFinite(cm) ? cm : DEFAULT_LAYER_SPACING_CM;
-  return Math.min(2, Math.max(0, value)) / 100;
+  return cmToM(Math.min(2, Math.max(0, value)));
 }
 
 /** Body collider handed to the COLLIDE pass: the triangle grid, plus capsules for the fallback. */

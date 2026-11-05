@@ -1,7 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { EXRLoader } from 'three/examples/jsm/loaders/EXRLoader.js';
-import { bundledAssetUrl } from '../../core/assets/bundledAssetUrls';
+import { bundledAssetUrl } from '@/common/platform/assetUrls';
 
 /** Bundled equirectangular environment used when the project selects none. */
 export const DEFAULT_ENV_URL = '/env/royal_esplanade_1k.hdr';

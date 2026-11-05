@@ -1,8 +1,7 @@
-import type { Command, ProjectContext } from '../../core/command/command';
-import type { Fabric, Pattern } from '../../core/model/types';
-import { createFabric } from '../../core/model/defaults';
-import { appendPattern } from './patternLayout';
-import { type GarmentTemplate } from './garmentTemplate';
+import type { Command, Fabric, Pattern, ProjectContext } from '@/model/types';
+import { createFabric } from '@/model';
+import { appendPattern } from '@/pattern/template/patternLayout';
+import { type GarmentTemplate } from '@/pattern/template/garmentTemplate';
 
 /** Pattern and fabric bookkeeping a template command restores on undo. */
 interface Snapshot {

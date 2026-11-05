@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef } from 'react';
-import type { Pattern, Vec2 } from '../../core/model/types';
-import { samplePanelOutline } from '../../pattern/panel/panelBuilder';
-import { computeBBox } from '../../pattern/geom/vec2';
-import { useUIStore } from '../../store/stores';
-import { fitView, toWorld, zoomAround, type ViewTransform } from './viewMath';
+import type { Pattern, Vec2 } from '@/model/types';
+import { samplePanelOutline } from '@/pattern/panel';
+import { computeBBox } from '@/common/geom';
+import { useUIStore } from '@/store';
+import { fitView, toWorld, zoomAround, type ViewTransform } from '@/ui/viewport2D/viewMath';
 
 /** CSS size of the pane, or null while it is hidden. */
 export interface CanvasSize {

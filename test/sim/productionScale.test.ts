@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { createEmptyPattern, DEFAULT_MESH_RESOLUTION_CM, genId } from '../../src/core/model/defaults';
-import type { Panel, Pattern, Vec2 } from '../../src/core/model/types';
-import { buildPanelMesh } from '../../src/pattern/panel/panelBuilder';
-import { SelfCollisionSolver } from '../../src/sim/selfCollision';
+import { genId } from '@/common/id';
+import { createEmptyPattern, DEFAULT_MESH_RESOLUTION_CM } from '@/model/defaults';
+import type { Panel, Pattern, Vec2 } from '@/model/types';
+import { buildPanelMesh } from '@/pattern/panel/panelBuilder';
+import { SelfCollisionSolver } from '@/sim/selfCollision';
 
 /** Adds one rectangular panel to the pattern and returns its id. */
 function addRectPanel(pattern: Pattern, name: string, width: number, height: number): string {

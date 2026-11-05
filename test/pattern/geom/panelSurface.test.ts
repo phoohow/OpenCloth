@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { barycentricWeights3D, trianglePointToPanel2D, type Triple } from '../../../src/pattern/geom/panelSurface';
+import { barycentricWeights3D, trianglePointToPanel2D, type Triple } from '@/common/geom';
 
 const origin: Triple = [0, 0, 0];
 const alongX: Triple = [10, 0, 0];

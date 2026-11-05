@@ -1,12 +1,17 @@
-import type { ObjectTransform, Panel, Pattern, Project, SceneLight, Seam } from '../core/model/types';
-import { PATTERN_ELEMENT_KINDS } from '../core/model/elementRef';
-import { elementNodeId, parseElementNodeId } from './elementSelection';
-import { seamNumbers } from '../pattern/seam/seamNumber';
+import type { Panel, Pattern, Project, SceneLight, Seam } from '@/model/types';
+import { PATTERN_ELEMENT_KINDS } from '@/model';
+import { elementNodeId } from '@/model';
+import { seamNumbers } from '@/pattern/seam';
 import {
-  BUNDLED_AVATARS, EDGE_SEMANTIC_LABELS, IDENTITY_TRANSFORM, LIGHT_TYPE_LABELS, SEAM_TYPE_LABELS,
+  BUNDLED_AVATARS, EDGE_SEMANTIC_LABELS, LIGHT_TYPE_LABELS, SEAM_TYPE_LABELS,
   TRIM_KIND_LABELS, normalizeLights,
-} from '../core/model/defaults';
-import type { IconName } from './icons';
+} from '@/model';
+import {
+  AVATAR_NODE_ID, CAMERA_NODE_ID, ENVIRONMENT_NODE_ID, GARMENT_COLLECTION_ID, LIGHT_COLLECTION_ID,
+  PRINT_COLLECTION_ID, REFERENCE_COLLECTION_ID, SCENE_ROOT_ID, SEAM_COLLECTION_ID,
+  TOPSTITCH_COLLECTION_ID, TRIM_COLLECTION_ID, lightNodeId, referenceNodeId, seamNodeId,
+} from '@/model';
+import type { IconName } from '@/ui/icons';
 
 /** Row categories shown in the outliner; element kinds come from 2D drafting picks. */
 export type SceneNodeKind =
@@ -17,20 +22,6 @@ export type SceneNodeKind =
 
 /** Kinds addressed with the `@kind:id` element encoding. */
 export const ELEMENT_NODE_KINDS: SceneNodeKind[] = PATTERN_ELEMENT_KINDS.filter(k => k !== 'panel');
-
-export const SCENE_ROOT_ID = '@scene';
-
-// Outliner rows with no project object behind them.
-export const AVATAR_NODE_ID = '@avatar';
-export const CAMERA_NODE_ID = '@camera';
-export const ENVIRONMENT_NODE_ID = '@env';
-export const GARMENT_COLLECTION_ID = '@collection:garment';
-export const REFERENCE_COLLECTION_ID = '@collection:reference';
-export const LIGHT_COLLECTION_ID = '@collection:light';
-export const SEAM_COLLECTION_ID = '@collection:seam';
-export const PRINT_COLLECTION_ID = '@collection:print';
-export const TOPSTITCH_COLLECTION_ID = '@collection:topstitch';
-export const TRIM_COLLECTION_ID = '@collection:trim';
 
 /** Chinese name of each row kind, shared by the outliner and the properties panel. */
 export const SCENE_KIND_LABELS: Record<SceneNodeKind, string> = {
@@ -45,41 +36,6 @@ export const SCENE_KIND_LABELS: Record<SceneNodeKind, string> = {
 export const LIGHT_TYPE_ICONS: Record<SceneLight['type'], IconName> = {
   directional: 'light-directional', point: 'light-point', spot: 'light-spot', area: 'light-area',
 };
-
-/** Outliner id of an imported reference object. */
-export function referenceNodeId(id: string): string {
-  return `@ref:${id}`;
-}
-
-/** Project id behind a reference row's outliner id. */
-export function referenceObjectId(nodeId: string): string {
-  return nodeId.slice('@ref:'.length);
-}
-
-/** Outliner id of one project light. */
-export function lightNodeId(id: string): string {
-  return `@light:${id}`;
-}
-
-/** Project id behind a light row's outliner id. */
-export function lightObjectId(nodeId: string): string {
-  return nodeId.slice('@light:'.length);
-}
-
-/** Outliner id of one seam's stitch line. */
-export function seamNodeId(id: string): string {
-  return `@seam:${id}`;
-}
-
-/** Pattern id behind a seam row's outliner id. */
-export function seamObjectId(nodeId: string): string {
-  return nodeId.slice('@seam:'.length);
-}
-
-/** Whether an id belongs to a non-panel scene object rather than the pattern. */
-export function isSceneNodeId(id: string): boolean {
-  return id.startsWith('@');
-}
 
 /** One outliner row and its children. */
 export interface SceneNode {
@@ -135,129 +91,19 @@ export function elementLabel(project: Project, kind: SceneNodeKind, id: string):
   }
 }
 
-/** Stored display name behind a row, or null when it labels itself from its kind. */
-export function storedSceneName(project: Project, nodeId: string): string | null {
-  const pattern = project.pattern;
-  const element = parseElementNodeId(nodeId);
-  if (element) {
-    switch (element.kind) {
-      case 'panel': return pattern.panels[element.id]?.name ?? null;
-      case 'point': return pattern.points[element.id]?.name ?? null;
-      case 'edge': return pattern.edges[element.id]?.name ?? null;
-      case 'internal': return pattern.internalLines[element.id]?.name ?? null;
-      case 'dart': return pattern.darts[element.id]?.name ?? null;
-      case 'seam': return pattern.seams[element.id]?.name ?? null;
-      case 'notch': return pattern.notches?.[element.id]?.name ?? null;
-      case 'annotation': return pattern.annotations?.[element.id]?.name ?? null;
-      case 'measurement': return pattern.measurements?.[element.id]?.name ?? null;
-      case 'print': return pattern.prints?.[element.id]?.name ?? null;
-      case 'topstitch': return pattern.topstitches?.[element.id]?.name ?? null;
-      case 'trim': return pattern.trims?.[element.id]?.name ?? null;
-    }
-  }
-  const panel = project.pattern.panels[nodeId];
-  if (panel) return panel.name ?? null;
-  if (nodeId === AVATAR_NODE_ID) return project.avatar.name ?? null;
-  if (nodeId === ENVIRONMENT_NODE_ID) return project.scene.lights.iblLabel ?? null;
-  if (nodeId === CAMERA_NODE_ID) return project.scene.cameraName ?? null;
-  if (nodeId.startsWith('@ref:')) {
-    return (project.scene.referenceObjects ?? []).find(r => r.id === referenceObjectId(nodeId))?.name ?? null;
-  }
-  if (nodeId.startsWith('@light:')) {
-    return normalizeLights(project.scene.lights).find(l => l.id === lightObjectId(nodeId))?.name ?? null;
-  }
-  return null;
+/** Whether every child of a collection row is visible. */
+export function isCollectionVisible(node: SceneNode): boolean {
+  return node.children.length > 0 && node.children.every(c => c.visible);
 }
 
-/** Writes a row's display name; a blank name clears the override where the row allows one. */
-export function writeSceneName(project: Project, nodeId: string, name: string): void {
-  const trimmed = name.trim();
-  const optional = trimmed || undefined;
-  const pattern = project.pattern;
-  const element = parseElementNodeId(nodeId);
-  if (element) {
-    switch (element.kind) {
-      case 'panel': {
-        const panel = pattern.panels[element.id];
-        if (panel && trimmed) panel.name = trimmed;
-        return;
-      }
-      case 'point': {
-        const point = pattern.points[element.id];
-        if (point) point.name = optional;
-        return;
-      }
-      case 'edge': {
-        const edge = pattern.edges[element.id];
-        if (edge) edge.name = optional;
-        return;
-      }
-      case 'internal': {
-        const line = pattern.internalLines[element.id];
-        if (line) line.name = optional;
-        return;
-      }
-      case 'dart': {
-        const dart = pattern.darts[element.id];
-        if (dart) dart.name = optional;
-        return;
-      }
-      case 'seam': {
-        const seam = pattern.seams[element.id];
-        if (seam) seam.name = optional;
-        return;
-      }
-      case 'notch': {
-        const notch = pattern.notches?.[element.id];
-        if (notch) notch.name = optional;
-        return;
-      }
-      case 'annotation': {
-        const note = pattern.annotations?.[element.id];
-        if (note) note.name = optional;
-        return;
-      }
-      case 'measurement': {
-        const measurement = pattern.measurements?.[element.id];
-        if (measurement) measurement.name = optional;
-        return;
-      }
-      case 'print': {
-        const print = pattern.prints?.[element.id];
-        if (print) print.name = optional;
-        return;
-      }
-      case 'topstitch': {
-        const stitch = pattern.topstitches?.[element.id];
-        if (stitch) stitch.name = optional;
-        return;
-      }
-      case 'trim': {
-        const trim = pattern.trims?.[element.id];
-        if (trim) trim.name = optional;
-        return;
-      }
-    }
+/** Depth-first lookup of an outliner row by id. */
+export function findSceneNode(node: SceneNode, id: string): SceneNode | null {
+  if (node.id === id) return node;
+  for (const child of node.children) {
+    const hit = findSceneNode(child, id);
+    if (hit) return hit;
   }
-  const panel = pattern.panels[nodeId];
-  if (panel) { panel.name = trimmed || panel.name; return; }
-  if (nodeId === AVATAR_NODE_ID) { project.avatar.name = optional; return; }
-  if (nodeId === ENVIRONMENT_NODE_ID) { project.scene.lights.iblLabel = optional; return; }
-  if (nodeId === CAMERA_NODE_ID) { project.scene.cameraName = optional; return; }
-  if (nodeId.startsWith('@ref:')) {
-    const ref = (project.scene.referenceObjects ?? []).find(r => r.id === referenceObjectId(nodeId));
-    if (ref && trimmed) ref.name = trimmed;
-    return;
-  }
-  if (nodeId.startsWith('@light:')) {
-    const light = normalizeLights(project.scene.lights).find(l => l.id === lightObjectId(nodeId));
-    if (light) {
-      project.scene = {
-        ...project.scene,
-        lights: { ...project.scene.lights, lights: project.scene.lights.lights.map(l => l.id === light.id ? { ...l, name: trimmed || l.name } : l) },
-      };
-    }
-  }
+  return null;
 }
 
 /** Drafting elements owned by a panel, as outliner rows. */
@@ -537,74 +383,4 @@ export function supportsMaterial(kind: SceneNodeKind): boolean {
 /** Rows that expose simulation settings. */
 export function supportsSimulator(kind: SceneNodeKind): boolean {
   return kind === 'panel' || kind === 'avatar';
-}
-
-/** Reads a node's stored transform; nodes without one report the identity. */
-export function readTransform(project: Project, nodeId: string): ObjectTransform | null {
-  if (nodeId === AVATAR_NODE_ID) return project.avatar.transform ?? IDENTITY_TRANSFORM;
-  if (nodeId.startsWith('@ref:')) {
-    const ref = (project.scene.referenceObjects ?? []).find(r => r.id === referenceObjectId(nodeId));
-    return ref ? ref.transform ?? IDENTITY_TRANSFORM : null;
-  }
-  if (isSceneNodeId(nodeId)) return null;
-  const panel = project.pattern.panels[nodeId];
-  return panel ? panel.transform ?? IDENTITY_TRANSFORM : null;
-}
-
-/** Writes a node's transform in place. */
-export function writeTransform(project: Project, nodeId: string, transform: ObjectTransform): void {
-  const next: ObjectTransform = {
-    position: { ...transform.position },
-    rotationEuler: { ...transform.rotationEuler },
-    scale: { ...transform.scale },
-  };
-  if (nodeId === AVATAR_NODE_ID) {
-    project.avatar.transform = next;
-    return;
-  }
-  if (nodeId.startsWith('@ref:')) {
-    const ref = (project.scene.referenceObjects ?? []).find(r => r.id === referenceObjectId(nodeId));
-    if (ref) ref.transform = next;
-    return;
-  }
-  if (isSceneNodeId(nodeId)) return;
-  const panel = project.pattern.panels[nodeId];
-  if (panel) panel.transform = next;
-}
-
-/** Whether every child of a collection row is visible. */
-export function isCollectionVisible(node: SceneNode): boolean {
-  return node.children.length > 0 && node.children.every(c => c.visible);
-}
-
-/** Depth-first lookup of an outliner row by id. */
-export function findSceneNode(node: SceneNode, id: string): SceneNode | null {
-  if (node.id === id) return node;
-  for (const child of node.children) {
-    const hit = findSceneNode(child, id);
-    if (hit) return hit;
-  }
-  return null;
-}
-
-/** Bounding box of a panel's outline in pattern centimeters. */
-export function panelSizeCm(pattern: Pattern, panelId: string): { width: number; height: number } | null {
-  const panel = pattern.panels[panelId];
-  if (!panel) return null;
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  for (const edgeId of panel.outlineEdgeIds) {
-    const edge = pattern.edges[edgeId];
-    for (const pos of [pattern.points[edge?.startPointId ?? '']?.pos, pattern.points[edge?.endPointId ?? '']?.pos]) {
-      if (!pos) continue;
-      minX = Math.min(minX, pos.x);
-      minY = Math.min(minY, pos.y);
-      maxX = Math.max(maxX, pos.x);
-      maxY = Math.max(maxY, pos.y);
-    }
-  }
-  if (!Number.isFinite(minX) || !Number.isFinite(maxX)) return null;
-  return { width: maxX - minX, height: maxY - minY };
 }

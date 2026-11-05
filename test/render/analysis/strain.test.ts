@@ -3,7 +3,7 @@ import {
   computeVertexStrain,
   strainColor,
   strainStats,
-} from '../../../src/render/analysis/strain';
+} from '@/analysis/strain';
 
 /** Right triangle: v0 at the origin, v1 on +X, v2 on +Y. */
 const REST_TRIANGLE = new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]);

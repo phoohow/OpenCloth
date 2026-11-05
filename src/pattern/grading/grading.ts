@@ -1,6 +1,6 @@
-import type { Pattern, Project, SizeDef, Vec2 } from '../../core/model/types';
-import { resolveSize } from '../../core/command/gradingCommands';
-import { sampleOutline, samplePanelOutline } from '../panel/panelBuilder';
+import type { Pattern, Project, SizeDef, Vec2 } from '@/model/types';
+import { resolveSize } from '@/pattern/grading/resolveSize';
+import { sampleOutline, samplePanelOutline } from '@/pattern/panel/panelBuilder';
 
 /** Size chart entries in grading order. */
 export function orderedSizes(project: Project): SizeDef[] {

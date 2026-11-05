@@ -1,11 +1,11 @@
-import type { Project } from '../../../core/model/types';
-import { useSimStore, useUIStore } from '../../../store/stores';
-import { downloadTextFile } from '../../../io/codec';
-import { DEFAULT_PRESSURE_KPA_PER_MM } from '../../../render/analysis/pressure';
-import { dynamicPressureCsv } from '../../../render/analysis/dynamicPressure';
-import { ButtonRow, CheckRow, Row, Section, SelectRow, SliderRow, SmallButton } from '../../widgets/propertyRows';
-import type { EngineRef } from '../../sceneCommands';
-import { styles } from './styles';
+import type { Project } from '@/model/types';
+import { useSimStore, useUIStore } from '@/store';
+import { downloadTextFile } from '@/io/serialization';
+import { DEFAULT_PRESSURE_KPA_PER_MM } from '@/analysis';
+import { dynamicPressureCsv } from '@/analysis';
+import { ButtonRow, CheckRow, Row, Section, SelectRow, SliderRow, SmallButton } from '@/ui/widgets/propertyRows';
+import type { EngineRef } from '@/ui/sceneCommands';
+import { styles } from '@/ui/panels/properties/styles';
 
 /** Body animation playback and the per-frame pressure report while the clip runs. */
 export function DynamicFitSection({ project, engineRef }: { project: Project; engineRef: EngineRef }) {

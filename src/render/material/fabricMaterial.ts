@@ -1,7 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { normalLocal, packNormalToRGB } from 'three/tsl';
-import type { FabricAppearance, FabricMapSlot, RenderMode } from '../../core/model/types';
-import { acquireFabricTexture, type FabricTextureHandle } from './fabricTextures';
+import type { FabricAppearance, FabricMapSlot, RenderMode } from '@/model/types';
+import { acquireFabricTexture, type FabricTextureHandle } from '@/render/material/fabricTextures';
 
 /** Colour space each map slot is sampled in; only albedo carries sRGB colour. */
 const MAP_COLOR_SPACE: Record<FabricMapSlot, THREE.ColorSpace> = {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { packCollideParams, packIntegrateParams } from '../../src/sim/simUniforms';
-import { FABRIC_PHYSICS_PRESETS, createDefaultProject } from '../../src/core/model/defaults';
+import { packCollideParams, packIntegrateParams } from '@/sim/simUniforms';
+import { FABRIC_PHYSICS_PRESETS, createDefaultProject } from '@/model/defaults';
 
 /** Uniforms of one integrate dispatch over 64 particles. */
 function packed(grabTarget: readonly [number, number, number] | null): Float32Array {

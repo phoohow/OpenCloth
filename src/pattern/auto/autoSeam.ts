@@ -1,5 +1,5 @@
-import type { Pattern, SeamEnd } from '../../core/model/types';
-import { edgeLength, sampleEdge } from '../../pattern/geom/edgeSample';
+import type { Pattern, SeamEnd } from '@/model/types';
+import { edgeLength, sampleEdge } from '@/pattern/geom/edgeSample';
 
 /** A suggested seam pairing two edge intervals. */
 export interface SeamCandidate {

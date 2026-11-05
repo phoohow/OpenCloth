@@ -1,9 +1,10 @@
-import type { Pattern, PatternEdge, Vec2 } from '../../core/model/types';
-import { add, sub, dot, distance, lerp, normalize, scale } from './vec2';
-import { genId } from '../../core/model/defaults';
-import { edgeCurve, splitEdgeCurve } from './bezier';
-import { arcFromThreePoints, arcSpan } from './arc';
-import { edgeLength, sampleEdge } from './edgeSample';
+import { genId } from '@/common/id';
+import type { Pattern, PatternEdge, Vec2 } from '@/model/types';
+import { add, sub, dot, distance, lerp, normalize, scale } from '@/common/geom';
+
+import { edgeCurve, splitEdgeCurve } from '@/pattern/geom/bezier';
+import { arcFromThreePoints, arcSpan } from '@/common/geom';
+import { edgeLength, sampleEdge } from '@/pattern/geom/edgeSample';
 
 /** Edges and tangent points that replace one filleted corner. */
 export interface FilletResult {

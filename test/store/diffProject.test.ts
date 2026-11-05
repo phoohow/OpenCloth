@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { diffProject } from '../../src/core/change/diffProject';
-import type { ChangeSet } from '../../src/core/change/changeSet';
-import { panelGeometrySignature } from '../../src/pattern/panel/panelMeshSignature';
-import { createDefaultProject, createEmptyPattern } from '../../src/core/model/defaults';
-import { vec2, vec3, type Pattern, type Project } from '../../src/core/model/types';
+import { diffProject } from '@/runtime/change';
+import type { ChangeSet } from '@/runtime/change';
+import { panelGeometrySignature } from '@/pattern/panel/panelMeshSignature';
+import { createDefaultProject, createEmptyPattern } from '@/model/defaults';
+import { vec2, vec3, type Pattern, type Project } from '@/model/types';
 
 /** Square panel with one seam, one notch, one note and one measurement. */
 function makePattern(): Pattern {

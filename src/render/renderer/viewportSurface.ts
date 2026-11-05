@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
-import { addStageFloor } from './stageFloor';
-import { FALLBACK_BACKGROUND } from './sceneEnvironment';
+import { addStageFloor } from '@/render/renderer/stageFloor';
+import { FALLBACK_BACKGROUND } from '@/render/renderer/sceneEnvironment';
 
 /** The drawing buffer, scene and canvas one viewport owns. */
 export class ViewportSurface {

@@ -1,6 +1,6 @@
-import type { MeshSampling, Vec2 } from '../../core/model/types';
-import type { TriangleMesh } from './triangulate';
-import { delaunayTriangulate } from './delaunay';
+import type { MeshSampling, Vec2 } from '@/model/types';
+import type { TriangleMesh } from '@/pattern/triangulate/triangulate';
+import { delaunayTriangulate } from '@/pattern/triangulate/delaunay';
 
 /** Triangles over a mutable flat [x, y, ...] buffer, wound counter-clockwise. */
 interface Remesh {

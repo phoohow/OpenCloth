@@ -1,4 +1,5 @@
-import type { Vec2 } from '../../core/model/types';
+import type { Vec2 } from '@/model/types';
+import { clamp } from '@/common/math';
 
 /** Page points per centimetre at 1:1. */
 export const CM_PT = 28.3465;
@@ -9,9 +10,7 @@ export function pdfNum(n: number): string {
   return Object.is(r, -0) ? '0' : String(r);
 }
 
-export function clamp(v: number, lo: number, hi: number): number {
-  return Math.min(hi, Math.max(lo, v));
-}
+export { clamp };
 
 /** True when a run cannot be set in Helvetica and needs the CJK font. */
 export function needsCjk(text: string): boolean {

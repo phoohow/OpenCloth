@@ -1,4 +1,5 @@
-import type { AvatarParams, BodyLandmark } from '../core/model/types';
+import type { AvatarParams, BodyLandmark } from '@/model/types';
+import { cmToM } from '@/common/units';
 
 /** Half width and half depth of an elliptical body cross-section, in meters. */
 export interface BodyEllipse {
@@ -75,16 +76,16 @@ const TORSO_PROFILE: Array<{ at: (p: BodyProportions) => number; r: (p: BodyProp
 
 /** Builds the landmarks from body girths using the procedural mannequin's proportions. */
 export function bodyProportions(params: AvatarParams): BodyProportions {
-  const height = params.heightCm / 100;
+  const height = cmToM(params.heightCm);
   const headH = height * 0.13;
   const neckH = height * 0.03;
   const torsoH = height * 0.345;
   const legH = height * 0.47;
   const armH = height * 0.36;
   const torsoTop = legH + torsoH;
-  const chestR = params.chestCm / 100 / (2 * Math.PI);
-  const waistR = params.waistCm / 100 / (2 * Math.PI);
-  const hipR = params.hipCm / 100 / (2 * Math.PI);
+  const chestR = cmToM(params.chestCm) / (2 * Math.PI);
+  const waistR = cmToM(params.waistCm) / (2 * Math.PI);
+  const hipR = cmToM(params.hipCm) / (2 * Math.PI);
 
   return {
     height,

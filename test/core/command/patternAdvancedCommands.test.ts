@@ -1,17 +1,17 @@
 import { describe, it, expect } from 'vitest';
-import type { Pattern, Vec2 } from '../../../src/core/model/types';
-import type { ProjectContext } from '../../../src/core/command/command';
-import { createEmptyPattern } from '../../../src/core/model/defaults';
-import { validatePattern } from '../../../src/core/model/validatePattern';
+import type { Pattern, Vec2 } from '@/model/types';
+import type { ProjectContext } from '@/commands/command';
+import { createEmptyPattern } from '@/model/defaults';
+import { validatePattern } from '@/model/validatePattern';
 import {
   AddInternalLineCommand, BreakPointCommand, ConnectPointsCommand, CreateCircleCommand, CreateEllipseCommand,
   MergeCollinearEdgesCommand, OffsetInternalLineCommand, PanelFromInternalLoopCommand, RhombusDartCommand,
   SetArcParamsCommand, SetEdgeAngleCommand, SetEdgeLengthCommand, SimplifyCurveCommand,
-} from '../../../src/core/command/patternCommands';
-import { edgeLength, pointAtT, sampleEdge } from '../../../src/pattern/geom/edgeSample';
-import { arcFromThreePoints, arcSpan } from '../../../src/pattern/geom/arc';
-import { samplePanelOutline } from '../../../src/pattern/panel/panelBuilder';
-import { distance } from '../../../src/pattern/geom/vec2';
+} from '@/commands/patternCommands';
+import { edgeLength, pointAtT, sampleEdge } from '@/pattern/geom/edgeSample';
+import { arcFromThreePoints, arcSpan } from '@/common/geom';
+import { samplePanelOutline } from '@/pattern/panel/panelBuilder';
+import { distance } from '@/common/geom';
 import { ctxOf, addSquare } from './fixtures';
 
 /** Executes, checks topology, then undoes and compares against the pre-execute snapshot. */

@@ -1,10 +1,9 @@
 import * as THREE from 'three/webgpu';
 import { texture, uniform, uv } from 'three/tsl';
 import { OIDNDenoiser, WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
-import { normalizeRayTracing } from '../../core/model/defaults';
-import { bundledAssetUrl } from '../../core/assets/bundledAssetUrls';
-import type { DenoiseModel, RayTracingConfig } from '../../core/model/types';
-import { useUIStore } from '../../store/uiStore';
+import { normalizeRayTracing } from '@/model';
+import { bundledAssetUrl } from '@/common/platform/assetUrls';
+import type { DenoiseModel, RayTracingConfig } from '@/model/types';
 
 type PathTracingMaterial = THREE.MeshStandardMaterial | THREE.MeshPhysicalMaterial;
 type GeometryWithBVH = THREE.BufferGeometry & { boundsTree?: { refit(): void } };
@@ -96,7 +95,11 @@ export class RayTracingRenderer {
     return this.disposed;
   }
 
-  constructor(renderer: THREE.WebGPURenderer, config: RayTracingConfig) {
+  constructor(
+    renderer: THREE.WebGPURenderer,
+    config: RayTracingConfig,
+    private readonly onDenoiserFailure?: (message: string) => void,
+  ) {
     this.renderer = renderer;
     this.tracer = new WebGPUPathTracer(renderer);
     this.blendTarget = new THREE.RenderTarget(1, 1, { type: THREE.HalfFloatType });
@@ -419,7 +422,7 @@ export class RayTracingRenderer {
   /** Logs an OIDN failure and tells the user how to retry the weight download. */
   private reportDenoiserFailure(error: unknown): void {
     console.warn('OIDN denoiser unavailable:', error);
-    useUIStore.getState().showToast('OIDN 降噪权重加载失败，已改用无降噪渲染；关闭再开启降噪可重试。');
+    this.onDenoiserFailure?.('OIDN 降噪权重加载失败，已改用无降噪渲染；关闭再开启降噪可重试。');
   }
 }
 

@@ -1,4 +1,4 @@
-import type { MenuEntry, MenuLeaf, TopMenu } from './menuTypes';
+import type { MenuEntry, MenuLeaf, TopMenu } from '@/ui/menu/menuTypes';
 
 /** Which dropdown is open, which submenu is expanded and which row is highlighted. */
 export interface MenuNavState {

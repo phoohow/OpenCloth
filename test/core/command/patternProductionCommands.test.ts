@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import type { ProjectContext } from '../../../src/core/command/command';
-import type { Pattern } from '../../../src/core/model/types';
-import { createEmptyPattern } from '../../../src/core/model/defaults';
-import { validatePattern } from '../../../src/core/model/validatePattern';
+import type { ProjectContext } from '@/commands/command';
+import type { Pattern } from '@/model/types';
+import { createEmptyPattern } from '@/model/defaults';
+import { validatePattern } from '@/model/validatePattern';
 import {
   SetPanelSeamAllowanceCommand, SetPanelMeshResolutionCommand, SetEdgeSeamAllowanceCommand,
   SetEdgeCornerStyleCommand,
@@ -12,9 +12,9 @@ import {
   AddSizeCommand, RenameSizeCommand, RemoveSizeCommand, SetBaseSizeCommand, ReorderSizesCommand,
   AddPrintCommand, UpdatePrintCommand, AddTopstitchCommand, UpdateTopstitchCommand,
   AddTrimCommand, UpdateTrimCommand, DeleteSelectionCommand,
-} from '../../../src/core/command/patternCommands';
+} from '@/commands/patternCommands';
 import { ctxOf, addSquare } from './fixtures';
-import { SetGlobalMeshResolutionCommand } from '../../../src/core/command/patternProductionCommands';
+import { SetGlobalMeshResolutionCommand } from '@/commands/patternProductionCommands';
 
 function makePattern(): Pattern {
   const p = createEmptyPattern();

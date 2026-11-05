@@ -1,30 +1,34 @@
-import type { SimulationConfig, FabricPhysics } from '../core/model/types';
-import type { AvatarCollider } from '../avatar/collider/avatarCollider';
-import { packCapsules } from '../avatar/collider/avatarCollider';
-import type { MeshCollider } from '../avatar/collider/meshCollider';
-import { packConstraints, type Constraint } from './buffers/constraintBuilder';
-import { buildNormalAdjacency } from './buffers/normalAdjacency';
+import type { SimulationConfig, FabricPhysics } from '@/model/types';
+import type { AvatarCollider } from '@/avatar/collider';
+import { packCapsules } from '@/avatar/collider';
+import type { MeshCollider } from '@/avatar/collider';
+import { type Constraint } from '@/sim/buffers/constraintBuilder';
+import { buildNormalAdjacency } from '@/sim/buffers/normalAdjacency';
 import {
   computeParticlePanelMap, ParticleGrid, pickNearest, pickNearestToPoint,
   type ParticlePickHit, type Vec3Like,
-} from './picking';
+} from '@/sim/picking';
 import {
   createSimPipelines, createStorageBuffer, createUniformBuffer, type SimPipelines,
-} from './gpuPipelines';
+} from '@/sim/gpuPipelines';
 import {
   packCollideParams, packIntegrateParams, packPinParams, packSolveParams, packUpdateParams,
   clothThicknessMeters, layerSpacingMeters, type CollideBody,
-} from './simUniforms';
+} from '@/sim/simUniforms';
 import {
   buildCreaseConstraints, buildPanelConstraints, createBatchedConstraints, rewriteBatches,
-} from './constraintBatches';
+} from '@/sim/constraintBatches';
 import {
   computeBaseInvMass, computeParticleDamping, computeParticleLayers, computeParticleThickness,
   CONSTRAINT_GROUP_ORDER, type ClothSimInput, type ConstraintGroup, type ConstraintGroupKind,
-} from './simTypes';
-import { SelfCollisionSolver } from './selfCollision';
+} from '@/sim/simTypes';
+import { SelfCollisionSolver } from '@/sim/selfCollision';
+import {
+  collideBodyForMesh, createMeshColliderBuffers, refreshMeshColliderBuffers, type MeshColliderBuffers,
+} from '@/sim/meshColliderBuffers';
+import { seamProgressWrites, tearStretchedSeams } from '@/sim/seamConstraints';
 
-export type { ClothSimInput } from './simTypes';
+export type { ClothSimInput } from '@/sim/simTypes';
 
 /**
  * GPU PBD cloth simulator running compute shaders on the viewport's GPUDevice and reading
@@ -61,9 +65,7 @@ export class ClothSimulator {
   private capsuleBuf!: GPUBuffer;
   private capsuleCount = 0;
   /** Triangle grid of the body mesh: vertices, cell offsets and per-cell triangle indices. */
-  private meshTriangleBuf!: GPUBuffer;
-  private cellStartBuf!: GPUBuffer;
-  private cellTrianglesBuf!: GPUBuffer;
+  private meshBuffers!: MeshColliderBuffers;
   /** Collider description the COLLIDE uniform block is packed from. */
   private collideBody: CollideBody = {
     capsuleCount: 0, triangleCount: 0, gridOrigin: [0, 0, 0], gridCell: 1, gridDims: [0, 0, 0],
@@ -201,9 +203,11 @@ export class ClothSimulator {
     const built = buildPanelConstraints(input, this.panelPhysics, config.dt);
 
     // ---- Body collider: mesh triangles when the model provides them, capsules otherwise ----
-    this.meshTriangleBuf = createStorageBuffer(dev, new Float32Array(4));
-    this.cellStartBuf = createStorageBuffer(dev, new Uint32Array(2));
-    this.cellTrianglesBuf = createStorageBuffer(dev, new Uint32Array(1));
+    this.meshBuffers = {
+      triangle: createStorageBuffer(dev, new Float32Array(4)),
+      cellStart: createStorageBuffer(dev, new Uint32Array(2)),
+      cellTriangles: createStorageBuffer(dev, new Uint32Array(1)),
+    };
     if (avatarCollider) {
       const packed = packCapsules(avatarCollider);
       this.capsuleCount = avatarCollider.capsules.length;
@@ -318,52 +322,12 @@ export class ClothSimulator {
     this.device.queue.writeBuffer(this.posInvMassBuf, 0, data);
   }
 
-  /** Flat index each seam batch starts at, so torn and progress paths index the same constraint. */
-  private seamBatchOffsets(): number[] {
-    const seam = this.groups.get('seam');
-    if (!seam) return [];
-    const offsets: number[] = [];
-    let acc = 0;
-    for (const batch of seam.batched.batches) {
-      offsets.push(acc);
-      acc += batch.length;
-    }
-    return offsets;
-  }
-
   /** Neutralizes seam constraints stretched past their strength-derived tear length. */
   private resolveSeamTears(): void {
-    if (!this.seamTearing) return;
-    const seam = this.groups.get('seam');
-    const pc = this.particleCount;
-    if (!seam || !(this.readPositions.length >= pc * 3)) return;
-    const offsets = this.seamBatchOffsets();
-    const dirty = new Set<number>();
-    seam.batched.batches.forEach((batch, b) => {
-      batch.forEach((constraint, i) => {
-        const flat = (offsets[b] ?? 0) + i;
-        if (this.tornSeams.has(flat)) return;
-        const tearLength = constraint.tearLength;
-        if (tearLength === undefined || !Number.isFinite(tearLength) || tearLength <= 0) return;
-        const p0 = constraint.p0;
-        const p1 = constraint.p1;
-        if (p0 < 0 || p1 < 0 || p0 >= pc || p1 >= pc) return;
-        const dx = this.readPositions[p0 * 3]! - this.readPositions[p1 * 3]!;
-        const dy = this.readPositions[p0 * 3 + 1]! - this.readPositions[p1 * 3 + 1]!;
-        const dz = this.readPositions[p0 * 3 + 2]! - this.readPositions[p1 * 3 + 2]!;
-        const dist = Math.hypot(dx, dy, dz);
-        if (!Number.isFinite(dist)) return;
-        if (dist > tearLength) {
-          this.tornSeams.add(flat);
-          constraint.restLength = dist; // a torn stitch keeps neither pulling nor pushing
-          dirty.add(b);
-        }
-      });
-    });
-    for (const b of dirty) {
-      const packed = packConstraints(seam.batched.batches[b]);
-      this.device.queue.writeBuffer(seam.batched.buffers[b], 0, packed.data);
-    }
+    const writes = tearStretchedSeams(
+      this.groups, this.readPositions, this.particleCount, this.tornSeams, this.seamTearing,
+    );
+    for (const write of writes) this.device.queue.writeBuffer(write.buffer, 0, write.data);
   }
 
   /**
@@ -378,41 +342,18 @@ export class ClothSimulator {
     this.positionsVersion++;
   }
 
-  /** Body triangles widened to three vec4 slots per triangle for the storage-buffer stride. */
-  private packMeshTriangles(mesh: MeshCollider): Float32Array {
-    const vertices = new Float32Array(mesh.triangleCount * 12);
-    for (let t = 0; t < mesh.triangleCount; t++) {
-      const src = t * 9;
-      const dst = t * 12;
-      for (let k = 0; k < 3; k++) {
-        vertices[dst + k * 4] = mesh.vertices[src + k * 3]!;
-        vertices[dst + k * 4 + 1] = mesh.vertices[src + k * 3 + 1]!;
-        vertices[dst + k * 4 + 2] = mesh.vertices[src + k * 3 + 2]!;
-      }
-    }
-    return vertices;
+  /** Switches body collision from the capsules to the mesh's triangle grid. */
+  private uploadMeshCollider(mesh: MeshCollider): void {
+    this.releaseMeshBuffers();
+    this.meshBuffers = createMeshColliderBuffers(this.device, mesh);
+    this.collideBody = collideBodyForMesh(mesh, this.capsuleCount);
   }
 
-  /**
-   * Uploads the body mesh grid and switches body collision from the capsules to the triangles.
-   * Vertices widen to three vec4 slots per triangle for the storage-buffer stride.
-   */
-  private uploadMeshCollider(mesh: MeshCollider): void {
-    const dev = this.device;
-    const vertices = this.packMeshTriangles(mesh);
-    this.meshTriangleBuf.destroy();
-    this.cellStartBuf.destroy();
-    this.cellTrianglesBuf.destroy();
-    this.meshTriangleBuf = createStorageBuffer(dev, vertices);
-    this.cellStartBuf = createStorageBuffer(dev, mesh.cellStart);
-    this.cellTrianglesBuf = createStorageBuffer(dev, mesh.cellTriangles);
-    this.collideBody = {
-      capsuleCount: this.capsuleCount,
-      triangleCount: mesh.triangleCount,
-      gridOrigin: mesh.origin,
-      gridCell: mesh.cell,
-      gridDims: mesh.dims,
-    };
+  /** Releases the three mesh collision buffers. */
+  private releaseMeshBuffers(): void {
+    this.meshBuffers?.triangle.destroy();
+    this.meshBuffers?.cellStart.destroy();
+    this.meshBuffers?.cellTriangles.destroy();
   }
 
   private createBindGroups(): void {
@@ -425,7 +366,7 @@ export class ClothSimulator {
         this.grabWeightBuf]);
     this.collideBG = bind(L.collide,
       [this.predictedBuf, this.capsuleBuf, this.collideParamsBuf, this.prevPosBuf,
-        this.meshTriangleBuf, this.cellStartBuf, this.cellTrianglesBuf, this.contactMoveBuf,
+        this.meshBuffers.triangle, this.meshBuffers.cellStart, this.meshBuffers.cellTriangles, this.contactMoveBuf,
         this.thicknessBuf]);
     this.updateBG = bind(L.update,
       [this.posInvMassBuf, this.prevPosBuf, this.velocityBuf, this.predictedBuf, this.updateParamsBuf,
@@ -835,20 +776,8 @@ export class ClothSimulator {
    * `progress` is clamped to 0..1 and the batches are repacked into their existing buffers.
    */
   setSeamProgress(progress: number): void {
-    const seam = this.groups.get('seam');
-    if (!seam || seam.batched.buffers.length === 0) return;
-    const p = Math.min(1, Math.max(0, progress));
-    const offsets = this.seamBatchOffsets();
-    for (let b = 0; b < seam.batched.batches.length; b++) {
-      const batch = seam.batched.batches[b];
-      const open = this.seamOpenLengths[b] ?? [];
-      for (let i = 0; i < batch.length; i++) {
-        if (this.tornSeams.has((offsets[b] ?? 0) + i)) continue; // torn stitches stay open
-        batch[i].restLength = (open[i] ?? batch[i].restLength) * (1 - p);
-      }
-      const packed = packConstraints(batch);
-      this.device.queue.writeBuffer(seam.batched.buffers[b], 0, packed.data);
-    }
+    const writes = seamProgressWrites(this.groups, this.seamOpenLengths, this.tornSeams, progress);
+    for (const write of writes) this.device.queue.writeBuffer(write.buffer, 0, write.data);
   }
 
   /** Overwrites every particle position, keeping inverse mass and clearing velocity. */
@@ -890,9 +819,9 @@ export class ClothSimulator {
    */
   updateMeshColliderVertices(vertices: Float32Array): void {
     if (!this.initialized) return;
-    if (vertices.byteLength !== this.meshTriangleBuf.size) return;
+    if (vertices.byteLength !== this.meshBuffers.triangle.size) return;
     this.device.queue.writeBuffer(
-      this.meshTriangleBuf, 0, vertices.buffer as ArrayBuffer, vertices.byteOffset, vertices.byteLength,
+      this.meshBuffers.triangle, 0, vertices.buffer as ArrayBuffer, vertices.byteOffset, vertices.byteLength,
     );
   }
 
@@ -913,43 +842,13 @@ export class ClothSimulator {
    */
   refreshMeshCollider(mesh: MeshCollider): boolean {
     if (!this.initialized || mesh.triangleCount !== this.collideBody.triangleCount) return false;
-    const dev = this.device;
-    const vertices = this.packMeshTriangles(mesh);
-    if (this.meshTriangleBuf.size === vertices.byteLength) {
-      dev.queue.writeBuffer(
-        this.meshTriangleBuf, 0, vertices.buffer as ArrayBuffer, vertices.byteOffset, vertices.byteLength,
-      );
-    } else {
-      this.meshTriangleBuf.destroy();
-      this.meshTriangleBuf = createStorageBuffer(dev, vertices);
-    }
-    const cellsFit = this.cellStartBuf.size === mesh.cellStart.byteLength
-      && this.cellTrianglesBuf.size === mesh.cellTriangles.byteLength;
-    if (cellsFit) {
-      dev.queue.writeBuffer(
-        this.cellStartBuf, 0, mesh.cellStart.buffer as ArrayBuffer, mesh.cellStart.byteOffset, mesh.cellStart.byteLength,
-      );
-      dev.queue.writeBuffer(
-        this.cellTrianglesBuf, 0, mesh.cellTriangles.buffer as ArrayBuffer,
-        mesh.cellTriangles.byteOffset, mesh.cellTriangles.byteLength,
-      );
-    } else {
-      this.cellStartBuf.destroy();
-      this.cellTrianglesBuf.destroy();
-      this.cellStartBuf = createStorageBuffer(dev, mesh.cellStart);
-      this.cellTrianglesBuf = createStorageBuffer(dev, mesh.cellTriangles);
-    }
-    this.collideBody = {
-      capsuleCount: this.capsuleCount,
-      triangleCount: mesh.triangleCount,
-      gridOrigin: mesh.origin,
-      gridCell: mesh.cell,
-      gridDims: mesh.dims,
-    };
-    if (!cellsFit) {
+    const refreshed = refreshMeshColliderBuffers(this.device, mesh, this.meshBuffers);
+    this.meshBuffers = refreshed.buffers;
+    this.collideBody = collideBodyForMesh(mesh, this.capsuleCount);
+    if (refreshed.replaced) {
       this.collideBG = this.bindGroup(this.pipelines.layouts.collide, [
         this.predictedBuf, this.capsuleBuf, this.collideParamsBuf, this.prevPosBuf,
-        this.meshTriangleBuf, this.cellStartBuf, this.cellTrianglesBuf, this.contactMoveBuf,
+        this.meshBuffers.triangle, this.meshBuffers.cellStart, this.meshBuffers.cellTriangles, this.contactMoveBuf,
         this.thicknessBuf,
       ]);
     }
@@ -1065,7 +964,7 @@ export class ClothSimulator {
       this.posInvMassBuf, this.prevPosBuf, this.velocityBuf, this.predictedBuf, this.normalsBuf,
       this.contactMoveBuf, this.indicesBuf, this.groupStartBuf, this.groupTrianglesBuf, this.groupOfParticleBuf,
       this.capsuleBuf, this.dampingBuf, this.grabWeightBuf, this.thicknessBuf,
-      this.meshTriangleBuf, this.cellStartBuf, this.cellTrianglesBuf,
+      this.meshBuffers.triangle, this.meshBuffers.cellStart, this.meshBuffers.cellTriangles,
       this.integrateParamsBuf, this.collideParamsBuf, this.updateParamsBuf, this.normalsParamsBuf,
       this.pinIndicesBuf, this.pinInvMassBuf, this.pinParamsBuf,
       this.readbackBuf, this.readbackNormalsBuf, this.readbackContactBuf,

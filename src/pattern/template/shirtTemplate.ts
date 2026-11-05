@@ -1,11 +1,11 @@
-import type { Pattern } from '../../core/model/types';
-import { PatternBuilder } from './templateKit';
+import type { Pattern } from '@/model/types';
+import { PatternBuilder } from '@/pattern/template/templateKit';
 import {
   frontArc, backArc, frontArcFlipped, backArcFlipped, neckArcSpan, necklineLengthCm,
-} from './drapeArcs';
-import { layoutRows } from './patternLayout';
-import { cm, defineTemplate } from './garmentTemplate';
-import { addBodice, addSleeve, addBand } from './panelShapes';
+} from '@/pattern/template/drapeArcs';
+import { layoutRows } from '@/pattern/template/patternLayout';
+import { cm, defineTemplate } from '@/pattern/template/garmentTemplate';
+import { addBodice, addSleeve, addBand } from '@/pattern/template/panelShapes';
 
 /** Body measurements of a button-up shirt, in centimeters. */
 export interface ShirtParams {

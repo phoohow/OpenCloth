@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
-import { PinMarkers } from '../../../src/core/engine/pinMarkers';
+import { PinMarkers } from '@/runtime/pinMarkers';
 
 /** Particle positions for a row of points one centimeter apart on +X. */
 function row(count: number): Float32Array {

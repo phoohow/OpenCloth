@@ -1,7 +1,7 @@
-import type { Vec3 } from '../../../core/model/types';
-import type { PropTab } from '../../../store/stores';
-import { supportsMaterial, supportsSimulator, supportsTransform, type SceneNodeKind } from '../../sceneTree';
-import { PROP_TAB_OPTIONS } from '../../optionTables';
+import type { Vec3 } from '@/model/types';
+import type { PropTab } from '@/store';
+import { supportsMaterial, supportsSimulator, supportsTransform, type SceneNodeKind } from '@/ui/sceneTree';
+import { PROP_TAB_OPTIONS } from '@/ui/optionTables';
 
 /** Avatar kinds the model select lists when the project has no bundled url. */
 export const PROCEDURAL_MODEL = 'procedural';

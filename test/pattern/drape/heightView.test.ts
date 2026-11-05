@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { createStarterProject } from '../../../src/pattern/template/starterProject';
-import { buildPanelMesh } from '../../../src/pattern/panel/panelBuilder';
-import { drapePositions } from '../../../src/pattern/drape/drapePlacement';
-import { bodyLandmarks } from '../../../src/avatar/landmarks';
-import { panelHeightOffsets, panelMoveOffsets, toHeightPattern } from '../../../src/ui/viewport2D/panelHeight';
-import { previewPanelMove } from '../../../src/core/command/patternCommands';
+import { createStarterProject } from '@/pattern/template/starterProject';
+import { buildPanelMesh } from '@/pattern/panel/panelBuilder';
+import { drapePositions } from '@/pattern/drape/drapePlacement';
+import { bodyLandmarks } from '@/avatar/landmarks';
+import { panelHeightOffsets, panelMoveOffsets, toHeightPattern } from '@/ui/viewport2D/panelHeight';
+import { previewPanelMove } from '@/commands/patternCommands';
 
 /** Tolerance in cm: mesh vertices are stored as float32, the offsets are computed in float64. */
 const EPS_CM = 1e-3;

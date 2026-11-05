@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { projectCodec } from '../../src/io/codec';
-import { createDefaultProject, createFabric } from '../../src/core/model/defaults';
-import { generateTShirt, DEFAULT_TSHIRT_PARAMS } from '../../src/pattern/template/tShirtTemplate';
-import { samplePanelOutline } from '../../src/pattern/panel/panelBuilder';
-import { PROJECT_FORMAT_VERSION } from '../../src/core/model/format';
+import { projectCodec } from '@/io/serialization/codec';
+import { createDefaultProject, createFabric } from '@/model/defaults';
+import { generateTShirt, DEFAULT_TSHIRT_PARAMS } from '@/pattern/template/tShirtTemplate';
+import { samplePanelOutline } from '@/pattern/panel/panelBuilder';
+import { PROJECT_FORMAT_VERSION } from '@/model/format';
 
 describe('projectCodec 往返', () => {
   it('默认工程 encode→decode 深度相等', () => {
@@ -52,17 +52,16 @@ describe('格式版本', () => {
     expect(raw.formatVersion).toBe(PROJECT_FORMAT_VERSION);
   });
 
-  it('缺少 formatVersion 的文件按旧版本读取', () => {
+  it('缺少 formatVersion 的文件被拒绝', () => {
     const raw = JSON.parse(projectCodec.encode(createDefaultProject()));
     delete raw.formatVersion;
-    const decoded = projectCodec.decode(JSON.stringify(raw));
-    expect(decoded.formatVersion).toBe(PROJECT_FORMAT_VERSION);
+    expect(() => projectCodec.decode(JSON.stringify(raw))).toThrow(/formatVersion/);
   });
 
-  it('更高版本的文件被拒绝，而不是半读', () => {
+  it('其它版本的文件被拒绝，而不是半读', () => {
     const raw = JSON.parse(projectCodec.encode(createDefaultProject()));
     raw.formatVersion = PROJECT_FORMAT_VERSION + 1;
-    expect(() => projectCodec.decode(JSON.stringify(raw))).toThrow(/高于本版本支持/);
+    expect(() => projectCodec.decode(JSON.stringify(raw))).toThrow(/formatVersion/);
   });
 
   it('版本号不是非负整数时报错', () => {
@@ -72,7 +71,7 @@ describe('格式版本', () => {
   });
 });
 
-describe('旧工程补全', () => {
+describe('可选字段补全', () => {
   it('decode 为缺少 maps / uvTiling / uvOffset 的面料补默认值', () => {
     const project = createDefaultProject();
     const fabricId = Object.keys(project.fabrics)[0];

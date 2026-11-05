@@ -2,24 +2,24 @@ import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'r
 import {
   dialogButton, dialogHint, dialogLabel, dialogMessage, dialogNote, dialogRoot,
   dialogSectionTitle, dialogTab, dialogTabActive, dialogTabs, dialogTitle,
-} from './dialogStyles';
-import type { TrimKind } from '../../core/model/types';
+} from '@/ui/menu/dialogStyles';
+import type { TrimKind } from '@/model/types';
 import {
   builtInFabricAssets, builtInTrimAssets, fabricAssetFrom, fabricAssetSummary, fabricFromAsset,
   trimAssetFrom, type FabricAsset, type TrimAsset,
-} from '../../core/model/assetLibrary';
-import { BUNDLED_AVATARS, TRIM_KIND_LABELS, TRIM_KINDS } from '../../core/model/defaults';
-import { AddFabricCommand, AddFabricRecordCommand } from '../../core/command/fabricCommands';
-import { AddTrimCommand } from '../../core/command/patternProductionCommands';
-import { CompositeCommand } from '../../core/command/patternCommands';
-import { samplePanelOutline } from '../../pattern/panel/panelBuilder';
-import { computeBBox } from '../../pattern/geom/vec2';
-import { useProjectStore, useUIStore } from '../../store/stores';
-import { idsOfKind } from '../elementSelection';
-import { patchValue } from '../sceneCommands';
+} from '@/model';
+import { BUNDLED_AVATARS, TRIM_KIND_LABELS, TRIM_KINDS } from '@/model';
+import { AddFabricCommand, AddFabricRecordCommand } from '@/commands';
+import { AddTrimCommand } from '@/commands';
+import { CompositeCommand } from '@/commands';
+import { samplePanelOutline } from '@/pattern/panel';
+import { computeBBox } from '@/common/geom';
+import { useProjectStore, useUIStore } from '@/store';
+import { idsOfKind } from '@/model';
+import { patchValue } from '@/ui/sceneCommands';
 import {
   deleteFabricAsset, deleteTrimAsset, listFabricAssets, listTrimAssets, saveFabricAsset, saveTrimAsset,
-} from '../../io/assetStore';
+} from '@/io/storage';
 
 type AssetTab = 'fabrics' | 'trims' | 'models';
 

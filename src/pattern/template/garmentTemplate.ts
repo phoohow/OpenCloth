@@ -1,4 +1,4 @@
-import type { Pattern } from '../../core/model/types';
+import type { Pattern } from '@/model/types';
 
 /** Glyph key of a template card; the UI resolves it to an icon. */
 export type TemplateIcon = 't-shirt' | 'shirt' | 'dress' | 'skirt' | 'sleeve' | 'bag' | 'shoe';

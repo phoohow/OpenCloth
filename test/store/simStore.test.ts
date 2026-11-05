@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { useSimStore } from '../../src/store/simStore';
+import { useSimStore } from '@/store/simStore';
 
 describe('simStore auto-pause frame', () => {
   beforeEach(() => {

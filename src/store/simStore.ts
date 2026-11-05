@@ -1,7 +1,7 @@
 import { create } from 'zustand';
-import type { FitStats } from '../render/analysis/fit';
-import type { PressureStats } from '../render/analysis/pressure';
-import type { StrainStats } from '../render/analysis/strain';
+import type { FitStats } from '@/analysis';
+import type { PressureStats } from '@/analysis';
+import type { StrainStats } from '@/analysis';
 
 /** Body animation state mirrored from the engine. */
 export interface AnimationInfo {

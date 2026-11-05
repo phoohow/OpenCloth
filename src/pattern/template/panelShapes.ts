@@ -1,6 +1,6 @@
-import type { Panel, PanelDrape, Vec2 } from '../../core/model/types';
-import { vec2 } from '../../core/model/types';
-import type { PatternBuilder } from './templateKit';
+import type { Panel, PanelDrape, Vec2 } from '@/model/types';
+import { vec2 } from '@/model/types';
+import type { PatternBuilder } from '@/pattern/template/templateKit';
 
 const mix = (a: number, b: number, t: number): number => a + (b - a) * t;
 

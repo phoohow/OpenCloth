@@ -1,8 +1,8 @@
-import type { Pattern, Vec2 } from '../../core/model/types';
-import { resolveSize } from '../../core/command/gradingCommands';
-import { panelGrainLine, panelOutlineWithAllowance } from '../panel/panelBuilder';
-import { computeBBox } from '../geom/vec2';
-import { packPanels, type PackItem, type Placement } from './packing';
+import type { Pattern, Vec2 } from '@/model/types';
+import { resolveSize } from '@/pattern/grading/resolveSize';
+import { panelGrainLine, panelOutlineWithAllowance } from '@/pattern/panel/panelBuilder';
+import { computeBBox } from '@/common/geom';
+import { packPanels, type PackItem, type Placement } from '@/pattern/marker/packing';
 
 /** One size nested onto the marker; labels become part of each piece name. */
 export interface MarkerSize {

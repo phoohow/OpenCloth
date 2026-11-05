@@ -1,6 +1,6 @@
-import type { ClothSimInput } from '../../sim/simTypes';
-import { computeVertexStrain, strainBounds, strainStats, type StrainBounds } from './strain';
-import { liveOr, type AnalysisChannel } from './channel';
+import type { ClothSimInput } from '@/sim';
+import { computeVertexStrain, strainBounds, strainStats, type StrainBounds } from '@/analysis';
+import { liveOr, type AnalysisChannel } from '@/analysis';
 
 /** Strain heatmap: stretch of each merged edge against its flat-pattern rest length. */
 export const strainChannel: AnalysisChannel<'strain'> = {

@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import type { Pattern, PatternEdge } from '../../../src/core/model/types';
-import { createEmptyPattern, genId } from '../../../src/core/model/defaults';
-import { filletCorner, filletCorners } from '../../../src/pattern/geom/fillet';
-import { evalArc } from '../../../src/pattern/geom/arc';
-import { edgeCurve } from '../../../src/pattern/geom/bezier';
-import { edgeLength } from '../../../src/pattern/geom/edgeSample';
-import { distance } from '../../../src/pattern/geom/vec2';
+import type { Pattern, PatternEdge } from '@/model/types';
+import { genId } from '@/common/id';
+import { createEmptyPattern } from '@/model/defaults';
+import { filletCorner, filletCorners } from '@/pattern/geom/fillet';
+import { evalArc } from '@/common/geom';
+import { edgeCurve } from '@/pattern/geom/bezier';
+import { edgeLength } from '@/pattern/geom/edgeSample';
+import { distance } from '@/common/geom';
 
 const makeEdge = (s: string, e: string): PatternEdge => ({
   id: genId('edge'), type: 'line', startPointId: s, endPointId: e,

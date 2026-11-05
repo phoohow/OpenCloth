@@ -1,14 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import type { SizeDef } from '../../../src/core/model/types';
-import { createEmptyPattern } from '../../../src/core/model/defaults';
-import { validatePattern } from '../../../src/core/model/validatePattern';
+import type { SizeDef } from '@/model/types';
+import { createEmptyPattern } from '@/model/defaults';
+import { validatePattern } from '@/model/validatePattern';
 import {
   SetPointGradingCommand, SetPointsGradingCommand, ApplySizeCommand, resolveSize, validateGrading,
-} from '../../../src/core/command/patternCommands';
+} from '@/commands/patternCommands';
 import { ctxOf, addSquare } from './fixtures';
-import { gradingPasteMap, gradingPasteTargets } from '../../../src/pattern/grading/grading';
-import { arcFromThreePoints, evalArc } from '../../../src/pattern/geom/arc';
-import { vec2 } from '../../../src/core/model/types';
+import { gradingPasteMap, gradingPasteTargets } from '@/pattern/grading/grading';
+import { arcFromThreePoints, evalArc } from '@/common/geom';
+import { vec2 } from '@/model/types';
 
 function squareCtx() {
   const p = createEmptyPattern();

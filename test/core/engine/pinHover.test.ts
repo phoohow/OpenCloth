@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { ndcDistancePx, pinsByScreenDistance } from '../../../src/core/engine/pinHover';
-import type { Vec3 } from '../../../src/core/model/types';
+import { ndcDistancePx, pinsByScreenDistance } from '@/runtime/pinHover';
+import type { Vec3 } from '@/model/types';
 
 /** Fixed projections for the candidate indices; missing indices cannot be projected. */
 function projections(points: Record<number, Vec3>) {

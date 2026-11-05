@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { liveOr } from '../../../src/render/analysis/channel';
-import { fitChannel } from '../../../src/render/analysis/fitChannel';
-import { strainChannel } from '../../../src/render/analysis/strainChannel';
-import { pressureChannel } from '../../../src/render/analysis/pressureChannel';
+import { liveOr } from '@/analysis/channel';
+import { fitChannel } from '@/render/analysis/fitChannel';
+import { strainChannel } from '@/render/analysis/strainChannel';
+import { pressureChannel } from '@/render/analysis/pressureChannel';
 
 describe('liveOr', () => {
   it('uses the live frame when both layouts agree', () => {

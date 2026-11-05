@@ -1,7 +1,7 @@
 import { create } from 'zustand';
-import type { CameraProjection, EditPreviewTier, Pattern, RenderMode, TrimKind, Vec2 } from '../core/model/types';
-import type { PatternElementKind } from '../core/model/elementRef';
-import { pickPrefs, readPrefs, writePrefs } from './prefs';
+import type { CameraProjection, EditPreviewTier, Pattern, RenderMode, TrimKind, Vec2 } from '@/model/types';
+import type { PatternElementKind } from '@/model';
+import { pickPrefs, readPrefs, writePrefs } from '@/store/prefs';
 
 /** 2D drafting and 3D fitting tools; each pane owns a subset. */
 export type ToolType = 'select' | 'point' | 'deletePoint' | 'line' | 'curve' | 'internalLine' | 'dart' | 'seam' | 'pin' | 'unpin' | 'sketch3d' | 'measure3d' | 'rect' | 'circle' | 'ellipse' | 'split' | 'hole' | 'notch' | 'annotation' | 'measure' | 'topstitch' | 'trim';
@@ -13,8 +13,10 @@ export interface MeasureReadout {
   distanceCm: number | null;
 }
 
-/** Properties-editor tabs, one icon in the right-hand rail. Identity and data share `object`. */
-export type PropTab = 'object' | 'material' | 'simulator' | 'pattern' | 'transform' | 'render' | 'project';
+import type { PaneId, PropTab, ViewLayout } from '@/store/types';
+
+export type { PaneId, PropTab, ViewLayout } from '@/store/types';
+
 /** Viewport display-mode value: a render mode or one of the three cloth analysis heatmaps. */
 export type DisplayMode = RenderMode | 'fitHeatmap' | 'strainHeatmap' | 'pressureHeatmap';
 
@@ -27,11 +29,6 @@ export function displayModeOf(state: {
   if (state.strainCheck) return 'strainHeatmap';
   return state.renderMode;
 }
-/** How the viewport area divides between panes. */
-export type ViewLayout = 'split3d2d' | 'split2d3d' | '2d' | '3d';
-/** Id of one viewport pane. */
-export type PaneId = '2d' | '3d';
-
 /** Transient message shown over the viewports; a fresh id restarts the toast on repeated text. */
 export interface ToastMessage {
   id: number;

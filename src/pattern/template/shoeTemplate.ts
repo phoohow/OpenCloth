@@ -1,7 +1,7 @@
-import type { EdgeSemantic, Panel, Pattern, Vec2 } from '../../core/model/types';
-import { PatternBuilder } from './templateKit';
-import { layoutRows } from './patternLayout';
-import { cm, defineTemplate } from './garmentTemplate';
+import type { EdgeSemantic, Panel, Pattern, Vec2 } from '@/model/types';
+import { PatternBuilder } from '@/pattern/template/templateKit';
+import { layoutRows } from '@/pattern/template/patternLayout';
+import { cm, defineTemplate } from '@/pattern/template/garmentTemplate';
 
 /** Foot length, ball width and collar height of a casual shoe. */
 export interface ShoeParams {

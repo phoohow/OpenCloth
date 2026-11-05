@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { bodyLandmarks } from '../../src/avatar/landmarks';
-import { generateAvatarCollider } from '../../src/avatar/collider/avatarCollider';
-import type { AvatarParams } from '../../src/core/model/types';
+import { bodyLandmarks } from '@/avatar/landmarks';
+import { generateAvatarCollider } from '@/avatar/collider/avatarCollider';
+import type { AvatarParams } from '@/model/types';
 
 const BASE: AvatarParams = { heightCm: 170, chestCm: 92, waistCm: 74, hipCm: 96 };
 

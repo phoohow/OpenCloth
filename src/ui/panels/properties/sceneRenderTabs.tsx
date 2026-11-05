@@ -1,24 +1,24 @@
-import { useProjectStore, displayModeOf, usePerfStore, useSimStore, useUIStore } from '../../../store/stores';
-import type { Project } from '../../../core/model/types';
+import { useProjectStore, displayModeOf, usePerfStore, useSimStore, useUIStore } from '@/store';
+import type { Project } from '@/model/types';
 import {
   DEFAULT_CLOTH_THICKNESS_CM, DEFAULT_COMPRESSION_LIMIT, DEFAULT_LAYER_SPACING_CM,
   DEFAULT_MESH_RESOLUTION_CM, DEFAULT_MESH_SAMPLING, DEFAULT_STRETCH_LIMIT, normalizeRayTracing,
-} from '../../../core/model/defaults';
-import { AutoAssignCollisionLayersCommand } from '../../../core/command/patternCommands';
-import { patchValue, setGlobalMeshResolution, setRayTracingConfig, setSimulationConfig, setToneMapping, type EngineRef } from '../../sceneCommands';
-import { SizeChart } from './objectDataSections';
-import { DynamicFitSection } from './dynamicFitSection';
-import { LayerSection } from './layerSection';
-import { PomSection } from './pomSection';
-import { DENOISE_MODELS, DISPLAY_MODES, MESH_SAMPLINGS, TONE_MAPPING, rayTracingUnavailableReason } from '../../optionTables';
-import { ButtonRow, CheckRow, Row, Section, SelectRow, SliderRow, SmallButton, TextRow } from '../../widgets/propertyRows';
-import { downloadTextFile } from '../../../io/codec';
-import { fitReportCsv } from '../../../render/analysis/fitReport';
-import { DEFAULT_PRESSURE_KPA_PER_MM } from '../../../render/analysis/pressure';
-import { pressureReportCsv } from '../../../render/analysis/pressureReport';
-import { strainReportCsv } from '../../../render/analysis/strainReport';
-import { reportActionError } from '../../widgets/toast';
-import { styles } from './styles';
+} from '@/model';
+import { AutoAssignCollisionLayersCommand } from '@/commands';
+import { patchValue, setGlobalMeshResolution, setRayTracingConfig, setSimulationConfig, setToneMapping, type EngineRef } from '@/ui/sceneCommands';
+import { SizeChart } from '@/ui/panels/properties/objectDataSections';
+import { DynamicFitSection } from '@/ui/panels/properties/dynamicFitSection';
+import { LayerSection } from '@/ui/panels/properties/layerSection';
+import { PomSection } from '@/ui/panels/properties/pomSection';
+import { DENOISE_MODELS, DISPLAY_MODES, MESH_SAMPLINGS, TONE_MAPPING, rayTracingUnavailableReason } from '@/ui/optionTables';
+import { ButtonRow, CheckRow, Row, Section, SelectRow, SliderRow, SmallButton, TextRow } from '@/ui/widgets/propertyRows';
+import { downloadTextFile } from '@/io/serialization';
+import { fitReportCsv } from '@/analysis';
+import { DEFAULT_PRESSURE_KPA_PER_MM } from '@/analysis';
+import { pressureReportCsv } from '@/analysis';
+import { strainReportCsv } from '@/analysis';
+import { reportActionError } from '@/ui/widgets/toast';
+import { styles } from '@/ui/panels/properties/styles';
 
 // ===== Pattern, project and render tabs ("版型" / "工程" / "渲染") =====
 

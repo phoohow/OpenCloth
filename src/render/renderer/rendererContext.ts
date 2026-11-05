@@ -1,14 +1,15 @@
-import type { CameraProjection, LightConfig, RayTracingConfig, RenderConfig, RenderMode } from '../../core/model/types';
-import { rendererDevice as deviceOf, ViewportSurface } from './viewportSurface';
-import { ViewCamera } from './viewCamera';
-import { LightRig } from './lightRig';
-import { RayTracePipeline, type RayTraceState } from './rayTracePipeline';
+import type { CameraProjection, LightConfig, RayTracingConfig, RenderConfig, RenderMode } from '@/model/types';
+import { rendererDevice as deviceOf, ViewportSurface } from '@/render/renderer/viewportSurface';
+import type { GpuDeviceProvider } from '@/common/ports';
+import { ViewCamera } from '@/render/renderer/viewCamera';
+import { LightRig } from '@/render/renderer/lightRig';
+import { RayTracePipeline, type RayTraceState } from '@/render/renderer/rayTracePipeline';
 
-export { DEFAULT_ENV_URL, applySceneEnvironment, releaseSceneEnvironment } from './sceneEnvironment';
-export { isOrthographic } from './viewCamera';
-export type { ViewportCamera } from './viewCamera';
-export { RayTracingUnsupportedError } from './rayTracePipeline';
-export type { RayTraceState, RayTraceFailure, RayTracingCapability } from './rayTracePipeline';
+export { DEFAULT_ENV_URL, applySceneEnvironment, releaseSceneEnvironment } from '@/render/renderer/sceneEnvironment';
+export { isOrthographic } from '@/render/renderer/viewCamera';
+export type { ViewportCamera } from '@/render/renderer/viewCamera';
+export { RayTracingUnsupportedError } from '@/render/renderer/rayTracePipeline';
+export type { RayTraceState, RayTraceFailure, RayTracingCapability } from '@/render/renderer/rayTracePipeline';
 
 /** Long-lived objects one viewport owns, grouped by lifecycle instead of one flat bag. */
 export interface RendererContext {
@@ -30,10 +31,13 @@ export async function detectWebGPU(): Promise<boolean> {
 }
 
 /** Creates the four objects that make up one viewport. */
-export async function createRendererContext(canvas: HTMLCanvasElement): Promise<RendererContext> {
+export async function createRendererContext(
+  canvas: HTMLCanvasElement,
+  onDenoiserFailure?: (message: string) => void,
+): Promise<RendererContext> {
   const surface = await ViewportSurface.create(canvas);
   const view = new ViewCamera(surface);
-  const ray = new RayTracePipeline(surface, view);
+  const ray = new RayTracePipeline(surface, view, onDenoiserFailure);
   const lights = new LightRig(surface, () => ray.invalidate());
   return { surface, view, lights, ray };
 }
@@ -41,6 +45,11 @@ export async function createRendererContext(canvas: HTMLCanvasElement): Promise<
 /** The GPUDevice the renderer was initialized with; simulation resources share it. */
 export function rendererDevice(ctx: RendererContext): GPUDevice {
   return deviceOf(ctx.surface);
+}
+
+/** Exposes the device through an explicit port so the runtime never reaches into three.js internals. */
+export function gpuDeviceProvider(ctx: RendererContext): GpuDeviceProvider {
+  return { device: () => deviceOf(ctx.surface) };
 }
 
 /** Aspect of the viewport drawing surface, guarded against a hidden pane. */

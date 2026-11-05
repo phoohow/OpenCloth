@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SelfCollisionSolver } from '../../src/sim/selfCollision';
+import { SelfCollisionSolver } from '@/sim/selfCollision';
 
 /** Random but deterministic particle cloud inside a garment-scale cuboid. */
 function particles(count: number): { positions: Float32Array; invMasses: Float32Array; layers: Uint8Array } {

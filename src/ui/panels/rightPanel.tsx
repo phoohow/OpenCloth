@@ -1,10 +1,10 @@
 import { useRef } from 'react';
-import { isRightPanelShown, useUIStore } from '../../store/stores';
-import { PaneDivider } from '../paneDivider';
-import { sceneRatioFromPointer } from '../viewportLayout';
-import { SceneOutliner } from './sceneOutliner';
-import { PropertiesEditor } from './propertiesEditor';
-import type { EngineRef } from '../sceneCommands';
+import { isRightPanelShown, useUIStore } from '@/store';
+import { PaneDivider } from '@/ui/paneDivider';
+import { sceneRatioFromPointer } from '@/ui/viewportLayout';
+import { SceneOutliner } from '@/ui/panels/sceneOutliner';
+import { PropertiesEditor } from '@/ui/panels/propertiesEditor';
+import type { EngineRef } from '@/ui/sceneCommands';
 
 /** Right column: the scene outliner above the properties editor, split by a draggable divider. */
 export function RightPanel({ engineRef }: { engineRef: EngineRef }) {

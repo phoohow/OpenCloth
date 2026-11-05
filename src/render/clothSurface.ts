@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu';
-import { FitOverlay } from './analysis/fitOverlay';
+import { FitOverlay } from '@/render/analysis/fitOverlay';
 
 /** Index range and material slot of one cloth geometry group. */
 export interface SurfaceGroup {

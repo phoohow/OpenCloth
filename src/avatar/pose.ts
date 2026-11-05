@@ -1,5 +1,5 @@
-import type { AvatarParams, JointPose, LimbPose } from '../core/model/types';
-import type { BodyLandmarks } from './landmarks';
+import type { AvatarParams, JointPose, LimbPose } from '@/model/types';
+import type { BodyLandmarks } from '@/avatar/landmarks';
 
 /** Largest forward swing accepted at a shoulder or hip, in radians. */
 const FLEX_LIMIT_RAD = 1.45;

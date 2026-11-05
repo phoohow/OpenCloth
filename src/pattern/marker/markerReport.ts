@@ -1,6 +1,6 @@
-import type { Vec2 } from '../../core/model/types';
-import { csvTable } from '../../core/text/csv';
-import type { MarkerLayout, MarkerPlacement } from './markerLayout';
+import { csvTable } from '@/common/text';
+import { polygonArea } from '@/common/geom';
+import type { MarkerLayout, MarkerPlacement } from '@/pattern/marker/markerLayout';
 
 /** Cost input for a marker report; prices are per running metre of fabric. */
 export interface MarkerCostOptions {
@@ -28,17 +28,7 @@ export interface MarkerReport {
   currency: string;
 }
 
-/** Shoelace area of a closed polygon, in the polygon's unit squared. */
-export function polygonArea(points: Vec2[]): number {
-  if (points.length < 3) return 0;
-  let sum = 0;
-  for (let i = 0; i < points.length; i++) {
-    const a = points[i]!;
-    const b = points[(i + 1) % points.length]!;
-    sum += a.x * b.y - b.x * a.y;
-  }
-  return Math.abs(sum) / 2;
-}
+export { polygonArea };
 
 /** Builds a marker report from the shared marker layout, optionally pricing the fabric. */
 export function buildMarkerReport(layout: MarkerLayout, options: MarkerCostOptions = {}): MarkerReport {

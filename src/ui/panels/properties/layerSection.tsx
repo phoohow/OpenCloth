@@ -1,9 +1,10 @@
-import type { GarmentLayer, Project } from '../../../core/model/types';
-import { GARMENT_LAYERS, GARMENT_LAYER_LABELS } from '../../../core/model/defaults';
-import { layerThicknessCm } from '../../../core/model/layers';
-import { patchValue } from '../../sceneCommands';
-import { Row, Section, SliderRow } from '../../widgets/propertyRows';
-import { styles } from './styles';
+import type { GarmentLayer, Project } from '@/model/types';
+import { GARMENT_LAYERS } from '@/model';
+import { GARMENT_LAYER_LABELS } from '@/ui/optionTables';
+import { layerThicknessCm } from '@/model';
+import { patchValue } from '@/ui/sceneCommands';
+import { Row, Section, SliderRow } from '@/ui/widgets/propertyRows';
+import { styles } from '@/ui/panels/properties/styles';
 
 /** Construction-layer clearances and how many panels each layer holds. */
 export function LayerSection({ project }: { project: Project }) {

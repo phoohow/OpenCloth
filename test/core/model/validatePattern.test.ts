@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { vec2, type Panel, type Pattern } from '../../../src/core/model/types';
-import { createDefaultProject } from '../../../src/core/model/defaults';
-import { createStarterProject } from '../../../src/pattern/template/starterProject';
-import { seamInterval, validatePattern, type PatternIssueCode } from '../../../src/core/model/validatePattern';
-import { PatternTopology } from '../../../src/core/model/patternTopology';
+import { vec2, type Panel, type Pattern } from '@/model/types';
+import { createDefaultProject } from '@/model/defaults';
+import { createStarterProject } from '@/pattern/template/starterProject';
+import { seamInterval, validatePattern, type PatternIssueCode } from '@/model/validatePattern';
+import { PatternTopology } from '@/model/patternTopology';
 
 /** Builds one valid triangular panel; `p` prefixes the ids so several panels can coexist. */
 function addTriangle(pattern: Pattern, p: string, counterclockwise = true): Panel {

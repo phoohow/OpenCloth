@@ -4,11 +4,11 @@ import {
   MergeCollinearEdgesCommand, MirrorPanelCommand, MergePanelsCommand, MovePanelsCommand,
   OffsetInternalLineCommand, PanelFromInternalLoopCommand, RhombusDartCommand, SimplifyCurveCommand,
   SyncMirrorCommand, PanelBooleanCommand, type MirrorAxis, type PanelBooleanOp, type SeamPart,
-} from '../../core/command/patternCommands';
-import { placePanelsAuto } from '../../pattern/auto/autoPlace';
-import { useProjectStore, useUIStore, type ToolType } from '../../store/stores';
-import { idsOfKind } from '../elementSelection';
-import { reportActionError } from '../widgets/toast';
+} from '@/commands';
+import { placePanelsAuto } from '@/pattern/auto';
+import { useProjectStore, useUIStore, type ToolType } from '@/store';
+import { idsOfKind } from '@/model';
+import { reportActionError } from '@/ui/widgets/toast';
 
 /** Structure operations offered by the 版型 ▸ 结构 menu and the 2D toolbar slot. */
 export type StructureAction =

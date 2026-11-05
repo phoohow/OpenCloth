@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   canComment, canEditVersions, canPerform, isReviewPackage, nextReviewStatus, reviewShareLink,
   type ReviewStatus, type ReviewRole,
-} from '../../../src/core/model/review';
+} from '@/model/review';
 
 describe('review workflow transitions', () => {
   it('draft can be submitted and changes requested can be resubmitted', () => {

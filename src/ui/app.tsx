@@ -1,28 +1,26 @@
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
-import { Menubar } from './menubar';
-import { LeftPanel, TemplateRail } from './panels/leftPanel';
-import { RightPanel } from './panels/rightPanel';
-import { Timeline } from './panels/timeline';
-import { Viewport3D } from './viewport3D';
-import { Viewport2D } from './viewport2D';
-import { MobileShell } from './mobile/mobileShell';
-import { isMobileUi } from './mobile/mobileUi';
-import { PaneDivider } from './paneDivider';
-import { Toolbar2D, Toolbar3D } from './paneToolbars';
-import { ToastHost } from './widgets/toast';
-import { createMenuActions, refreshAutosaveList, refreshRecentList, restoreAutosaveOnStartup, shortcutActions, writeAutosave } from './menu/actions';
-import { menuOwnsKeyboard, useMenuStore } from './menu/menuStore';
-import { getCloudProject } from '../io/reviewStore';
-import { SHORTCUTS, matchShortcut } from './menu/shortcuts';
-import type { MenuActions } from './menu/actions';
-import { useUIStore, is3DFocus, isSplitLayout, leftPaneOf, isRightPanelShown,
-  FPS_SAMPLE_MS, usePerfStore, type PaneId,
-} from '../store/stores';
-import type { GarmentEngine } from '../core/engine/garmentEngine';
-import type { RendererContext } from '../render/renderer/rendererContext';
+import { Menubar } from '@/ui/menubar';
+import { LeftPanel, TemplateRail } from '@/ui/panels/leftPanel';
+import { RightPanel } from '@/ui/panels/rightPanel';
+import { Timeline } from '@/ui/panels/timeline';
+import { Viewport3D } from '@/ui/viewport3D';
+import { Viewport2D } from '@/ui/viewport2D';
+import { MobileShell } from '@/ui/mobile/mobileShell';
+import { isMobileUi } from '@/ui/mobile/mobileUi';
+import { PaneDivider } from '@/ui/paneDivider';
+import { Toolbar2D, Toolbar3D } from '@/ui/paneToolbars';
+import { ToastHost } from '@/ui/widgets/toast';
+import { createMenuActions, shortcutActions } from '@/ui/menu/actions';
+import type { MenuActions } from '@/ui/menu/actions';
+import { useUIStore, isSplitLayout, leftPaneOf, isRightPanelShown, type PaneId } from '@/store';
+import type { GarmentEngine } from '@/runtime';
+import type { RendererContext } from '@/render/renderer';
 import {
   isPaneShown, paneFlex, leftPanelWidthFromPointer, rightPanelWidthFromPointer, splitRatioFromPointer,
-} from './viewportLayout';
+} from '@/ui/viewportLayout';
+import {
+  useAutosaveTimer, useFpsSampling, useGlobalShortcuts, useLocalArchiveStartup, useReviewHashRoute,
+} from '@/ui/appHooks';
 
 /** Engine handle and menu actions every shell drives. */
 interface ShellProps {
@@ -52,70 +50,11 @@ export function App() {
 
   const shellProps: ShellProps = { actions, engineRef, onEngineReady: handleEngineReady, ready };
 
-  // Global keyboard shortcuts, dispatched through the shared shortcut table.
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') return;
-      if (menuOwnsKeyboard()) return;
-
-      const id = matchShortcut(e);
-      if (!id) return;
-      const def = SHORTCUTS.find(s => s.id === id);
-      if (!def || def.scope === '菜单栏') return;
-      const ui = useUIStore.getState();
-      if (def.scope === '3D 视口' && !is3DFocus(ui.layout, ui.focus)) return;
-      if (def.scope === '2D 制版' && ui.layout === '3d') return;
-      const run = runShortcut[id];
-      if (!run) return;
-      e.preventDefault();
-      run();
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [runShortcut]);
-
-  // A #review=<id> link opens the matching local review project; the hash is cleared so a
-  // reload does not reopen it, and later links pasted into the address bar still work.
-  useEffect(() => {
-    const openFromHash = () => {
-      const match = location.hash.match(/^#review=([^&]+)$/);
-      if (!match) return;
-      const projectId = decodeURIComponent(match[1]!);
-      history.replaceState(null, '', `${location.pathname}${location.search}`);
-      const menu = useMenuStore.getState();
-      if (menu.dialog === 'review' && menu.dialogParam === projectId) return;
-      void getCloudProject(projectId).then(project => {
-        if (project) menu.openDialog('review', projectId);
-        else useUIStore.getState().showToast('本机没有该共享项目，请让分享者导出审版包后导入');
-      });
-    };
-    openFromHash();
-    window.addEventListener('hashchange', openFromHash);
-    return () => window.removeEventListener('hashchange', openFromHash);
-  }, []);
-
-  // Local archive is read once so 文件 ▸ 最近 populates and the last session is restored.
-  useEffect(() => {
-    refreshRecentList();
-    refreshAutosaveList();
-    restoreAutosaveOnStartup();
-  }, []);
-
-  useEffect(() => {
-    if (autoSaveSeconds <= 0) return undefined;
-    const timer = window.setInterval(() => void writeAutosave(), autoSaveSeconds * 1000);
-    return () => window.clearInterval(timer);
-  }, [autoSaveSeconds]);
-
-  // Pane frame rates are published on a timer so idle panes fall back to 0.
-  useEffect(() => {
-    const timer = window.setInterval(
-      () => usePerfStore.getState().sampleFps(performance.now()),
-      FPS_SAMPLE_MS,
-    );
-    return () => window.clearInterval(timer);
-  }, []);
+  useGlobalShortcuts(runShortcut);
+  useReviewHashRoute();
+  useLocalArchiveStartup();
+  useAutosaveTimer(autoSaveSeconds);
+  useFpsSampling();
 
   return (
     <>

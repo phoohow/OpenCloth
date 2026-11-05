@@ -1,7 +1,8 @@
-import { genId } from '../core/model/defaults';
-import { putModelBlob } from '../io/objectStore';
-import type { GarmentEngine } from '../core/engine/garmentEngine';
-import { commitAvatarModel, commitEnvironmentImport, commitReferenceImport } from './sceneCommands';
+import { genId } from '@/common/id';
+
+import { putModelBlob } from '@/io/storage';
+import type { GarmentEngine } from '@/runtime';
+import { commitAvatarModel, commitEnvironmentImport, commitReferenceImport } from '@/ui/sceneCommands';
 
 const MODEL_EXT = /\.(glb|gltf|obj|fbx)$/i;
 const ENV_EXT = /\.(hdr|exr|png|jpg|jpeg|webp)$/i;
@@ -88,7 +89,7 @@ export async function importAvatarViaPicker(): Promise<void> {
     alert('导入模型失败：' + (err as Error).message);
     return;
   }
-  const key = `avatar-${Date.now().toString(36)}`;
+  const key = genId('avatar');
   try {
     await putModelBlob(key, file);
   } catch (err) {
@@ -120,7 +121,7 @@ export async function importEnvironmentViaPicker(): Promise<void> {
     alert('请选择 .hdr / .exr / .png / .jpg 环境图');
     return;
   }
-  const key = `env-${Date.now().toString(36)}`;
+  const key = genId('env');
   try {
     await putModelBlob(key, file);
   } catch (err) {

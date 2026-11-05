@@ -1,9 +1,9 @@
-import type { FabricPhysics } from '../core/model/types';
+import type { FabricPhysics } from '@/model/types';
 import {
   buildMeshConstraints, colorConstraints, creaseConstraintsForEdges, packConstraints,
   type Constraint,
-} from './buffers/constraintBuilder';
-import type { BatchedConstraints, ClothSimInput } from './simTypes';
+} from '@/sim/buffers/constraintBuilder';
+import type { BatchedConstraints, ClothSimInput } from '@/sim/simTypes';
 
 /** Structural, shear, crease and bending constraints of every panel, each with its own material stiffness. */
 export function buildPanelConstraints(

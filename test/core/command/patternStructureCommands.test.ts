@@ -1,18 +1,18 @@
 import { describe, it, expect } from 'vitest';
-import { CommandHistory, type ProjectContext } from '../../../src/core/command/command';
-import type { Pattern, Vec2 } from '../../../src/core/model/types';
-import { createEmptyPattern } from '../../../src/core/model/defaults';
-import { validatePattern } from '../../../src/core/model/validatePattern';
+import { CommandHistory, type ProjectContext } from '@/commands/command';
+import type { Pattern, Vec2 } from '@/model/types';
+import { createEmptyPattern } from '@/model/defaults';
+import { validatePattern } from '@/model/validatePattern';
 import {
   AddInternalLineCommand, OutlineSplitCommand, MergePanelsCommand, OutlineHoleCommand,
   RemoveHoleCommand, CreateDartCommand, MoveDartTipCommand, TransferDartCommand,
   MirrorPanelCommand, SyncMirrorCommand, ScalePanelCommand, MovePointsCommand, SetEdgeLengthCommand,
   AddPointOnEdgeCommand, DeleteElementsCommand,
-} from '../../../src/core/command/patternCommands';
+} from '@/commands/patternCommands';
 import { ctxOf, addSquare } from './fixtures';
-import { computeBBox } from '../../../src/pattern/geom/vec2';
-import { pointAtT, samplePanelOutline } from '../../../src/pattern/panel/panelBuilder';
-import { elementNodeId } from '../../../src/core/model/elementRef';
+import { computeBBox } from '@/common/geom';
+import { pointAtT, samplePanelOutline } from '@/pattern/panel/panelBuilder';
+import { elementNodeId } from '@/model/elementRef';
 
 function squareCtx(size = 10): { ctx: ProjectContext; panelId: string } {
   const p = createEmptyPattern();

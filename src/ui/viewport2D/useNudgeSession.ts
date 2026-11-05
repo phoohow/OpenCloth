@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Pattern, Vec2 } from '../../core/model/types';
+import type { Pattern, Vec2 } from '@/model/types';
 import {
   SetPointGradingCommand, edgePointIds,
   panelMoveCommand, panelMoveGeometry, pointMoveCommand, pointMoveGeometry,
   previewMove, previewPanelMove, type MoveGeometry,
-} from '../../core/command/patternCommands';
-import { idsOfKind } from '../elementSelection';
-import { is2DFocus, useProjectStore, useUIStore } from '../../store/stores';
-import { menuOwnsKeyboard } from '../menu/menuStore';
-import { panelsOfPoint } from './hitTest';
-import type { PreviewDrag } from './render';
+} from '@/commands';
+import { idsOfKind } from '@/model';
+import { is2DFocus, useProjectStore, useUIStore } from '@/store';
+import { menuOwnsKeyboard } from '@/ui/menu/menuStore';
+import { panelsOfPoint } from '@/ui/viewport2D/hitTest';
+import type { PreviewDrag } from '@/ui/viewport2D/render';
 
 /** What an arrow-key gesture translates: whole panels, or point geometry. */
 export interface NudgeTarget {

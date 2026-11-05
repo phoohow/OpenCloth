@@ -2,24 +2,24 @@ import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 import {
   dialogButton, dialogHint, dialogLabel, dialogMessage, dialogRoot, dialogSectionTitle,
   dialogTab, dialogTabActive, dialogTabs, dialogTitle,
-} from './dialogStyles';
+} from '@/ui/menu/dialogStyles';
 import type {
   CloudProjectRecord, ReviewCommentRecord, ReviewEventRecord, ReviewRole, ReviewVersionRecord,
-} from '../../core/model/review';
+} from '@/model';
 import {
   REVIEW_ACTION_LABELS, REVIEW_ROLE_LABELS, REVIEW_STATUS_LABELS, canComment, canEditVersions,
   canPerform, isReviewPackage, nextReviewStatus, reviewShareLink, type ReviewAction,
-} from '../../core/model/review';
-import { parseElementNodeId, type PatternElementKind } from '../../core/model/elementRef';
-import { downloadTextFile, projectCodec, readFileAsText } from '../../io/codec';
+} from '@/model';
+import { parseElementNodeId, type PatternElementKind } from '@/model';
+import { downloadTextFile, projectCodec, readFileAsText } from '@/io/serialization';
 import {
   addComment, addCommentReply, appendVersion, createCloudProject, deleteCloudProject,
   deleteComment, exportReviewPackage, getCloudProject, importReviewPackage, listCloudProjects,
   listComments, listReviewEvents, listVersions, localReviewUser, recordReviewStatus,
   roleForProject, setCommentResolved, setLocalReviewUser, setSharedRole,
-} from '../../io/reviewStore';
-import { useProjectStore, useUIStore } from '../../store/stores';
-import { openFilePicker } from '../modelImport';
+} from '@/io/storage';
+import { useProjectStore, useUIStore } from '@/store';
+import { openFilePicker } from '@/ui/modelImport';
 
 /** Chinese labels for the element kinds a comment can anchor to. */
 const ANCHOR_KIND_LABELS: Record<PatternElementKind, string> = {

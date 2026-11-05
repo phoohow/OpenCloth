@@ -1,6 +1,6 @@
-import type { Pattern, Seam } from '../../core/model/types';
-import { seamInterval, type PatternIssue } from '../../core/model/validatePattern';
-import { edgeIntervalLength } from '../geom/edgeSample';
+import type { Pattern, Seam } from '@/model/types';
+import { seamInterval, type PatternIssue } from '@/model';
+import { edgeIntervalLength } from '@/pattern/geom/edgeSample';
 
 /** Length differences past both tolerances earn a hint; easing below them stays silent. */
 const LENGTH_DIFF_CM = 0.3;

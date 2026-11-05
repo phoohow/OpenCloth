@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { markerGerber, markerHpgl } from '../../src/io/cutExport';
-import { generateTote } from '../../src/pattern/template/bagTemplate';
-import { buildMarkerLayout } from '../../src/pattern/marker/markerLayout';
+import { markerGerber, markerHpgl } from '@/io/exporters/cutExport';
+import { generateTote } from '@/pattern/template/bagTemplate';
+import { buildMarkerLayout } from '@/pattern/marker/markerLayout';
 
 describe('cut exports', () => {
   it('writes a Gerber file with one closed contour per placed piece', () => {

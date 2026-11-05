@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   builtInFabricAssets, builtInTrimAssets, fabricAssetFrom, fabricAssetSummary, fabricFromAsset,
   trimAssetFrom,
-} from '../../../src/core/model/assetLibrary';
-import { createFabric, createDefaultProject, FABRIC_PRESET_KEYS } from '../../../src/core/model/defaults';
+} from '@/model/assetLibrary';
+import { createFabric, createDefaultProject, FABRIC_PRESET_KEYS } from '@/model/defaults';
 
 describe('built-in asset library', () => {
   it('lists one material card per fabric preset', () => {

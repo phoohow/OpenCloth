@@ -15,12 +15,15 @@ const UP = ['..', '../..', '../../..'];
  * is a normal sibling module, while `../../pattern` is the layer and stays forbidden.
  */
 function unreachable(names) {
-  return names.flatMap(name => UP.flatMap(up => [`${up}/${name}`, `${up}/${name}/**`]));
+  return names.flatMap(name => [
+    `@/${name}`, `@/${name}/**`,
+    ...UP.flatMap(up => [`${up}/${name}`, `${up}/${name}/**`]),
+  ]);
 }
 
 /** Builds the `no-restricted-imports` options for one layer boundary. */
-function boundary(group, layer, target) {
-  return ['error', {
+function boundary(group, layer, target, severity = 'error') {
+  return [severity, {
     patterns: [{ group, message: `${layer} must not import from ${target}.` }],
   }];
 }
@@ -59,11 +62,11 @@ export default [
     },
   },
   {
-    files: ['src/core/model/**/*.ts'],
+    files: ['src/model/**/*.ts'],
     rules: {
       'no-restricted-imports': boundary(
         unreachable(['pattern', 'ui', 'render', 'sim', 'io']),
-        'core/model',
+        'model',
         'pattern, ui, render, sim or io',
       ),
     },
@@ -81,7 +84,17 @@ export default [
     },
   },
   {
-    files: ['src/tools/**/*.ts', 'src/core/engine/engineTiming.ts'],
+    files: ['src/runtime/**/*.ts', 'src/commands/**/*.ts'],
+    rules: {
+      'no-restricted-imports': boundary(
+        unreachable(['ui', 'store']),
+        'runtime and commands',
+        'ui or store',
+      ),
+    },
+  },
+  {
+    files: ['src/tools/**/*.ts', 'src/runtime/engineTiming.ts'],
     rules: { 'no-console': 'off' },
   },
 ];

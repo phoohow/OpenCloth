@@ -1,5 +1,6 @@
-import type { PaneId, PropTab, ViewLayout } from './stores';
-import type { CameraProjection, EditPreviewTier, RenderMode } from '../core/model/types';
+import type { PaneId, PropTab, ViewLayout } from '@/store/types';
+import type { CameraProjection, EditPreviewTier, RenderMode } from '@/model/types';
+import { clamp } from '@/common/math';
 
 /** Key holding the persisted UI preferences. */
 export const PREFS_KEY = 'oc-ui-prefs-v2';
@@ -124,7 +125,7 @@ export function readPrefs(storage: PreferencesStorage = browserStorage()): UiPre
 /** Number inside the persisted range; anything missing or unreadable uses the default. */
 function clampTo(value: unknown, [min, max]: [number, number], fallback: number): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
-  return Math.min(max, Math.max(min, value));
+  return clamp(value, min, max);
 }
 
 /** Stores the preferences, ignoring write failures from a full or unavailable storage. */

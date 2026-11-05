@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bodyOccludesSegment } from '../../../src/core/engine/bodyOcclusion';
+import { bodyOccludesSegment } from '@/runtime/bodyOcclusion';
 
 /** Signed distance to a unit sphere at the origin. */
 const unitSphere = (x: number, y: number, z: number) => Math.hypot(x, y, z) - 1;

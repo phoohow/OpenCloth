@@ -1,8 +1,8 @@
-import type { Pattern, PatternEdge, PatternPoint, Vec2 } from '../../../src/core/model/types';
-import { adaptiveSampleBezier, edgeCurve } from '../../../src/pattern/geom/bezier';
-import { adaptiveSampleArc } from '../../../src/pattern/geom/arc';
-import { ensureCCW } from '../../../src/pattern/geom/vec2';
-import { sampleEdge } from '../../../src/pattern/geom/edgeSample';
+import type { Pattern, PatternEdge, PatternPoint, Vec2 } from '@/model/types';
+import { adaptiveSampleBezier, edgeCurve } from '@/pattern/geom/bezier';
+import { adaptiveSampleArc } from '@/common/geom';
+import { ensureCCW } from '@/common/geom';
+import { sampleEdge } from '@/pattern/geom/edgeSample';
 
 /** Straight or bezier loop edge: [from, to] plus optional bezier control points. */
 type LoopEdge = [Vec2, Vec2] | { from: Vec2; to: Vec2; c0: Vec2; c1: Vec2 };

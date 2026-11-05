@@ -1,8 +1,8 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { App } from './ui/app';
-import { uiMode } from './ui/mobile/mobileUi';
-import { installPublicApi } from './api/openclothApi';
+import { App } from '@/ui/app';
+import { uiMode } from '@/ui/mobile/mobileUi';
+import { installPublicApi } from '@/api/openclothApi';
 import './index.css';
 
 // Published before the first paint so the CSS control metrics match the shell about to render.

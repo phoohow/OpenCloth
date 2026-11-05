@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildNormalAdjacency } from '../../src/sim/buffers/normalAdjacency';
-import type { Constraint } from '../../src/sim/buffers/constraintBuilder';
+import { buildNormalAdjacency } from '@/sim/buffers/normalAdjacency';
+import type { Constraint } from '@/sim/buffers/constraintBuilder';
 
 /** One stitch pair between particle 3 of the first panel and particle 4 of the second. */
 const WELD: Constraint = { p0: 3, p1: 4, restLength: 0, compliance: 1 };

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { generateTote, DEFAULT_TOTE_PARAMS } from '../../../src/pattern/template/bagTemplate';
-import { generateShoes, DEFAULT_SHOE_PARAMS } from '../../../src/pattern/template/shoeTemplate';
-import { samplePanelOutline } from '../../../src/pattern/panel/panelBuilder';
-import { computeBBox, polygonArea } from '../../../src/pattern/geom/vec2';
-import type { Pattern } from '../../../src/core/model/types';
+import { generateTote, DEFAULT_TOTE_PARAMS } from '@/pattern/template/bagTemplate';
+import { generateShoes, DEFAULT_SHOE_PARAMS } from '@/pattern/template/shoeTemplate';
+import { samplePanelOutline } from '@/pattern/panel/panelBuilder';
+import { computeBBox, polygonArea } from '@/common/geom';
+import type { Pattern } from '@/model/types';
 
 /** Panel whose name matches, or undefined. */
 function panelByName(pattern: Pattern, name: string) {

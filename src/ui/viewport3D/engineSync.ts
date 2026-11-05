@@ -1,18 +1,18 @@
 import {
   applyLightConfig, rayTraceState, renderScene, setRayTracingConfig, setRendererMode,
-} from '../../render/renderer/rendererContext';
-import { RayTracingUnsupportedError } from '../../render/renderer/rendererContext';
-import type { RendererContext } from '../../render/renderer/rendererContext';
-import type { GarmentEngine } from '../../core/engine/garmentEngine';
+} from '@/render/renderer';
+import { RayTracingUnsupportedError } from '@/render/renderer';
+import type { RendererContext } from '@/render/renderer';
+import type { GarmentEngine } from '@/runtime';
 import {
   noteDrawnFrame, noteRayTraceState, noteRayTracingSamples, noteRayTracingUnsupported, noteSimSteps,
   useProjectStore, useSimStore, useUIStore,
-} from '../../store/stores';
-import { normalizeRayTracing } from '../../core/model/defaults';
-import { ChangeSet } from '../../core/change/changeSet';
-import { AVATAR_NODE_ID } from '../sceneTree';
-import { rayTraceFailureLabel } from '../optionTables';
-import type { CameraConfig, Pattern, Project, Vec3 } from '../../core/model/types';
+} from '@/store';
+import { normalizeRayTracing } from '@/model';
+import { ChangeSet } from '@/runtime/change';
+import { AVATAR_NODE_ID } from '@/model';
+import { rayTraceFailureLabel } from '@/ui/optionTables';
+import type { CameraConfig, Pattern, Project, Vec3 } from '@/model/types';
 
 /** Applies the UI store's selection to the panel and avatar highlights. */
 export function syncSelectionOverlay(engine: GarmentEngine, pattern: Pattern, selection: string[]): void {

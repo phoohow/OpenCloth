@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { Vec2 } from '../../../src/core/model/types';
-import { packPanels } from '../../../src/pattern/marker/packing';
-import { placePoint, type MarkerPiece } from '../../../src/pattern/marker/markerLayout';
+import type { Vec2 } from '@/model/types';
+import { packPanels } from '@/pattern/marker/packing';
+import { placePoint, type MarkerPiece } from '@/pattern/marker/markerLayout';
 
 /** Marker piece with a 10 x 6 cm rectangle outline. */
 const piece: MarkerPiece = {

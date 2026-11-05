@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { grabWeightsAround } from '../../../src/core/engine/clothDrag';
+import { grabWeightsAround } from '@/runtime/clothDrag';
 
 /** Four particles strung along +X, one centimeter apart. */
 function row(): Float32Array {

@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import type { Pattern, Project } from '../../src/core/model/types';
-import { createDefaultProject, createEmptyPattern } from '../../src/core/model/defaults';
-import { buildTechPackData, buildTechPackPdf } from '../../src/io/techPack';
+import type { Pattern, Project } from '@/model/types';
+import { createDefaultProject, createEmptyPattern } from '@/model/defaults';
+import { buildTechPackData } from '@/io/exporters/techPackData';
+import { buildTechPackPdf } from '@/io/exporters/techPackSheet';
 import { buildSamplePattern } from './dxf/samplePattern';
 import { addSquare } from '../core/command/fixtures';
-import { createStarterProject } from '../../src/pattern/template';
+import { createStarterProject } from '@/pattern/template';
 
 /** Project with the sample pattern, a size chart, a gather seam and dimension lines. */
 function sampleProject(): { project: Project; pattern: Pattern } {

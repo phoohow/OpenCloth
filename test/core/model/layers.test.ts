@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { Panel } from '../../../src/core/model/types';
-import { createDefaultProject } from '../../../src/core/model/defaults';
+import type { Panel } from '@/model/types';
+import { createDefaultProject } from '@/model/defaults';
 import {
   layerThicknessCm, panelCollisionLayer, panelThicknessCm, particleThicknessMeters,
-} from '../../../src/core/model/layers';
+} from '@/model/layers';
 
 /** Minimal panel record with only the fields the layer helpers read. */
 function panel(layer?: Panel['layer'], collisionLayer?: number): Panel {

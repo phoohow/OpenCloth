@@ -1,13 +1,13 @@
 import { useEffect, type RefObject } from 'react';
-import type { GarmentEngine } from '../../core/engine/garmentEngine';
-import type { Vec2 } from '../../core/model/types';
-import { AddInternalLineCommand } from '../../core/command/patternStructureCommands';
-import { samplePanelOutline } from '../../pattern/panel/panelBuilder';
-import { useProjectStore, useSimStore, useUIStore } from '../../store/stores';
-import { pointInPolygon } from '../viewport2D/hitTest';
-import { reportActionError } from '../widgets/toast';
-import { isTapGesture } from '../mobile/mobileUi';
-import { CLAMP_CURSOR, OPEN_CLAMP_CURSOR, PIN_CURSOR, UNPIN_CURSOR } from './cursors';
+import type { GarmentEngine } from '@/runtime';
+import type { Vec2 } from '@/model/types';
+import { AddInternalLineCommand } from '@/commands';
+import { samplePanelOutline } from '@/pattern/panel';
+import { useProjectStore, useSimStore, useUIStore } from '@/store';
+import { pointInPolygon } from '@/ui/viewport2D/hitTest';
+import { reportActionError } from '@/ui/widgets/toast';
+import { isTapGesture } from '@/ui/mobile/mobileUi';
+import { CLAMP_CURSOR, OPEN_CLAMP_CURSOR, PIN_CURSOR, UNPIN_CURSOR } from '@/ui/viewport3D/cursors';
 
 /** What a pointer press would do where it currently hovers. */
 type HoverMode = 'camera' | 'drag' | 'pin' | 'unpin' | 'sketch' | 'measure';

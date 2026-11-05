@@ -1,5 +1,5 @@
-import type { ToolType } from '../../store/uiStore';
-import type { PressRole } from './hitTest';
+import type { ToolType } from '@/store';
+import type { PressRole } from '@/ui/viewport2D/hitTest';
 
 /**
  * Tools that drop geometry where the pointer lands. Only these show the crosshair: while drawing

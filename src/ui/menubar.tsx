@@ -1,15 +1,15 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { useMenuStore } from './menu/menuStore';
-import { buildMenus, type MenuState } from './menu/menuModel';
-import type { MenuActions } from './menu/actions';
-import type { MenuEntry, TopMenu } from './menu/menuTypes';
+import { useMenuStore } from '@/ui/menu/menuStore';
+import { buildMenus, type MenuState } from '@/ui/menu/menuModel';
+import type { MenuActions } from '@/ui/menu/actions';
+import type { MenuEntry, TopMenu } from '@/ui/menu/menuTypes';
 import {
   CLOSED_NAV, activeLeaf, menuByMnemonic, reduceMenuNav, type MenuNavState, type MenuNavStep,
-} from './menu/nav';
-import { MenuDialogs } from './menu/menuDialogs';
-import { formatClockTime } from './timeFormat';
-import { Icon } from './icons';
-import { displayModeOf, useProjectStore, useUIStore } from '../store/stores';
+} from '@/ui/menu/nav';
+import { MenuDialogs } from '@/ui/menu/menuDialogs';
+import { formatClockTime } from '@/ui/timeFormat';
+import { Icon } from '@/ui/icons';
+import { displayModeOf, useProjectStore, useUIStore } from '@/store';
 
 /** Top menu bar: dropdowns, submenus, check marks, shortcut column and keyboard navigation. */
 export function Menubar({ actions }: { actions: MenuActions }) {

@@ -1,6 +1,6 @@
-import type { ArcGeom, Pattern, PatternEdge, Vec2 } from '../../core/model/types';
-import { arcSpan } from '../../pattern/geom/arc';
-import { sampleEdge } from '../../pattern/panel/panelBuilder';
+import type { ArcGeom, Pattern, PatternEdge, Vec2 } from '@/model/types';
+import { arcSpan } from '@/common/geom/arc';
+import { sampleEdge } from '@/pattern/panel';
 
 /** Kinds of snap candidate, ordered by pick priority. */
 export type SnapKind =

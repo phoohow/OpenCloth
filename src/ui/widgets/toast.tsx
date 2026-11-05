@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useUIStore } from '../../store/uiStore';
+import { useUIStore } from '@/store';
 
 /** Milliseconds a toast stays visible before it retires on its own. */
 const TOAST_MS = 3200;

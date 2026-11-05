@@ -1,7 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import type { CameraProjection } from '../../core/model/types';
-import type { ViewportSurface } from './viewportSurface';
+import type { CameraProjection } from '@/model/types';
+import type { ViewportSurface } from '@/render/renderer/viewportSurface';
 
 /** Either camera the viewport can render with. */
 export type ViewportCamera = THREE.PerspectiveCamera | THREE.OrthographicCamera;

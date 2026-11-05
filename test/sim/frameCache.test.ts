@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FrameCache } from '../../src/sim/frameCache';
+import { FrameCache } from '@/sim/frameCache';
 
 /** Flat positions of a frame with the given particle count, filled with one value. */
 function positions(particles: number, value: number): Float32Array {

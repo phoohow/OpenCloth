@@ -1,4 +1,4 @@
-import type { ClothSimInput } from './simTypes';
+import type { ClothSimInput } from '@/sim/simTypes';
 
 // Particle-to-panel and ray-pick helpers operating on CPU data only.
 

@@ -1,18 +1,18 @@
 /// <reference types="node" />
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
-import type { AvatarParams, Pattern, Seam } from '../core/model/types';
-import { createDefaultAvatar } from '../core/model/defaults';
-import { buildPanelMesh, sampleEdge, type PanelMesh } from '../pattern/panel/panelBuilder';
-import { bodyLandmarks } from '../avatar/landmarks';
-import { generateAvatarCollider } from '../avatar/collider/avatarCollider';
-import { drapePositions } from '../pattern/drape/drapePlacement';
-import { flatLayout } from './flatLayout';
-import { explodeOffBody } from '../pattern/drape/explodedLayout';
-import { collapseSeamPairs, type SeamPairRef } from '../pattern/drape/sewnTargets';
-import { GARMENT_TEMPLATES } from '../pattern/template';
-import { SoftCanvas, capsuleTriangles, type Camera, type RGB, type XYZ } from './softwareRender';
-import { writePng } from './pngOut';
+import type { AvatarParams, Pattern, Seam } from '@/model/types';
+import { createDefaultAvatar } from '@/model';
+import { buildPanelMesh, sampleEdge, type PanelMesh } from '@/pattern/panel';
+import { bodyLandmarks } from '@/avatar';
+import { generateAvatarCollider } from '@/avatar/collider';
+import { drapePositions } from '@/pattern/drape';
+import { flatLayout } from '@/tools/flatLayout';
+import { explodeOffBody } from '@/pattern/drape';
+import { collapseSeamPairs, type SeamPairRef } from '@/pattern/drape';
+import { GARMENT_TEMPLATES } from '@/pattern/template';
+import { SoftCanvas, capsuleTriangles, type Camera, type RGB, type XYZ } from '@/tools/softwareRender';
+import { writePng } from '@/tools/pngOut';
 
 const AVATAR: AvatarParams = createDefaultAvatar().params;
 

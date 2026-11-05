@@ -1,0 +1,76 @@
+import * as THREE from 'three/webgpu';
+import type { AvatarParams, Panel } from '@/model/types';
+import type { PanelMesh } from '@/pattern/panel';
+import { IDENTITY_TRANSFORM } from '@/model';
+import { bodyLandmarks, type BodyLandmarks } from '@/avatar';
+import { drapePositions } from '@/pattern/drape';
+import { explodeOffBody } from '@/pattern/drape';
+import { applyObjectTransform } from '@/runtime/objectTransforms';
+
+const CM_TO_M = 0.01;
+
+/** Converts a panel's flat 2D mesh into rest-length positions in meters. */
+export function flatRestPositions(mesh: PanelMesh): Float32Array {
+  const rest = new Float32Array(mesh.vertexCount * 3);
+  for (let i = 0; i < mesh.vertexCount; i++) {
+    rest[i * 3] = mesh.positions2D[i * 2] * CM_TO_M;
+    rest[i * 3 + 1] = mesh.positions2D[i * 2 + 1] * CM_TO_M;
+    rest[i * 3 + 2] = 0;
+  }
+  return rest;
+}
+
+/**
+ * Panel's posed 3D positions: wrapped around the body only for a panel with an explicit drape,
+ * otherwise laid flat at its pattern coordinates with Z = 0.
+ */
+export function posedPositions3D(mesh: PanelMesh, panel: Panel, landmarks: BodyLandmarks): Float32Array {
+  const positions = panel.placement
+    ? flatPanelPositions(mesh, panel.placement)
+    : panel.drape
+      ? drapePositions(mesh, panel, landmarks)
+      : flatRestPositions(mesh);
+  applyObjectTransform(positions, panel.transform ?? IDENTITY_TRANSFORM);
+  return positions;
+}
+
+/** Unsewn start pose: wrapped panels slide off the body, flat panels stay on their coordinates. */
+export function initialPositions3D(positions3D: Float32Array, panel: Panel): Float32Array {
+  if (panel.placement || !panel.drape) return positions3D;
+  return explodeOffBody(positions3D);
+}
+
+/** Lays a flat panel out at its stored placement. */
+function flatPanelPositions(mesh: PanelMesh, placement: { position: { x: number; y: number; z: number }; rotationEuler: { x: number; y: number; z: number } }): Float32Array {
+  const positions3D = new Float32Array(mesh.vertexCount * 3);
+  const quat = new THREE.Quaternion().setFromEuler(
+    new THREE.Euler(placement.rotationEuler.x, placement.rotationEuler.y, placement.rotationEuler.z),
+  );
+  const offset = new THREE.Vector3(placement.position.x, placement.position.y, placement.position.z);
+  const v = new THREE.Vector3();
+  for (let i = 0; i < mesh.vertexCount; i++) {
+    v.set(mesh.positions2D[i * 2] * CM_TO_M, mesh.positions2D[i * 2 + 1] * CM_TO_M, 0);
+    v.applyQuaternion(quat).add(offset);
+    positions3D[i * 3] = v.x; positions3D[i * 3 + 1] = v.y; positions3D[i * 3 + 2] = v.z;
+  }
+  return positions3D;
+}
+
+/** Body landmarks memoized by measurement set, reused by every panel wrap. */
+export class BodyLandmarkCache {
+  private key = '';
+  private cached: BodyLandmarks | null = null;
+
+  /** Landmarks for these measurements, rebuilt only when they change. */
+  resolve(avatar: AvatarParams): BodyLandmarks {
+    const key = [
+      avatar.heightCm, avatar.chestCm, avatar.waistCm, avatar.hipCm,
+      avatar.poseArmAngleRad ?? 0.12, avatar.poseLegSpreadRad ?? 0, avatar.poseTorsoLeanRad ?? 0,
+    ].join('/');
+    if (this.key !== key || !this.cached) {
+      this.cached = bodyLandmarks(avatar);
+      this.key = key;
+    }
+    return this.cached;
+  }
+}

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { parsePatternDxf } from '../../../src/io/dxf/reader';
-import { samplePanelOutline } from '../../../src/pattern/panel/panelBuilder';
+import { parsePatternDxf } from '@/io/dxf/reader';
+import { samplePanelOutline } from '@/pattern/panel/panelBuilder';
 
 const rows = (items: (string | number)[][]): string => items.map(r => r.join('\n')).join('\n');
 

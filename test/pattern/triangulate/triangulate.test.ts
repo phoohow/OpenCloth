@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { vec2 } from '../../../src/core/model/types';
+import { vec2 } from '@/model/types';
 import {
   resampleClosedOutline,
   extractBoundaryEdges,
   buildAdjacency,
-} from '../../../src/pattern/triangulate/triangulate';
-import { remeshPolygon } from '../../../src/pattern/triangulate/remesh';
+} from '@/pattern/triangulate/triangulate';
+import { remeshPolygon } from '@/pattern/triangulate/remesh';
 
 const square = [vec2(0, 0), vec2(10, 0), vec2(10, 10), vec2(0, 10)];
 

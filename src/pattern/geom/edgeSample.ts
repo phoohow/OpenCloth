@@ -1,6 +1,6 @@
-import type { Measurement, Pattern, Vec2 } from '../../core/model/types';
-import { adaptiveSampleBezier, edgeCurve } from './bezier';
-import { adaptiveSampleArc } from './arc';
+import type { Measurement, Pattern, Vec2 } from '@/model/types';
+import { adaptiveSampleBezier, edgeCurve } from '@/pattern/geom/bezier';
+import { adaptiveSampleArc } from '@/common/geom';
 
 /** Samples one pattern edge as polyline points; curve and arc edges use adaptive tolerance. */
 export function sampleEdge(pattern: Pattern, edgeId: string, reverse = false): Vec2[] {

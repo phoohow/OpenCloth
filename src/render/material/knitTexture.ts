@@ -1,4 +1,4 @@
-import type { KnitSpec } from '../../core/model/knit';
+import type { KnitSpec } from '@/model';
 
 /** Clamps a count into a visible range. */
 function clampCount(value: number, lo: number, hi: number): number {

@@ -1,0 +1,22 @@
+# Module ownership. Replace role placeholders with real GitHub handles or teams
+# before enabling branch protection. Boundaries follow docs/架构.md §2-3.
+
+/src/common/            @base-lib-owner
+/src/model/             @model-owner
+/src/pattern/           @pattern-owner
+/src/analysis/          @analysis-owner
+/src/sim/               @sim-owner
+/src/avatar/            @sim-owner
+/src/render/            @render-owner
+/src/io/                @io-owner
+/src/runtime/           @runtime-owner
+/src/commands/          @pattern-owner @runtime-owner
+/src/store/             @ui-owner
+/src/ui/                @ui-owner
+/src/api/               @runtime-owner
+/src/tools/             @runtime-owner
+/scripts/               @arch-owner
+/test/architecture/     @arch-owner
+/docs/                  @arch-owner
+/eslint.config.mjs      @arch-owner
+/package.json           @arch-owner

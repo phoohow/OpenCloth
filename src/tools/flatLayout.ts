@@ -1,7 +1,7 @@
-import type { Panel } from '../core/model/types';
-import type { BodyLandmarks } from '../avatar/landmarks';
-import type { PanelMesh } from '../pattern/panel/panelBuilder';
-import { drapePositions } from '../pattern/drape/drapePlacement';
+import type { Panel } from '@/model/types';
+import type { BodyLandmarks } from '@/avatar';
+import type { PanelMesh } from '@/pattern/panel';
+import { drapePositions } from '@/pattern/drape';
 
 /** One panel and its mesh, in merged simulation order. */
 export interface FlatPanelInput {

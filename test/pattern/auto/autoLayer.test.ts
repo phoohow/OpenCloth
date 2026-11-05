@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { Pattern, Seam } from '../../../src/core/model/types';
-import { createEmptyPattern } from '../../../src/core/model/defaults';
-import { inferCollisionLayers } from '../../../src/pattern/auto/autoLayer';
-import { AutoAssignCollisionLayersCommand } from '../../../src/core/command/patternCommands';
+import type { Pattern, Seam } from '@/model/types';
+import { createEmptyPattern } from '@/model/defaults';
+import { inferCollisionLayers } from '@/pattern/auto/autoLayer';
+import { AutoAssignCollisionLayersCommand } from '@/commands/patternCommands';
 import { ctxOf, addSquare } from '../../core/command/fixtures';
 
 /** Joins two panel edges across their full length. */

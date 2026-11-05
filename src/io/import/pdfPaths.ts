@@ -1,5 +1,5 @@
-import type { Pattern, Vec2 } from '../../core/model/types';
-import { patternFromGroups } from './patternFromGroups';
+import type { Pattern, Vec2 } from '@/model/types';
+import { patternFromGroups } from '@/io/import/patternFromGroups';
 
 /** Options for the PDF vector reader. */
 export interface PdfPatternOptions {

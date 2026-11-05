@@ -1,4 +1,4 @@
-import type { Constraint } from './constraintBuilder';
+import type { Constraint } from '@/sim/buffers/constraintBuilder';
 
 /** Vertex-normal topology: welded vertex groups and the triangles each group touches. */
 export interface NormalAdjacency {

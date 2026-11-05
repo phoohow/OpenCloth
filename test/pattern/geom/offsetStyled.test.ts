@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { vec2 } from '../../../src/core/model/types';
+import { vec2 } from '@/model/types';
 import {
   offsetPolygon,
   offsetPolygonStyled,
   offsetOutlinePerEdge,
   hasSelfIntersection,
-} from '../../../src/pattern/geom/offset';
-import { computeBBox, polygonArea } from '../../../src/pattern/geom/vec2';
+} from '@/common/geom';
+import { computeBBox, signedPolygonArea } from '@/common/geom';
 
 // Counter-clockwise 10x10 square.
 const square = [vec2(0, 0), vec2(10, 0), vec2(10, 10), vec2(0, 10)];
@@ -28,7 +28,7 @@ describe('offsetPolygonStyled', () => {
     expect(size.w).toBeCloseTo(12, 5);
     expect(size.h).toBeCloseTo(12, 5);
     // 12x12 minus four corners outside the unit arcs: 144 - (4 - pi).
-    expect(polygonArea(out)).toBeCloseTo(144 - (4 - Math.PI), 1);
+    expect(signedPolygonArea(out)).toBeCloseTo(144 - (4 - Math.PI), 1);
     // Four gap corners, each an endpoint pair plus arc samples.
     expect(out.length).toBeGreaterThan(8);
     expect(hasSelfIntersection(out)).toBe(false);
@@ -47,7 +47,7 @@ describe('offsetPolygonStyled', () => {
   it('bevel 外扩生成倒角且面积为八边形', () => {
     const out = offsetPolygonStyled(square, 1, 'bevel');
     expect(out).toHaveLength(8);
-    expect(polygonArea(out)).toBeCloseTo(142, 6);
+    expect(signedPolygonArea(out)).toBeCloseTo(142, 6);
     expect(hasSelfIntersection(out)).toBe(false);
   });
 
@@ -67,22 +67,22 @@ describe('offsetPolygonStyled', () => {
     const bevel = offsetPolygonStyled(lShape, -1, 'bevel');
     // The reflex join arc reaches into the material beyond its chord by (pi/4 - 1/2),
     // minus the chord-discretization of the 15-degree arc samples.
-    expect(polygonArea(bevel) - polygonArea(round)).toBeCloseTo(Math.PI / 4 - 0.5, 1);
+    expect(signedPolygonArea(bevel) - signedPolygonArea(round)).toBeCloseTo(Math.PI / 4 - 0.5, 1);
     expect(hasSelfIntersection(round)).toBe(false);
     expect(hasSelfIntersection(bevel)).toBe(false);
   });
 
   it('顺时针输入保持方向：正值沿行进右侧偏移', () => {
     const cw = [...square].reverse();
-    expect(polygonArea(cw)).toBeLessThan(0);
+    expect(signedPolygonArea(cw)).toBeLessThan(0);
     // Positive distance on a CW ring moves to the travel side, i.e. shrinks.
     const out = offsetPolygonStyled(cw, 1, 'round');
-    expect(polygonArea(out)).toBeCloseTo(-64, 6);
+    expect(signedPolygonArea(out)).toBeCloseTo(-64, 6);
     expect(out).toHaveLength(4);
     // Negative distance expands with bevel cuts.
     const outBevel = offsetPolygonStyled(cw, -1, 'bevel');
-    expect(polygonArea(outBevel)).toBeLessThan(0);
-    expect(Math.abs(polygonArea(outBevel))).toBeCloseTo(142, 6);
+    expect(signedPolygonArea(outBevel)).toBeLessThan(0);
+    expect(Math.abs(signedPolygonArea(outBevel))).toBeCloseTo(142, 6);
     expect(outBevel).toHaveLength(8);
   });
 

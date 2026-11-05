@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { vec2, type Vec2 } from '../../../src/core/model/types';
-import { remeshPolygon } from '../../../src/pattern/triangulate/remesh';
-import { resampleClosedOutline, type TriangleMesh } from '../../../src/pattern/triangulate/triangulate';
+import { vec2, type Vec2 } from '@/model/types';
+import { remeshPolygon } from '@/pattern/triangulate/remesh';
+import { resampleClosedOutline, type TriangleMesh } from '@/pattern/triangulate/triangulate';
 
 const rect = (w: number, h: number): Vec2[] => [vec2(0, 0), vec2(w, 0), vec2(w, h), vec2(0, h)];
 

@@ -1,31 +1,24 @@
 import type { MutableRefObject } from 'react';
-import { isSplitLayout, useProjectStore, useSimStore, useUIStore } from '../../store/stores';
-import type { DisplayMode, PaneId, PropTab, ToolType, ViewLayout } from '../../store/stores';
-import type { DisplayOptions } from '../viewport2D/render';
-import { createBlankProject } from '../../pattern/template';
-import { projectCodec, downloadTextFile, readFileAsText } from '../../io/codec';
-import { embedProjectAssets } from '../../io/projectPackage';
-import { exportGLB, exportOBJ, exportFBX, exportUSD, exportScreenshot } from '../../io/exporter';
-import { markerGerber, markerHpgl } from '../../io/cutExport';
-import { recordCanvasToWebM } from '../../io/animationExporter';
-import { downloadBytes, sequenceArchive } from '../../io/sequenceExport';
-import { clearRecent, listAutosaves, listRecent, pruneOrphanBlobs, pushRecent, readAutosave, readRecent, saveAutosave, type RecentSummary } from '../../io/projectArchive';
-import { capturePanels, PastePanelsCommand } from '../../core/command/panelClipboard';
-import { CompositeCommand, DeleteElementsCommand, DeleteSelectionCommand } from '../../core/command/patternCommands';
-import type { Command } from '../../core/command/command';
-import { setPanelsVisible, commitClearReferences, commitEnvironmentReset } from '../sceneCommands';
-import { importAvatarViaPicker, importEnvironmentViaPicker, importReferenceViaPicker, openFilePicker } from '../modelImport';
-import { parsePatternDxf } from '../../io/dxf/reader';
-import { parseGerberPattern } from '../../io/import/gerber';
-import { parseHpglPattern } from '../../io/import/hpgl';
-import { parsePdfPattern } from '../../io/import/pdfPaths';
-import { patternFromJson } from '../../pattern/auto/aiContract';
-import { useMenuStore } from './menuStore';
-import type { GarmentEngine, CameraPreset } from '../../core/engine/garmentEngine';
-import { renderScene } from '../../render/renderer/rendererContext';
-import type { RendererContext } from '../../render/renderer/rendererContext';
-import type { CameraProjection, EditPreviewTier, Pattern, Project } from '../../core/model/types';
-import { reportActionError } from '../widgets/toast';
+import { isSplitLayout, useProjectStore, useSimStore, useUIStore } from '@/store';
+import type { DisplayMode, PaneId, PropTab, ToolType, ViewLayout } from '@/store';
+import type { DisplayOptions } from '@/ui/viewport2D/render';
+import { downloadTextFile } from '@/io/serialization';
+import { exportGLB, exportOBJ, exportFBX, exportUSD, exportScreenshot } from '@/io/exporters';
+import { markerGerber, markerHpgl } from '@/io/exporters';
+import { recordCanvasToWebM } from '@/io/exporters';
+import { downloadBytes, sequenceArchive } from '@/io/exporters';
+import { capturePanels, PastePanelsCommand } from '@/commands';
+import { CompositeCommand, DeleteElementsCommand, DeleteSelectionCommand } from '@/commands';
+import type { Command } from '@/commands';
+import { setPanelsVisible, commitClearReferences, commitEnvironmentReset } from '@/ui/sceneCommands';
+import { importAvatarViaPicker, importEnvironmentViaPicker, importReferenceViaPicker, openFilePicker } from '@/ui/modelImport';
+import { useMenuStore } from '@/ui/menu/menuStore';
+import type { GarmentEngine, CameraPreset } from '@/runtime';
+import { renderScene } from '@/render/renderer';
+import type { RendererContext } from '@/render/renderer';
+import type { CameraProjection, EditPreviewTier, Project } from '@/model/types';
+import { reportActionError } from '@/ui/widgets/toast';
+import { createProjectService } from '@/runtime';
 
 interface MenuActionContext {
   engineRef: MutableRefObject<GarmentEngine | null>;
@@ -33,9 +26,6 @@ interface MenuActionContext {
   /** Hidden file input owned by the app; 打开… routes through it. */
   projectInputRef: MutableRefObject<HTMLInputElement | null>;
 }
-
-/** Guards the startup restore against React's double effect run. */
-let startupRestoreStarted = false;
 
 /** Everything the menu bar and the shortcut handler can invoke, built once with the engine refs. */
 export interface MenuActions {
@@ -139,166 +129,67 @@ function withEngine(actions: MenuActionContext, fn: (engine: GarmentEngine) => v
   fn(engine);
 }
 
-/** Confirms before discarding edits that were not saved to a file. */
-function confirmDiscard(): boolean {
-  if (!useProjectStore.getState().history.canUndo) return true;
-  return confirm('当前工程有未保存的修改，确定放弃吗？');
-}
-
-/** Replaces the open project, remembering it in the recent list. */
-function adopt(project: Project): void {
-  useProjectStore.getState().loadProject(project);
-  // The old history is gone, so blobs no snapshot references can be reclaimed.
-  void pruneOrphanBlobs(project);
-  void pushRecent(project).then(() => refreshRecentList());
-}
-
-/** Replaces the project pattern in one undoable step. */
-function commitPatternReplace(next: Pattern, label: string): void {
-  let before: Pattern | null = null;
-  useProjectStore.getState().executeCommand({
-    label,
-    execute(ctx) { before = structuredClone(ctx.project.pattern); ctx.project.pattern = next; },
-    undo(ctx) { if (before) ctx.project.pattern = before; },
-  });
-}
-
-/** Picks a pattern file, parses it and swaps it into the project; failures alert. */
-async function importPatternFile(accept: string, parse: (text: string) => Pattern, label: string, hint: string): Promise<void> {
-  const files = await openFilePicker(accept, false);
-  const file = files?.[0];
-  if (!file) return;
-  try {
-    commitPatternReplace(parse(await readFileAsText(file)), label);
-  } catch (err) {
-    alert(hint + (err as Error).message);
-  }
-}
-
-/** Picks a binary pattern file, parses it and swaps it into the project; failures alert. */
-async function importBinaryPatternFile(
-  accept: string, parse: (bytes: Uint8Array) => Promise<Pattern>, label: string, hint: string,
-): Promise<void> {
-  const files = await openFilePicker(accept, false);
-  const file = files?.[0];
-  if (!file) return;
-  try {
-    commitPatternReplace(await parse(new Uint8Array(await file.arrayBuffer())), label);
-  } catch (err) {
-    alert(hint + (err as Error).message);
-  }
-}
+/** Project lifecycle bound to the project store's history and the UI store's preferences. */
+const projectService = createProjectService({
+  project: () => useProjectStore.getState().project,
+  load: loaded => useProjectStore.getState().loadProject(loaded),
+  canUndo: () => useProjectStore.getState().history.canUndo,
+  execute: command => useProjectStore.getState().executeCommand(command),
+  autoSaveSeconds: () => useUIStore.getState().autoSaveSeconds,
+  setAutoSaveSeconds: seconds => useUIStore.getState().setAutoSaveSeconds(seconds),
+  setRecent: list => useProjectStore.getState().setRecent(list),
+  setAutosaves: list => useProjectStore.getState().setAutosaves(list),
+  setLastAutosaveAt: at => useUIStore.getState().setLastAutosaveAt(at),
+  pickFiles: (accept, multiple) => openFilePicker(accept, multiple),
+  confirm: message => window.confirm(message),
+  prompt: (message, initial) => window.prompt(message, initial),
+  alert: message => window.alert(message),
+});
 
 /** Reads the stored list into the store that backs 文件 ▸ 最近. */
 export function refreshRecentList(): void {
-  void listRecent().then((recent: RecentSummary[]) => useProjectStore.getState().setRecent(recent));
+  projectService.refreshRecent();
 }
 
 /** Reads the stored snapshot list into the store that backs 文件 ▸ 自动保存. */
 export function refreshAutosaveList(): void {
-  void listAutosaves().then(list => useProjectStore.getState().setAutosaves(list));
+  projectService.refreshAutosaveList();
 }
 
 /** Writes the current project into a new autosave snapshot and refreshes the snapshot list. */
-export async function writeAutosave(): Promise<void> {
-  const snapshot = project();
-  const record = await saveAutosave(snapshot);
-  if (!record) return;
-  useUIStore.getState().setLastAutosaveAt(record.savedAt);
-  refreshAutosaveList();
+export function writeAutosave(): Promise<void> {
+  return projectService.writeAutosave();
 }
 
 /** Restores the newest autosave once per page load so a reload keeps the last session. */
 export function restoreAutosaveOnStartup(): void {
-  if (startupRestoreStarted) return;
-  startupRestoreStarted = true;
-  if (useUIStore.getState().autoSaveSeconds <= 0) return;
-  void readAutosave().then(record => {
-    if (!record) return;
-    useUIStore.getState().setLastAutosaveAt(record.savedAt);
-    if (useProjectStore.getState().history.canUndo) return;
-    try {
-      adopt(projectCodec.decode(record.json));
-    } catch {
-      // A corrupt snapshot leaves the starter project in place.
-    }
-  });
+  projectService.restoreAutosaveOnStartup();
 }
 
 /** Builds the action set; refs are read on demand so the closures stay valid across re-renders. */
 export function createMenuActions(refs: MenuActionContext): MenuActions {
-  const saveToJson = (name: string) => {
-    void (async () => {
-      const plain = project();
-      const snapshot = await embedProjectAssets(plain);
-      downloadTextFile(`${name}.ocproj.json`, projectCodec.encode(snapshot));
-      await pushRecent(plain);
-      refreshRecentList();
-    })().catch(err => alert('保存工程失败：' + (err as Error).message));
-  };
-
-  const loadText = (text: string) => {
-    try {
-      adopt(projectCodec.decode(text));
-    } catch (err) {
-      alert('加载工程失败：' + (err as Error).message);
-    }
-  };
-
   return {
-    newProject: () => {
-      if (!confirmDiscard()) return;
-      adopt(createBlankProject());
-      // Snapshot the blank project so a reload restores it instead of the previous session.
-      if (useUIStore.getState().autoSaveSeconds > 0) void writeAutosave();
-    },
+    newProject: projectService.newProject,
     openProject: () => refs.projectInputRef.current?.click(),
-    openProjectFile: (file: File) => {
-      if (!confirmDiscard()) return;
-      void readFileAsText(file).then(loadText);
-    },
-    saveProject: () => saveToJson(project().meta.name),
-    saveProjectAs: () => {
-      const before = project().meta.name;
-      const name = prompt('工程名称', before);
-      if (!name) return;
-      useProjectStore.getState().executeCommand({
-        label: '重命名工程',
-        execute: ctx => { ctx.project.meta = { ...ctx.project.meta, name }; },
-        undo: ctx => { ctx.project.meta = { ...ctx.project.meta, name: before }; },
-      });
-      saveToJson(name);
-    },
-    reopenRecent: (id: string) => {
-      if (!confirmDiscard()) return;
-      void readRecent(id).then(text => {
-        if (!text) { alert('该工程快照已不在本地存档中。'); return; }
-        loadText(text);
-      });
-    },
-    refreshRecent: refreshRecentList,
-    clearRecentList: () => {
-      void clearRecent().then(refreshRecentList);
-    },
-    restoreAutosave: (id?: string) => {
-      if (!confirmDiscard()) return;
-      void readAutosave(id).then(record => {
-        if (!record) { alert('该自动保存快照已不在本地存档中。'); return; }
-        loadText(record.json);
-      });
-    },
-    saveSnapshotNow: () => void writeAutosave(),
-    setAutoSaveSeconds: (seconds: number) => useUIStore.getState().setAutoSaveSeconds(seconds),
+    openProjectFile: projectService.openProjectFile,
+    saveProject: projectService.saveProject,
+    saveProjectAs: projectService.saveProjectAs,
+    reopenRecent: projectService.reopenRecent,
+    refreshRecent: projectService.refreshRecent,
+    clearRecentList: projectService.clearRecentList,
+    restoreAutosave: projectService.restoreAutosave,
+    saveSnapshotNow: projectService.saveSnapshotNow,
+    setAutoSaveSeconds: projectService.setAutoSaveSeconds,
 
     importAvatar: () => void importAvatarViaPicker(),
     importReference: () => withEngine(refs, engine => void importReferenceViaPicker(engine)),
     importEnvironment: () => void importEnvironmentViaPicker(),
-    importDxf: () => void importPatternFile('.dxf', text => parsePatternDxf(text), '导入 DXF 版型', '导入 DXF 失败：'),
-    importAstm: () => void importPatternFile('.dxf', text => parsePatternDxf(text, { convention: 'ASTM' }), '导入 ASTM DXF 版型', '导入 ASTM DXF 失败：'),
-    importGerber: () => void importPatternFile('.gbr,.ger,.gtl,.gbl,.gko', text => parseGerberPattern(text), '导入 Gerber 版型', '导入 Gerber 失败：'),
-    importHpgl: () => void importPatternFile('.plt,.hpgl,.hp,.hpg', text => parseHpglPattern(text), '导入 PLT 绘图', '导入 PLT 失败：'),
-    importPdf: () => void importBinaryPatternFile('.pdf', bytes => parsePdfPattern(bytes), '导入 PDF 版型', '导入 PDF 版型失败：'),
-    importPatternJson: () => void importPatternFile('.json', patternFromJson, '导入 JSON 版型', '导入 JSON 版型失败：'),
+    importDxf: projectService.importDxf,
+    importAstm: projectService.importAstm,
+    importGerber: projectService.importGerber,
+    importHpgl: projectService.importHpgl,
+    importPdf: projectService.importPdf,
+    importPatternJson: projectService.importPatternJson,
     openReview: () => useMenuStore.getState().openDialog('review'),
     openAssets: () => useMenuStore.getState().openDialog('assets'),
     openIntegration: () => useMenuStore.getState().openDialog('integration'),

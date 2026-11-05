@@ -1,6 +1,7 @@
-import type { EdgeSemantic, Pattern, PatternEdge, Vec2 } from '../../core/model/types';
-import { genId } from '../../core/model/defaults';
-import { distance, ensureCCW } from './vec2';
+import { genId } from '@/common/id';
+import type { EdgeSemantic, Pattern, PatternEdge, Vec2 } from '@/model/types';
+
+import { distance, ensureCCW } from '@/common/geom';
 
 /** Edge ids and vertex ids of a closed loop inserted into a pattern. */
 export interface EdgeLoop {

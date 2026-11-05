@@ -1,9 +1,9 @@
-import type { Pattern, Vec2 } from '../../core/model/types';
+import type { Pattern, Vec2 } from '@/model/types';
 
 /** Print, topstitch and trim geometry shared with the engine. */
 export {
   panelFrame, printCenter, printFrame, rotatedFrame, topstitchRows, trimRadiusCm,
-} from '../../pattern/panel/productionGeometry';
+} from '@/pattern/panel';
 
 /** How a picked polyline leaves the model: a drawing line, a split cut, or a closed hole. */
 export type PolylineMode = 'line' | 'split' | 'hole';

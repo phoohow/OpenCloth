@@ -1,9 +1,9 @@
 import * as THREE from 'three/webgpu';
-import type { RayTracingConfig, RenderMode } from '../../core/model/types';
-import { createDefaultRayTracing } from '../../core/model/defaults';
-import type { RayTracingRenderer } from './rayTracingRenderer';
-import { rendererDevice, type ViewportSurface } from './viewportSurface';
-import type { ViewCamera } from './viewCamera';
+import type { RayTracingConfig, RenderMode } from '@/model/types';
+import { createDefaultRayTracing } from '@/model';
+import type { RayTracingRenderer } from '@/render/renderer/rayTracingRenderer';
+import { rendererDevice, type ViewportSurface } from '@/render/renderer/viewportSurface';
+import type { ViewCamera } from '@/render/renderer/viewCamera';
 
 /** Stage of the ray tracing pipeline the 3D view is in. */
 export type RayTraceState =
@@ -65,6 +65,7 @@ export class RayTracePipeline {
   constructor(
     private readonly surface: ViewportSurface,
     private readonly view: ViewCamera,
+    private readonly onDenoiserFailure?: (message: string) => void,
   ) { }
 
   /** Selects rasterized shading or lazily initialized WebGPU ray tracing. */
@@ -73,10 +74,10 @@ export class RayTracePipeline {
     if (mode !== 'raytraced' || this.tracer || this.surface.disposed) return;
     if (this.capability && !this.capability.ok) throw new RayTracingUnsupportedError(this.capability);
     if (!this.loading) {
-      this.loading = import('./rayTracingRenderer')
+      this.loading = import('@/render/renderer/rayTracingRenderer')
         .then(async ({ RayTracingRenderer }) => {
           if (this.surface.disposed) return null;
-          const tracer = new RayTracingRenderer(this.surface.renderer, this.config);
+          const tracer = new RayTracingRenderer(this.surface.renderer, this.config, this.onDenoiserFailure);
           await tracer.setConfig(this.config);
           // The switch is only proven once the kernels have drawn; see verifyRayTracing.
           const capability = this.capability ?? await this.verify(tracer);

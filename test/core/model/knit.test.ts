@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_KNIT_SPEC, knitChartCsv, knitChartSymbol, knitNeedleCount, knitOf, knitRowCount,
-} from '../../../src/core/model/knit';
-import type { Fabric } from '../../../src/core/model/types';
+} from '@/model/knit';
+import type { Fabric } from '@/model/types';
 
 describe('knit spec', () => {
   it('falls back to the default spec for a material without knit structure', () => {

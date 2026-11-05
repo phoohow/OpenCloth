@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { vec2 } from '../../../src/core/model/types';
-import { inferDrape } from '../../../src/pattern/drape/drapeInfer';
+import { vec2 } from '@/model/types';
+import { inferDrape } from '@/pattern/drape/drapeInfer';
 
 /** A rectangle from (0, 0) to (w, h), in centimeters. */
 function rect(w: number, h: number) {

@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
-import type { SkinAppearance } from '../../core/model/types';
-import { DEFAULT_SKIN_APPEARANCE } from '../../core/model/defaults';
+import type { SkinAppearance } from '@/model/types';
+import { DEFAULT_SKIN_APPEARANCE } from '@/model';
 
 /** Highlight layer sharpness of skin: a tight sheen rather than a wet gloss. */
 const CLEARCOAT_ROUGHNESS = 0.45;

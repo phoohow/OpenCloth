@@ -1,6 +1,6 @@
-import type { Pattern } from '../../core/model/types';
-import { normalizePattern } from '../../core/model/normalize';
-import { validatePattern } from '../../core/model/validatePattern';
+import type { Pattern } from '@/model/types';
+import { normalizePattern } from '@/model';
+import { validatePattern } from '@/model';
 
 const EDGE_TYPES = new Set(['line', 'bezier', 'arc']);
 const POINT_KINDS = new Set(['corner', 'smooth']);

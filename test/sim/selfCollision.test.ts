@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { SelfCollisionSolver } from '../../src/sim/selfCollision';
-import { ClothSimulator } from '../../src/sim/clothSimulator';
-import type { ClothSimInput } from '../../src/sim/simTypes';
-import { FABRIC_PHYSICS_PRESETS, createDefaultProject } from '../../src/core/model/defaults';
+import { SelfCollisionSolver } from '@/sim/selfCollision';
+import { ClothSimulator } from '@/sim/clothSimulator';
+import type { ClothSimInput } from '@/sim/simTypes';
+import { FABRIC_PHYSICS_PRESETS, createDefaultProject } from '@/model/defaults';
 
 // The simulator reads the WebGPU enums while creating resources.
 const globals = globalThis as unknown as Record<string, unknown>;

@@ -1,20 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useMenuStore } from './menuStore';
-import { SHORTCUTS, shortcutsByScope, type ShortcutScope } from './shortcuts';
-import { detectWebGPU } from '../../render/renderer/rendererContext';
-import { useProjectStore } from '../../store/stores';
-import { downloadBytesFile, downloadTextFile } from '../../io/codec';
-import { writeMarkerDxf, writePatternDxf } from '../../io/dxf/writer';
-import { buildPatternPdf, planPatternPdfLayout, planPdfTiling } from '../../io/pdfPattern';
-import { buildTechPackPdf } from '../../io/techPack';
-import { orderedSizes } from '../../pattern/grading/grading';
-import { exportMarkerSvg, exportPatternSvg } from '../../io/svgPattern';
-import { buildMarkerLayout } from '../../pattern/marker/markerLayout';
-import { buildMarkerReport, markerReportCsv } from '../../pattern/marker/markerReport';
-import { bomCsv, bomQuantityText, bomTotals, buildBom } from '../../pattern/bom';
-import { ReviewDialog } from './reviewDialog';
-import { AssetLibraryDialog } from './assetLibraryDialog';
-import { IntegrationDialog } from './integrationDialog';
+import { useMenuStore } from '@/ui/menu/menuStore';
+import { SHORTCUTS, shortcutsByScope, type ShortcutScope } from '@/ui/menu/shortcuts';
+import { detectWebGPU } from '@/render/renderer';
+import { useProjectStore } from '@/store';
+import { downloadBytesFile, downloadTextFile } from '@/io/serialization';
+import { writeMarkerDxf, writePatternDxf } from '@/io/dxf';
+import { buildPatternPdf, planPatternPdfLayout, planPdfTiling } from '@/io/exporters';
+import { buildTechPackPdf } from '@/io/exporters';
+import { orderedSizes } from '@/pattern/grading';
+import { exportMarkerSvg, exportPatternSvg } from '@/io/exporters';
+import { buildMarkerLayout } from '@/pattern/marker';
+import { buildMarkerReport, markerReportCsv } from '@/pattern/marker';
+import { bomCsv, bomQuantityText, bomTotals, buildBom } from '@/pattern';
+import { ReviewDialog } from '@/ui/menu/reviewDialog';
+import { AssetLibraryDialog } from '@/ui/menu/assetLibraryDialog';
+import { IntegrationDialog } from '@/ui/menu/integrationDialog';
 
 const SCOPE_ORDER: ShortcutScope[] = ['全局', '3D 视口', '2D 制版', '菜单栏'];
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fitReportCsv } from '../../../src/render/analysis/fitReport';
+import { fitReportCsv } from '@/analysis/fitReport';
 
 describe('fitReportCsv', () => {
   it('writes every fit number with fixed precision', () => {

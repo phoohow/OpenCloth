@@ -1,26 +1,27 @@
 import { useState } from 'react';
-import { useProjectStore } from '../../../store/stores';
-import type { Fabric, FabricMapSlot, FabricPresetKey, Project, SkinAppearance } from '../../../core/model/types';
-import { DEFAULT_SKIN_APPEARANCE, FABRIC_PRESET_KEYS, FABRIC_PRESET_LABELS, SKIN_TONES } from '../../../core/model/defaults';
-import { fabricList, panelsUsingFabric, uniqueFabricName } from '../../../core/model/fabric';
-import { AddFabricCommand, AssignFabricCommand, DetachFabricCommand } from '../../../core/command/fabricCommands';
-import type { Command } from '../../../core/command/command';
-import { readImageAsPngDataUrl } from '../../../io/imageData';
-import { downloadTextFile } from '../../../io/codec';
-import { patchValue, type EngineRef } from '../../sceneCommands';
-import { Vec2Field } from '../../widgets/numberField';
-import { Icon } from '../../icons';
+import { useProjectStore } from '@/store';
+import type { Fabric, FabricMapSlot, FabricPresetKey, Project, SkinAppearance } from '@/model/types';
+import { DEFAULT_SKIN_APPEARANCE, FABRIC_PRESET_KEYS, FABRIC_PRESET_LABELS } from '@/model';
+import { SKIN_TONES } from '@/ui/optionTables';
+import { fabricList, panelsUsingFabric, uniqueFabricName } from '@/model';
+import { AddFabricCommand, AssignFabricCommand, DetachFabricCommand } from '@/commands';
+import type { Command } from '@/commands';
+import { readImageAsPngDataUrl } from '@/io/serialization';
+import { downloadTextFile } from '@/io/serialization';
+import { patchValue, type EngineRef } from '@/ui/sceneCommands';
+import { Vec2Field } from '@/ui/widgets/numberField';
+import { Icon } from '@/ui/icons';
 import {
   ColorRow, FileRow, FlexSelect, Hint, IconButton, InlineText, PopupSelect, Row, Section,
   SelectRow, SliderRow, SlotRow, SmallButton, ValueButton,
-} from '../../widgets/propertyRows';
-import { samplePanelOutline } from '../../../pattern/panel/panelBuilder';
-import { computeBBox } from '../../../pattern/geom/vec2';
+} from '@/ui/widgets/propertyRows';
+import { samplePanelOutline } from '@/pattern/panel';
+import { computeBBox } from '@/common/geom';
 import {
   KNIT_STITCHES, KNIT_STITCH_LABELS, knitChartCsv, knitNeedleCount, knitOf, knitRowCount,
   type KnitStitch,
-} from '../../../core/model/knit';
-import { knitTextureDataUrl } from '../../../render/material/knitTexture';
+} from '@/model';
+import { knitTextureDataUrl } from '@/render/material';
 
 // ===== Material tab ("材质") =====
 

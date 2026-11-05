@@ -1,5 +1,5 @@
-import type { AvatarCollider, Capsule } from './avatarCollider';
-import { sampleMeshCollider } from './meshCollider';
+import type { AvatarCollider, Capsule } from '@/avatar/collider/types';
+import { sampleMeshCollider } from '@/avatar/collider/meshCollider';
 
 /** CPU-side signed distance to the body surface; negative inside the body. */
 export function evalBodyDistance(collider: AvatarCollider, px: number, py: number, pz: number): number {

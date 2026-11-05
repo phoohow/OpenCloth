@@ -1,5 +1,5 @@
-import { computePressureField, pressureStats } from './pressure';
-import type { AnalysisChannel } from './channel';
+import { computePressureField, pressureStats } from '@/analysis';
+import type { AnalysisChannel } from '@/analysis';
 
 /** Contact-pressure heatmap: estimated from the normal correction of the last simulation step. */
 export const pressureChannel: AnalysisChannel<'pressure'> = {

@@ -1,24 +1,24 @@
 import { useRef, useState } from 'react';
-import { useProjectStore, useUIStore } from '../../store/stores';
-import type { LightType } from '../../core/model/types';
+import { useProjectStore, useUIStore } from '@/store';
+import type { LightType } from '@/model/types';
 import {
   DEFAULT_PRINT_SIDE_CM, LIGHT_TYPES, LIGHT_TYPE_LABELS, MAX_PRINT_BYTES,
-} from '../../core/model/defaults';
-import { AddPrintCommand } from '../../core/command/patternCommands';
-import { readImageAsPngDataUrl } from '../../io/imageData';
+} from '@/model';
+import { AddPrintCommand } from '@/commands';
+import { readImageAsPngDataUrl } from '@/io/serialization';
 import {
   GARMENT_COLLECTION_ID, LIGHT_COLLECTION_ID, PRINT_COLLECTION_ID, REFERENCE_COLLECTION_ID,
   SEAM_COLLECTION_ID, TOPSTITCH_COLLECTION_ID, TRIM_COLLECTION_ID,
-  buildSceneTree, isCollectionVisible, lightObjectId, referenceObjectId, seamObjectId,
-  type SceneNode,
-} from '../sceneTree';
+  lightObjectId, referenceObjectId, seamObjectId,
+} from '@/model';
+import { buildSceneTree, isCollectionVisible, type SceneNode } from '@/ui/sceneTree';
 import {
   addLight, setAvatarVisible, setEnvironmentEnabled, setLightsEnabled, setPanelsVisible,
   setProductionVisible, setReferencesVisible, setSeamsStitchVisible, type EngineRef,
-} from '../sceneCommands';
-import { idsOfKind, parseElementNodeId } from '../elementSelection';
-import { Icon } from '../icons';
-import { reportActionError } from '../widgets/toast';
+} from '@/ui/sceneCommands';
+import { idsOfKind, parseElementNodeId } from '@/model';
+import { Icon } from '@/ui/icons';
+import { reportActionError } from '@/ui/widgets/toast';
 
 /** Collections that group one kind of production object. */
 const PRODUCTION_COLLECTION_KINDS: Record<string, 'print' | 'topstitch' | 'trim'> = {

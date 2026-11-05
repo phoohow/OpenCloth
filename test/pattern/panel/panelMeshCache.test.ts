@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { buildRegistry } from '../../../src/core/build/buildRegistry';
-import { buildPanelMesh, samplePanelOutline } from '../../../src/pattern/panel/panelBuilder';
-import { DEFAULT_TSHIRT_PARAMS, generateTShirt } from '../../../src/pattern/template/tShirtTemplate';
-import type { Panel, Pattern } from '../../../src/core/model/types';
+import { buildRegistry } from '@/pattern/panel';
+import { buildPanelMesh, samplePanelOutline } from '@/pattern/panel/panelBuilder';
+import { DEFAULT_TSHIRT_PARAMS, generateTShirt } from '@/pattern/template/tShirtTemplate';
+import type { Panel, Pattern } from '@/model/types';
 
 const frontPanel = (pattern: Pattern): Panel =>
   Object.values(pattern.panels).find(p => p.name === '前片')!;

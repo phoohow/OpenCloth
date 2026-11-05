@@ -2,15 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import {
   createRendererContext, resizeRenderer, applyLightConfig, detectWebGPU,
   disposeRendererContext, setRendererMode, type RendererContext,
-} from '../../render/renderer/rendererContext';
-import { GarmentEngine } from '../../core/engine/garmentEngine';
-import { useProjectStore, useSimStore, useUIStore, usePerfStore, isSplitLayout, type ViewLayout, type ToolType } from '../../store/stores';
-import { EngineSync, recoverWithRaster, syncSelectionOverlay } from './engineSync';
-import { useClothPicking } from './useClothPicking';
-import { ViewportHint } from '../widgets/viewportHint';
-import { normalizeRayTracing } from '../../core/model/defaults';
-import { rayTraceStateLabel } from '../optionTables';
-import { MOBILE_VIEWPORT_HINT, isMobileUi } from '../mobile/mobileUi';
+} from '@/render/renderer';
+import { GarmentEngine } from '@/runtime';
+import { useProjectStore, useSimStore, useUIStore, usePerfStore, isSplitLayout, type ViewLayout, type ToolType } from '@/store';
+import { EngineSync, recoverWithRaster, syncSelectionOverlay } from '@/ui/viewport3D/engineSync';
+import { useClothPicking } from '@/ui/viewport3D/useClothPicking';
+import { ViewportHint } from '@/ui/widgets/viewportHint';
+import { normalizeRayTracing } from '@/model';
+import { rayTraceStateLabel } from '@/ui/optionTables';
+import { MOBILE_VIEWPORT_HINT, isMobileUi } from '@/ui/mobile/mobileUi';
 
 /** Width the phone shell's floating buttons reserve at the right of the pane. */
 const MOBILE_HINT_RIGHT = 72;
@@ -75,7 +75,7 @@ export function Viewport3D({ onEngineReady }: Viewport3DProps) {
       canvas.height = Math.max(1, container.clientHeight);
 
       const initial = useProjectStore.getState().project;
-      const ctx = await createRendererContext(canvas);
+      const ctx = await createRendererContext(canvas, message => useUIStore.getState().showToast(message));
       if (cancelled) {
         // StrictMode's second mount owns the canvas now; release the abandoned renderer.
         disposeRendererContext(ctx);
@@ -152,7 +152,11 @@ export function Viewport3D({ onEngineReady }: Viewport3DProps) {
   return (
     <div ref={containerRef} style={{ width: '100%', height: '100%', position: 'relative' }}>
       {/* The pointer cursor is owned by useClothPicking: it depends on what is under it. */}
-      <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%', cursor: 'default' }} />
+      <canvas
+        ref={canvasRef}
+        data-testid="viewport-3d"
+        style={{ display: 'block', width: '100%', height: '100%', cursor: 'default' }}
+      />
       <ViewportHint right={isMobileUi() ? MOBILE_HINT_RIGHT : 8}>{statusHint(layout, activeTool)}</ViewportHint>
       {renderMode === 'raytraced' && !isMobileUi() && (
         <div style={{

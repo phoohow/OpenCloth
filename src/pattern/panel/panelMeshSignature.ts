@@ -1,4 +1,4 @@
-import type { MeshSampling, Pattern } from '../../core/model/types';
+import type { MeshSampling, Pattern } from '@/model/types';
 
 /** Scene settings a panel mesh build reads beside the pattern geometry. */
 export interface PanelMeshSettings {

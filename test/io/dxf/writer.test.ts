@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import type { SizeDef, Vec2 } from '../../../src/core/model/types';
-import { writeMarkerDxf, writePatternDxf } from '../../../src/io/dxf/writer';
-import { parsePatternDxf } from '../../../src/io/dxf/reader';
-import { resolveSize } from '../../../src/core/command/gradingCommands';
+import type { SizeDef, Vec2 } from '@/model/types';
+import { writeMarkerDxf, writePatternDxf } from '@/io/dxf/writer';
+import { parsePatternDxf } from '@/io/dxf/reader';
+import { resolveSize } from '@/commands/gradingCommands';
 import { buildSamplePattern, finePolygon, hausdorff, parsedOutline } from './samplePattern';
-import { samplePanelOutline } from '../../../src/pattern/panel/panelBuilder';
-import { validatePattern } from '../../../src/core/model/validatePattern';
+import { samplePanelOutline } from '@/pattern/panel/panelBuilder';
+import { validatePattern } from '@/model/validatePattern';
 
 describe('writePatternDxf 输出结构', () => {
   const pattern = buildSamplePattern();

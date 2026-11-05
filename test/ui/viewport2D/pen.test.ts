@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createPen } from '../../../src/ui/viewport2D/pen';
-import { DRAW_LAYERS, type DisplayOptions, type SceneState } from '../../../src/ui/viewport2D/render';
+import { createPen } from '@/ui/viewport2D/pen';
+import { DRAW_LAYERS, type DisplayOptions, type SceneState } from '@/ui/viewport2D/render';
 
 const display = (patch: Partial<DisplayOptions> = {}): DisplayOptions => ({
   internal: true, darts: true, seamAllowance: false, notches: true, grain: true,

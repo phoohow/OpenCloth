@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { strainReportCsv } from '../../../src/render/analysis/strainReport';
-import type { StrainStats } from '../../../src/render/analysis/strain';
+import { strainReportCsv } from '@/analysis/strainReport';
+import type { StrainStats } from '@/analysis/strain';
 
 describe('strainReportCsv', () => {
   it('lists the project, colour range and strain summary', () => {

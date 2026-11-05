@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
-import { DragMarker } from '../../../src/core/engine/dragMarker';
+import { DragMarker } from '@/runtime/dragMarker';
 
 /** Particle positions in meters, one every centimetre along +X. */
 function row(count: number): Float32Array {

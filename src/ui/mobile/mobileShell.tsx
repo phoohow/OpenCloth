@@ -1,15 +1,15 @@
 import { useEffect, useState, type MutableRefObject } from 'react';
-import { Viewport3D } from '../viewport3D';
-import { MobileSheet, type MobileSheetId } from './mobileSheets';
-import { MenuDialogs } from '../menu/menuDialogs';
-import { Icon, type IconName } from '../icons';
-import { normalizeRayTracing } from '../../core/model/defaults';
-import { usePerfStore, useProjectStore, useSimStore, useUIStore } from '../../store/stores';
-import { nextSimStep, rayTraceStateLabel, simStepLabel } from '../optionTables';
-import { setSimulationConfig } from '../sceneCommands';
-import type { MenuActions } from '../menu/actions';
-import type { GarmentEngine } from '../../core/engine/garmentEngine';
-import type { RendererContext } from '../../render/renderer/rendererContext';
+import { Viewport3D } from '@/ui/viewport3D';
+import { MobileSheet, type MobileSheetId } from '@/ui/mobile/mobileSheets';
+import { MenuDialogs } from '@/ui/menu/menuDialogs';
+import { Icon, type IconName } from '@/ui/icons';
+import { normalizeRayTracing } from '@/model';
+import { usePerfStore, useProjectStore, useSimStore, useUIStore } from '@/store';
+import { nextSimStep, rayTraceStateLabel, simStepLabel } from '@/ui/optionTables';
+import { setSimulationConfig } from '@/ui/sceneCommands';
+import type { MenuActions } from '@/ui/menu/actions';
+import type { GarmentEngine } from '@/runtime';
+import type { RendererContext } from '@/render/renderer';
 
 /** Phone layout: one full-bleed 3D pane between a top bar and the action dock. */
 export function MobileShell({ actions, engineRef, onEngineReady, ready }: {

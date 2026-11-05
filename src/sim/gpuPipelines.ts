@@ -1,6 +1,6 @@
 import {
   INTEGRATE_WGSL, SOLVE_WGSL, COLLIDE_WGSL, UPDATE_WGSL, NORMALS_WGSL, SET_PIN_WGSL,
-} from './shaders/shaders';
+} from '@/sim/shaders/shaders';
 
 /** Compute-visible buffer entry kinds, in binding order. */
 type BufferAccess = 'storage' | 'read-only-storage' | 'uniform';

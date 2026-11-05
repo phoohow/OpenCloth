@@ -1,26 +1,26 @@
 import { useLayoutEffect, useRef, useState, useMemo, type ReactNode, type MutableRefObject } from 'react';
 import { createPortal } from 'react-dom';
-import { displayModeOf, useProjectStore, useSimStore, useUIStore, usePerfStore, type DisplayMode, type ToolType } from '../store/stores';
-import type { GarmentEngine, CameraPreset } from '../core/engine/garmentEngine';
-import type { CameraProjection, EditPreviewTier } from '../core/model/types';
+import { displayModeOf, useProjectStore, useSimStore, useUIStore, usePerfStore, type DisplayMode, type ToolType } from '@/store';
+import type { GarmentEngine, CameraPreset } from '@/runtime';
+import type { CameraProjection, EditPreviewTier } from '@/model/types';
 import {
   CompositeCommand, CreateFreeSeamCommand, validateGrading,
-} from '../core/command/patternCommands';
-import { seamCandidates, type SeamCandidate, type SeamScanResult, type SeamScanSkipped } from '../pattern/auto/autoSeam';
-import { MARK_ITEMS, STRUCTURE_ITEMS, autoPlacePanels, runStructure, type StructureAction } from './commands/patternOps';
-import { TRIM_KIND_LABELS, TRIM_KINDS } from '../core/model/defaults';
-import type { TrimKind } from '../core/model/types';
-import { validatePattern } from '../core/model/validatePattern';
-import { seamWarnings } from '../pattern/seam/seamWarnings';
-import { elementNodeId, type PatternElementKind } from './elementSelection';
-import type { DisplayOptions } from './viewport2D/render';
+} from '@/commands';
+import { seamCandidates, type SeamCandidate, type SeamScanResult, type SeamScanSkipped } from '@/pattern/auto';
+import { MARK_ITEMS, STRUCTURE_ITEMS, autoPlacePanels, runStructure, type StructureAction } from '@/ui/commands/patternOps';
+import { TRIM_KIND_LABELS, TRIM_KINDS } from '@/model';
+import type { TrimKind } from '@/model/types';
+import { validatePattern } from '@/model';
+import { seamWarnings } from '@/pattern/seam';
+import { elementNodeId, type PatternElementKind } from '@/model';
+import type { DisplayOptions } from '@/ui/viewport2D/render';
 import {
   CAMERA_PRESETS, CAMERA_PROJECTIONS, DISPLAY_LAYER_OPTIONS, DISPLAY_MODES, EDIT_PREVIEW_TIERS,
   rayTracingUnavailableReason,
-} from './optionTables';
-import { comboOf } from './menu/shortcuts';
-import { Icon, type IconName } from './icons';
-import { reportActionError } from './widgets/toast';
+} from '@/ui/optionTables';
+import { comboOf } from '@/ui/menu/shortcuts';
+import { Icon, type IconName } from '@/ui/icons';
+import { reportActionError } from '@/ui/widgets/toast';
 
 /**
  * One pattern or pin tool: toolbar glyph, display name and the tool it selects.

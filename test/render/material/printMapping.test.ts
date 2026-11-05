@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { Pattern, Print } from '../../../src/core/model/types';
-import { createEmptyPattern } from '../../../src/core/model/defaults';
-import { panelPrintFrame, printPlacement } from '../../../src/render/material/printTexture';
+import type { Pattern, Print } from '@/model/types';
+import { createEmptyPattern } from '@/model/defaults';
+import { panelPrintFrame, printPlacement } from '@/render/material/printTexture';
 import { addSquare } from '../../core/command/fixtures';
 
 /** 10 × 10 cm square whose simulation mesh spans the seam-allowance box. */

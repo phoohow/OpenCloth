@@ -1,15 +1,15 @@
 import { useEffect, type ReactNode } from 'react';
-import type { MenuActions } from '../menu/actions';
-import { AUTO_SAVE_ITEMS } from '../menu/menuModel';
-import { formatSavedAt } from '../timeFormat';
-import { CAMERA_PRESETS, CAMERA_PROJECTIONS, DISPLAY_MODES, PROP_TAB_OPTIONS, rayTracingUnavailableReason, SIM_STEP_OPTIONS, simStepLabel } from '../optionTables';
-import { usePropsTarget } from '../panels/propertiesEditor';
-import { Icon } from '../icons';
-import { setSimulationConfig, type EngineRef } from '../sceneCommands';
-import { displayModeOf, usePerfStore, useProjectStore, useSimStore, useUIStore } from '../../store/stores';
-import type { PropTab } from '../../store/stores';
-import type { CameraProjection } from '../../core/model/types';
-import type { CameraPreset } from '../../core/engine/garmentEngine';
+import type { MenuActions } from '@/ui/menu/actions';
+import { AUTO_SAVE_ITEMS } from '@/ui/menu/menuModel';
+import { formatSavedAt } from '@/ui/timeFormat';
+import { CAMERA_PRESETS, CAMERA_PROJECTIONS, DISPLAY_MODES, PROP_TAB_OPTIONS, rayTracingUnavailableReason, SIM_STEP_OPTIONS, simStepLabel } from '@/ui/optionTables';
+import { usePropsTarget } from '@/ui/panels/propertiesEditor';
+import { Icon } from '@/ui/icons';
+import { setSimulationConfig, type EngineRef } from '@/ui/sceneCommands';
+import { displayModeOf, usePerfStore, useProjectStore, useSimStore, useUIStore } from '@/store';
+import type { PropTab } from '@/store';
+import type { CameraProjection } from '@/model/types';
+import type { CameraPreset } from '@/runtime';
 
 /** Sheets the phone shell can slide up; null keeps the viewport full screen. */
 export type MobileSheetId = 'menu' | 'camera' | 'display' | 'props' | null;

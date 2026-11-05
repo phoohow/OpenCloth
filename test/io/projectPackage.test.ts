@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { embedProjectAssets } from '../../src/io/projectPackage';
-import { createDefaultProject } from '../../src/core/model/defaults';
+import { embedProjectAssets } from '@/io/storage/projectPackage';
+import { createDefaultProject } from '@/model/defaults';
 
 describe('embedProjectAssets', () => {
   it('returns a detached copy when no imported blob is referenced', async () => {

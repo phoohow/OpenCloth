@@ -1,6 +1,6 @@
-import type { Panel, Pattern, Seam, Vec2 } from '../../core/model/types';
-import { samplePanelOutline } from '../panel/panelBuilder';
-import { sampleEdge } from '../geom/edgeSample';
+import type { Panel, Pattern, Seam, Vec2 } from '@/model/types';
+import { samplePanelOutline } from '@/pattern/panel/panelBuilder';
+import { sampleEdge } from '@/pattern/geom/edgeSample';
 
 /** Which end of a seam interval the joint sits at. */
 export type SeamJointEnd = 'start' | 'end';

@@ -1,11 +1,11 @@
 import { create } from 'zustand';
-import type { CameraConfig, Project } from '../core/model/types';
-import type { PanelClipboard } from '../core/command/panelClipboard';
-import type { RecentSummary, AutosaveSummary } from '../io/projectArchive';
-import { CommandHistory, type Command } from '../core/command/command';
-import { createStarterProject } from '../pattern/template';
-import { ChangeSet } from '../core/change/changeSet';
-import { diffProject } from '../core/change/diffProject';
+import type { CameraConfig, Project } from '@/model/types';
+import type { PanelClipboard } from '@/commands';
+import type { RecentSummary, AutosaveSummary } from '@/io/storage';
+import { CommandHistory, type Command } from '@/commands';
+import { createStarterProject } from '@/pattern/template';
+import { ChangeSet } from '@/runtime/change';
+import { diffProject } from '@/runtime/change';
 
 interface ProjectStore {
   project: Project;

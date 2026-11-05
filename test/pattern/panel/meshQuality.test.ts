@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_TSHIRT_PARAMS, generateTShirt } from '../../../src/pattern/template/tShirtTemplate';
-import { buildPanelMesh, panelOutlineWithAllowance, type PanelMesh } from '../../../src/pattern/panel/panelBuilder';
-import type { Vec2 } from '../../../src/core/model/types';
+import { DEFAULT_TSHIRT_PARAMS, generateTShirt } from '@/pattern/template/tShirtTemplate';
+import { buildPanelMesh, panelOutlineWithAllowance, type PanelMesh } from '@/pattern/panel/panelBuilder';
+import type { Vec2 } from '@/model/types';
 
 const pointOf = (mesh: PanelMesh, i: number): Vec2 => ({
   x: mesh.positions2D[i * 2]!,

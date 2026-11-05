@@ -1,6 +1,6 @@
-import { createDefaultProject } from '../../core/model/defaults';
-import type { Project } from '../../core/model/types';
-import { tShirtTemplate } from './tShirtTemplate';
+import { createDefaultProject } from '@/model';
+import type { Project } from '@/model/types';
+import { tShirtTemplate } from '@/pattern/template/tShirtTemplate';
 
 /** Fresh project carrying the default garment so the scene opens dressed. */
 export function createStarterProject(): Project {

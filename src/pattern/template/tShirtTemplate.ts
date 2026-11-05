@@ -1,10 +1,10 @@
-import type { PanelDrape, Pattern, Vec2 } from '../../core/model/types';
-import { PatternBuilder } from './templateKit';
-import { layoutRows } from './patternLayout';
-import { frontArc, backArc } from './drapeArcs';
-import { cm, defineTemplate } from './garmentTemplate';
-import { addBodice, addSleeve, capHeightForArmhole } from './panelShapes';
-import { sampleEdge } from '../panel/panelBuilder';
+import type { PanelDrape, Pattern, Vec2 } from '@/model/types';
+import { PatternBuilder } from '@/pattern/template/templateKit';
+import { layoutRows } from '@/pattern/template/patternLayout';
+import { frontArc, backArc } from '@/pattern/template/drapeArcs';
+import { cm, defineTemplate } from '@/pattern/template/garmentTemplate';
+import { addBodice, addSleeve, capHeightForArmhole } from '@/pattern/template/panelShapes';
+import { sampleEdge } from '@/pattern/panel/panelBuilder';
 
 /** Body measurements of a T-shirt, in centimeters. */
 export interface TShirtParams {

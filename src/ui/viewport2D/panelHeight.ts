@@ -1,7 +1,7 @@
-import type { Pattern, PatternPoint, Vec2 } from '../../core/model/types';
-import type { BodyLandmarks } from '../../avatar/landmarks';
-import { panelCutBounds } from '../../pattern/panel/panelBuilder';
-import { drapeHeightOffsetCm } from '../../pattern/drape/drapePlacement';
+import type { Pattern, PatternPoint, Vec2 } from '@/model/types';
+import type { BodyLandmarks } from '@/avatar';
+import { panelCutBounds } from '@/pattern/panel';
+import { drapeHeightOffsetCm } from '@/pattern/drape';
 
 /** Shifted copy of a pattern point; handles ride along with the anchor. */
 function shiftPoint(point: PatternPoint, dy: number): PatternPoint {

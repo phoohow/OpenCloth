@@ -1,9 +1,9 @@
-import type { Pattern } from '../../core/model/types';
-import { addFlaredPanel } from './panelShapes';
-import { PatternBuilder } from './templateKit';
-import { bandArc } from './drapeArcs';
-import { layoutRows } from './patternLayout';
-import { cm, count, defineTemplate } from './garmentTemplate';
+import type { Pattern } from '@/model/types';
+import { addFlaredPanel } from '@/pattern/template/panelShapes';
+import { PatternBuilder } from '@/pattern/template/templateKit';
+import { bandArc } from '@/pattern/template/drapeArcs';
+import { layoutRows } from '@/pattern/template/patternLayout';
+import { cm, count, defineTemplate } from '@/pattern/template/garmentTemplate';
 
 /** Waist, hem, length and panel count of a gore skirt. */
 export interface SkirtParams {

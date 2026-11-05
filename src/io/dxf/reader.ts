@@ -1,13 +1,15 @@
-import type { Panel, Pattern, Vec2 } from '../../core/model/types';
-import { genId, createEmptyPattern, DEFAULT_MESH_RESOLUTION_CM } from '../../core/model/defaults';
-import { normalizePattern } from '../../core/model/normalize';
-import { validatePattern } from '../../core/model/validatePattern';
-import { sampleEdge } from '../../pattern/geom/edgeSample';
-import { adaptiveSampleArc, arcFromThreePoints } from '../../pattern/geom/arc';
-import { computeBBox, ensureCCW, polygonArea } from '../../pattern/geom/vec2';
-import { parseDxf, expandInserts, type DxfEntity, type DxfVertex } from './dxfParser';
-import { layerRole, type DxfConvention, type LayerRole } from './layers';
-import { unescapeDxfValue } from './writer';
+import { genId } from '@/common/id';
+import type { Panel, Pattern, Vec2 } from '@/model/types';
+import { createEmptyPattern, DEFAULT_MESH_RESOLUTION_CM } from '@/model';
+import { normalizePattern } from '@/model';
+import { roundTo } from '@/common/format';
+import { validatePattern } from '@/model';
+import { sampleEdge } from '@/pattern/geom';
+import { adaptiveSampleArc, arcFromThreePoints } from '@/common/geom/arc';
+import { computeBBox, ensureCCW, polygonArea } from '@/common/geom';
+import { parseDxf, expandInserts, type DxfEntity, type DxfVertex } from '@/io/dxf/dxfParser';
+import { layerRole, type DxfConvention, type LayerRole } from '@/io/dxf/layers';
+import { unescapeDxfValue } from '@/io/dxf/writer';
 
 /** Options for `parsePatternDxf`. */
 export interface ParseDxfOptions {
@@ -373,7 +375,7 @@ export function parsePatternDxf(text: string, opts: ParseDxfOptions = {}): Patte
       const outlinePts = loopPoints(pattern, owner.outlineEdgeIds);
       if (outlinePts.length < 3) continue;
       const mean = outlinePts.reduce((acc, p) => acc + distanceToChain(p, saChain), 0) / outlinePts.length;
-      owner.seamAllowanceCm = Math.max(0, Math.round(mean * 100) / 100);
+      owner.seamAllowanceCm = Math.max(0, roundTo(mean));
     }
 
     for (const { role, pts, layer } of lines) {

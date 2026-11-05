@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import type { AvatarParams } from '../../src/core/model/types';
-import { bodyLandmarks } from '../../src/avatar/landmarks';
-import { generateAvatarCollider } from '../../src/avatar/collider/avatarCollider';
+import type { AvatarParams } from '@/model/types';
+import { bodyLandmarks } from '@/avatar/landmarks';
+import { generateAvatarCollider } from '@/avatar/collider/avatarCollider';
 import {
   appliedLimbPose, armChain, legChain, POSE_PRESETS, posePresetParams,
-} from '../../src/avatar/pose';
+} from '@/avatar/pose';
 
 const BASE: AvatarParams = { heightCm: 170, chestCm: 92, waistCm: 74, hipCm: 96 };
 const RAD = Math.PI / 180;

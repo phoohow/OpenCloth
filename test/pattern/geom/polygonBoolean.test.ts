@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { vec2, type Vec2 } from '../../../src/core/model/types';
-import { polygonArea } from '../../../src/pattern/geom/vec2';
+import { vec2, type Vec2 } from '@/model/types';
+import { polygonArea } from '@/common/geom';
 import {
   differencePolygons, intersectPolygons, unionPolygons, type PolygonList,
-} from '../../../src/pattern/geom/polygonBoolean';
+} from '@/common/geom';
 
 /** Exterior area of every polygon in a result list. */
 function exteriorArea(polygons: PolygonList): number {

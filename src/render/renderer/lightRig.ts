@@ -1,7 +1,7 @@
 import * as THREE from 'three/webgpu';
-import type { LightConfig, RenderConfig, SceneLight } from '../../core/model/types';
-import { iblStrength, normalizeLights } from '../../core/model/defaults';
-import type { ViewportSurface } from './viewportSurface';
+import type { LightConfig, RenderConfig, SceneLight } from '@/model/types';
+import { iblStrength, normalizeLights } from '@/model';
+import type { ViewportSurface } from '@/render/renderer/viewportSurface';
 
 /** Inverse-square falloff for the punctual lights that have one. */
 const PUNCTUAL_DECAY = 2;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { computeParticleThickness, type ClothSimInput } from '../../src/sim/simTypes';
-import { FABRIC_PHYSICS_PRESETS } from '../../src/core/model/defaults';
+import { computeParticleThickness, type ClothSimInput } from '@/sim/simTypes';
+import { FABRIC_PHYSICS_PRESETS } from '@/model/defaults';
 
 /** Input with two panels of two particles each carrying their own clearance. */
 function layeredInput(): ClothSimInput {

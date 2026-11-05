@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
-import type { Vec2, Vec3 } from '../../core/model/types';
+import type { Vec2, Vec3 } from '@/model/types';
+import { clamp as clampValue } from '@/common/math';
 
 const AXIS_COLOR = { X: '#e06c5e', Y: '#78c860', Z: '#5f8fd3' } as const;
 
@@ -25,7 +26,7 @@ export function NumberField({ value, step, precision = 3, min, max, axis, title,
   const [text, setText] = useState('');
   const drag = useRef<{ x: number; from: number; value?: number; moved: boolean } | null>(null);
 
-  const clamp = (v: number) => Math.min(max ?? Infinity, Math.max(min ?? -Infinity, v));
+  const clamp = (v: number) => clampValue(v, min ?? -Infinity, max ?? Infinity);
   const shown = clamp(draft ?? value);
   const fmt = (v: number) => v.toFixed(precision);
 

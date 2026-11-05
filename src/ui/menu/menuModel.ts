@@ -1,17 +1,17 @@
-import { comboOf } from './shortcuts';
-import { menuSep, type MenuEntry, type MenuLeaf, type TopMenu } from './menuTypes';
-import type { MenuActions } from './actions';
+import { comboOf } from '@/ui/menu/shortcuts';
+import { menuSep, type MenuEntry, type MenuLeaf, type TopMenu } from '@/ui/menu/menuTypes';
+import type { MenuActions } from '@/ui/menu/actions';
 import {
   CAMERA_PRESETS, CAMERA_PROJECTIONS, DISPLAY_LAYER_OPTIONS, DISPLAY_MODES, EDIT_PREVIEW_TIERS,
   PROP_TAB_OPTIONS,
-} from '../optionTables';
-import { MARK_ITEMS, STRUCTURE_ITEMS, autoPlacePanels, runStructure } from '../commands/patternOps';
-import { formatSavedAt } from '../timeFormat';
-import type { CameraProjection, EditPreviewTier } from '../../core/model/types';
-import type { DisplayMode, PaneId, PropTab, ToolType, ViewLayout } from '../../store/stores';
-import { isSplitLayout } from '../../store/stores';
-import type { DisplayOptions } from '../viewport2D/render';
-import type { RecentSummary, AutosaveSummary } from '../../io/projectArchive';
+} from '@/ui/optionTables';
+import { MARK_ITEMS, STRUCTURE_ITEMS, autoPlacePanels, runStructure } from '@/ui/commands/patternOps';
+import { formatSavedAt } from '@/ui/timeFormat';
+import type { CameraProjection, EditPreviewTier } from '@/model/types';
+import type { DisplayMode, PaneId, PropTab, ToolType, ViewLayout } from '@/store';
+import { isSplitLayout } from '@/store';
+import type { DisplayOptions } from '@/ui/viewport2D/render';
+import type { RecentSummary, AutosaveSummary } from '@/io/storage';
 
 export { formatSavedAt };
 

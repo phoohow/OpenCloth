@@ -1,11 +1,12 @@
+import { genId } from '@/common/id';
 import type {
   Panel, PanelDrape, Pattern, PatternEdge, PatternPoint, Seam, SeamEnd, Vec2, EdgeSemantic,
-} from '../../core/model/types';
-import { vec2 } from '../../core/model/types';
-import { genId, createEmptyPattern, DEFAULT_MESH_RESOLUTION_CM } from '../../core/model/defaults';
-import { setEdgeCurve } from '../geom/bezier';
+} from '@/model/types';
+import { vec2 } from '@/model/types';
+import { createEmptyPattern, DEFAULT_MESH_RESOLUTION_CM } from '@/model';
+import { setEdgeCurve } from '@/pattern/geom/bezier';
 
-export type { GarmentTemplate, ParamField } from './garmentTemplate';
+export type { GarmentTemplate, ParamField } from '@/pattern/template/garmentTemplate';
 
 /** Reference to a pattern point already inserted in the pattern. */
 export interface PtRef {

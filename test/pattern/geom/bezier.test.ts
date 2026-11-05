@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { vec2 } from '../../../src/core/model/types';
-import { evalBezier, smoothSplineSegments } from '../../../src/pattern/geom/bezier';
+import { vec2 } from '@/model/types';
+import { evalBezier, smoothSplineSegments } from '@/pattern/geom/bezier';
 
 /** The four corners of a 10 × 10 square, clockwise from the lower-left. */
 const square = [vec2(0, 0), vec2(10, 0), vec2(10, 10), vec2(0, 10)];

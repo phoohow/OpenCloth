@@ -1,8 +1,8 @@
-import type { FabricPhysics } from '../../core/model/types';
-import type { TriangleMesh } from '../../pattern/triangulate/triangulate';
-import { buildAdjacency } from '../../pattern/triangulate/triangulate';
+import type { FabricPhysics } from '@/model/types';
+import type { TriangleMesh } from '@/pattern/triangulate';
+import { buildAdjacency } from '@/pattern/triangulate';
 
-import type { Constraint } from '../../core/build/constraint';
+import type { Constraint } from '@/sim/simTypes';
 
 export type { Constraint };
 

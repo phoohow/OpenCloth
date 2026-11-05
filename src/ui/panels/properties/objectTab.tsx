@@ -1,26 +1,25 @@
-import type { PropTab } from '../../../store/stores';
-import type { ObjectTransform, Project, Vec3 } from '../../../core/model/types';
-import type { SceneNode, SceneNodeKind } from '../../sceneTree';
-import {
-  AVATAR_NODE_ID, ENVIRONMENT_NODE_ID, SCENE_KIND_LABELS, lightObjectId, readTransform,
-  referenceObjectId, storedSceneName, writeSceneName,
-} from '../../sceneTree';
-import { parseElementNodeId } from '../../elementSelection';
-import { normalizeLights } from '../../../core/model/defaults';
-import { seamNumber } from '../../../pattern/seam/seamNumber';
+import type { PropTab } from '@/store';
+import type { ObjectTransform, Project, Vec3 } from '@/model/types';
+import type { SceneNode, SceneNodeKind } from '@/ui/sceneTree';
+import { storedSceneName, writeSceneName } from '@/commands';
+import { AVATAR_NODE_ID, ENVIRONMENT_NODE_ID, lightObjectId, readTransform, referenceObjectId } from '@/model';
+import { SCENE_KIND_LABELS } from '@/ui/sceneTree';
+import { parseElementNodeId } from '@/model';
+import { normalizeLights } from '@/model';
+import { seamNumber } from '@/pattern/seam';
 import {
   commitTransform, patchValue, previewTransform, setAvatarDisplay, setEnvironmentEnabled,
   setLightsEnabled, setPanelsVisible, setProductionVisible, setReferencesVisible, setSeamsStitchVisible,
   type EngineRef,
-} from '../../sceneCommands';
-import { ButtonRow, CheckRow, Hint, Row, Section, SelectRow, SmallButton, TextRow } from '../../widgets/propertyRows';
-import { Vec3Field } from '../../widgets/numberField';
-import { degVec, radVec } from './constants';
-import { styles } from './styles';
-import { AvatarMaterialTab, MaterialTab, panelFabric } from './materialTab';
-import { LightPlacementData, ObjectData, PanelDrapeData, PanelManageRows, PanelMeshData } from './objectDataSections';
-import { AvatarPhysics, FabricPhysics } from './physicsTabs';
-import { PatternTab, ProjectTab, RenderTab } from './sceneRenderTabs';
+} from '@/ui/sceneCommands';
+import { ButtonRow, CheckRow, Hint, Row, Section, SelectRow, SmallButton, TextRow } from '@/ui/widgets/propertyRows';
+import { Vec3Field } from '@/ui/widgets/numberField';
+import { degVec, radVec } from '@/ui/panels/properties/constants';
+import { styles } from '@/ui/panels/properties/styles';
+import { AvatarMaterialTab, MaterialTab, panelFabric } from '@/ui/panels/properties/materialTab';
+import { LightPlacementData, ObjectData, PanelDrapeData, PanelManageRows, PanelMeshData } from '@/ui/panels/properties/objectDataSections';
+import { AvatarPhysics, FabricPhysics } from '@/ui/panels/properties/physicsTabs';
+import { PatternTab, ProjectTab, RenderTab } from '@/ui/panels/properties/sceneRenderTabs';
 
 /** Property panel for the tab of one selected scene object. */
 export function selectedBody(tab: PropTab, project: Project, nodeId: string, node: SceneNode, engineRef: EngineRef) {

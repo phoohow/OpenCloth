@@ -2,14 +2,14 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import {
   dialogButton, dialogLabel, dialogMessage, dialogNote, dialogRoot, dialogSectionTitle,
   dialogTab, dialogTabActive, dialogTabs, dialogTitle,
-} from './dialogStyles';
-import { useProjectStore } from '../../store/stores';
-import { downloadTextFile } from '../../io/codec';
-import { buildTechPackData } from '../../io/techPack';
-import { buildPlmPackage, buildWebhookPayload, postWebhook } from '../../io/integration';
-import { bomCsv } from '../../pattern/bom';
-import { buildPomTable } from '../../pattern/pom/pomTable';
-import { pomReportCsv } from '../../io/pomCsv';
+} from '@/ui/menu/dialogStyles';
+import { useProjectStore } from '@/store';
+import { downloadTextFile } from '@/io/serialization';
+import { buildTechPackData } from '@/io/exporters';
+import { buildPlmPackage, buildWebhookPayload, postWebhook } from '@/io/exporters';
+import { bomCsv } from '@/pattern';
+import { buildPomTable } from '@/pattern/pom';
+import { pomReportCsv } from '@/io/exporters';
 
 type IntegrationTab = 'plm' | 'webhook' | 'api';
 

@@ -1,5 +1,5 @@
-import { computeFitField, fitStats } from './fit';
-import { liveOr, type AnalysisChannel } from './channel';
+import { computeFitField, fitStats } from '@/analysis';
+import { liveOr, type AnalysisChannel } from '@/analysis';
 
 /** Body-clearance heatmap: signed distance from the live cloth to the avatar. */
 export const fitChannel: AnalysisChannel<'fit'> = {

@@ -1,7 +1,7 @@
 import * as THREE from 'three/webgpu';
-import { fitColor, type FitField } from './fit';
-import { pressureColor } from './pressure';
-import { strainColor, type StrainBounds } from './strain';
+import { fitColor, type FitField } from '@/analysis';
+import { pressureColor } from '@/analysis';
+import { strainColor, type StrainBounds } from '@/analysis';
 
 /** Coloured copy of the cloth geometry that shows body clearance as a heatmap. */
 export class FitOverlay {

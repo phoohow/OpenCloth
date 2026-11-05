@@ -1,8 +1,8 @@
 import * as THREE from 'three/webgpu';
-import type { AvatarParams } from '../../core/model/types';
-import { bodyLandmarks } from '../landmarks';
-import { appliedLimbPose, armChain, legChain, type Point3 } from '../pose';
-import { DEFAULT_SKIN_APPEARANCE } from '../../core/model/defaults';
+import type { AvatarParams } from '@/model/types';
+import { bodyLandmarks } from '@/avatar/landmarks';
+import { appliedLimbPose, armChain, legChain, type Point3 } from '@/avatar/pose';
+import { DEFAULT_SKIN_APPEARANCE } from '@/model';
 
 /** Local axis a lathe profile runs along, pointing down. */
 const DOWN = new THREE.Vector3(0, -1, 0);

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { Pattern, Vec2 } from '../../src/core/model/types';
-import { createEmptyPattern } from '../../src/core/model/defaults';
-import { buildPatternPdf, planPdfTiling } from '../../src/io/pdfPattern';
-import { CM_PT } from '../../src/io/pdf/pdfDocument';
+import type { Pattern, Vec2 } from '@/model/types';
+import { createEmptyPattern } from '@/model/defaults';
+import { buildPatternPdf, planPdfTiling } from '@/io/exporters/pdfPattern';
+import { CM_PT } from '@/io/pdf/pdfDocument';
 import { addSquare } from '../core/command/fixtures';
 
 /** Empty pattern holding one rectangle panel with a controlled allowance. */

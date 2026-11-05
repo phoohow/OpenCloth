@@ -1,4 +1,4 @@
-import type { Vec2 } from '../../core/model/types';
+import type { Vec2 } from '@/model/types';
 
 /** One polyline vertex; `bulge` is tan(quarter of the included angle) of the arc to the next vertex. */
 export interface DxfVertex {

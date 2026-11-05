@@ -1,7 +1,7 @@
-import type { Panel, PanelDrape, BodyLandmark } from '../../core/model/types';
-import { landmarkY, type BodyEllipse, type BodyLandmarks } from '../../avatar/landmarks';
-import type { PanelMesh } from '../panel/panelBuilder';
-import { inferDrape } from './drapeInfer';
+import type { Panel, PanelDrape, BodyLandmark } from '@/model/types';
+import { landmarkY, type BodyEllipse, type BodyLandmarks } from '@/avatar';
+import type { PanelMesh } from '@/pattern/panel/panelBuilder';
+import { inferDrape } from '@/pattern/drape/drapeInfer';
 
 const DEG = Math.PI / 180;
 

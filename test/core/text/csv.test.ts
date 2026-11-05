@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { csvCell, csvTable } from '../../../src/core/text/csv';
+import { csvCell, csvTable } from '@/common/text';
 
 describe('csvCell', () => {
   it('leaves plain cells untouched', () => {

@@ -1,4 +1,4 @@
-import type { Pattern } from '../../core/model/types';
+import type { Pattern } from '@/model/types';
 
 /**
  * 1-based display number of a seam, taken from its position in the seams map.

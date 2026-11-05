@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { computeFitField, DEFAULT_FIT_THRESHOLDS, fitColor, fitStats } from '../../../src/render/analysis/fit';
-import type { AvatarCollider } from '../../../src/avatar/collider/avatarCollider';
+import { computeFitField, DEFAULT_FIT_THRESHOLDS, fitColor, fitStats } from '@/analysis/fit';
+import type { AvatarCollider } from '@/avatar/collider/avatarCollider';
 
 /** Vertical capsule of radius 0.1 m centred on the Y axis. */
 const collider: AvatarCollider = {

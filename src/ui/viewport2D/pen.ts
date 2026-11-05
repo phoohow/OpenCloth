@@ -1,5 +1,5 @@
-import type { Vec2 } from '../../core/model/types';
-import { toScreen, type ViewTransform } from './viewMath';
+import type { Vec2 } from '@/model/types';
+import { toScreen, type ViewTransform } from '@/ui/viewport2D/viewMath';
 
 /** Everything one draw layer needs to put a world-space point on the pane. */
 export interface Pen {

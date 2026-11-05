@@ -1,12 +1,12 @@
-import type { MeshSampling, Pattern, Panel, SeamAllowanceCorner, Vec2 } from '../../core/model/types';
-import { DEFAULT_MESH_RESOLUTION_CM } from '../../core/model/defaults';
-import { hasSelfIntersection, offsetOutlinePerEdge, offsetPolygonStyled, safeOffsetPolygon } from '../geom/offset';
-import { computeBBox, ensureCCW } from '../geom/vec2';
-import { extractBoundaryEdges, resampleClosedOutline, type TriangleMesh } from '../triangulate/triangulate';
-import { remeshPolygon } from '../triangulate/remesh';
-import { sampleEdge } from '../geom/edgeSample';
+import type { MeshSampling, Pattern, Panel, SeamAllowanceCorner, Vec2 } from '@/model/types';
+import { DEFAULT_MESH_RESOLUTION_CM } from '@/model';
+import { hasSelfIntersection, offsetOutlinePerEdge, offsetPolygonStyled, safeOffsetPolygon } from '@/common/geom';
+import { computeBBox, ensureCCW } from '@/common/geom';
+import { extractBoundaryEdges, resampleClosedOutline, type TriangleMesh } from '@/pattern/triangulate/triangulate';
+import { remeshPolygon } from '@/pattern/triangulate/remesh';
+import { sampleEdge } from '@/pattern/geom/edgeSample';
 
-export { sampleEdge, sampleEdgeInterval, pointAtT, edgeLength, edgeIntervalLength } from '../geom/edgeSample';
+export { sampleEdge, sampleEdgeInterval, pointAtT, edgeLength, edgeIntervalLength } from '@/pattern/geom/edgeSample';
 
 /** Triangulated pattern piece with both its 2D source coordinates and 3D build pose. */
 export interface PanelMesh {

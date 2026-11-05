@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { createEmptyPattern } from '../../../src/core/model/defaults';
-import type { Pattern, SeamAllowanceCorner } from '../../../src/core/model/types';
-import { panelOutlineWithAllowance } from '../../../src/pattern/panel/panelBuilder';
-import { hasSelfIntersection } from '../../../src/pattern/geom/offset';
-import { computeBBox } from '../../../src/pattern/geom/vec2';
+import { createEmptyPattern } from '@/model/defaults';
+import type { Pattern, SeamAllowanceCorner } from '@/model/types';
+import { panelOutlineWithAllowance } from '@/pattern/panel/panelBuilder';
+import { hasSelfIntersection } from '@/common/geom';
+import { computeBBox } from '@/common/geom';
 import { addSquare } from '../../core/command/fixtures';
 
 const box = (pattern: Pattern, panelId: string, allowanceCm: number): Pattern => {

@@ -1,0 +1,21 @@
+{
+  "metrics": {
+    "files": 368,
+    "lines": 51534,
+    "edges": 1605,
+    "crossEdges": 779,
+    "runtimeCrossEdges": 495,
+    "nonCommonRuntimeCrossEdges": 391,
+    "reverseEdges": 0,
+    "upwardEdges": 0,
+    "cycleCount": 0,
+    "cycleFiles": 0,
+    "deepImports": 0,
+    "barrelViolations": 0,
+    "maxFileLines": 977,
+    "commonForbidden": 0,
+    "barrels": 51
+  },
+  "forbidden": [],
+  "cycles": []
+}

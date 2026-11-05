@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { DIVIDER_WIDTH } from './viewportLayout';
+import { DIVIDER_WIDTH } from '@/ui/viewportLayout';
 
 interface PaneDividerProps {
   /** 'x' splits left/right, 'y' splits top/bottom. */

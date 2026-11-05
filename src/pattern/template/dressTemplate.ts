@@ -1,9 +1,9 @@
-import type { Pattern } from '../../core/model/types';
-import { addBodice, addFlaredPanel } from './panelShapes';
-import { PatternBuilder } from './templateKit';
-import { bandArc, backArc, frontArc } from './drapeArcs';
-import { layoutRows } from './patternLayout';
-import { cm, defineTemplate } from './garmentTemplate';
+import type { Pattern } from '@/model/types';
+import { addBodice, addFlaredPanel } from '@/pattern/template/panelShapes';
+import { PatternBuilder } from '@/pattern/template/templateKit';
+import { bandArc, backArc, frontArc } from '@/pattern/template/drapeArcs';
+import { layoutRows } from '@/pattern/template/patternLayout';
+import { cm, defineTemplate } from '@/pattern/template/garmentTemplate';
 
 /** Body measurements of a dress, in centimeters. */
 export interface DressParams {

@@ -1,13 +1,13 @@
-import { useProjectStore, useUIStore, type PropTab } from '../../store/stores';
-import { buildSceneTree, elementLabel, findSceneNode, type SceneNode } from '../sceneTree';
-import { parseElementNodeId } from '../elementSelection';
-import { PROP_TAB_OPTIONS } from '../optionTables';
-import type { EngineRef } from '../sceneCommands';
-import { selectedBody } from './properties/objectTab';
-import { PatternTab, ProjectTab, RenderTab } from './properties/sceneRenderTabs';
-import { tabsForKind } from './properties/constants';
-import { styles } from './properties/styles';
-import { Icon } from '../icons';
+import { useProjectStore, useUIStore, type PropTab } from '@/store';
+import { buildSceneTree, elementLabel, findSceneNode, type SceneNode } from '@/ui/sceneTree';
+import { parseElementNodeId } from '@/model';
+import { PROP_TAB_OPTIONS } from '@/ui/optionTables';
+import type { EngineRef } from '@/ui/sceneCommands';
+import { selectedBody } from '@/ui/panels/properties/objectTab';
+import { PatternTab, ProjectTab, RenderTab } from '@/ui/panels/properties/sceneRenderTabs';
+import { tabsForKind } from '@/ui/panels/properties/constants';
+import { styles } from '@/ui/panels/properties/styles';
+import { Icon } from '@/ui/icons';
 import type { ReactNode } from 'react';
 
 /** Object, applicable tabs and tab content the properties surface edits right now. */

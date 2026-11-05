@@ -1,13 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { vec2 } from '../../../src/core/model/types';
+import { vec2 } from '@/model/types';
 import {
   offsetPolygon,
   offsetPolyline,
   computePolylineNormals,
   hasSelfIntersection,
   safeOffsetPolygon,
-} from '../../../src/pattern/geom/offset';
-import { computeBBox, polygonArea, ensureCCW } from '../../../src/pattern/geom/vec2';
+} from '@/common/geom';
+import { computeBBox, signedPolygonArea, ensureCCW } from '@/common/geom';
 
 // Counter-clockwise 10x10 square.
 const square = [vec2(0, 0), vec2(10, 0), vec2(10, 10), vec2(0, 10)];
@@ -39,7 +39,7 @@ describe('offsetPolygon', () => {
 
   it('外扩后面积增大', () => {
     const out = offsetPolygon(square, 1);
-    expect(polygonArea(out)).toBeGreaterThan(polygonArea(square));
+    expect(signedPolygonArea(out)).toBeGreaterThan(signedPolygonArea(square));
   });
 
   it('少于三个顶点时原样返回副本', () => {
@@ -100,8 +100,8 @@ describe('safeOffsetPolygon', () => {
 describe('ensureCCW', () => {
   it('顺时针多边形被翻转为逆时针', () => {
     const cw = [vec2(0, 0), vec2(0, 10), vec2(10, 10), vec2(10, 0)];
-    expect(polygonArea(cw)).toBeLessThan(0);
+    expect(signedPolygonArea(cw)).toBeLessThan(0);
     const ccw = ensureCCW(cw);
-    expect(polygonArea(ccw)).toBeGreaterThan(0);
+    expect(signedPolygonArea(ccw)).toBeGreaterThan(0);
   });
 });

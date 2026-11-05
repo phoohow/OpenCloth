@@ -1,8 +1,8 @@
 import * as THREE from 'three/webgpu';
-import type { FabricAppearance, Pattern, Print, Vec2 } from '../../core/model/types';
-import { computeBBox } from '../../pattern/geom/vec2';
-import { samplePanelOutline } from '../../pattern/panel/panelBuilder';
-import { imageAt } from '../imageStore';
+import type { FabricAppearance, Pattern, Print, Vec2 } from '@/model/types';
+import { computeBBox } from '@/common/geom';
+import { samplePanelOutline } from '@/pattern/panel';
+import { imageAt } from '@/render/imageStore';
 
 /** Longest canvas side of a composed panel texture, in pixels. */
 const COMPOSITE_MAX_SIDE = 1024;

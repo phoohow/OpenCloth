@@ -1,22 +1,22 @@
 import { useState } from 'react';
-import type { PomBodyKey, PomKind, Project } from '../../../core/model/types';
-import { buildPomTable } from '../../../pattern/pom/pomTable';
+import type { PomBodyKey, PomKind, Project } from '@/model/types';
+import { buildPomTable } from '@/pattern/pom';
 import {
   AddPomPointCommand, DeletePomPointCommand, GeneratePomGradingCommand,
   ImportPomValuesCommand, UpdatePomPointCommand,
-} from '../../../core/command/pomCommands';
-import { parsePomCsv, pomMatrixCsv, pomReportCsv } from '../../../io/pomCsv';
-import type { Command } from '../../../core/command/command';
-import { downloadTextFile, readFileAsText } from '../../../io/codec';
-import { idsOfKind } from '../../elementSelection';
-import { openFilePicker } from '../../modelImport';
-import { reportActionError } from '../../widgets/toast';
-import { NumberField } from '../../widgets/numberField';
+} from '@/commands';
+import { parsePomCsv, pomMatrixCsv, pomReportCsv } from '@/io/exporters';
+import type { Command } from '@/commands';
+import { downloadTextFile, readFileAsText } from '@/io/serialization';
+import { idsOfKind } from '@/model';
+import { openFilePicker } from '@/ui/modelImport';
+import { reportActionError } from '@/ui/widgets/toast';
+import { NumberField } from '@/ui/widgets/numberField';
 import {
   ButtonRow, FlexSelect, InlineText, Row, Section, SmallButton,
-} from '../../widgets/propertyRows';
-import { useProjectStore, useUIStore } from '../../../store/stores';
-import { styles } from './styles';
+} from '@/ui/widgets/propertyRows';
+import { useProjectStore, useUIStore } from '@/store';
+import { styles } from '@/ui/panels/properties/styles';
 
 /** Display name of each POM anchor kind. */
 const KIND_LABELS: Record<PomKind, string> = {

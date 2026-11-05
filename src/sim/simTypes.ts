@@ -1,6 +1,15 @@
-import type { FabricPhysics } from '../core/model/types';
-import type { TriangleMesh } from '../pattern/triangulate/triangulate';
-import type { Constraint } from './buffers/constraintBuilder';
+import type { FabricPhysics } from '@/model/types';
+import type { TriangleMesh } from '@/pattern/triangulate';
+
+/** One GPU distance constraint: a particle pair held near a rest length. */
+export interface Constraint {
+  p0: number;
+  p1: number;
+  restLength: number;
+  compliance: number;
+  /** Distance beyond which the constraint tears; absent constraints never tear. */
+  tearLength?: number;
+}
 
 /** Fabric weight (g/m²) used when a panel has no material record. */
 const FABRIC_DEFAULT_MASS_PER_AREA = 180;

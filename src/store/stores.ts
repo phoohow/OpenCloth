@@ -1,10 +1,10 @@
-export { useProjectStore } from './projectStore';
-export { useSimStore } from './simStore';
+export { useProjectStore } from '@/store/projectStore';
+export { useSimStore } from '@/store/simStore';
 export {
   FPS_SAMPLE_MS, noteDrawnFrame, noteRayTraceState, noteRayTracingSamples,
   noteRayTracingUnsupported, noteSimSteps, usePerfStore,
-} from './perfStore';
+} from '@/store/perfStore';
 export {
   displayModeOf, is2DFocus, is3DFocus, isRightPanelShown, isSplitLayout, leftPaneOf, toolPane, useUIStore,
-} from './uiStore';
-export type { DisplayMode, PaneId, PropTab, ToolType, ViewLayout } from './uiStore';
+} from '@/store/uiStore';
+export type { DisplayMode, PaneId, PropTab, ToolType, ViewLayout } from '@/store/uiStore';

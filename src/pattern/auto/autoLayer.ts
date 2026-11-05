@@ -1,5 +1,5 @@
-import type { Pattern } from '../../core/model/types';
-import { resolveDrape } from '../drape/drapePlacement';
+import type { Pattern } from '@/model/types';
+import { resolveDrape } from '@/pattern/drape/drapePlacement';
 
 /** Highest collision layer the auto-assignment recognises. */
 const MAX_LAYER = 9;

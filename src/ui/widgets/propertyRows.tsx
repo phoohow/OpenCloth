@@ -1,5 +1,6 @@
 import { useRef, useState, type ReactNode } from 'react';
-import { Icon } from '../icons';
+import { Icon } from '@/ui/icons';
+import { clamp as clampValue } from '@/common/math';
 
 /** Collapsible titled group of property rows, like a Blender panel. */
 export function Section({ title, children, defaultOpen = true }: {
@@ -48,7 +49,7 @@ export function SliderRow({ label, min, max, step, value, onChange, commitOnRele
   const [text, setText] = useState<string | null>(null);
   const shown = draft ?? value;
   const decimals = step < 0.01 ? 3 : (step < 1 ? 2 : 0);
-  const clamp = (v: number) => Math.min(max, Math.max(min, v));
+  const clamp = (v: number) => clampValue(v, min, max);
   /** Snap to the slider's grid so the field and the thumb cannot disagree. */
   const snap = (v: number) => clamp(Number((Math.round(v / step) * step).toFixed(Math.max(decimals, 0))));
 

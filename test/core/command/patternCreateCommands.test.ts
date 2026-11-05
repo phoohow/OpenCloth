@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { vec2 } from '../../../src/core/model/types';
-import { createDefaultProject } from '../../../src/core/model/defaults';
-import { samplePanelOutline } from '../../../src/pattern/panel/panelBuilder';
-import { CreatePanelFromPointsCommand } from '../../../src/core/command/patternCreateCommands';
+import { vec2 } from '@/model/types';
+import { createDefaultProject } from '@/model/defaults';
+import { samplePanelOutline } from '@/pattern/panel/panelBuilder';
+import { CreatePanelFromPointsCommand } from '@/commands/patternCreateCommands';
 
 /** Four corners of a 10 × 10 square, clockwise from the lower-left. */
 const square = [vec2(0, 0), vec2(10, 0), vec2(10, 10), vec2(0, 10)];

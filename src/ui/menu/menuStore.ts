@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { CLOSED_NAV, type MenuNavState } from './nav';
+import { CLOSED_NAV, type MenuNavState } from '@/ui/menu/nav';
 
 /** Modal shown over the app from the menu. */
 export type MenuDialog = 'shortcuts' | 'about' | 'exportDxf' | 'exportSvg' | 'exportPdf' | 'exportTechPack' | 'exportMarker' | 'exportBom' | 'review' | 'assets' | 'integration' | null;

@@ -1,8 +1,8 @@
-import type { Pattern } from '../../core/model/types';
-import { addSleeve } from './panelShapes';
-import { PatternBuilder } from './templateKit';
-import { layoutRows } from './patternLayout';
-import { cm, defineTemplate } from './garmentTemplate';
+import type { Pattern } from '@/model/types';
+import { addSleeve } from '@/pattern/template/panelShapes';
+import { PatternBuilder } from '@/pattern/template/templateKit';
+import { layoutRows } from '@/pattern/template/patternLayout';
+import { cm, defineTemplate } from '@/pattern/template/garmentTemplate';
 
 /** Measurements of a one-piece sleeve, in centimeters. */
 export interface SleeveParams {

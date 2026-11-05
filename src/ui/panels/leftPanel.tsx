@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { useProjectStore, useUIStore } from '../../store/stores';
-import { GARMENT_TEMPLATES } from '../../pattern/template';
-import { AppendTemplateCommand, ApplyTemplateCommand } from '../../pattern/template/templateCommands';
-import type { GarmentTemplate, ParamField } from '../../pattern/template/templateKit';
-import { Icon } from '../icons';
+import { useProjectStore, useUIStore } from '@/store';
+import { GARMENT_TEMPLATES } from '@/pattern/template';
+import { AppendTemplateCommand, ApplyTemplateCommand } from '@/pattern/template';
+import type { GarmentTemplate, ParamField } from '@/pattern/template';
+import { Icon } from '@/ui/icons';
 
 /** Template library; pattern tools live above the 2D pane and scene objects on the right. */
 export function LeftPanel() {

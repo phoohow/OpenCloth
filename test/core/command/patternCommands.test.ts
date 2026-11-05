@@ -1,15 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import { vec2, type ArcGeom, type Pattern, type Project, type Vec2 } from '../../../src/core/model/types';
-import { createDefaultProject } from '../../../src/core/model/defaults';
-import { generateTShirt } from '../../../src/pattern/template/tShirtTemplate';
-import { panelCutBounds, samplePanelOutline } from '../../../src/pattern/panel/panelBuilder';
-import type { ProjectContext } from '../../../src/core/command/command';
+import { vec2, type ArcGeom, type Pattern, type Project, type Vec2 } from '@/model/types';
+import { createDefaultProject } from '@/model/defaults';
+import { generateTShirt } from '@/pattern/template/tShirtTemplate';
+import { panelCutBounds, samplePanelOutline } from '@/pattern/panel/panelBuilder';
+import type { ProjectContext } from '@/commands/command';
 import {
   AddPointOnEdgeCommand, DeleteSelectionCommand, MoveGeometryCommand, MovePanelsCommand,
   MovePanelsHeightCommand, MovePointsCommand, edgePointIds, movePanelsCommands, panelMoveGeometry,
   pointMoveGeometry, previewMove, previewPanelMove,
-} from '../../../src/core/command/patternCommands';
-import { arcFromThreePoints, evalArc } from '../../../src/pattern/geom/arc';
+} from '@/commands/patternCommands';
+import { arcFromThreePoints, evalArc } from '@/common/geom';
 
 function makeCtx(project: Project): ProjectContext {
   return { project };

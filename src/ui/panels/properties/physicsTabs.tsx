@@ -1,11 +1,11 @@
-import type { Fabric, Project } from '../../../core/model/types';
+import type { Fabric, Project } from '@/model/types';
 import {
   DEFAULT_COMPRESSION_LIMIT, DEFAULT_CONTACT_FRICTION, DEFAULT_STRETCH_LIMIT,
-} from '../../../core/model/defaults';
-import { patchValue, setSimulationConfig } from '../../sceneCommands';
-import { SliderRow, CheckRow, Section } from '../../widgets/propertyRows';
-import { writeFabric } from './materialTab';
-import { styles } from './styles';
+} from '@/model';
+import { patchValue, setSimulationConfig } from '@/ui/sceneCommands';
+import { SliderRow, CheckRow, Section } from '@/ui/widgets/propertyRows';
+import { writeFabric } from '@/ui/panels/properties/materialTab';
+import { styles } from '@/ui/panels/properties/styles';
 
 // ===== Physics tabs ("物理") =====
 
