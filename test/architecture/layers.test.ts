@@ -59,7 +59,7 @@ describe('architecture', () => {
     expect(violations).toEqual([]);
   });
 
-  it('passes the architecture guard against its baseline', () => {
+  it('passes the architecture guard', () => {
     expect(() => execFileSync(
       process.execPath,
       ['scripts/check-architecture.mjs', '--check'],

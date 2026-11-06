@@ -15,10 +15,9 @@
     "test:coverage": "vitest run --coverage",
     "lint": "eslint src --ext .ts,.tsx",
     "typecheck": "tsc --noEmit",
-    "perf:baseline": "node scripts/selfcollision-baseline.mjs",
+    "perf:baseline": "node scripts/self-collision-baseline.mjs",
     "perf:gate": "vitest run test/sim/productionScale.test.ts",
     "arch:report": "node scripts/check-architecture.mjs",
-    "arch:baseline": "node scripts/check-architecture.mjs --baseline",
     "arch:check": "node scripts/check-architecture.mjs --check"
   },
   "dependencies": {

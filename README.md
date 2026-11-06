@@ -54,8 +54,7 @@ npm run preview
 | `npm run typecheck` | 类型检查 |
 | `npm run perf:gate` | 大面积布料的性能门禁 |
 | `npm run arch:report` | 输出依赖矩阵、循环与分层违例 |
-| `npm run arch:check` | 对照基线检查架构守卫（CI 必过） |
-| `npm run arch:baseline` | 重建架构基线（目录结构调整后使用） |
+| `npm run arch:check` | 检查分层、环、门面与文件规模（CI 必过） |
 
 ## 目录结构
 

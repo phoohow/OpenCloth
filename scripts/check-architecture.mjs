@@ -1,12 +1,11 @@
-import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+// Architecture guard: scans src/ imports for layer, cycle and barrel violations.
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = join(ROOT, 'src');
-const BASELINE = join(ROOT, 'scripts', 'architecture-baseline.json');
 const ALLOWLIST = join(ROOT, 'scripts', 'architecture-allowlist.json');
-const UPPER = ['pattern', 'render', 'sim', 'avatar', 'io'];
 const LAYER = {
   common: 0,
   model: 1, pattern: 1, avatar: 1, sim: 1, analysis: 1,
@@ -18,6 +17,15 @@ const LAYER = {
 const layerOf = d => LAYER[d] ?? 3;
 const FORBIDDEN_EXTERNAL = ['three', 'three/webgpu', 'three/tsl', 'react', 'react-dom', 'zustand'];
 const IMPORT_RE = /\b(?:import|export)\b[^;'"]*?\bfrom\s*['"]([^'"]+)['"]|\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)|\bimport\s*['"]([^'"]+)['"]|\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
+const LIMITS = {
+  upwardEdges: 0,
+  cycleCount: 0,
+  cycleFiles: 0,
+  deepImports: 0,
+  barrelViolations: 0,
+  maxFileLines: 1000,
+  commonForbidden: 0,
+};
 
 function collectFiles(dir, out = []) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -48,7 +56,7 @@ function analyze() {
   const lines = new Map();
   const edges = [];
   const forbidden = [];
-  const barrels = [];
+  const barrelViolations = [];
   let deepImports = 0;
 
   for (const file of files) {
@@ -62,8 +70,7 @@ function analyze() {
       const typeOnly = /^\s*import\s+type\b/.test(match[0]);
       const target = resolveSpec(file, spec);
 
-      // Deep paths into common are temporary until stage 2 switches to the @/ alias.
-      if (spec.startsWith('.') && (spec.match(/\.\.\//g) ?? []).length >= 2 && !spec.includes('common/')) deepImports++;
+      if (spec.startsWith('.') && (spec.match(/\.\.\//g) ?? []).length >= 2) deepImports++;
 
       if (!target) {
         if (fromDomain === 'common' && FORBIDDEN_EXTERNAL.includes(spec)) {
@@ -82,14 +89,13 @@ function analyze() {
       if (fromDomain !== toDomain && toDomain !== 'common'
         && !/\/(index|types)\.tsx?$/.test(target)
         && !['main', 'api', 'tools'].includes(fromDomain)) {
-        barrels.push(`${rel(file)} -> ${rel(target)}`);
+        barrelViolations.push(`${rel(file)} -> ${rel(target)}`);
       }
     }
   }
 
   const cross = edges.filter(e => domain(e.from) !== domain(e.to));
   const runtimeCross = cross.filter(e => !e.typeOnly);
-  const reverse = runtimeCross.filter(e => domain(e.from) === 'core' && UPPER.includes(domain(e.to)));
   const upward = runtimeCross.filter(e => layerOf(domain(e.from)) < layerOf(domain(e.to)));
 
   // Tarjan SCC on the file graph.
@@ -119,17 +125,16 @@ function analyze() {
     crossEdges: cross.length,
     runtimeCrossEdges: runtimeCross.length,
     nonCommonRuntimeCrossEdges: runtimeCross.filter(e => domain(e.to) !== 'common').length,
-    reverseEdges: reverse.length,
     upwardEdges: upward.length,
     cycleCount: cycles.length,
     cycleFiles: cycles.reduce((n, c) => n + c.length, 0),
     deepImports,
-    barrelViolations: barrels.length,
+    barrelViolations: barrelViolations.length,
     maxFileLines: Math.max(...lines.values()),
     commonForbidden: forbidden.length,
     barrels: files.filter(f => /\/index\.tsx?$/.test(f)).length,
   };
-  return { metrics, cycles, forbidden, reverse: reverse.map(e => `${rel(e.from)} -> ${rel(e.to)}`) };
+  return { metrics, cycles, forbidden };
 }
 
 function readJson(path, fallback) {
@@ -153,31 +158,14 @@ if (activeForbidden.length) {
   for (const item of activeForbidden.slice(0, 20)) console.log(`  ${item}`);
 }
 
-if (args.includes('--baseline')) {
-  writeFileSync(BASELINE, `${JSON.stringify({ metrics, forbidden: result.forbidden, cycles: result.cycles }, null, 2)}\n`);
-  console.log('\nBaseline written to scripts/architecture-baseline.json');
-}
-
 if (args.includes('--check')) {
-  const baseline = readJson(BASELINE, null);
-  if (!baseline) {
-    console.error('\nFAIL: no baseline. Run `npm run arch:baseline` first.');
-    process.exit(1);
-  }
-  const guards = [
-    ['reverseEdges', metrics.reverseEdges <= baseline.metrics.reverseEdges],
-    ['upwardEdges', metrics.upwardEdges <= (baseline.metrics.upwardEdges ?? metrics.upwardEdges)],
-    ['cycleCount', metrics.cycleCount <= baseline.metrics.cycleCount],
-    ['cycleFiles', metrics.cycleFiles <= baseline.metrics.cycleFiles],
-    ['deepImports', metrics.deepImports <= baseline.metrics.deepImports],
-    ['barrelViolations', metrics.barrelViolations <= (baseline.metrics.barrelViolations ?? metrics.barrelViolations)],
-    ['maxFileLines', metrics.maxFileLines <= 1000],
-    ['commonForbidden', activeForbidden.length === 0],
-  ];
-  const failed = guards.filter(([, ok]) => !ok).map(([name]) => name);
+  const values = { ...metrics, commonForbidden: activeForbidden.length };
+  const failed = Object.entries(LIMITS)
+    .filter(([key, limit]) => values[key] > limit)
+    .map(([key]) => key);
   if (failed.length) {
-    console.error(`\nFAIL: ${failed.join(', ')} regressed against baseline.`);
+    console.error(`\nFAIL: ${failed.join(', ')} exceed the architecture limits.`);
     process.exit(1);
   }
-  console.log('\nPASS: all architecture guards satisfied (metrics are non-increasing vs baseline).');
+  console.log('\nPASS: all architecture limits satisfied.');
 }

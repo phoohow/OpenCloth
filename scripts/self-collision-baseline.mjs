@@ -1,5 +1,5 @@
 // Prints a CPU self-collision throughput baseline without running the GPU solver.
-// Run with: node scripts/selfcollision-baseline.mjs
+// Run with: node scripts/self-collision-baseline.mjs
 import { SelfCollisionSolver } from '../src/sim/selfCollision.ts';
 
 /** Random but deterministic particle cloud inside a garment-scale cuboid. */
