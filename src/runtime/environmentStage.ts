@@ -1,6 +1,5 @@
 import type { LightConfig } from '@/model/types';
-import { iblStrength } from '@/model';
-import { applySceneEnvironment, releaseSceneEnvironment, DEFAULT_ENV_URL, type RendererContext } from '@/render/renderer';
+import { applySceneEnvironment, releaseSceneEnvironment, DEFAULT_ENV_URL, type Renderer } from '@/render';
 import { getModelBlob } from '@/io/storage';
 
 /** The scene's environment image: backdrop, lighting source and the object url serving it. */
@@ -8,20 +7,19 @@ export class EnvironmentStage {
   private objectKey: string | null = null;
   private objectUrl: string | null = null;
 
-  constructor(private ctx: RendererContext) { }
+  constructor(private renderer: Renderer) { }
 
   /** Applies the project's environment image as backdrop and lighting source. */
   async apply(lights: LightConfig): Promise<void> {
     const target = await this.resolveUrl(lights);
-    await applySceneEnvironment(this.ctx.surface.scene, target.url, target.name);
-    this.ctx.surface.scene.environmentIntensity = iblStrength(lights);
-    this.ctx.ray.tracer?.invalidateEnvironment();
+    await applySceneEnvironment(this.renderer.scene, target.url, target.name);
+    this.renderer.invalidateTrace();
   }
 
   /** Revokes the live object url and frees the texture loaded from it. */
   release(): void {
     if (!this.objectUrl) return;
-    releaseSceneEnvironment(this.ctx.surface.scene, this.objectUrl);
+    releaseSceneEnvironment(this.renderer.scene, this.objectUrl);
     URL.revokeObjectURL(this.objectUrl);
     this.objectUrl = null;
     this.objectKey = null;

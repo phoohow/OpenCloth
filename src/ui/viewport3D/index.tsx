@@ -1,14 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import {
-  createRendererContext, resizeRenderer, applyLightConfig, detectWebGPU,
-  disposeRendererContext, setRendererMode, type RendererContext,
-} from '@/render/renderer';
+import { Renderer, detectWebGPU } from '@/render';
 import { GarmentEngine } from '@/runtime';
 import { useProjectStore, useSimStore, useUIStore, usePerfStore, isSplitLayout, type ViewLayout, type ToolType } from '@/store';
-import { EngineSync, recoverWithRaster, syncSelectionOverlay } from '@/ui/viewport3D/engineSync';
+import { EngineSync, liveRenderConfig, recoverWithRaster, syncSelectionOverlay } from '@/ui/viewport3D/engineSync';
 import { useClothPicking } from '@/ui/viewport3D/useClothPicking';
 import { ViewportHint } from '@/ui/widgets/viewportHint';
-import { normalizeRayTracing } from '@/model';
 import { rayTraceStateLabel } from '@/ui/optionTables';
 import { MOBILE_VIEWPORT_HINT, isMobileUi } from '@/ui/mobile/mobileUi';
 
@@ -16,7 +12,7 @@ import { MOBILE_VIEWPORT_HINT, isMobileUi } from '@/ui/mobile/mobileUi';
 const MOBILE_HINT_RIGHT = 72;
 
 interface Viewport3DProps {
-  onEngineReady?: (engine: GarmentEngine, ctx: RendererContext) => void;
+  onEngineReady?: (engine: GarmentEngine, renderer: Renderer) => void;
 }
 
 /** Gestures the current layout allows. */
@@ -43,12 +39,12 @@ const statusHint = (layout: ViewLayout, tool: ToolType): string => {
 export function Viewport3D({ onEngineReady }: Viewport3DProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const ctxRef = useRef<RendererContext | null>(null);
+  const rendererRef = useRef<Renderer | null>(null);
   const engineRef = useRef<GarmentEngine | null>(null);
   const errorRef = useRef<string | null>(null);
   const [renderError, setRenderError] = useState<string | null>(null);
 
-  const renderMode = useUIStore(s => s.renderMode);
+  const backend = useUIStore(s => s.backend);
   const layout = useUIStore(s => s.layout);
   const activeTool = useUIStore(s => s.activeTool);
   const measure3d = useUIStore(s => s.measure3d);
@@ -75,18 +71,22 @@ export function Viewport3D({ onEngineReady }: Viewport3DProps) {
       canvas.height = Math.max(1, container.clientHeight);
 
       const initial = useProjectStore.getState().project;
-      const ctx = await createRendererContext(canvas, message => useUIStore.getState().showToast(message));
+      const renderConfig = liveRenderConfig(initial);
+      const renderer = await Renderer.create({
+        canvas,
+        config: renderConfig,
+        onDenoiseFailure: message => useUIStore.getState().showToast(message),
+      });
       if (cancelled) {
         // StrictMode's second mount owns the canvas now; release the abandoned renderer.
-        disposeRendererContext(ctx);
+        renderer.dispose();
         return;
       }
-      ctxRef.current = ctx;
-      ctx.ray.config = normalizeRayTracing(initial.scene.render.rayTracing);
+      rendererRef.current = renderer;
+      renderer.setToneMapping(initial.scene.render.toneMapping);
+      renderer.applyLights(initial.scene.lights);
 
-      applyLightConfig(ctx, initial.scene.lights, initial.scene.render);
-
-      const engine = new GarmentEngine(ctx);
+      const engine = new GarmentEngine(renderer);
       engineRef.current = engine;
       await engine.applyEnvironment(initial);
 
@@ -95,8 +95,8 @@ export function Viewport3D({ onEngineReady }: Viewport3DProps) {
       if (cancelled) {
         // The cleanup that cancelled this init ran before these refs existed.
         engine.dispose();
-        disposeRendererContext(ctx);
-        ctxRef.current = null;
+        renderer.dispose();
+        rendererRef.current = null;
         engineRef.current = null;
         return;
       }
@@ -112,26 +112,26 @@ export function Viewport3D({ onEngineReady }: Viewport3DProps) {
       syncSelectionOverlay(engine, initial.pattern, useUIStore.getState().selection);
       useSimStore.getState().bumpPins();
       try {
-        await setRendererMode(ctx, useUIStore.getState().renderMode);
+        await renderer.applyRenderConfig(liveRenderConfig(initial));
       } catch (error) {
-        if (!cancelled) recoverWithRaster(ctx, error, setRenderError);
+        if (!cancelled) recoverWithRaster(renderer, error, setRenderError);
       }
 
-      onEngineReady?.(engine, ctx);
+      onEngineReady?.(engine, renderer);
 
       // Store sync and the frame loop live in the controller from here on.
-      sync = new EngineSync(engine, ctx, setRenderError, initial);
+      sync = new EngineSync(engine, renderer, setRenderError, initial);
 
       // Resize handling
       const ro = new ResizeObserver(() => {
-        if (!container || !ctxRef.current) return;
+        if (!container || !rendererRef.current) return;
         const w = container.clientWidth, h = container.clientHeight;
         if (w === 0 || h === 0) return;
         canvas!.width = w; canvas!.height = h;
-        resizeRenderer(ctxRef.current, w, h);
+        rendererRef.current.resize(w, h);
       });
       ro.observe(container);
-      ctx.surface.resizeObserver = ro;
+      renderer.resizeObserver = ro;
     }
 
     init();
@@ -140,9 +140,9 @@ export function Viewport3D({ onEngineReady }: Viewport3DProps) {
       cancelled = true;
       sync?.dispose();
       engineRef.current?.dispose();
-      if (ctxRef.current) disposeRendererContext(ctxRef.current);
+      rendererRef.current?.dispose();
       engineRef.current = null;
-      ctxRef.current = null;
+      rendererRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -158,7 +158,7 @@ export function Viewport3D({ onEngineReady }: Viewport3DProps) {
         style={{ display: 'block', width: '100%', height: '100%', cursor: 'default' }}
       />
       <ViewportHint right={isMobileUi() ? MOBILE_HINT_RIGHT : 8}>{statusHint(layout, activeTool)}</ViewportHint>
-      {renderMode === 'raytraced' && !isMobileUi() && (
+      {backend === 'pathtrace' && !isMobileUi() && (
         <div style={{
           position: 'absolute', top: 8, left: 8, padding: '5px 8px', color: '#bde7ff',
           background: 'rgba(18, 39, 55, 0.84)', border: '1px solid #2f6d92',
@@ -167,7 +167,7 @@ export function Viewport3D({ onEngineReady }: Viewport3DProps) {
       )}
       {measure3d && (
         <div style={{
-          position: 'absolute', top: renderMode === 'raytraced' && !isMobileUi() ? 40 : 8, left: 8,
+          position: 'absolute', top: backend === 'pathtrace' && !isMobileUi() ? 40 : 8, left: 8,
           padding: '5px 8px', color: '#ffe2a6', background: 'rgba(55, 43, 18, 0.86)',
           border: '1px solid #8a6030', borderRadius: 4, fontSize: 'var(--oc-fs-micro)', pointerEvents: 'none',
         }}>

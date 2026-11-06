@@ -3,6 +3,7 @@ import type { Pattern, Project, Topstitch, Vec2 } from '@/model/types';
 import type { ClothSimInput } from '@/sim';
 import type { TriangleMesh } from '@/pattern/triangulate';
 import { topstitchRows } from '@/pattern/panel';
+import type { StageSlot } from '@/render';
 
 /** Width of one thread ribbon, in meters. */
 const THREAD_WIDTH_M = 0.0008;
@@ -78,7 +79,7 @@ export class TopstitchThreads {
 
   /** Builds one ribbon quad per stitch step and adds it to the scene. */
   attach(
-    scene: THREE.Scene, segments: TopstitchSegment[], positions: Float32Array, normals?: Float32Array,
+    scene: StageSlot, segments: TopstitchSegment[], positions: Float32Array, normals?: Float32Array,
   ): void {
     this.detach(scene);
     if (segments.length === 0) return;
@@ -154,7 +155,7 @@ export class TopstitchThreads {
   }
 
   /** Removes the overlay from the scene and frees its buffers. */
-  detach(scene: THREE.Scene): void {
+  detach(scene: StageSlot): void {
     if (!this.mesh) return;
     scene.remove(this.mesh);
     this.mesh.geometry.dispose();

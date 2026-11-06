@@ -1,8 +1,10 @@
 import { useLayoutEffect, useRef, useState, useMemo, type ReactNode, type MutableRefObject } from 'react';
 import { createPortal } from 'react-dom';
-import { displayModeOf, useProjectStore, useSimStore, useUIStore, usePerfStore, type DisplayMode, type ToolType } from '@/store';
+import {
+  displayModeOf, useProjectStore, useSimStore, useUIStore, usePerfStore, type DisplayMode, type ToolType,
+} from '@/store';
 import type { GarmentEngine, CameraPreset } from '@/runtime';
-import type { CameraProjection, EditPreviewTier } from '@/model/types';
+import type { CameraProjection, EditPreviewTier, WireMode } from '@/model/types';
 import {
   CompositeCommand, CreateFreeSeamCommand, validateGrading,
 } from '@/commands';
@@ -16,6 +18,7 @@ import { elementNodeId, type PatternElementKind } from '@/model';
 import type { DisplayOptions } from '@/ui/viewport2D/render';
 import {
   CAMERA_PRESETS, CAMERA_PROJECTIONS, DISPLAY_LAYER_OPTIONS, DISPLAY_MODES, EDIT_PREVIEW_TIERS,
+  WIRE_MODES,
   rayTracingUnavailableReason,
 } from '@/ui/optionTables';
 import { comboOf } from '@/ui/menu/shortcuts';
@@ -88,6 +91,7 @@ const VIEW_ITEMS = CAMERA_PRESETS.map(p => ({
 const PROJECTION_ITEMS = CAMERA_PROJECTIONS.map(p => ({ key: p.value, label: p.label }));
 
 const DISPLAY_ITEMS = DISPLAY_MODES.map(m => ({ key: m.value, label: m.label }));
+const WIRE_ITEMS = WIRE_MODES.map(m => ({ key: m.value, label: m.label }));
 
 /** Edit-preview tiers; the coarse entry spells out the re-drape that follows the drag. */
 const EDIT_PREVIEW_ITEMS = EDIT_PREVIEW_TIERS.map(tier => ({
@@ -96,7 +100,7 @@ const EDIT_PREVIEW_ITEMS = EDIT_PREVIEW_TIERS.map(tier => ({
   note: tier.value === 'low' ? '粗网格跟随拖动，松手后布料重新垂坠；全精度沿用当前垂坠状态。' : undefined,
 }));
 
-/** Display modes with the ray tracing entry locked once the probe has rejected this GPU. */
+/** Display modes, with the ray-traced entry locked once the probe has rejected this GPU. */
 function displayItems(unavailable: string | null) {
   if (!unavailable) return DISPLAY_ITEMS;
   return DISPLAY_ITEMS.map(item => item.key === 'raytraced'
@@ -331,6 +335,8 @@ export function Toolbar3D({ engineRef }: { engineRef: MutableRefObject<GarmentEn
   const setTool = useUIStore(s => s.setTool);
   const displayMode = useUIStore(displayModeOf);
   const setDisplayMode = useUIStore(s => s.setDisplayMode);
+  const wire = useUIStore(s => s.wire);
+  const setWire = useUIStore(s => s.setWire);
   const projection = useUIStore(s => s.cameraProjection);
   const setCameraProjection = useUIStore(s => s.setCameraProjection);
   const editPreview = useUIStore(s => s.editPreview);
@@ -373,6 +379,12 @@ export function Toolbar3D({ engineRef }: { engineRef: MutableRefObject<GarmentEn
         items={displayItems(rayUnavailable)}
         value={displayMode}
         onPick={key => setDisplayMode(key as DisplayMode)}
+      />
+      <Dropdown
+        label="线框"
+        items={WIRE_ITEMS}
+        value={wire}
+        onPick={key => setWire(key as WireMode)}
       />
       <Dropdown
         label="拖动预览"

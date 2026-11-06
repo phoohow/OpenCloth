@@ -14,15 +14,14 @@ import { setPanelsVisible, commitClearReferences, commitEnvironmentReset } from 
 import { importAvatarViaPicker, importEnvironmentViaPicker, importReferenceViaPicker, openFilePicker } from '@/ui/modelImport';
 import { useMenuStore } from '@/ui/menu/menuStore';
 import type { GarmentEngine, CameraPreset } from '@/runtime';
-import { renderScene } from '@/render/renderer';
-import type { RendererContext } from '@/render/renderer';
+import type { Renderer } from '@/render';
 import type { CameraProjection, EditPreviewTier, Project } from '@/model/types';
 import { reportActionError } from '@/ui/widgets/toast';
 import { createProjectService } from '@/runtime';
 
 interface MenuActionContext {
   engineRef: MutableRefObject<GarmentEngine | null>;
-  ctxRef: MutableRefObject<RendererContext | null>;
+  rendererRef: MutableRefObject<Renderer | null>;
   /** Hidden file input owned by the app; 打开… routes through it. */
   projectInputRef: MutableRefObject<HTMLInputElement | null>;
 }
@@ -197,37 +196,37 @@ export function createMenuActions(refs: MenuActionContext): MenuActions {
     clearReferences: () => commitClearReferences(),
 
     exportGlb: () => {
-      const ctx = refs.ctxRef.current;
+      const ctx = refs.rendererRef.current;
       if (!ctx) return;
-      void exportGLB(ctx.surface.scene, `${project().meta.name}.glb`, { includeAvatar: false, includeMaterial: true });
+      void exportGLB(ctx.scene.exportables(), `${project().meta.name}.glb`, { includeAvatar: false, includeMaterial: true });
     },
     exportObj: () => {
-      const ctx = refs.ctxRef.current;
+      const ctx = refs.rendererRef.current;
       if (!ctx) return;
-      exportOBJ(ctx.surface.scene, `${project().meta.name}.obj`, { includeAvatar: false, includeMaterial: true });
+      exportOBJ(ctx.scene.exportables(), `${project().meta.name}.obj`, { includeAvatar: false, includeMaterial: true });
     },
     exportFbx: () => {
-      const ctx = refs.ctxRef.current;
+      const ctx = refs.rendererRef.current;
       if (!ctx) return;
-      exportFBX(ctx.surface.scene, `${project().meta.name}.fbx`, { includeAvatar: false, includeMaterial: false });
+      exportFBX(ctx.scene.exportables(), `${project().meta.name}.fbx`, { includeAvatar: false, includeMaterial: false });
     },
     exportUsd: () => {
-      const ctx = refs.ctxRef.current;
+      const ctx = refs.rendererRef.current;
       if (!ctx) return;
-      exportUSD(ctx.surface.scene, `${project().meta.name}.usda`, { includeAvatar: false, includeMaterial: false });
+      exportUSD(ctx.scene.exportables(), `${project().meta.name}.usda`, { includeAvatar: false, includeMaterial: false });
     },
     screenshot: () => {
-      const ctx = refs.ctxRef.current;
+      const ctx = refs.rendererRef.current;
       if (!ctx) return;
-      renderScene(ctx);
-      exportScreenshot(ctx.surface.canvas, `${project().meta.name}.png`);
+      ctx.render();
+      exportScreenshot(ctx.canvas, `${project().meta.name}.png`);
     },
     exportAnimation: () => {
-      const ctx = refs.ctxRef.current;
+      const ctx = refs.rendererRef.current;
       if (!ctx) return;
       alert('开始录制 5 秒动画…');
       // The viewport keeps drawing each frame, so a paused simulation records its current state.
-      void recordCanvasToWebM(ctx.surface.canvas, `${project().meta.name}.webm`).then(result => {
+      void recordCanvasToWebM(ctx.canvas, `${project().meta.name}.webm`).then(result => {
         if (result === 'unsupported') alert('当前浏览器不支持画布录制');
       });
     },

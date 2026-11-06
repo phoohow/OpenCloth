@@ -95,6 +95,21 @@ export function drapePositions(mesh: PanelMesh, panel: Panel, body: BodyLandmark
   }
 }
 
+/**
+ * True when the panel's pose turns the pattern sheet over, so its counter-clockwise 2D triangles
+ * come out clockwise in 3D. The torso wrap keeps the sheet's facing for a positive sweep, the limbs
+ * always mirror it, and a negative transform scale mirrors as well.
+ */
+export function drapeReversesWinding(panel: Panel): boolean {
+  const scale = panel.transform?.scale;
+  const scaleSign = scale && scale.x * scale.y * scale.z < 0 ? -1 : 1;
+  if (panel.placement || !panel.drape) return scaleSign < 0;
+  const drape = resolveDrape(panel);
+  const sweepSign = drape.sweepDeg < 0 ? -1 : 1;
+  const wrapSign = drape.region === 'torso' ? sweepSign : -sweepSign;
+  return wrapSign * scaleSign < 0;
+}
+
 /** Angle of a vertex: the panel's full width spreads evenly over the declared sweep. */
 function columnAngle(x: number, bounds: PanelBounds, drape: ResolvedDrape): number {
   const width = Math.max(bounds.maxX - bounds.minX, 1e-3);

@@ -10,7 +10,8 @@ import { loadModelFromFile, loadModelFromUrl, type LoadedModel } from '@/io/impo
 import { getModelBlob } from '@/io/storage';
 import { applyTransform } from '@/runtime/objectTransforms';
 import { AVATAR_OVERLAY_NAME } from '@/runtime/clothConstants';
-import { applyBodySkin } from '@/render/material';
+import { applyBodySkin } from '@/render';
+import type { StageSlot } from '@/render';
 
 /** Extra room around the body grid so animated limbs stay inside it, in meters. */
 const ANIMATION_COLLIDER_MARGIN_M = 0.3;
@@ -30,6 +31,8 @@ export class AvatarStage {
   collider: AvatarCollider | null = null;
 
   private group: THREE.Group | null = null;
+  /** Slot the body lives in, the gateway for change notifications the tracer reads. */
+  private slot: StageSlot | null = null;
   private overlays: THREE.Mesh[] = [];
   /** Appearance key the body materials were last written for. */
   private appliedSkin = '';
@@ -49,7 +52,7 @@ export class AvatarStage {
   get object(): THREE.Group | null { return this.group; }
 
   /** Replaces the scene avatar with the project's body and rebuilds its collision body. */
-  async build(avatar: Avatar, scene: THREE.Scene): Promise<void> {
+  async build(avatar: Avatar, scene: StageSlot): Promise<void> {
     this.detach(scene);
     const loaded = avatar.source === 'procedural'
       ? null
@@ -64,6 +67,7 @@ export class AvatarStage {
     // The capsules remain the fallback and the fit-analysis proxy; the triangle grid drives collision.
     collider.mesh = meshColliderFromObject(group, margin);
     this.group = group;
+    this.slot = scene;
     this.collider = collider;
     this.clips = loaded?.animations ?? [];
     this.mixer = this.clips.length > 0 ? new THREE.AnimationMixer(group) : null;
@@ -79,11 +83,14 @@ export class AvatarStage {
   applyAppearance(appearance?: SkinAppearance): void {
     if (!this.group || skinKey(appearance) === this.appliedSkin) return;
     this.applySkin(appearance);
+    this.slot?.markChanged('material');
   }
 
   /** Places the avatar group at its stored scene transform. */
   place(transform: ObjectTransform | undefined): void {
-    if (this.group) applyTransform(this.group, transform ?? IDENTITY_TRANSFORM);
+    if (!this.group) return;
+    applyTransform(this.group, transform ?? IDENTITY_TRANSFORM);
+    this.slot?.markChanged('transform');
   }
 
   /** Motion clips the current body carries, in file order. */
@@ -138,6 +145,7 @@ export class AvatarStage {
     if (!this.playing || !this.action || !this.mixer) return false;
     this.mixer.update(dtMs / 1000);
     this.elapsed = this.action.time;
+    this.slot?.markChanged('deform');
     return true;
   }
 
@@ -149,6 +157,7 @@ export class AvatarStage {
     this.action.time = t;
     this.mixer.update(0);
     this.elapsed = t;
+    this.slot?.markChanged('deform');
   }
 
   /** Shows, hides or fades the avatar without touching its overlay clones. */
@@ -161,6 +170,8 @@ export class AvatarStage {
       mat.transparent = display === 'translucent';
       mat.opacity = display === 'translucent' ? 0.35 : 1;
     });
+    this.slot?.markChanged('visibility');
+    this.slot?.markChanged('material');
   }
 
   /** Rebuilds the translucent clones that mark the avatar as selected. */
@@ -178,11 +189,12 @@ export class AvatarStage {
   }
 
   /** Removes the avatar group and its overlays from the scene. */
-  detach(scene: THREE.Scene): void {
+  detach(scene: StageSlot): void {
     this.clearOverlay();
     if (!this.group) return;
     scene.remove(this.group);
     this.group = null;
+    this.slot = null;
     this.collider = null;
     this.appliedSkin = '';
     this.clips = [];

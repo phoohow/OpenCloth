@@ -9,13 +9,13 @@ import { rayTraceStateLabel } from '@/ui/optionTables';
 import { formatElapsed } from '@/ui/timeFormat';
 import type { MenuActions } from '@/ui/menu/actions';
 import type { GarmentEngine } from '@/runtime';
-import type { RendererContext } from '@/render/renderer';
+import type { Renderer } from '@/render';
 
 /** Phone layout: one full-bleed 3D pane between a top bar and the action dock. */
 export function MobileShell({ actions, engineRef, onEngineReady, ready }: {
   actions: MenuActions;
   engineRef: MutableRefObject<GarmentEngine | null>;
-  onEngineReady: (engine: GarmentEngine, ctx: RendererContext) => void;
+  onEngineReady: (engine: GarmentEngine, renderer: Renderer) => void;
   ready: boolean;
 }) {
   const [sheet, setSheet] = useState<MobileSheetId>(null);
@@ -62,7 +62,7 @@ function TopBar({ onOpenMenu, onOpenProps }: { onOpenMenu: () => void; onOpenPro
   const isDressed = useSimStore(s => s.isDressed);
   const isDressing = useSimStore(s => s.isDressing);
   const currentFrame = useSimStore(s => s.currentFrame);
-  const renderMode = useUIStore(s => s.renderMode);
+  const backend = useUIStore(s => s.backend);
   const fps3D = usePerfStore(s => s.fps['3d']);
   const samples3D = usePerfStore(s => s.samples3D);
   const costMs3D = usePerfStore(s => s.costMs3D);
@@ -85,7 +85,7 @@ function TopBar({ onOpenMenu, onOpenProps }: { onOpenMenu: () => void; onOpenPro
         </button>
         <span style={styles.projectName}>{projectName}</span>
         <span style={styles.readout}>
-          {renderMode === 'raytraced'
+          {backend === 'pathtrace'
             ? `SPP ${samples3D}/${maxSamples}${samples3D > 0 ? ` · Cost ${formatElapsed(costMs3D)}` : rayNote ? ` · ${rayNote}` : ''}`
             : `FPS ${fps3D}`}
         </span>

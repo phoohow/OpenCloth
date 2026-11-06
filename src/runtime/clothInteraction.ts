@@ -1,11 +1,12 @@
 import * as THREE from 'three/webgpu';
-import type { RendererContext } from '@/render/renderer';
+import type { Renderer } from '@/render';
 import type { ClothSimulator } from '@/sim';
 import type { ParticlePickHit } from '@/sim';
 import { evalBodyDistance } from '@/avatar/collider';
 import type { AvatarStage } from '@/runtime/avatarStage';
 import type { ClothPicker } from '@/runtime/clothPicker';
 import { DragMarker } from '@/runtime/dragMarker';
+import type { StageSlot } from '@/render';
 import type { PinMarkers } from '@/runtime/pinMarkers';
 import { grabWeightsAround } from '@/runtime/clothDrag';
 import { pinsByScreenDistance } from '@/runtime/pinHover';
@@ -23,7 +24,9 @@ export interface ClothInteractionHost {
   readonly picker: ClothPicker;
   readonly avatar: AvatarStage;
   readonly pinMarkers: PinMarkers;
-  readonly renderer: RendererContext;
+  readonly renderer: Renderer;
+  /** Slot the drag marker is drawn in. */
+  readonly markerSlot: StageSlot;
   /** Merged particle positions from the last readback, or null before it. */
   positions(): Float32Array | null;
   /** Solver the drag pulls, or null while it is being rebuilt. */
@@ -81,8 +84,8 @@ export class ClothInteraction {
   hoverPinAtScreen(ndcX: number, ndcY: number, radiusPx = PIN_HOVER_RADIUS_PX): number | null {
     const positions = this.host.positions();
     if (!positions) return null;
-    const camera = this.host.renderer.view.camera;
-    const { canvas } = this.host.renderer.surface;
+    const camera = this.host.renderer.camera.camera;
+    const canvas = this.host.renderer.canvas;
     const width = canvas.clientWidth;
     const height = canvas.clientHeight;
     if (!width || !height) return null;
@@ -116,7 +119,7 @@ export class ClothInteraction {
   ): boolean {
     const offset = index * 3;
     if (offset + 2 >= positions.length) return true;
-    const camera = this.host.renderer.view.camera;
+    const camera = this.host.renderer.camera.camera;
     const point = this.point.set(positions[offset]!, positions[offset + 1]!, positions[offset + 2]!);
     const distance = camera.position.distanceTo(point);
     this.direction.copy(point).sub(camera.position).divideScalar(distance || 1);
@@ -149,7 +152,7 @@ export class ClothInteraction {
     const weights = grabWeightsAround(positions, center, DRAG_GRAB_RADIUS_M, DRAG_GRAB_STRENGTH);
     if (!simulator.setGrab(weights, [center.x, center.y, center.z])) return false;
     this.drag = { center, plane: new THREE.Plane().setFromNormalAndCoplanarPoint(normal, center), particle: hit.index };
-    this.marker.show(hit.index, positions, this.host.renderer.surface.scene, this.host.renderer.view.camera);
+    this.marker.show(hit.index, positions, this.host.markerSlot, this.host.renderer.camera.camera);
     return true;
   }
 
@@ -174,7 +177,7 @@ export class ClothInteraction {
   /** Releases the drag; the cloth keeps the velocity the pull gave it. */
   endDrag(): void {
     this.drag = null;
-    this.marker.hide(this.host.renderer.surface.scene);
+    this.marker.hide(this.host.markerSlot);
     this.host.simulator()?.clearGrab();
   }
 
@@ -185,12 +188,12 @@ export class ClothInteraction {
 
   /** Keeps the grabbed-point marker on its particle after a readback. */
   syncMarker(positions: Float32Array | null): void {
-    this.marker.sync(positions, this.host.renderer.view.camera);
+    this.marker.sync(positions, this.host.renderer.camera.camera);
   }
 
   /** Ends the drag and frees the marker. */
   dispose(): void {
     this.endDrag();
-    this.marker.dispose(this.host.renderer.surface.scene);
+    this.marker.dispose(this.host.markerSlot);
   }
 }

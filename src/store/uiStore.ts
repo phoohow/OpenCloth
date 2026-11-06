@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import type { CameraProjection, EditPreviewTier, Pattern, RenderMode, TrimKind, Vec2 } from '@/model/types';
+import type { CameraProjection, EditPreviewTier, FillMode, Pattern, RenderBackend, TrimKind, Vec2, WireMode } from '@/model/types';
+import { presetOf, RENDER_PRESETS } from '@/store/renderPresets';
 import type { PatternElementKind } from '@/model';
 import { pickPrefs, readPrefs, writePrefs } from '@/store/prefs';
 
@@ -17,17 +18,26 @@ import type { PaneId, PropTab, ViewLayout } from '@/store/types';
 
 export type { PaneId, PropTab, ViewLayout } from '@/store/types';
 
-/** Viewport display-mode value: a render mode or one of the three cloth analysis heatmaps. */
-export type DisplayMode = RenderMode | 'fitHeatmap' | 'strainHeatmap' | 'pressureHeatmap';
+/** Display modes that colour the surface from simulation fields: raster-only, physical fill. */
+const HEATMAP_MODES: ReadonlySet<string> = new Set(['fitHeatmap', 'strainHeatmap', 'pressureHeatmap']);
 
-/** Display-mode value the viewport controls show: the active heatmap, otherwise the render mode. */
+/**
+ * Viewport display mode: one of the render presets, or one of the three cloth analysis heatmaps.
+ * The two live in one picker so the viewport has a single "what am I looking at" control.
+ */
+export type DisplayMode =
+  | 'shaded' | 'raytraced' | 'uvCheck' | 'normalVis' | 'vertexNormalVis'
+  | 'fitHeatmap' | 'strainHeatmap' | 'pressureHeatmap';
+
+/** Display-mode value the viewport controls show: the active heatmap, otherwise the render preset. */
 export function displayModeOf(state: {
-  renderMode: RenderMode; fitCheck: boolean; strainCheck: boolean; pressureCheck: boolean;
+  fill: FillMode; backend: RenderBackend;
+  fitCheck: boolean; strainCheck: boolean; pressureCheck: boolean;
 }): DisplayMode {
   if (state.pressureCheck) return 'pressureHeatmap';
   if (state.fitCheck) return 'fitHeatmap';
   if (state.strainCheck) return 'strainHeatmap';
-  return state.renderMode;
+  return presetOf(state.fill, state.backend).id as DisplayMode;
 }
 /** Transient message shown over the viewports; a fresh id restarts the toast on repeated text. */
 export interface ToastMessage {
@@ -84,7 +94,9 @@ interface UIStore {
   rightPanelWidth: number;
   /** Outliner rows whose children are hidden. */
   collapsedOutliner: string[];
-  renderMode: RenderMode;
+  fill: FillMode;
+  wire: WireMode;
+  backend: RenderBackend;
   /** Projection the 3D viewport renders with; persisted like the render mode. */
   cameraProjection: CameraProjection;
   /** Bumped to fit the pattern into the 2D pane. */
@@ -179,7 +191,10 @@ interface UIStore {
   setCollapsedOutliner: (ids: string[]) => void;
   setPropTab: (t: PropTab) => void;
   setDisplayMode: (m: DisplayMode) => void;
-  setRenderMode: (m: RenderMode) => void;
+  setFill: (m: FillMode) => void;
+  setWire: (m: WireMode) => void;
+  setBackend: (m: RenderBackend) => void;
+
   setCameraProjection: (p: CameraProjection) => void;
   requestFit: () => void;
   requestRepaint: () => void;
@@ -214,7 +229,9 @@ export const useUIStore = create<UIStore>((set, get) => ({
   leftPanelWidth: prefs.leftPanelWidth,
   rightPanelWidth: prefs.rightPanelWidth,
   collapsedOutliner: [],
-  renderMode: prefs.renderMode,
+  fill: prefs.fill,
+  wire: prefs.wire,
+  backend: prefs.backend,
   cameraProjection: prefs.cameraProjection,
   fitToken: 0,
   repaintToken: 0,
@@ -299,19 +316,25 @@ export const useUIStore = create<UIStore>((set, get) => ({
   })),
   setCollapsedOutliner: (ids) => set({ collapsedOutliner: ids }),
   setPropTab: (t) => set({ propTab: t }),
-  // Heatmaps replace the cloth material, and the path tracer hides that overlay, so analysis modes stay on the raster path.
+  // A heatmap colours the simulated surface, so it is a raster diagnostic: entering one switches
+  // the viewport to raster and to the physical fill, or the tracer would fade the colours out as it
+  // accumulates and a uv or normal override would keep covering the surface. A render preset sets
+  // the two axes back and turns every heatmap off.
   setDisplayMode: (m) => {
-    if (m === 'pressureHeatmap') {
-      set(s => ({ pressureCheck: true, fitCheck: false, strainCheck: false, renderMode: s.renderMode === 'raytraced' ? 'shaded' : s.renderMode }));
-    } else if (m === 'fitHeatmap') {
-      set(s => ({ fitCheck: true, strainCheck: false, pressureCheck: false, renderMode: s.renderMode === 'raytraced' ? 'shaded' : s.renderMode }));
-    } else if (m === 'strainHeatmap') {
-      set(s => ({ strainCheck: true, fitCheck: false, pressureCheck: false, renderMode: s.renderMode === 'raytraced' ? 'shaded' : s.renderMode }));
-    } else {
-      set({ renderMode: m, fitCheck: false, strainCheck: false, pressureCheck: false });
-    }
+    const preset = RENDER_PRESETS.find(entry => entry.id === m);
+    const heatmap = HEATMAP_MODES.has(m);
+    set({
+      pressureCheck: m === 'pressureHeatmap',
+      fitCheck: m === 'fitHeatmap',
+      strainCheck: m === 'strainHeatmap',
+      ...(preset
+        ? { fill: preset.fill, backend: preset.backend }
+        : heatmap ? { fill: 'physical' as FillMode, backend: 'raster' as RenderBackend } : {}),
+    });
   },
-  setRenderMode: (m) => set({ renderMode: m }),
+  setFill: (m) => set({ fill: m }),
+  setWire: (m) => set({ wire: m }),
+  setBackend: (m) => set({ backend: m }),
   setCameraProjection: (p) => set({ cameraProjection: p }),
   requestFit: () => set(s => ({ fitToken: s.fitToken + 1 })),
   requestRepaint: () => set(s => ({ repaintToken: s.repaintToken + 1 })),

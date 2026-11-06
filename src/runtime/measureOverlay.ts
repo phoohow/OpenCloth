@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import type { StageSlot } from '@/render';
 
 /** Radius of the marker spheres placed on measured points, in meters. */
 const MARKER_RADIUS = 0.006;
@@ -10,7 +11,7 @@ export class MeasureOverlay {
   private markers: THREE.Mesh[] = [];
 
   /** Draws the placed points; the segment only shows once there are two. */
-  setPoints(scene: THREE.Scene, points: THREE.Vector3[]): void {
+  setPoints(scene: StageSlot, points: THREE.Vector3[]): void {
     if (points.length === 0) {
       this.clear(scene);
       return;
@@ -34,7 +35,7 @@ export class MeasureOverlay {
   }
 
   /** Removes the measurement from the scene and frees its buffers. */
-  clear(scene: THREE.Scene): void {
+  clear(scene: StageSlot): void {
     if (!this.group) return;
     scene.remove(this.group);
     this.line?.geometry.dispose();
@@ -48,7 +49,7 @@ export class MeasureOverlay {
     this.markers = [];
   }
 
-  private ensure(scene: THREE.Scene): void {
+  private ensure(scene: StageSlot): void {
     if (this.group) return;
     const group = new THREE.Group();
     group.name = 'measure3d';

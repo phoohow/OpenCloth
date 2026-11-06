@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMenuStore } from '@/ui/menu/menuStore';
 import { SHORTCUTS, shortcutsByScope, type ShortcutScope } from '@/ui/menu/shortcuts';
-import { detectWebGPU } from '@/render/renderer';
+import { detectWebGPU } from '@/render';
 import { useProjectStore } from '@/store';
 import { downloadBytesFile, downloadTextFile } from '@/io/serialization';
 import { writeMarkerDxf, writePatternDxf } from '@/io/dxf';

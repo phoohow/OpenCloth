@@ -1,5 +1,5 @@
 import type { PaneId, PropTab, ViewLayout } from '@/store/types';
-import type { CameraProjection, EditPreviewTier, RenderMode } from '@/model/types';
+import type { CameraProjection, EditPreviewTier, FillMode, RenderBackend, WireMode } from '@/model/types';
 import { clamp } from '@/common/math';
 
 /** Key holding the persisted UI preferences. */
@@ -12,7 +12,12 @@ export interface UiPrefs {
   splitRatio: number;
   focus: PaneId;
   propTab: PropTab;
-  renderMode: RenderMode;
+  /** How the subject surface is filled. */
+  fill: FillMode;
+  /** Wire overlay state. */
+  wire: WireMode;
+  /** Who computes the lit image. */
+  backend: RenderBackend;
   /** Projection the 3D viewport renders with. */
   cameraProjection: CameraProjection;
   /** Share of the right panel height given to the outliner. */
@@ -37,7 +42,9 @@ export const DEFAULT_PREFS: UiPrefs = {
   splitRatio: 0.5,
   focus: '3d',
   propTab: 'object',
-  renderMode: 'shaded',
+  fill: 'physical',
+  wire: 'off',
+  backend: 'raster',
   cameraProjection: 'perspective',
   sceneRatio: 0.5,
   leftPanelWidth: 220,
@@ -52,7 +59,9 @@ export const DEFAULT_PREFS: UiPrefs = {
 
 const LAYOUTS: ViewLayout[] = ['split3d2d', 'split2d3d', '2d', '3d'];
 const PANES: PaneId[] = ['2d', '3d'];
-const RENDER_MODES: RenderMode[] = ['shaded', 'raytraced', 'wireframe', 'shadedWireframe', 'uvCheck', 'normalVis'];
+const FILLS: FillMode[] = ['physical', 'uvCheck', 'normal', 'vertexNormal'];
+const WIRES: WireMode[] = ['off', 'only', 'over'];
+const BACKENDS: RenderBackend[] = ['raster', 'pathtrace'];
 const CAMERA_PROJECTIONS: CameraProjection[] = ['perspective', 'orthographic'];
 const PROP_TABS: PropTab[] = ['object', 'material', 'simulator', 'pattern', 'transform', 'render', 'project'];
 const EDIT_PREVIEW_TIERS: EditPreviewTier[] = ['off', 'low', 'full'];
@@ -102,9 +111,11 @@ export function readPrefs(storage: PreferencesStorage = browserStorage()): UiPre
     splitRatio: clampTo(value.splitRatio, SPLIT_RATIO_RANGE, DEFAULT_PREFS.splitRatio),
     focus: PANES.includes(value.focus as PaneId) ? value.focus as PaneId : DEFAULT_PREFS.focus,
     propTab: PROP_TABS.includes(value.propTab as PropTab) ? value.propTab as PropTab : DEFAULT_PREFS.propTab,
-    renderMode: RENDER_MODES.includes(value.renderMode as RenderMode)
-      ? value.renderMode as RenderMode
-      : DEFAULT_PREFS.renderMode,
+    fill: FILLS.includes(value.fill as FillMode) ? value.fill as FillMode : DEFAULT_PREFS.fill,
+    wire: WIRES.includes(value.wire as WireMode) ? value.wire as WireMode : DEFAULT_PREFS.wire,
+    backend: BACKENDS.includes(value.backend as RenderBackend)
+      ? value.backend as RenderBackend
+      : DEFAULT_PREFS.backend,
     cameraProjection: CAMERA_PROJECTIONS.includes(value.cameraProjection as CameraProjection)
       ? value.cameraProjection as CameraProjection
       : DEFAULT_PREFS.cameraProjection,
@@ -144,7 +155,9 @@ export function pickPrefs(state: UiPrefs): UiPrefs {
     splitRatio: state.splitRatio,
     focus: state.focus,
     propTab: state.propTab,
-    renderMode: state.renderMode,
+    fill: state.fill,
+    wire: state.wire,
+    backend: state.backend,
     cameraProjection: state.cameraProjection,
     sceneRatio: state.sceneRatio,
     leftPanelWidth: state.leftPanelWidth,

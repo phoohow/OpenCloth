@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { EXRLoader } from 'three/examples/jsm/loaders/EXRLoader.js';
 import { bundledAssetUrl } from '@/common/platform/assetUrls';
+import type { SceneMgr } from '@/render/scene/manager';
 
 /** Bundled equirectangular environment used when the project selects none. */
 export const DEFAULT_ENV_URL = '/env/royal_esplanade_1k.hdr';
@@ -39,15 +40,13 @@ function loadEnvironment(url: string, extension: string): Promise<THREE.Texture>
 
 /** Uses an environment image as the scene backdrop and image-based lighting source. */
 export async function applySceneEnvironment(
-  scene: THREE.Scene, url: string, filename = url,
+  sceneMgr: SceneMgr, url: string, filename = url,
 ): Promise<boolean> {
-  if (scene.userData.envUrl === url) return true;
+  if (sceneMgr.environmentUrl === url) return true;
   const extension = filename.split('.').pop()?.toLowerCase() ?? '';
   try {
     const texture = await loadEnvironment(url, extension);
-    scene.background = texture;
-    scene.environment = texture;
-    scene.userData.envUrl = url;
+    sceneMgr.setEnvironment(texture, url);
     return true;
   } catch (err) {
     console.warn('Environment image failed to load, keeping the flat background:', err);
@@ -56,15 +55,14 @@ export async function applySceneEnvironment(
 }
 
 /** Frees the texture cached for an environment image that is no longer selected. */
-export function releaseSceneEnvironment(scene: THREE.Scene, url: string): void {
+export function releaseSceneEnvironment(sceneMgr: SceneMgr, url: string): void {
   envLoads.delete(url);
   const texture = envTextures.get(url);
   envTextures.delete(url);
   if (!texture) return;
-  if (scene.userData.envUrl === url) {
-    scene.userData.envUrl = '';
-    scene.background = FALLBACK_BACKGROUND;
-    scene.environment = null;
+  if (sceneMgr.environmentUrl === url) {
+    sceneMgr.setEnvironment(null);
+    sceneMgr.setBackground(FALLBACK_BACKGROUND);
   }
   texture.dispose();
 }

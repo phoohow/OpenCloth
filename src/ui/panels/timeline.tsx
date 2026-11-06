@@ -18,7 +18,7 @@ export function Timeline() {
   const reset = useSimStore(s => s.reset);
   const isDressed = useSimStore(s => s.isDressed);
   const isDressing = useSimStore(s => s.isDressing);
-  const renderMode = useUIStore(s => s.renderMode);
+  const backend = useUIStore(s => s.backend);
   const fps3D = usePerfStore(s => s.fps['3d']);
   const samples3D = usePerfStore(s => s.samples3D);
   const costMs3D = usePerfStore(s => s.costMs3D);
@@ -26,7 +26,7 @@ export function Timeline() {
   const simRate = usePerfStore(s => s.simRate);
   const maxSamples = useProjectStore(s => normalizeRayTracing(s.project.scene.render.rayTracing).maxSamples);
   const dt = useProjectStore(s => s.project.scene.simulation.dt);
-  const raytraced = renderMode === 'raytraced';
+  const raytraced = backend === 'pathtrace';
   /** Gate the traced image is stuck behind; the sample count already explains a running pass. */
   const rayNote = raytraced && samples3D === 0 ? rayTraceStateLabel(rayState3D) : '';
   /** Text being typed into the auto-pause field, committed on blur or Enter so clamping never eats a keystroke. */

@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { describe, expect, it } from 'vitest';
-import { applyBodySkin } from '@/render/material/bodyMaterial';
+import { applyBodySkin } from '@/render/scene/materials/bodyMaterial';
 import { DEFAULT_SKIN_APPEARANCE } from '@/model/defaults';
 
 /** Body mesh with one material of the given name and options. */

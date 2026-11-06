@@ -8,7 +8,7 @@ import type { SeamPair } from '@/runtime/seamPair';
 import { ParticleLayout, type PanelSlice } from '@/runtime/particleLayout';
 import { fabricForPanel } from '@/model';
 import { panelCollisionLayer, panelThicknessCm } from '@/model';
-import { collapseSeamPairs, type VertexRef } from '@/pattern/drape';
+import { collapseSeamPairs, drapeReversesWinding, type VertexRef } from '@/pattern/drape';
 import { seamBreakStretch } from '@/sim';
 import { FALLBACK_PHYSICS } from '@/runtime/clothConstants';
 import { flatRestPositions, initialPositions3D, posedPositions3D, type BodyLandmarkCache } from '@/runtime/initialPose';
@@ -74,10 +74,14 @@ export class ClothAssembly {
         initial[dst] = start[src]; initial[dst + 1] = start[src + 1]; initial[dst + 2] = start[src + 2];
         mergedUVsFrom(uvs, mesh, i, vertexOffset);
       }
-      for (let i = 0; i < mesh.indices.length; i++) {
-        indices[indexOffset + i] = mesh.indices[i] + vertexOffset;
+      // Panels whose pose turns the sheet over keep the same vertices but swap two indices, so every
+      // triangle winds outward and the normals pass can average the two sides of a seam.
+      const reverse = drapeReversesWinding(panel);
+      for (let i = 0; i < mesh.indices.length; i += 3) {
+        indices[indexOffset + i] = mesh.indices[i]! + vertexOffset;
+        indices[indexOffset + i + 1] = mesh.indices[reverse ? i + 2 : i + 1]! + vertexOffset;
+        indices[indexOffset + i + 2] = mesh.indices[reverse ? i + 1 : i + 2]! + vertexOffset;
       }
-
       const triangleMesh = toTriangleMesh(mesh);
       const creaseEdges = panelCreaseEdges(project.pattern, panelId, triangleMesh);
       this.panelTriangles.set(panelId, offsetTriangleList(mesh, vertexOffset));

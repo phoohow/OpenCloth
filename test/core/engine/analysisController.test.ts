@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { AnalysisController, type AnalysisHost } from '@/runtime/analysisController';
-import type { ClothSurface } from '@/render/clothSurface';
+import type { ClothSurface } from '@/render';
 
 /** A harness with no cloth, so every pass returns null and only the dispatch is observable. */
 function harness() {

@@ -1,4 +1,4 @@
-import { useProjectStore, displayModeOf, usePerfStore, useSimStore, useUIStore } from '@/store';
+import { displayModeOf, usePerfStore, useProjectStore, useSimStore, useUIStore } from '@/store';
 import type { Project } from '@/model/types';
 import {
   DEFAULT_CLOTH_THICKNESS_CM, DEFAULT_COMPRESSION_LIMIT, DEFAULT_LAYER_SPACING_CM,
@@ -10,7 +10,10 @@ import { SizeChart } from '@/ui/panels/properties/objectDataSections';
 import { DynamicFitSection } from '@/ui/panels/properties/dynamicFitSection';
 import { LayerSection } from '@/ui/panels/properties/layerSection';
 import { PomSection } from '@/ui/panels/properties/pomSection';
-import { DENOISE_MODELS, DISPLAY_MODES, MESH_SAMPLINGS, TONE_MAPPING, rayTracingUnavailableReason } from '@/ui/optionTables';
+import {
+  DENOISE_MODELS, DISPLAY_MODES, MESH_SAMPLINGS, TONE_MAPPING, WIRE_MODES,
+  rayTracingUnavailableReason,
+} from '@/ui/optionTables';
 import { ButtonRow, CheckRow, Row, Section, SelectRow, SliderRow, SmallButton, TextRow } from '@/ui/widgets/propertyRows';
 import { downloadTextFile } from '@/io/serialization';
 import { fitReportCsv } from '@/analysis';
@@ -99,6 +102,9 @@ export function ProjectTab({ project, engineRef }: { project: Project; engineRef
 /** Viewport display mode, fit and strain heatmaps, tone mapping and ray tracing settings. */
 export function RenderTab({ project }: { project: Project }) {
   const displayMode = useUIStore(displayModeOf);
+  const backend = useUIStore(s => s.backend);
+  const wire = useUIStore(s => s.wire);
+  const setWire = useUIStore(s => s.setWire);
   const setDisplayMode = useUIStore(s => s.setDisplayMode);
   const fitCheck = useUIStore(s => s.fitCheck);
   const fitTightCm = useUIStore(s => s.fitTightCm);
@@ -132,6 +138,9 @@ export function RenderTab({ project }: { project: Project }) {
             ? { value: m.value, label: `${m.label}（不支持）`, disabled: true }
             : { value: m.value, label: m.label })}
           onChange={v => setDisplayMode(v)} />
+        <SelectRow label="线框" value={wire}
+          options={WIRE_MODES.map(m => ({ value: m.value, label: m.label }))}
+          onChange={v => setWire(v)} />
         {rayUnavailable && <div style={styles.note}>本机 WebGPU 跑不了光线追踪：{rayUnavailable}。</div>}
       </Section>
       {fitCheck && (
@@ -231,7 +240,7 @@ export function RenderTab({ project }: { project: Project }) {
           <div style={styles.note}>压力热图把碰撞阶段施加的法向接触修正量按每毫米 1 kPa 折算成估算压力，不是接触力求解结果；蓝色为轻接触，红色为高压。只有贴住模特或地面的顶点参与统计。</div>
         </Section>
       )}
-      {displayMode === 'raytraced' && (
+      {backend === 'pathtrace' && (
         <>
           <Section title="光线追踪">
             <SliderRow label="最大弹射次数" min={1} max={16} step={1} value={ray.maxBounces}

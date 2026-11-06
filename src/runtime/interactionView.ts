@@ -3,7 +3,7 @@ import type { Vec2 } from '@/model/types';
 import type { ClothSimInput } from '@/sim';
 import type { ClothSimulator } from '@/sim';
 import type { ParticlePickHit } from '@/sim';
-import type { RendererContext } from '@/render/renderer';
+import type { Renderer } from '@/render';
 import type { AvatarStage } from '@/runtime/avatarStage';
 import { ClothPicker, type ClothSurfacePick } from '@/runtime/clothPicker';
 import { ClothInteraction } from '@/runtime/clothInteraction';
@@ -11,6 +11,7 @@ import { PinMarkers } from '@/runtime/pinMarkers';
 import { SelectionOverlay } from '@/runtime/selectionOverlay';
 import type { OverlayKit } from '@/runtime/overlayKit';
 import { trianglePointToPanel2D } from '@/common/geom/panelSurface';
+import type { StageSlot } from '@/render';
 
 /** A cloth surface point resolved to its panel's flat pattern coordinates. */
 export interface ClothSurfacePoint {
@@ -31,8 +32,13 @@ const DEFAULT_PICK_RADIUS_FACTOR = 0.03;
 
 /** What the interaction view reads from the rest of the engine. */
 export interface InteractionViewDeps {
-  scene: THREE.Scene;
-  renderer: RendererContext;
+  /** Selection highlight. */
+  slot: StageSlot;
+  /** Pin markers. */
+  pinSlot: StageSlot;
+  /** Drag marker. */
+  markerSlot: StageSlot;
+  renderer: Renderer;
   overlays: OverlayKit;
   avatar: AvatarStage;
   /** Merged cloth the picks land on. */
@@ -81,6 +87,7 @@ export class InteractionView {
       picker: this.picker,
       avatar: deps.avatar,
       pinMarkers: this.pins,
+      markerSlot: deps.markerSlot,
       renderer: deps.renderer,
       positions: deps.positions,
       simulator: () => (deps.simReady() ? deps.simulator() : null),
@@ -183,7 +190,7 @@ export class InteractionView {
   setSelectedPanels(panelIds: string[]): void {
     const ids = panelIds.filter(id => this.deps.hasTriangles(id));
     const geometry = this.deps.input() ? this.deps.geometry() : null;
-    this.selection.apply(this.deps.scene, geometry, ids, this.deps.overlayTriangles(ids));
+    this.selection.apply(this.deps.slot, geometry, ids, this.deps.overlayTriangles(ids));
   }
 
   /** Selected panel ids, in selection order. */
@@ -197,7 +204,7 @@ export class InteractionView {
     if (!simulator) return false;
     if (!await simulator.setParticlePin(particleIndex, pinned)) return false;
     if (pinned) this.addPinMarker(particleIndex);
-    else this.pins.remove(particleIndex, this.deps.scene);
+    else this.pins.remove(particleIndex, this.deps.pinSlot);
     return true;
   }
 
@@ -212,7 +219,7 @@ export class InteractionView {
     if (!simulator) return false;
     const indices = simulator.getPinnedParticles();
     const released = indices.length === 0 || await simulator.setParticlePins(indices, false);
-    this.pins.clear(this.deps.scene);
+    this.pins.clear(this.deps.pinSlot);
     return released;
   }
 
@@ -221,7 +228,7 @@ export class InteractionView {
     const carried: number[] = [];
     for (const index of this.pins.list()) {
       if (index < particleCount) carried.push(index);
-      else this.pins.remove(index, this.deps.scene);
+      else this.pins.remove(index, this.deps.pinSlot);
     }
     return carried;
   }
@@ -234,14 +241,14 @@ export class InteractionView {
 
   /** Drops the selection highlight and every pin marker. */
   reset(): void {
-    this.selection.clear(this.deps.scene);
-    this.pins.clear(this.deps.scene);
+    this.selection.clear(this.deps.slot);
+    this.pins.clear(this.deps.pinSlot);
   }
 
   /** Frees the selection overlay and pin markers. */
   dispose(): void {
-    this.selection.dispose(this.deps.scene);
-    this.pins.dispose(this.deps.scene);
+    this.selection.dispose(this.deps.slot);
+    this.pins.dispose(this.deps.pinSlot);
   }
 
   /** Flat pattern point of a surface pick, or null when the triangle has no panel. */
@@ -257,7 +264,7 @@ export class InteractionView {
 
   private addPinMarker(particleIndex: number): void {
     const positions = this.deps.positions();
-    if (positions) this.pins.add(particleIndex, positions, this.deps.scene);
+    if (positions) this.pins.add(particleIndex, positions, this.deps.pinSlot);
   }
 }
 

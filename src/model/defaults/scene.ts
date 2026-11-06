@@ -1,9 +1,12 @@
 import type {
   DenoiseModel, EdgeSemantic, GarmentLayer, LightConfig, LightType, MeshSampling, RayTracingConfig,
-  SceneConfig, SceneLight, SeamType, TrimKind, Vec3,
+  SceneConfig, SceneLight, SeamType, TrimKind, Vec3, WireOptions,
 } from '@/model/types';
 import { vec3 } from '@/model/types';
 import { genId } from '@/common/id';
+
+/** Wire overlay the viewport starts with. */
+export const DEFAULT_WIRE_OPTIONS: WireOptions = { color: 0x66ccff, depth: 'tested' };
 
 /** Default simulation mesh edge length in cm; finer than the per-panel pattern value. */
 export const DEFAULT_MESH_RESOLUTION_CM = 1.5;
@@ -209,7 +212,10 @@ export function createDefaultScene(): SceneConfig {
       iblIntensity: 1.0,
     },
     render: {
-      mode: 'shaded',
+      fill: 'physical',
+      wire: 'off',
+      backend: 'raster',
+      wireOptions: DEFAULT_WIRE_OPTIONS,
       toneMapping: 'aces',
       rayTracing: createDefaultRayTracing(),
     },

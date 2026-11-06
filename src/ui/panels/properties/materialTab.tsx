@@ -21,7 +21,7 @@ import {
   KNIT_STITCHES, KNIT_STITCH_LABELS, knitChartCsv, knitNeedleCount, knitOf, knitRowCount,
   type KnitStitch,
 } from '@/model';
-import { knitTextureDataUrl } from '@/render/material';
+import { knitTextureDataUrl } from '@/render';
 
 // ===== Material tab ("材质") =====
 

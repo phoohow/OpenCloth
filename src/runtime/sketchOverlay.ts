@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import type { StageSlot } from '@/render';
 
 /** Most samples one stroke draws; extra samples past this are ignored. */
 const MAX_STROKE_POINTS = 2048;
@@ -9,7 +10,7 @@ export class SketchOverlay {
   private pointCount = 0;
 
   /** Attaches a fresh stroke starting at a world point. */
-  begin(scene: THREE.Scene, point: THREE.Vector3): void {
+  begin(scene: StageSlot, point: THREE.Vector3): void {
     this.detach(scene);
     const geometry = new THREE.BufferGeometry();
     const attribute = new THREE.BufferAttribute(new Float32Array(MAX_STROKE_POINTS * 3), 3);
@@ -42,7 +43,7 @@ export class SketchOverlay {
   }
 
   /** Removes the stroke from the scene and frees its buffers. */
-  detach(scene: THREE.Scene): void {
+  detach(scene: StageSlot): void {
     if (!this.line) return;
     scene.remove(this.line);
     this.line.geometry.dispose();

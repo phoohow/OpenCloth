@@ -7,6 +7,7 @@ import { TopstitchThreads, topstitchSegments } from '@/runtime/topstitchThreads'
 import { TrimInstances, trimInstances } from '@/runtime/trimInstances';
 import { SketchOverlay } from '@/runtime/sketchOverlay';
 import { MeasureOverlay } from '@/runtime/measureOverlay';
+import type { StageSlot } from '@/render';
 
 /**
  * The four decorative overlays that live on top of the cloth: seam threads, topstitch rows,
@@ -16,6 +17,15 @@ import { MeasureOverlay } from '@/runtime/measureOverlay';
  * detach when the cloth goes away — so they share one owner. Signatures are kept here as well:
  * a rebuild is needed exactly when the records or the merged layout behind them changed.
  */
+/** Slots the overlays draw into. */
+export interface OverlaySlots {
+  seams: StageSlot;
+  topstitch: StageSlot;
+  trims: StageSlot;
+  sketch: StageSlot;
+  measure: StageSlot;
+}
+
 export class OverlayKit {
   private readonly seams = new SeamThreads();
   private readonly topstitches = new TopstitchThreads();
@@ -31,13 +41,13 @@ export class OverlayKit {
   /** World points of the pending 3D measurement, in placement order. */
   private measurePoints: THREE.Vector3[] = [];
 
-  constructor(private readonly scene: THREE.Scene) {}
+  constructor(private readonly slots: OverlaySlots) {}
 
   /** Drops the seam, topstitch and trim overlays, forcing a rebuild on the next apply. */
   reset(): void {
-    this.seams.detach(this.scene);
-    this.topstitches.detach(this.scene);
-    this.trims.detach(this.scene);
+    this.seams.detach(this.slots.seams);
+    this.topstitches.detach(this.slots.topstitch);
+    this.trims.detach(this.slots.trims);
     this.pairCount = -1;
     this.topstitchKey = '';
     this.trimKey = '';
@@ -51,7 +61,7 @@ export class OverlayKit {
   applySeams(project: Project, pairs: SeamPair[], positions: Float32Array): void {
     if (pairs.length !== this.pairCount) {
       this.pairCount = pairs.length;
-      this.seams.attach(this.scene, pairs, positions, project.pattern.seams);
+      this.seams.attach(this.slots.seams, pairs, positions, project.pattern.seams);
       return;
     }
     this.seams.setSeams(project.pattern.seams);
@@ -65,7 +75,7 @@ export class OverlayKit {
     const signature = topstitchSignature(project, input);
     if (signature !== this.topstitchKey) {
       this.topstitchKey = signature;
-      this.topstitches.attach(this.scene, topstitchSegments(project, input.panels), positions, normals);
+      this.topstitches.attach(this.slots.topstitch, topstitchSegments(project, input.panels), positions, normals);
       return;
     }
     this.topstitches.update(positions, normals);
@@ -78,7 +88,7 @@ export class OverlayKit {
     const signature = trimSignature(project, input);
     if (signature !== this.trimKey) {
       this.trimKey = signature;
-      this.trims.attach(this.scene, trimInstances(project, input.panels), positions, normals);
+      this.trims.attach(this.slots.trims, trimInstances(project, input.panels), positions, normals);
       return;
     }
     this.trims.update(positions, normals);
@@ -106,7 +116,7 @@ export class OverlayKit {
 
   /** Starts a sketch stroke at a picked surface point; the caller owns the stroke extent. */
   beginSketch(world: THREE.Vector3): void {
-    this.sketch.begin(this.scene, world);
+    this.sketch.begin(this.slots.sketch, world);
   }
 
   /** Extends the active sketch stroke by one picked surface point. */
@@ -116,7 +126,7 @@ export class OverlayKit {
 
   /** Drops the sketch stroke overlay. */
   endSketch(): void {
-    this.sketch.detach(this.scene);
+    this.sketch.detach(this.slots.sketch);
   }
 
   /**
@@ -126,14 +136,14 @@ export class OverlayKit {
   addMeasurePoint(world: THREE.Vector3): readonly THREE.Vector3[] {
     if (this.measurePoints.length >= 2) this.measurePoints = [];
     this.measurePoints.push(world.clone());
-    this.measure.setPoints(this.scene, this.measurePoints);
+    this.measure.setPoints(this.slots.measure, this.measurePoints);
     return this.measurePoints;
   }
 
   /** Drops the measurement overlay and its placed points. */
   clearMeasurement(): void {
     this.measurePoints = [];
-    this.measure.clear(this.scene);
+    this.measure.clear(this.slots.measure);
   }
 }
 

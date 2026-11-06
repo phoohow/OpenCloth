@@ -432,18 +432,34 @@ fn computeNormals(@builtin(global_invocation_id) gid: vec3<u32>) {
   let end = groupStart[group + 1u];
 
   var sum = vec3<f32>(0.0);
+  var own = vec3<f32>(0.0);
   for (var k = start; k < end; k++) {
     let tri = groupTriangles[k] * 3u;
-    let p0 = posInvMass[indices[tri]].xyz;
-    let p1 = posInvMass[indices[tri + 1u]].xyz;
-    let p2 = posInvMass[indices[tri + 2u]].xyz;
+    let i0 = indices[tri];
+    let i1 = indices[tri + 1u];
+    let i2 = indices[tri + 2u];
+    let p0 = posInvMass[i0].xyz;
+    let p1 = posInvMass[i1].xyz;
+    let p2 = posInvMass[i2].xyz;
     // Unnormalized cross product = 2x face area, so the sum is area-weighted.
-    sum = sum + cross(p1 - p0, p2 - p0);
+    let n = cross(p1 - p0, p2 - p0);
+    sum = sum + n;
+    if (i0 == i || i1 == i || i2 == i) { own = own + n; }
   }
 
-  let len = length(sum);
+  // A smooth stitch uses the group average. A folded one has the two sides facing apart and
+  // cancelling it, so a vertex whose own faces disagree with that average keeps its own normal.
+  let ownLen = length(own);
+  let sumLen = length(sum);
   var n = vec3<f32>(0.0, 1.0, 0.0);
-  if (len > 1e-12) { n = sum / len; }
+  if (ownLen > 1e-12) {
+    let ownN = own / ownLen;
+    n = ownN;
+    if (sumLen > 1e-12) {
+      let sumN = sum / sumLen;
+      if (dot(sumN, ownN) >= 0.3) { n = sumN; }
+    }
+  }
   normals[i] = vec4<f32>(n, 0.0);
 }
 `;

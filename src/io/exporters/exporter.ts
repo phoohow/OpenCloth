@@ -15,43 +15,45 @@ export interface ExportOptions {
 }
 
 /** Cloth and its 3D production markings, plus the avatar when asked for. */
-function buildExportScene(scene: THREE.Scene, options: ExportOptions): THREE.Scene {
+function buildExportScene(roots: readonly THREE.Object3D[], options: ExportOptions): THREE.Scene {
   const names = options.includeAvatar
     ? ['cloth', 'avatar', 'topstitchMesh', 'trims']
     : ['cloth', 'topstitchMesh', 'trims'];
   const exportScene = new THREE.Scene();
-  scene.traverse(obj => {
-    if (names.includes(obj.name)) exportScene.add(obj.clone());
-  });
+  for (const root of roots) {
+    root.traverse(obj => {
+      if (names.includes(obj.name)) exportScene.add(obj.clone());
+    });
+  }
   return exportScene;
 }
 
 /** Exports the garment as binary glTF (GLB). */
-export async function exportGLB(scene: THREE.Scene, filename = 'garment.glb', options: ExportOptions = { includeAvatar: false, includeMaterial: true }): Promise<void> {
+export async function exportGLB(roots: readonly THREE.Object3D[], filename = 'garment.glb', options: ExportOptions = { includeAvatar: false, includeMaterial: true }): Promise<void> {
   // Every map image must carry its pixels before the exporter reads the materials.
   await whenImagesReady();
   const exporter = new GLTFExporter();
   const result = await new Promise<ArrayBuffer>((resolve, reject) => {
-    exporter.parse(buildExportScene(scene, options), (gltf) => resolve(gltf as ArrayBuffer), reject, { binary: true });
+    exporter.parse(buildExportScene(roots, options), (gltf) => resolve(gltf as ArrayBuffer), reject, { binary: true });
   });
 
   downloadBlob(new Blob([result], { type: 'model/gltf-binary' }), filename);
 }
 
 /** Exports the garment as a Wavefront OBJ file. */
-export function exportOBJ(scene: THREE.Scene, filename = 'garment.obj', options: ExportOptions = { includeAvatar: false, includeMaterial: true }): void {
-  const objText = new OBJExporter().parse(buildExportScene(scene, options));
+export function exportOBJ(roots: readonly THREE.Object3D[], filename = 'garment.obj', options: ExportOptions = { includeAvatar: false, includeMaterial: true }): void {
+  const objText = new OBJExporter().parse(buildExportScene(roots, options));
   downloadTextFile(filename, objText, 'text/plain');
 }
 
 /** World-space triangles of the meshes the exports carry, positions in meters. */
-export function collectExportMeshes(scene: THREE.Scene, options: ExportOptions): ExportMesh[] {
+export function collectExportMeshes(roots: readonly THREE.Object3D[], options: ExportOptions): ExportMesh[] {
   const names = options.includeAvatar
     ? new Set(['cloth', 'avatar', 'topstitchMesh', 'trims'])
     : new Set(['cloth', 'topstitchMesh', 'trims']);
-  scene.updateMatrixWorld(true);
   const meshes: ExportMesh[] = [];
-  scene.traverse(object => {
+  for (const root of roots) root.updateMatrixWorld(true);
+  for (const root of roots) root.traverse(object => {
     const mesh = object as THREE.Mesh;
     if (!mesh.isMesh || !names.has(mesh.name)) return;
     const position = mesh.geometry.getAttribute('position');
@@ -77,13 +79,13 @@ export function collectExportMeshes(scene: THREE.Scene, options: ExportOptions):
 }
 
 /** Exports the garment as an ASCII FBX 7.4 mesh file. */
-export function exportFBX(scene: THREE.Scene, filename = 'garment.fbx', options: ExportOptions = { includeAvatar: false, includeMaterial: true }): void {
-  downloadTextFile(filename, fbxText(collectExportMeshes(scene, options)), 'text/plain');
+export function exportFBX(roots: readonly THREE.Object3D[], filename = 'garment.fbx', options: ExportOptions = { includeAvatar: false, includeMaterial: true }): void {
+  downloadTextFile(filename, fbxText(collectExportMeshes(roots, options)), 'text/plain');
 }
 
 /** Exports the garment as a USDA text scene. */
-export function exportUSD(scene: THREE.Scene, filename = 'garment.usda', options: ExportOptions = { includeAvatar: false, includeMaterial: true }): void {
-  downloadTextFile(filename, usdaText(collectExportMeshes(scene, options)), 'text/plain');
+export function exportUSD(roots: readonly THREE.Object3D[], filename = 'garment.usda', options: ExportOptions = { includeAvatar: false, includeMaterial: true }): void {
+  downloadTextFile(filename, usdaText(collectExportMeshes(roots, options)), 'text/plain');
 }
 
 /** Downloads the canvas's current pixels as a PNG file. */

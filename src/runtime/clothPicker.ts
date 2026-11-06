@@ -1,8 +1,6 @@
 import * as THREE from 'three/webgpu';
 import type { ParticlePickHit } from '@/sim';
-import {
-  isOrthographic, syncOrthoFrustum, viewportAspect, type RendererContext,
-} from '@/render/renderer';
+import { isOrthographic, type Renderer } from '@/render';
 import {
   CAMERA_VIEW_FRAMES, fitCameraToBox, type CameraPreset, type ViewFrame,
 } from '@/runtime/cameraFit';
@@ -56,12 +54,12 @@ const FALLBACK_BOX = new THREE.Box3(
 export class ClothPicker {
   private raycaster = new THREE.Raycaster();
 
-  constructor(private ctx: RendererContext, private targets: PickTargets) { }
+  constructor(private renderer: Renderer, private targets: PickTargets) { }
 
   /** Ray through a normalized device coordinate point of the main camera. */
   screenRay(ndcX: number, ndcY: number): THREE.Ray | null {
-    const camera = this.ctx.view.camera;
-    const { canvas } = this.ctx.surface;
+    const camera = this.renderer.camera.camera;
+    const canvas = this.renderer.canvas;
     if (!canvas.clientHeight) return null;
     this.raycaster.setFromCamera({ x: ndcX, y: ndcY } as unknown as THREE.Vector2, camera);
     return this.raycaster.ray.clone();
@@ -69,8 +67,8 @@ export class ClothPicker {
 
   /** World units per screen pixel at the ray origin, for a screen-stable pick radius. */
   private screenWorldScale(origin: THREE.Vector3): number {
-    const height = Math.max(this.ctx.surface.canvas.clientHeight, 1);
-    const camera = this.ctx.view.camera;
+    const height = Math.max(this.renderer.canvas.clientHeight, 1);
+    const camera = this.renderer.camera.camera;
     if (isOrthographic(camera)) {
       return (camera.top - camera.bottom) / camera.zoom / height;
     }
@@ -221,21 +219,21 @@ export class ClothPicker {
 
   /** Frames the scene box from the current view direction; keeps orbit direction, resets distance. */
   frameScene(direction?: THREE.Vector3, up?: THREE.Vector3): void {
-    const { ctx } = this;
-    const { camera, controls } = ctx.view;
+    const renderer = this.renderer;
+    const { camera, controls } = renderer.camera;
     const box = this.sceneBounds();
     const center = box.getCenter(new THREE.Vector3());
     const dir = viewDirection(camera.position, controls.target, direction);
     const frame = toViewFrame(dir, up ?? camera.up);
-    const aspect = viewportAspect(ctx);
-    const fit = fitCameraToBox(box, frame, ctx.view.perspectiveCamera.fov, aspect);
+    const aspect = renderer.aspect();
+    const fit = fitCameraToBox(box, frame, renderer.camera.perspectiveCamera.fov, aspect);
 
     camera.up.copy(frame.up);
     camera.position.copy(center).add(frame.direction.clone().multiplyScalar(fit.distance));
     controls.target.copy(center);
-    ctx.view.orthoViewHeight = fit.viewHeight;
-    ctx.view.orthographicCamera.zoom = 1;
-    syncOrthoFrustum(ctx, aspect);
+    renderer.camera.orthoViewHeight = fit.viewHeight;
+    renderer.camera.orthographicCamera.zoom = 1;
+    renderer.camera.syncFrustum(aspect);
     controls.update();
   }
 

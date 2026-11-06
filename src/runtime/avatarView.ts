@@ -1,4 +1,3 @@
-import type * as THREE from 'three/webgpu';
 import type { Project, SkinAppearance, ObjectTransform } from '@/model/types';
 import type { MeshCollider } from '@/avatar/collider';
 import type { ClothSimInput } from '@/sim';
@@ -7,13 +6,14 @@ import { AvatarMotion, type AvatarMotionInfo } from '@/runtime/avatarMotion';
 import { SoftBodyDeformer } from '@/runtime/softBody';
 import { DynamicFitSampler } from '@/runtime/dynamicFitSampler';
 import type { DynamicPressureFrame } from '@/analysis';
+import type { StageSlot } from '@/render';
 
 /** Frames between two soft-body collision updates. */
 const SOFT_UPDATE_INTERVAL = 8;
 
 /** What the avatar view reads from the rest of the engine. */
 export interface AvatarViewDeps {
-  scene: THREE.Scene;
+  slot: StageSlot;
   /** Latest pressure samples, kept while a heatmap is on. */
   contact: () => Float32Array | null;
   /** Merged input the dynamic sampler reads per-particle pressure from. */
@@ -66,7 +66,7 @@ export class AvatarView {
 
   /** Replaces the scene body and re-applies its display, transform and highlight. */
   async build(project: Project): Promise<void> {
-    await this.stage.build(project.avatar, this.deps.scene);
+    await this.stage.build(project.avatar, this.deps.slot);
     this.stage.applyDisplay(project.avatar.display);
     this.stage.place(project.avatar.transform);
     this.stage.highlight(this.highlighted);
@@ -145,7 +145,7 @@ export class AvatarView {
 
   /** Removes the body from the scene. */
   detach(): void {
-    this.stage.detach(this.deps.scene);
+    this.stage.detach(this.deps.slot);
   }
 
   /** Rebinds soft deformation to the collider the animation left behind. */

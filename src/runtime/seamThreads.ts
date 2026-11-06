@@ -2,6 +2,7 @@ import { distance3At as distance } from '@/common/math';
 import * as THREE from 'three/webgpu';
 import type { Seam } from '@/model/types';
 import type { SeamPair } from '@/runtime/seamPair';
+import type { StageSlot } from '@/render';
 
 /** Thread overlay drawn between paired seam edges; it dims as a seam closes. */
 export class SeamThreads {
@@ -11,7 +12,7 @@ export class SeamThreads {
   private colors = new Map<string, THREE.Color>();
 
   /** Builds one line segment per seam pair and adds it to the scene. */
-  attach(scene: THREE.Scene, pairs: SeamPair[], positions: Float32Array, seams: Record<string, Seam>): void {
+  attach(scene: StageSlot, pairs: SeamPair[], positions: Float32Array, seams: Record<string, Seam>): void {
     this.detach(scene);
     if (pairs.length === 0) return;
     const material = new THREE.LineBasicMaterial({
@@ -64,7 +65,7 @@ export class SeamThreads {
   }
 
   /** Removes the overlay from the scene and frees its buffers. */
-  detach(scene: THREE.Scene): void {
+  detach(scene: StageSlot): void {
     if (!this.lines) return;
     scene.remove(this.lines);
     this.lines.geometry.dispose();

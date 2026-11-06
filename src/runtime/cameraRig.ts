@@ -1,8 +1,5 @@
 import type { CameraProjection, Vec3 } from '@/model/types';
-import {
-  isOrthographic, setCameraProjection, syncOrthoFrustum, viewportAspect,
-  type RendererContext,
-} from '@/render/renderer';
+import { isOrthographic, type Renderer } from '@/render';
 import type { CameraPreset } from '@/runtime/cameraFit';
 
 /** Live camera placement of the viewport; not part of the project data. */
@@ -25,7 +22,7 @@ export interface CameraRigHooks {
 /** Viewport camera: named presets, projection switching and the saved placement round-trip. */
 export class CameraRig {
   constructor(
-    private readonly ctx: RendererContext,
+    private readonly renderer: Renderer,
     private readonly hooks: CameraRigHooks,
   ) { }
 
@@ -41,23 +38,23 @@ export class CameraRig {
 
   /** Projection the viewport camera renders with. */
   get projection(): CameraProjection {
-    return this.ctx.view.projection;
+    return this.renderer.camera.projection;
   }
 
   /** Swaps the viewport camera and refits the scene box along the current view direction. */
   setProjection(projection: CameraProjection): void {
-    setCameraProjection(this.ctx, projection);
+    this.renderer.setCameraProjection(projection);
     this.hooks.frameScene();
   }
 
   getState(): CameraState {
-    const { camera, controls, orthoViewHeight } = this.ctx.view;
+    const { camera, controls, orthoViewHeight } = this.renderer.camera;
     const ortho = isOrthographic(camera);
     return {
       position: { x: camera.position.x, y: camera.position.y, z: camera.position.z },
       target: { x: controls.target.x, y: controls.target.y, z: controls.target.z },
-      fovDeg: ortho ? this.ctx.view.perspectiveCamera.fov : camera.fov,
-      projection: this.ctx.view.projection,
+      fovDeg: ortho ? this.renderer.camera.perspectiveCamera.fov : camera.fov,
+      projection: this.renderer.camera.projection,
       viewHeightMeters: ortho ? orthoViewHeight / camera.zoom : orthoViewHeight,
     };
   }
@@ -66,7 +63,7 @@ export class CameraRig {
   setState(state: {
     position?: Vec3; target?: Vec3; fovDeg?: number; viewHeightMeters?: number;
   }): void {
-    const view = this.ctx.view;
+    const view = this.renderer.camera;
     const { camera, controls } = view;
     if (state.position) camera.position.set(state.position.x, state.position.y, state.position.z);
     if (state.target) controls.target.set(state.target.x, state.target.y, state.target.z);
@@ -78,7 +75,7 @@ export class CameraRig {
       // The wheel zoom folds into the base height so the slider always reads the live frame.
       view.orthoViewHeight = state.viewHeightMeters;
       view.orthographicCamera.zoom = 1;
-      syncOrthoFrustum(this.ctx, viewportAspect(this.ctx));
+      this.renderer.camera.syncFrustum(this.renderer.aspect());
     }
     controls.update();
   }

@@ -1,5 +1,6 @@
 import * as THREE from 'three/webgpu';
-import { FitOverlay } from '@/render/analysis/fitOverlay';
+import { FitOverlay } from '@/render/scene/objects/fitOverlay';
+import type { StageSlot } from '@/render/scene/manager';
 
 /** Index range and material slot of one cloth geometry group. */
 export interface SurfaceGroup {
@@ -23,7 +24,7 @@ export class ClothSurface {
   private materials: THREE.Material[] = [];
 
   constructor(
-    private readonly scene: THREE.Scene,
+    private readonly slot: StageSlot,
     // Flat xyz triples.
     initialPositions: Float32Array,
     indices: Uint32Array,
@@ -54,8 +55,12 @@ export class ClothSurface {
 
     this.overlay = new FitOverlay(this.geometry);
     this.overlay.setSlotCount(this.materials.length);
-    scene.add(this.fabric);
-    scene.add(this.overlay.mesh);
+    this.slot.add(this.fabric);
+    this.slot.add(this.overlay.mesh);
+    // The fabric is the pattern surface: diagnostics restyle it, and never the heatmap overlay.
+    this.slot.markSurface(this.fabric, true);
+    // The heatmap is a display-space colour overlay: the tracer has no use for it.
+    this.slot.setTraceMask(this.overlay.mesh, 0);
   }
 
   /** Copies simulation positions and normals into the draw buffers. */
@@ -86,6 +91,7 @@ export class ClothSurface {
     this.fabric.material = this.materials;
     // The heatmap repeats its material so hidden panel groups stay hidden in both layers.
     this.overlay.setSlotCount(materials.length);
+    this.slot.markChanged('material');
   }
 
   /** Materials currently bound to the fabric layer. */
@@ -95,13 +101,22 @@ export class ClothSurface {
 
   /** Index ranges of the merged mesh, one per material group slot. */
   addGroups(ranges: SurfaceGroup[]): void {
-    this.geometry.groups = ranges.map(g => ({ start: g.start, count: g.count, materialIndex: g.slot }));
+    const groups = ranges.map(g => ({ start: g.start, count: g.count, materialIndex: g.slot }));
+    const changed = groups.length !== this.geometry.groups.length
+      || groups.some((group, i) => {
+        const previous = this.geometry.groups[i];
+        return !previous || previous.start !== group.start
+          || previous.count !== group.count || previous.materialIndex !== group.materialIndex;
+      });
+    this.geometry.groups = groups;
+    if (changed) this.slot.markChanged('groups');
   }
 
-  /** Removes both layers from the scene and frees the geometry and their materials. */
+  /** Removes both layers from the slot and frees the geometry and their materials. */
   dispose(): void {
-    this.scene.remove(this.fabric);
-    this.scene.remove(this.overlay.mesh);
+    this.slot.markSurface(this.fabric, false);
+    this.slot.remove(this.fabric);
+    this.slot.remove(this.overlay.mesh);
     this.overlay.dispose();
     this.geometry.dispose();
     for (const material of this.materials) material.dispose();

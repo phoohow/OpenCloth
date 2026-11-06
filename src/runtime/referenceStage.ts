@@ -4,6 +4,7 @@ import { IDENTITY_TRANSFORM, cloneTransform } from '@/model';
 import { loadModelFromFile, loadModelFromUrl } from '@/io/importers';
 import { getModelBlob, putModelBlob } from '@/io/storage';
 import { applyTransform } from '@/runtime/objectTransforms';
+import type { StageSlot } from '@/render';
 
 /** A model placed in the scene for reference, not simulated. */
 export interface ReferenceObject {
@@ -17,6 +18,8 @@ export interface ReferenceObject {
 /** Reference objects held in the scene, keyed by their project record id. */
 export class ReferenceStage {
   private objects: Map<string, ReferenceObject> = new Map();
+  /** Slot the objects live in, the gateway for change notifications the tracer reads. */
+  private slot: StageSlot | null = null;
 
   /** Reference objects currently in the scene. */
   list(): ReferenceObject[] {
@@ -24,7 +27,7 @@ export class ReferenceStage {
   }
 
   /** Loads stored models that are not in the scene yet. */
-  async ensure(references: ReferenceObjectRef[], scene: THREE.Scene): Promise<void> {
+  async ensure(references: ReferenceObjectRef[], scene: StageSlot): Promise<void> {
     for (const ref of references) {
       if (this.objects.has(ref.id) || (!ref.objectKey && !ref.objectUrl)) continue;
       const loaded = ref.objectUrl
@@ -45,7 +48,7 @@ export class ReferenceStage {
   }
 
   /** Keeps scene meshes in sync with the project list: drops strays, loads missing entries. */
-  async reconcile(references: ReferenceObjectRef[], scene: THREE.Scene): Promise<void> {
+  async reconcile(references: ReferenceObjectRef[], scene: StageSlot): Promise<void> {
     const wanted = new Set(references.map(r => r.id));
     for (const held of this.list()) {
       if (!wanted.has(held.id)) this.remove(held.id, scene);
@@ -54,7 +57,7 @@ export class ReferenceStage {
   }
 
   /** Stores a model file and adds it to the scene; returns the project record for the list. */
-  async importFile(file: File, id: string, scene: THREE.Scene): Promise<ReferenceObjectRef> {
+  async importFile(file: File, id: string, scene: StageSlot): Promise<ReferenceObjectRef> {
     const objectKey = `object-${id}`;
     await putModelBlob(objectKey, file);
     const loaded = await loadModelFromFile(file, { targetHeight: 0 });
@@ -65,8 +68,9 @@ export class ReferenceStage {
   }
 
   /** Adds an already loaded model group, replacing any object already held under the id. */
-  add(group: THREE.Group, id: string, scene: THREE.Scene, opacity = 0.5): ReferenceObject {
+  add(group: THREE.Group, id: string, scene: StageSlot, opacity = 0.5): ReferenceObject {
     if (this.objects.has(id)) this.remove(id, scene);
+    this.slot = scene;
     group.name = `reference:${id}`;
     setGroupOpacity(group, opacity);
     scene.add(group);
@@ -80,6 +84,7 @@ export class ReferenceStage {
     if (!obj) return;
     obj.visible = visible;
     obj.group.visible = visible;
+    this.slot?.markChanged('visibility');
   }
 
   setOpacity(id: string, opacity: number): void {
@@ -87,16 +92,19 @@ export class ReferenceStage {
     if (!obj) return;
     obj.opacity = opacity;
     setGroupOpacity(obj.group, opacity);
+    this.slot?.markChanged('material');
   }
 
   /** Places a reference object at its stored scene transform. */
   place(id: string, transform: ObjectTransform): void {
     const obj = this.objects.get(id);
-    if (obj) applyTransform(obj.group, transform);
+    if (!obj) return;
+    applyTransform(obj.group, transform);
+    this.slot?.markChanged('transform');
   }
 
   /** Removes an object from the scene and disposes its geometries and materials. */
-  remove(id: string, scene: THREE.Scene): void {
+  remove(id: string, scene: StageSlot): void {
     const obj = this.objects.get(id);
     if (!obj) return;
     scene.remove(obj.group);
@@ -110,7 +118,7 @@ export class ReferenceStage {
   }
 
   /** Removes every reference object, used when the viewport tears the scene down. */
-  clear(scene: THREE.Scene): void {
+  clear(scene: StageSlot): void {
     for (const id of Array.from(this.objects.keys())) this.remove(id, scene);
   }
 }

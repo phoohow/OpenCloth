@@ -1,17 +1,17 @@
 import * as THREE from 'three/webgpu';
-import type { Project, RenderMode } from '@/model/types';
+import type { Project } from '@/model/types';
 import type { PanelMesh } from '@/pattern/panel';
 import type { ClothSimInput } from '@/sim';
-import { applyFabricAppearance, createMaterialForMode, modeUsesFabric } from '@/render/material';
 import {
-  createCompositeTexture, panelPrintFrame, printPlacement,
+  applyFabricAppearance, createCompositeTexture, createFabricMaterial, panelPrintFrame, printPlacement,
   type CompositeTextureHandle, type PrintPlacement,
-} from '@/render/material';
+} from '@/render';
 import { ClothSurface } from '@/render';
 import {
   clothMaterialSlotKey, clothMaterialSlotPlan, fabricForPanel, panelPrints,
 } from '@/model';
 import { FALLBACK_APPEARANCE } from '@/runtime/clothConstants';
+import type { StageSlot } from '@/render';
 
 /** Index range, material slot and owning panel of one cloth geometry group. */
 interface ClothGroupRange {
@@ -23,7 +23,7 @@ interface ClothGroupRange {
 
 /** What the cloth view reads from the rest of the engine. */
 export interface ClothViewDeps {
-  scene: THREE.Scene;
+  slot: StageSlot;
   /** Merged input the drawn mesh mirrors; null before a build. */
   input: () => ClothSimInput | null;
   /** Panel meshes in merged order, the source of the merged UVs. */
@@ -43,7 +43,6 @@ export class ClothView {
   /** One geometry group per panel, in merged order. */
   private groups: ClothGroupRange[] = [];
   private printTextures = new Map<string, CompositeTextureHandle>();
-  private materialMode: RenderMode | null = null;
 
   constructor(private readonly deps: ClothViewDeps) { }
 
@@ -66,16 +65,15 @@ export class ClothView {
   create(project: Project): void {
     const input = this.deps.input();
     if (!input) return;
-    const mode = project.scene.render.mode;
     this.clearPrintTextures();
     this.surface = new ClothSurface(
-      this.deps.scene,
+      this.deps.slot,
       input.positions,
       input.indices,
       mergedUVs(this.deps.panelMeshes(), input.particleCount),
-      createMaterialForMode(FALLBACK_APPEARANCE, mode),
+      createFabricMaterial(FALLBACK_APPEARANCE),
     );
-    this.bindMaterials(project, mode);
+    this.bindMaterials(project);
   }
 
   /** Takes both cloth layers out of the scene and frees their buffers. */
@@ -90,12 +88,12 @@ export class ClothView {
     this.remove();
     this.slots = [];
     this.groups = [];
-    this.materialMode = null;
   }
 
   /** Pushes simulated positions and normals into the render mesh. */
   updateFromSim(positions: Float32Array, normals: Float32Array): void {
     this.surface?.updateFromSim(positions, normals);
+    this.deps.slot.markChanged('deform');
   }
 
   /** Restores the mesh to a static layout. */
@@ -105,15 +103,15 @@ export class ClothView {
 
   /** Shows or hides the whole garment, leaving the simulation running. */
   setVisible(visible: boolean): void {
-    if (this.surface) this.surface.fabric.visible = visible;
+    if (!this.surface) return;
+    this.surface.fabric.visible = visible;
+    this.deps.slot.markChanged('visibility');
   }
 
   /** Re-applies the material records to the built mesh; never rebuilds geometry. */
-  applyFabrics(project: Project, mode?: RenderMode): void {
+  applyFabrics(project: Project): void {
     const surface = this.surface;
     if (!surface) return;
-    const target = mode ?? this.materialMode ?? project.scene.render.mode;
-    if (target !== this.materialMode) this.bindMaterials(project, target);
 
     const plan = clothMaterialSlotPlan(project, this.panelIds());
     const materials = surface.boundMaterials;
@@ -134,9 +132,10 @@ export class ClothView {
         applyFabricAppearance(material, app);
       });
     } else {
-      this.bindMaterials(project, target);
+      this.bindMaterials(project);
     }
 
+    this.deps.slot.markChanged('material');
     this.deps.refreshPhysics(project);
   }
 
@@ -157,16 +156,15 @@ export class ClothView {
    * Binds one material per slot, with a geometry group per panel. A printed panel gets its own
    * slot so its composed texture can be drawn into a material of its own.
    */
-  private bindMaterials(project: Project, mode: RenderMode): void {
+  private bindMaterials(project: Project): void {
     const surface = this.surface;
     const input = this.deps.input();
     if (!surface || !input) return;
     const plan = clothMaterialSlotPlan(project, this.panelIds());
-    const printable = modeUsesFabric(mode);
     const materials = plan.slots.map(slot => {
       const app = slot.fabric?.appearance ?? FALLBACK_APPEARANCE;
-      const composite = slot.panelId && printable ? this.printTexture(project, slot.panelId) : null;
-      return createMaterialForMode(app, mode, composite?.texture ?? null);
+      const composite = slot.panelId ? this.printTexture(project, slot.panelId) : null;
+      return createFabricMaterial(app, composite?.texture ?? null);
     });
     this.prunePrintTextures(plan.slots);
 
@@ -182,7 +180,6 @@ export class ClothView {
     this.groups = groups;
     surface.addGroups(groups);
     this.slots = plan.slots.map(clothMaterialSlotKey);
-    this.materialMode = mode;
   }
 
   /** UV placements of a panel's visible prints; empty while its mesh is missing. */

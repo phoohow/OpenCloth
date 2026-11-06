@@ -1,7 +1,10 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import type { MenuActions } from '@/ui/menu/actions';
 import { formatSavedAt } from '@/ui/timeFormat';
-import { CAMERA_PRESETS, CAMERA_PROJECTIONS, DISPLAY_MODES, PROP_TAB_OPTIONS, rayTracingUnavailableReason } from '@/ui/optionTables';
+import {
+  CAMERA_PRESETS, CAMERA_PROJECTIONS, DISPLAY_MODES, PROP_TAB_OPTIONS, WIRE_MODES,
+  rayTracingUnavailableReason,
+} from '@/ui/optionTables';
 import { usePropsTarget } from '@/ui/panels/propertiesEditor';
 import { Icon } from '@/ui/icons';
 import { displayModeOf, usePerfStore, useProjectStore, useSimStore, useUIStore } from '@/store';
@@ -130,10 +133,13 @@ function ViewSheet({ actions, engineRef, onClose }: {
   );
 }
 
-/** Shading mode, ray tracing and the three analysis heatmaps — the floating 显示 button. */
+/** Fill, wire, backend and the three analysis heatmaps — the floating 显示 button. */
 function DisplaySheet({ onClose }: { onClose: () => void }) {
   const displayMode = useUIStore(displayModeOf);
   const setDisplayMode = useUIStore(s => s.setDisplayMode);
+  const backend = useUIStore(s => s.backend);
+  const wire = useUIStore(s => s.wire);
+  const setWire = useUIStore(s => s.setWire);
   const rayUnavailable = rayTracingUnavailableReason(usePerfStore(s => s.rayUnsupported3D));
   const fitOn = displayMode === 'fitHeatmap';
   const fitTightCm = useUIStore(s => s.fitTightCm);
@@ -177,7 +183,17 @@ function DisplaySheet({ onClose }: { onClose: () => void }) {
           />
         ))}
       </SheetGroup>
-      {displayMode === 'raytraced' && (
+      <SheetGroup title="线框">
+        {WIRE_MODES.map(mode => (
+          <SheetButton
+            key={mode.value}
+            label={mode.label}
+            active={wire === mode.value}
+            onClick={() => setWire(mode.value)}
+          />
+        ))}
+      </SheetGroup>
+      {backend === 'pathtrace' && (
         <div style={styles.advanced}>
           <button
             style={styles.advancedHead}

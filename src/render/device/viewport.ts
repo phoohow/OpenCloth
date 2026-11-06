@@ -1,9 +1,9 @@
-import * as THREE from 'three/webgpu';
-import { addStageFloor } from '@/render/renderer/stageFloor';
-import { FALLBACK_BACKGROUND } from '@/render/renderer/sceneEnvironment';
+/** The GPU context one viewport owns: canvas, renderer and drawing-buffer size. */
 
-/** The drawing buffer, scene and canvas one viewport owns. */
-export class ViewportSurface {
+import * as THREE from 'three/webgpu';
+
+/** Canvas plus the WebGPU renderer that draws into it. Holds no scene knowledge. */
+export class ViewportDevice {
   /** Watcher that keeps the drawing buffer in sync with the viewport's layout size. */
   resizeObserver?: ResizeObserver;
   disposed = false;
@@ -11,11 +11,10 @@ export class ViewportSurface {
   private constructor(
     readonly canvas: HTMLCanvasElement,
     readonly renderer: THREE.WebGPURenderer,
-    readonly scene: THREE.Scene,
   ) { }
 
-  /** Initializes the WebGPU renderer and builds the empty stage scene. */
-  static async create(canvas: HTMLCanvasElement): Promise<ViewportSurface> {
+  /** Initializes the WebGPU renderer on the given canvas. */
+  static async create(canvas: HTMLCanvasElement): Promise<ViewportDevice> {
     // Keep a nonzero drawing buffer while the viewport is hidden by the layout.
     const width = Math.max(1, canvas.clientWidth);
     const height = Math.max(1, canvas.clientHeight);
@@ -23,14 +22,12 @@ export class ViewportSurface {
     await renderer.init();
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(width, height, false);
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    // Tone mapping belongs to the post chain, which decides the curve per project; leaving a curve
+    // here would apply a second one to anything three draws straight to the canvas.
+    renderer.toneMapping = THREE.NoToneMapping;
     renderer.toneMappingExposure = 1.0;
     renderer.shadowMap.enabled = false;
-
-    const scene = new THREE.Scene();
-    scene.background = FALLBACK_BACKGROUND;
-    addStageFloor(scene);
-    return new ViewportSurface(canvas, renderer, scene);
+    return new ViewportDevice(canvas, renderer);
   }
 
   /** Aspect of the drawing surface, guarded against a hidden pane. */
@@ -53,8 +50,8 @@ export class ViewportSurface {
 }
 
 /** The GPUDevice the renderer was initialized with; simulation resources share it. */
-export function rendererDevice(surface: ViewportSurface): GPUDevice {
-  const device = (surface.renderer.backend as unknown as { device?: GPUDevice }).device;
-  if (!device) throw new Error('WebGPU renderer device unavailable before init');
-  return device;
+export function rendererDevice(device: ViewportDevice): GPUDevice {
+  const gpu = (device.renderer.backend as unknown as { device?: GPUDevice }).device;
+  if (!gpu) throw new Error('WebGPU renderer device unavailable before init');
+  return gpu;
 }

@@ -1,12 +1,12 @@
 import type { CameraPreset } from '@/runtime';
 import type {
-  CameraProjection, DenoiseModel, EditPreviewTier, GarmentLayer, MeshSampling, RenderMode, ToneMappingMode,
+  CameraProjection, DenoiseModel, EditPreviewTier, GarmentLayer, MeshSampling, ToneMappingMode, WireMode,
 } from '@/model/types';
 import { DEFAULT_SKIN_APPEARANCE } from '@/model';
 import type { PropTab, DisplayMode } from '@/store';
 import type { IconName } from '@/ui/icons';
 import type { DisplayOptions } from '@/ui/viewport2D/render';
-import type { RayTraceFailure, RayTraceState, RayTracingCapability } from '@/render/renderer';
+import type { RayTraceFailure, RayTraceState, RayTracingCapability } from '@/render';
 
 /** One properties-editor tab: rail icon plus the Chinese label shared by rail and menu. */
 export interface PropTabOption {
@@ -77,18 +77,20 @@ export const CAMERA_PROJECTIONS: CameraProjectionOption[] = [
   { value: 'orthographic', menuId: 'cameraProjectionOrthographic', label: '正交' },
 ];
 
-/** Render modes that map to a cloth material; `DISPLAY_MODES` appends the two analysis heatmaps. */
-export const RENDER_MODES: Array<{ value: RenderMode; label: string }> = [
-  { value: 'shaded', label: '光栅化' },
-  { value: 'raytraced', label: '光线追踪' },
-  { value: 'wireframe', label: '线框' },
-  { value: 'uvCheck', label: 'UV 检查' },
-  { value: 'normalVis', label: '法线可视化' },
+/** Wire overlay switch: off, edges alone, or edges on top of the surface. */
+export const WIRE_MODES: Array<{ value: WireMode; label: string }> = [
+  { value: 'off', label: '关闭' },
+  { value: 'only', label: '仅线框' },
+  { value: 'over', label: '叠加线框' },
 ];
 
-/** Display modes shared by the 3D toolbar, the render tab and the phone drawer, with the heatmaps last. */
+/** Display modes shared by the 3D toolbar, the render tab and the phone drawer. */
 export const DISPLAY_MODES: Array<{ value: DisplayMode; label: string }> = [
-  ...RENDER_MODES,
+  { value: 'shaded', label: '光栅化' },
+  { value: 'raytraced', label: '光线追踪' },
+  { value: 'uvCheck', label: 'UV 检查' },
+  { value: 'normalVis', label: '着色法线' },
+  { value: 'vertexNormalVis', label: '顶点法线' },
   { value: 'fitHeatmap', label: '合身热图' },
   { value: 'strainHeatmap', label: '应变热图' },
   { value: 'pressureHeatmap', label: '压力热图' },

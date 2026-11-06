@@ -1,7 +1,6 @@
 import * as THREE from 'three/webgpu';
-import { normalLocal, packNormalToRGB } from 'three/tsl';
-import type { FabricAppearance, FabricMapSlot, RenderMode } from '@/model/types';
-import { acquireFabricTexture, type FabricTextureHandle } from '@/render/material/fabricTextures';
+import type { FabricAppearance, FabricMapSlot } from '@/model/types';
+import { acquireFabricTexture, type FabricTextureHandle } from '@/render/scene/materials/fabricTextures';
 
 /** Colour space each map slot is sampled in; only albedo carries sRGB colour. */
 const MAP_COLOR_SPACE: Record<FabricMapSlot, THREE.ColorSpace> = {
@@ -126,57 +125,5 @@ function setMap(mat: THREE.MeshPhysicalMaterial, slot: FabricMapSlot, texture: T
     case 'normal': mat.normalMap = texture; break;
     case 'roughness': mat.roughnessMap = texture; break;
     case 'metallic': mat.metalnessMap = texture; break;
-  }
-}
-
-/** Whether a render mode draws the fabric appearance instead of a diagnostic layer. */
-export function modeUsesFabric(mode: RenderMode): boolean {
-  return mode === 'shaded' || mode === 'shadedWireframe' || mode === 'raytraced';
-}
-
-/** Builds the material a render mode shows the cloth with. */
-export function createMaterialForMode(
-  app: FabricAppearance, mode: RenderMode, composite: THREE.Texture | null = null,
-): THREE.Material {
-  switch (mode) {
-    case 'wireframe': {
-      const m = new THREE.MeshBasicMaterial({ color: 0x66ccff, wireframe: true, side: THREE.DoubleSide });
-      return m;
-    }
-    case 'uvCheck': {
-      // Checkerboard drawn into a data texture instead of shipped as an asset.
-      const size = 256;
-      const data = new Uint8Array(size * size * 4);
-      const cell = size / 16;
-      for (let y = 0; y < size; y++) {
-        for (let x = 0; x < size; x++) {
-          const i = (y * size + x) * 4;
-          const cx = Math.floor(x / cell), cy = Math.floor(y / cell);
-          const v = (cx + cy) % 2 === 0 ? 220 : 80;
-          data[i] = v; data[i + 1] = v; data[i + 2] = v; data[i + 3] = 255;
-        }
-      }
-      const tex = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
-      tex.needsUpdate = true;
-      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-      const m = new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide });
-      return m;
-    }
-    case 'normalVis': {
-      // Object-space vertex normal, interpolated across the triangle and shown as colour. Unlike
-      // the view-space normal of MeshNormalMaterial this does not follow the camera.
-      const m = new THREE.MeshBasicNodeMaterial({ side: THREE.DoubleSide, toneMapped: false });
-      const packed = packNormalToRGB(normalLocal.normalize());
-      // sRGB decode, so the renderer's working-space to sRGB output shows the packed colour as is.
-      const decoded = packed.lessThanEqual(0.04045)
-        .select(packed.div(12.92), packed.add(0.055).div(1.055).pow(2.4));
-      m.colorNode = decoded;
-      return m;
-    }
-    case 'shadedWireframe':
-    case 'raytraced':
-    case 'shaded':
-    default:
-      return createFabricMaterial(app, composite);
   }
 }

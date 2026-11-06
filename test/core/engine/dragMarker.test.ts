@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { testSlot } from '../../helpers/testSlot';
 import * as THREE from 'three/webgpu';
 import { DragMarker } from '@/runtime/dragMarker';
 
@@ -20,63 +21,63 @@ function camera(): THREE.PerspectiveCamera {
 
 describe('DragMarker', () => {
   it('puts a ring on the grabbed particle and follows it', () => {
-    const scene = new THREE.Scene();
+    const slot = testSlot();
     const marker = new DragMarker();
     const positions = row(5);
 
-    marker.show(2, positions, scene, camera());
+    marker.show(2, positions, slot, camera());
     expect(marker.particleIndex).toBe(2);
-    const group = scene.children[0] as THREE.Group;
+    const group = slot.group.children[0] as THREE.Group;
     expect(group).toBeDefined();
     expect(group.position.x).toBeCloseTo(0.02);
 
     positions[2 * 3] = 0.5;
     marker.sync(positions, camera());
     expect(group.position.x).toBeCloseTo(0.5);
-    marker.dispose(scene);
+    marker.dispose(slot);
   });
 
   it('turns the ring toward the camera so it stays a circle', () => {
-    const scene = new THREE.Scene();
+    const slot = testSlot();
     const marker = new DragMarker();
     const view = camera();
-    marker.show(0, row(3), scene, view);
-    const group = scene.children[0] as THREE.Group;
+    marker.show(0, row(3), slot, view);
+    const group = slot.group.children[0] as THREE.Group;
     expect(group.quaternion.equals(view.quaternion)).toBe(true);
-    marker.dispose(scene);
+    marker.dispose(slot);
   });
 
   it('removes the ring when the drag ends and can show it again', () => {
-    const scene = new THREE.Scene();
+    const slot = testSlot();
     const marker = new DragMarker();
     const positions = row(4);
 
-    marker.show(1, positions, scene, camera());
-    marker.hide(scene);
+    marker.show(1, positions, slot, camera());
+    marker.hide(slot);
     expect(marker.particleIndex).toBeNull();
-    expect(scene.children).toHaveLength(0);
+    expect(slot.group.children).toHaveLength(0);
 
-    marker.show(3, positions, scene, camera());
-    expect(scene.children).toHaveLength(1);
-    marker.dispose(scene);
-    expect(scene.children).toHaveLength(0);
+    marker.show(3, positions, slot, camera());
+    expect(slot.group.children).toHaveLength(1);
+    marker.dispose(slot);
+    expect(slot.group.children).toHaveLength(0);
   });
 
   it('does nothing while no point is grabbed', () => {
-    const scene = new THREE.Scene();
+    const slot = testSlot();
     const marker = new DragMarker();
     marker.sync(row(3), camera());
-    expect(scene.children).toHaveLength(0);
+    expect(slot.group.children).toHaveLength(0);
     expect(marker.particleIndex).toBeNull();
-    marker.dispose(scene);
+    marker.dispose(slot);
   });
 
   it('ignores a particle index outside the position buffer', () => {
-    const scene = new THREE.Scene();
+    const slot = testSlot();
     const marker = new DragMarker();
-    marker.show(99, row(3), scene, camera());
-    const group = scene.children[0] as THREE.Group;
+    marker.show(99, row(3), slot, camera());
+    const group = slot.group.children[0] as THREE.Group;
     expect(group.position.x).toBe(0);
-    marker.dispose(scene);
+    marker.dispose(slot);
   });
 });

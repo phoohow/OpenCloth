@@ -1,7 +1,7 @@
 import * as THREE from 'three/webgpu';
-import type { LightConfig, RenderConfig, SceneLight } from '@/model/types';
+import type { LightConfig, SceneLight } from '@/model/types';
 import { iblStrength, normalizeLights } from '@/model';
-import type { ViewportSurface } from '@/render/renderer/viewportSurface';
+import type { SceneMgr } from '@/render/scene/manager';
 
 /** Inverse-square falloff for the punctual lights that have one. */
 const PUNCTUAL_DECAY = 2;
@@ -9,26 +9,30 @@ const PUNCTUAL_DECAY = 2;
 /** Name of the scene container holding every project light. */
 const LIGHT_GROUP_NAME = 'sceneLights';
 
-/** Rebuilds the scene's lights and tone mapping from the project's lighting and render settings. */
-export class LightRig {
+/**
+ * The scene's lighting: the punctual lights, the ambient fill and the strength of the environment
+ * light, all rebuilt from the project's lighting settings.
+ *
+ * The environment image itself belongs to the environment; what belongs here is how strongly it
+ * lights the scene, because that value lives in the lighting settings and changes with them.
+ */
+export class SceneLights {
   /** Whether the LTC textures a rect area light needs have been installed. */
   private areaLightSupported = false;
   private areaLoading: Promise<void> | null = null;
   /** Settings the scene lights were last built from, kept for the deferred area-light support. */
   private lightConfig?: LightConfig;
-  /** Settings the tone mapping was last built from. */
-  private renderConfig?: RenderConfig;
 
   constructor(
-    private readonly surface: ViewportSurface,
+    private readonly sceneMgr: SceneMgr,
     /** Tells the path tracer that lights or the environment changed. */
     private readonly invalidate: () => void,
   ) { }
 
-  apply(cfg: LightConfig, renderCfg: RenderConfig): void {
-    const { scene, renderer } = this.surface;
+  /** Rebuilds the scene lights so they match these settings. */
+  applyConfig(cfg: LightConfig): void {
+    const scene = this.sceneMgr.scene;
     this.lightConfig = cfg;
-    this.renderConfig = renderCfg;
     const group = ensureLightGroup(scene);
     clearGroup(group);
 
@@ -37,7 +41,7 @@ export class LightRig {
     ambient.name = '环境补光';
     group.add(ambient);
 
-    scene.environmentIntensity = iblStrength(cfg);
+    this.sceneMgr.setEnvironmentIntensity(iblStrength(cfg));
 
     const lights = normalizeLights(cfg);
     for (const light of lights) {
@@ -53,12 +57,6 @@ export class LightRig {
       this.areaLoading = this.installAreaLightSupport().finally(() => { this.areaLoading = null; });
     }
 
-    switch (renderCfg.toneMapping) {
-      case 'aces': renderer.toneMapping = THREE.ACESFilmicToneMapping; break;
-      case 'reinhard': renderer.toneMapping = THREE.ReinhardToneMapping; break;
-      case 'linear': renderer.toneMapping = THREE.LinearToneMapping; break;
-      default: renderer.toneMapping = THREE.NoToneMapping;
-    }
     this.invalidate();
   }
 
@@ -108,8 +106,7 @@ export class LightRig {
         .RectAreaLightNode.setLTC(RectAreaLightTexturesLib.init());
       this.areaLightSupported = true;
       const cfg = this.lightConfig;
-      const renderCfg = this.renderConfig;
-      if (!this.surface.disposed && cfg && renderCfg) this.apply(cfg, renderCfg);
+      if (cfg) this.applyConfig(cfg);
     } catch (error) {
       console.warn('Rect area light support unavailable:', error);
     }

@@ -2,8 +2,21 @@
 
 import type { Vec3 } from '@/model/types/geometry';
 
-/** Viewport shading and rendering modes. */
-export type RenderMode = 'shaded' | 'raytraced' | 'wireframe' | 'shadedWireframe' | 'uvCheck' | 'normalVis';
+/** How the subject surface is filled: shading normal and vertex normal are separate diagnostics. */
+export type FillMode = 'physical' | 'uvCheck' | 'normal' | 'vertexNormal';
+
+/** Subject edges: hidden, drawn alone, or drawn over the filled surface. */
+export type WireMode = 'off' | 'only' | 'over';
+
+/** Who computes the lit image. */
+export type RenderBackend = 'raster' | 'pathtrace';
+
+/** Appearance of the wire overlay. */
+export interface WireOptions {
+  color: number;
+  /** `tested` hides edges behind the surface; `always` draws them through it. */
+  depth: 'tested' | 'always';
+}
 
 /** Tone-mapping operators offered by the renderer. */
 export type ToneMappingMode = 'none' | 'aces' | 'reinhard' | 'linear';
@@ -38,7 +51,10 @@ export interface RayTracingConfig {
 
 /** Viewport rendering settings. */
 export interface RenderConfig {
-  mode: RenderMode;
+  fill: FillMode;
+  wire: WireMode;
+  backend: RenderBackend;
+  wireOptions: WireOptions;
   toneMapping: ToneMappingMode;
   rayTracing?: RayTracingConfig;
 }
