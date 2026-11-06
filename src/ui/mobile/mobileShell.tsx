@@ -5,8 +5,8 @@ import { MenuDialogs } from '@/ui/menu/menuDialogs';
 import { Icon, type IconName } from '@/ui/icons';
 import { normalizeRayTracing } from '@/model';
 import { usePerfStore, useProjectStore, useSimStore, useUIStore } from '@/store';
-import { nextSimStep, rayTraceStateLabel, simStepLabel } from '@/ui/optionTables';
-import { setSimulationConfig } from '@/ui/sceneCommands';
+import { rayTraceStateLabel } from '@/ui/optionTables';
+import { formatElapsed } from '@/ui/timeFormat';
 import type { MenuActions } from '@/ui/menu/actions';
 import type { GarmentEngine } from '@/runtime';
 import type { RendererContext } from '@/render/renderer';
@@ -38,9 +38,8 @@ export function MobileShell({ actions, engineRef, onEngineReady, ready }: {
           </div>
         )}
         <div style={styles.floatColumn}>
-          <FloatButton icon="camera" label="视角" onClick={() => setSheet('camera')} />
-          <FloatButton icon="aperture" label="显示" onClick={() => setSheet('display')} />
-          <FloatButton icon="expand-all" label="适应" onClick={() => engineRef.current?.frameScene()} />
+          <FloatButton icon="camera" title="视图" onClick={() => setSheet('view')} />
+          <FloatButton icon="aperture" title="显示" onClick={() => setSheet('display')} />
         </div>
       </div>
       <Dock actions={actions} onOpenProps={() => setSheet('props')} />
@@ -66,7 +65,9 @@ function TopBar({ onOpenMenu, onOpenProps }: { onOpenMenu: () => void; onOpenPro
   const renderMode = useUIStore(s => s.renderMode);
   const fps3D = usePerfStore(s => s.fps['3d']);
   const samples3D = usePerfStore(s => s.samples3D);
+  const costMs3D = usePerfStore(s => s.costMs3D);
   const rayState3D = usePerfStore(s => s.rayState3D);
+  const rayNote = samples3D === 0 ? rayTraceStateLabel(rayState3D) : '';
 
   const status = isDressing
     ? { text: '缝合着装中', color: '#4da6ff' }
@@ -79,91 +80,76 @@ function TopBar({ onOpenMenu, onOpenProps }: { onOpenMenu: () => void; onOpenPro
   return (
     <div style={styles.topBar}>
       <div style={styles.topRow}>
-        <button style={styles.menuBtn} onClick={onOpenMenu}>菜单</button>
+        <button style={styles.menuBtn} onClick={onOpenMenu} title="菜单" aria-label="菜单">
+          <span style={styles.menuBtnFace}><Icon name="menu" size={19} /></span>
+        </button>
         <span style={styles.projectName}>{projectName}</span>
         <span style={styles.readout}>
           {renderMode === 'raytraced'
-            ? `SPP ${samples3D}/${maxSamples}${samples3D === 0 ? ` · ${rayTraceStateLabel(rayState3D)}` : ''}`
+            ? `SPP ${samples3D}/${maxSamples}${samples3D > 0 ? ` · Cost ${formatElapsed(costMs3D)}` : rayNote ? ` · ${rayNote}` : ''}`
             : `FPS ${fps3D}`}
-          <span style={styles.readoutDim}> · 帧 {currentFrame}</span>
         </span>
       </div>
       <div style={styles.statusRow}>
+        <span style={styles.frameCount}>帧 {currentFrame}</span>
         <span style={{ ...styles.status, color: status.color }}>{status.text}</span>
         <button style={styles.selectionChip} onClick={onOpenProps}>
-          {selectedPanel ? `选中 ${selectedPanel} · 参数` : '轻点布料选片 · 参数'}
+          {selectedPanel ? `选中 ${selectedPanel}` : '轻点布料选片'}
         </button>
       </div>
     </div>
   );
 }
 
-/** Thumb-reach actions: dress the garment, run the simulation, change its step length, edit properties. */
+/** Icon-only timeline controls plus the properties entry, in PC timeline order. */
 function Dock({ actions, onOpenProps }: { actions: MenuActions; onOpenProps: () => void }) {
   const isPlaying = useSimStore(s => s.isPlaying);
-  const isDressing = useSimStore(s => s.isDressing);
-  const dt = useProjectStore(s => s.project.scene.simulation.dt);
 
   return (
     <nav style={styles.dock}>
-      <DockButton
-        icon="t-shirt"
-        label={isDressing ? '着装中…' : '自动着装'}
-        primary
-        disabled={isDressing}
-        onClick={actions.dress}
-      />
+      <DockButton icon="reset" title="重置" onClick={actions.resetSim} />
       <DockButton
         icon={isPlaying ? 'pause' : 'play'}
-        label={isPlaying ? '暂停' : '播放'}
+        title={isPlaying ? '暂停' : '播放'}
+        active={isPlaying}
         onClick={actions.playPause}
       />
-      <DockButton icon="reset" label="重置" onClick={actions.resetSim} />
-      <DockButton
-        icon="atom"
-        label={simStepLabel(dt)}
-        active={dt !== 1 / 60}
-        title="点击切换仿真步长"
-        onClick={() => setSimulationConfig('修改仿真步长', { dt: nextSimStep(dt) })}
-      />
-      <DockButton icon="cube" label="参数" onClick={onOpenProps} />
+      <DockButton icon="step" title="下一帧" onClick={actions.stepFrame} />
+      <span style={styles.dockDivider} />
+      <DockButton icon="cube" title="参数" label="参数" onClick={onOpenProps} />
     </nav>
   );
 }
 
-function DockButton({ icon, label, primary, active, disabled, title, onClick }: {
+function DockButton({ icon, title, label, active, onClick }: {
   icon: IconName;
-  label: string;
-  primary?: boolean;
+  title: string;
+  label?: string;
   active?: boolean;
-  disabled?: boolean;
-  title?: string;
   onClick: () => void;
 }) {
   return (
     <button
       style={{
         ...styles.dockBtn,
-        ...(primary ? styles.dockBtnPrimary : null),
         ...(active ? styles.dockBtnActive : null),
-        ...(disabled ? styles.dockBtnDisabled : null),
       }}
-      title={title ?? label}
-      disabled={disabled}
+      title={title}
+      aria-label={title}
+      aria-pressed={active}
       onClick={onClick}
     >
-      <Icon name={icon} size={19} />
-      <span style={styles.dockLabel}>{label}</span>
+      <Icon name={icon} size={20} />
+      {label && <span style={styles.dockLabel}>{label}</span>}
     </button>
   );
 }
 
 /** Round viewport button that opens one of the small sheets. */
-function FloatButton({ icon, label, onClick }: { icon: IconName; label: string; onClick: () => void }) {
+function FloatButton({ icon, title, onClick }: { icon: IconName; title: string; onClick: () => void }) {
   return (
-    <button style={styles.floatBtn} title={label} onClick={onClick}>
-      <Icon name={icon} size={16} />
-      <span style={styles.floatLabel}>{label}</span>
+    <button style={styles.floatBtn} title={title} aria-label={title} onClick={onClick}>
+      <Icon name={icon} size={20} />
     </button>
   );
 }
@@ -181,20 +167,26 @@ const styles: Record<string, React.CSSProperties> = {
   },
   topRow: { display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 },
   menuBtn: {
-    flex: '0 0 auto', padding: '6px 12px', background: '#2a2a30',
-    border: '1px solid #3a3a42', borderRadius: 5, color: '#ddd', fontSize: 'var(--oc-fs-heading)', cursor: 'pointer',
+    flex: '0 0 auto', width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center',
+    padding: 0, background: 'transparent', border: 'none', color: '#ddd', cursor: 'pointer',
+  },
+  menuBtnFace: {
+    width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center',
+    background: '#2a2a30', border: '1px solid #3a3a42', borderRadius: 5,
   },
   projectName: {
     flex: '1 1 auto', minWidth: 0, fontSize: 'var(--oc-fs-heading)', color: '#eee',
-    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+    textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
   },
   readout: {
-    flex: '0 0 auto', fontSize: 'var(--oc-fs-body)', color: '#4da6ff',
+    flex: '0 1 auto', minWidth: 0, display: 'block', textAlign: 'right',
+    fontSize: 'var(--oc-fs-body)', color: '#4da6ff',
+    overflow: 'hidden', textOverflow: 'ellipsis',
     fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',
   },
-  readoutDim: { color: '#8a94a6' },
   statusRow: { display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 },
   status: { flex: '0 0 auto', fontSize: 'var(--oc-fs-body)' },
+  frameCount: { flex: '0 0 auto', fontSize: 'var(--oc-fs-body)', color: '#8a94a6', fontVariantNumeric: 'tabular-nums' },
   selectionChip: {
     flex: '1 1 auto', minWidth: 0, textAlign: 'right', padding: '2px 0',
     background: 'transparent', border: 'none', color: '#9ab', fontSize: 'var(--oc-fs-body)',
@@ -206,27 +198,28 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex', flexDirection: 'column', gap: 8,
   },
   floatBtn: {
-    width: 48, height: 48, display: 'flex', flexDirection: 'column',
-    alignItems: 'center', justifyContent: 'center', gap: 1,
+    width: 44, height: 44, display: 'flex',
+    alignItems: 'center', justifyContent: 'center',
     background: 'rgba(32,32,36,0.9)', border: '1px solid #3a3a42',
-    borderRadius: 24, color: '#ccc', cursor: 'pointer',
+    borderRadius: 22, color: '#ccc', cursor: 'pointer',
   },
-  floatLabel: { fontSize: 'var(--oc-fs-note)', color: '#9ab' },
   dock: {
-    flex: '0 0 auto', display: 'flex', alignItems: 'stretch', gap: 6, padding: '8px 8px',
+    flex: '0 0 auto', display: 'flex', alignItems: 'stretch', justifyContent: 'center', gap: 16, padding: '8px 8px',
     paddingBottom: 'calc(8px + env(safe-area-inset-bottom))',
     background: '#202024', borderTop: '1px solid #333',
   },
   dockBtn: {
-    flex: '1 1 0', minWidth: 0, minHeight: 54, display: 'flex', flexDirection: 'column',
-    alignItems: 'center', justifyContent: 'center', gap: 3,
+    flex: '0 0 auto', width: 44, height: 44, display: 'flex', flexDirection: 'column',
+    alignItems: 'center', justifyContent: 'center', gap: 1,
     background: '#2a2a30', border: '1px solid #3a3a42', borderRadius: 8,
     color: '#ccc', cursor: 'pointer',
   },
-  dockBtnPrimary: { flex: '1.4 1 0', background: '#2a4a6a', border: '1px solid #4da6ff', color: '#fff' },
-  dockBtnActive: { border: '1px solid #4da6ff', color: '#fff' },
-  dockBtnDisabled: { opacity: 0.4, cursor: 'default' },
-  dockLabel: { fontSize: 'var(--oc-fs-micro)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' },
+  dockBtnActive: { border: '1px solid #4da6ff', background: '#2a4a6a', color: '#fff' },
+  dockLabel: { fontSize: 'var(--oc-fs-micro)', lineHeight: 1, whiteSpace: 'nowrap' },
+  dockDivider: {
+    flex: '0 0 auto', alignSelf: 'center', width: 1, height: 22,
+    background: '#3a3a42',
+  },
   loading: {
     position: 'absolute', inset: 0, zIndex: 6, display: 'flex', flexDirection: 'column',
     alignItems: 'center', justifyContent: 'center', gap: 14, color: '#888', fontSize: 'var(--oc-fs-heading)',

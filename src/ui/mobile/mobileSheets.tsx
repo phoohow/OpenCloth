@@ -1,18 +1,26 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import type { MenuActions } from '@/ui/menu/actions';
-import { AUTO_SAVE_ITEMS } from '@/ui/menu/menuModel';
 import { formatSavedAt } from '@/ui/timeFormat';
-import { CAMERA_PRESETS, CAMERA_PROJECTIONS, DISPLAY_MODES, PROP_TAB_OPTIONS, rayTracingUnavailableReason, SIM_STEP_OPTIONS, simStepLabel } from '@/ui/optionTables';
+import { CAMERA_PRESETS, CAMERA_PROJECTIONS, DISPLAY_MODES, PROP_TAB_OPTIONS, rayTracingUnavailableReason } from '@/ui/optionTables';
 import { usePropsTarget } from '@/ui/panels/propertiesEditor';
 import { Icon } from '@/ui/icons';
-import { setSimulationConfig, type EngineRef } from '@/ui/sceneCommands';
 import { displayModeOf, usePerfStore, useProjectStore, useSimStore, useUIStore } from '@/store';
 import type { PropTab } from '@/store';
+import { DEFAULT_COMPRESSION_LIMIT, DEFAULT_STRETCH_LIMIT, normalizeRayTracing } from '@/model';
 import type { CameraProjection } from '@/model/types';
 import type { CameraPreset } from '@/runtime';
+import { DEFAULT_PRESSURE_KPA_PER_MM, fitReportCsv, pressureReportCsv, strainReportCsv } from '@/analysis';
+import { downloadTextFile } from '@/io/serialization';
+import { setRayTracingConfig, type EngineRef } from '@/ui/sceneCommands';
 
 /** Sheets the phone shell can slide up; null keeps the viewport full screen. */
-export type MobileSheetId = 'menu' | 'camera' | 'display' | 'props' | null;
+export type MobileSheetId = 'menu' | 'view' | 'display' | 'props' | null;
+
+/** The properties tabs offered on the phone, in rail order. */
+const MOBILE_PROP_TAB_KEYS: PropTab[] = ['object', 'material', 'simulator', 'transform', 'project'];
+
+/** Modes with controls in this sheet keep it open; the remaining modes close after selection. */
+const IN_PLACE_MODES: ReadonlySet<string> = new Set(['raytraced', 'fitHeatmap', 'strainHeatmap', 'pressureHeatmap']);
 
 /** Bottom sheet with a grabber, a title row and its own scrolling body. */
 export function Sheet({ title, onClose, children }: {
@@ -35,7 +43,9 @@ export function Sheet({ title, onClose, children }: {
         <div style={styles.grabber} />
         <div style={styles.sheetHead}>
           <span style={styles.sheetTitle}>{title}</span>
-          <button style={styles.closeBtn} onClick={onClose}>关闭</button>
+          <button style={styles.closeBtn} onClick={onClose} title="关闭" aria-label="关闭">
+            <span style={styles.closeBtnFace}><Icon name="close" size={18} /></span>
+          </button>
         </div>
         <div style={styles.sheetBody}>{children}</div>
       </div>
@@ -77,14 +87,18 @@ function SheetNote({ children }: { children: ReactNode }) {
   return <div style={styles.note}>{children}</div>;
 }
 
-/** Camera, projection and view-fitting actions. */
-function CameraSheet({ actions, engineRef, onClose }: {
+/** Full-width action inside a sheet section, sized for touch. */
+function WideAction({ label, onClick }: { label: string; onClick: () => void }) {
+  return <button style={styles.wideAction} onClick={onClick}>{label}</button>;
+}
+
+/** Camera presets, projection and framing — the controls the floating 视图 button opens. */
+function ViewSheet({ actions, engineRef, onClose }: {
   actions: MenuActions;
   engineRef: EngineRef;
   onClose: () => void;
 }) {
   const projection = useUIStore(s => s.cameraProjection);
-
   const pick = (run: () => void) => () => { run(); onClose(); };
 
   return (
@@ -116,7 +130,7 @@ function CameraSheet({ actions, engineRef, onClose }: {
   );
 }
 
-/** Viewport display modes, the same set the desktop toolbar offers minus the strain and pressure heatmaps. */
+/** Shading mode, ray tracing and the three analysis heatmaps — the floating 显示 button. */
 function DisplaySheet({ onClose }: { onClose: () => void }) {
   const displayMode = useUIStore(displayModeOf);
   const setDisplayMode = useUIStore(s => s.setDisplayMode);
@@ -126,23 +140,69 @@ function DisplaySheet({ onClose }: { onClose: () => void }) {
   const fitLooseCm = useUIStore(s => s.fitLooseCm);
   const setFitThresholds = useUIStore(s => s.setFitThresholds);
   const fitStats = useSimStore(s => s.fitStats);
+  const strainOn = displayMode === 'strainHeatmap';
+  const strainMin = useUIStore(s => s.strainMin);
+  const strainMax = useUIStore(s => s.strainMax);
+  const setStrainRange = useUIStore(s => s.setStrainRange);
+  const strainByFabric = useUIStore(s => s.strainByFabric);
+  const setStrainByFabric = useUIStore(s => s.setStrainByFabric);
+  const strainStats = useSimStore(s => s.strainStats);
+  const pressureOn = displayMode === 'pressureHeatmap';
+  const pressureMaxKpa = useUIStore(s => s.pressureMaxKpa);
+  const setPressureMaxKpa = useUIStore(s => s.setPressureMaxKpa);
+  const pressureStats = useSimStore(s => s.pressureStats);
+  const project = useProjectStore(s => s.project);
+  const [rayOpen, setRayOpen] = useState(false);
+  const ray = normalizeRayTracing(project.scene.render.rayTracing);
+  const fabricLimits = Object.values(project.fabrics).map(fabric => ({
+    name: fabric.name,
+    stretchLimit: fabric.physics.stretchLimit ?? DEFAULT_STRETCH_LIMIT,
+    compressionLimit: fabric.physics.compressionLimit ?? DEFAULT_COMPRESSION_LIMIT,
+  }));
 
   return (
     <>
       <SheetGroup title="显示模式">
-        {DISPLAY_MODES
-          .filter(mode => mode.value !== 'strainHeatmap' && mode.value !== 'pressureHeatmap')
-          .map(mode => (
-            <SheetButton
-              key={mode.value}
-              label={mode.value === 'raytraced' && rayUnavailable ? `${mode.label}（不支持）` : mode.label}
-              hint={mode.value === 'raytraced' ? rayUnavailable ?? undefined : undefined}
-              disabled={mode.value === 'raytraced' && !!rayUnavailable}
-              active={displayMode === mode.value}
-              onClick={() => { setDisplayMode(mode.value); onClose(); }}
-            />
-          ))}
+        {DISPLAY_MODES.map(mode => (
+          <SheetButton
+            key={mode.value}
+            label={mode.value === 'raytraced' && rayUnavailable ? `${mode.label}（不支持）` : mode.label}
+            hint={mode.value === 'raytraced' ? rayUnavailable ?? undefined : undefined}
+            disabled={mode.value === 'raytraced' && !!rayUnavailable}
+            active={displayMode === mode.value}
+            onClick={() => {
+              setDisplayMode(mode.value);
+              if (!IN_PLACE_MODES.has(mode.value)) onClose();
+            }}
+          />
+        ))}
       </SheetGroup>
+      {displayMode === 'raytraced' && (
+        <div style={styles.advanced}>
+          <button
+            style={styles.advancedHead}
+            aria-expanded={rayOpen}
+            onClick={() => setRayOpen(open => !open)}
+          >
+            <Icon name={rayOpen ? 'chevron-down' : 'chevron-right'} size={16} />
+            <span>光线追踪高级</span>
+          </button>
+          {rayOpen && (
+            <>
+              <label style={styles.rangeRow}>
+                <span>最大弹射次数 {ray.maxBounces}</span>
+                <input type="range" min={1} max={16} step={1} value={ray.maxBounces}
+                  onChange={e => setRayTracingConfig('修改光追弹射次数', { maxBounces: Number(e.target.value) })} />
+              </label>
+              <label style={styles.rangeRow}>
+                <span>每帧路径预算 {Math.round(ray.frameBudget / 1000)}k</span>
+                <input type="range" min={50} max={1000} step={10} value={ray.frameBudget / 1000}
+                  onChange={e => setRayTracingConfig('修改光追每帧预算', { frameBudget: Math.round(Number(e.target.value) * 1000) })} />
+              </label>
+            </>
+          )}
+        </div>
+      )}
       {fitOn && (
         <>
           <label style={styles.rangeRow}>
@@ -156,41 +216,127 @@ function DisplaySheet({ onClose }: { onClose: () => void }) {
               onChange={e => setFitThresholds(fitTightCm, Number(e.target.value))} />
           </label>
           {fitStats && (
-            <SheetNote>
-              穿透 {fitStats.penetration} · 贴近 {fitStats.tight} · 合适 {fitStats.ideal} · 宽松 {fitStats.loose}
-              ；间隙 {fitStats.minCm.toFixed(2)} / {fitStats.meanCm.toFixed(2)} / {fitStats.maxCm.toFixed(2)} cm。
-            </SheetNote>
+            <>
+              <SheetNote>
+                穿透 {fitStats.penetration} · 贴近 {fitStats.tight} · 合适 {fitStats.ideal} · 宽松 {fitStats.loose}
+                ；间隙 {fitStats.minCm.toFixed(2)} / {fitStats.meanCm.toFixed(2)} / {fitStats.maxCm.toFixed(2)} cm。
+              </SheetNote>
+              <WideAction
+                label="导出合身报告 CSV"
+                onClick={() => downloadTextFile(
+                  `${project.meta.name}-合身报告.csv`,
+                  '\ufeff' + fitReportCsv(project.meta.name, fitStats, { tightCm: fitTightCm, looseCm: fitLooseCm }),
+                  'text/csv;charset=utf-8',
+                )}
+              />
+            </>
           )}
         </>
       )}
-      <SheetNote>光线追踪按渐进采样出图，布料每帧变形都会重新累计采样；手机上建议先暂停模拟再看收敛结果。</SheetNote>
+      {strainOn && (
+        <>
+          <label style={{ ...styles.rangeRow, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <input type="checkbox" checked={strainByFabric} onChange={e => setStrainByFabric(e.target.checked)} />
+            <span>按面料上限着色</span>
+          </label>
+          {!strainByFabric && (
+            <>
+              <label style={styles.rangeRow}>
+                <span>色标下限 {strainMin.toFixed(2)}</span>
+                <input type="range" min={-1} max={0} step={0.05} value={strainMin}
+                  onChange={e => setStrainRange(Number(e.target.value), strainMax)} />
+              </label>
+              <label style={styles.rangeRow}>
+                <span>色标上限 {strainMax.toFixed(2)}</span>
+                <input type="range" min={0} max={1} step={0.05} value={strainMax}
+                  onChange={e => setStrainRange(strainMin, Number(e.target.value))} />
+              </label>
+            </>
+          )}
+          {strainStats && (
+            <>
+              <SheetNote>
+                应变 最小/最大/平均 {strainStats.min.toFixed(4)} / {strainStats.max.toFixed(4)} / {strainStats.meanAbs.toFixed(4)}
+                {strainByFabric && `；超限 拉伸/压缩 ${strainStats.overStretch} / ${strainStats.overCompression}`}
+              </SheetNote>
+              <WideAction
+                label="导出应变报告 CSV"
+                onClick={() => downloadTextFile(
+                  `${project.meta.name}-应变报告.csv`,
+                  '\ufeff' + strainReportCsv(
+                    project.meta.name, strainStats, { min: strainMin, max: strainMax },
+                    { mode: strainByFabric ? 'fabric' : 'manual', fabrics: fabricLimits },
+                  ),
+                  'text/csv;charset=utf-8',
+                )}
+              />
+            </>
+          )}
+        </>
+      )}
+      {pressureOn && (
+        <>
+          <label style={styles.rangeRow}>
+            <span>色标上限 {pressureMaxKpa.toFixed(1)} kPa</span>
+            <input type="range" min={0.5} max={20} step={0.5} value={pressureMaxKpa}
+              onChange={e => setPressureMaxKpa(Number(e.target.value))} />
+          </label>
+          {pressureStats && (
+            <>
+              <SheetNote>
+                顶点/接触 {pressureStats.vertices} / {pressureStats.contactVertices}
+                ；压力 最小/平均/最大 {pressureStats.minKpa.toFixed(2)} / {pressureStats.meanKpa.toFixed(2)} / {pressureStats.maxKpa.toFixed(2)} kPa。
+              </SheetNote>
+              <WideAction
+                label="导出压力报告 CSV"
+                onClick={() => downloadTextFile(
+                  `${project.meta.name}-压力报告.csv`,
+                  '\ufeff' + pressureReportCsv(project.meta.name, pressureStats, {
+                    maxKpa: pressureMaxKpa,
+                    kpaPerMm: DEFAULT_PRESSURE_KPA_PER_MM,
+                    panelNames: Object.fromEntries(
+                      Object.values(project.pattern.panels).map(panel => [panel.id, panel.name]),
+                    ),
+                  }),
+                  'text/csv;charset=utf-8',
+                )}
+              />
+            </>
+          )}
+        </>
+      )}
+      <SheetNote>着色为常规预览；光线追踪按渐进采样出图，手机上建议先暂停模拟再看收敛结果。三种热图（合身 / 应变 / 压力）按各自阈值或色标上限着色，切回其它显示模式即恢复面料材质。</SheetNote>
     </>
   );
 }
 
-/** Object, material, simulator, transform, render and project properties. */
+/** Object, material, simulator, transform and project properties for the selected thing. */
 function PropsSheet({ engineRef }: { engineRef: EngineRef }) {
   const setPropTab = useUIStore(s => s.setPropTab);
-  const target = usePropsTarget(engineRef);
+  const target = usePropsTarget(engineRef, MOBILE_PROP_TAB_KEYS);
 
   return (
     <>
       <div style={styles.tabStrip}>
-        {PROP_TAB_OPTIONS.map(option => {
-          const enabled = target.allowedTabs.includes(option.key);
-          const active = enabled && target.tab === option.key;
-          return (
-            <button
-              key={option.key}
-              style={{ ...styles.tab, ...(active ? styles.tabActive : null), ...(enabled ? null : styles.tabDisabled) }}
-              disabled={!enabled}
-              onClick={() => setPropTab(option.key as PropTab)}
-            >
-              <Icon name={option.icon} size={13} />
-              <span style={{ marginLeft: 5 }}>{option.label}</span>
-            </button>
-          );
-        })}
+        {PROP_TAB_OPTIONS
+          .filter(option => MOBILE_PROP_TAB_KEYS.includes(option.key))
+          .map(option => {
+            const enabled = target.allowedTabs.includes(option.key);
+            const active = enabled && target.tab === option.key;
+            return (
+              <button
+                key={option.key}
+                style={{ ...styles.tab, ...(active ? styles.tabActive : null), ...(enabled ? null : styles.tabDisabled) }}
+                disabled={!enabled}
+                title={option.label}
+                aria-label={option.label}
+                aria-pressed={active}
+                onClick={() => setPropTab(option.key as PropTab)}
+              >
+                <Icon name={option.icon} size={20} />
+              </button>
+            );
+          })}
       </div>
       <div style={styles.propsObjectName}>{target.objectName}</div>
       <div key={target.bodyKey}>{target.body}</div>
@@ -198,80 +344,28 @@ function PropsSheet({ engineRef }: { engineRef: EngineRef }) {
   );
 }
 
-/** Everything that does not earn a dock button: simulation, editing, scene, project files, export and help. */
+/** Everything that is not a dock action: files, recent projects, scene, selection, export and help. */
 function MenuSheet({ actions, onClose }: { actions: MenuActions; onClose: () => void }) {
   const project = useProjectStore(s => s.project);
   const recent = useProjectStore(s => s.recent);
   const history = useProjectStore(s => s.history);
   const selection = useUIStore(s => s.selection);
-  const autoSaveSeconds = useUIStore(s => s.autoSaveSeconds);
   const lastAutosaveAt = useUIStore(s => s.lastAutosaveAt);
-  const isPlaying = useSimStore(s => s.isPlaying);
-  const dt = project.scene.simulation.dt;
 
   const panels = project.pattern.panels;
   const panelIds = Object.keys(panels);
-  const selectedPanelCount = selection.filter(id => !!panels[id]).length;
-  const hiddenPanelCount = panelIds.filter(id => !panels[id].visible).length;
-  const referenceCount = (project.scene.referenceObjects ?? []).length;
 
   return (
     <>
-      <SheetGroup title="模拟">
-        <SheetButton label={isPlaying ? '暂停' : '播放'} onClick={actions.playPause} />
-        <SheetButton label="单步" onClick={actions.stepFrame} />
-        <SheetButton label="重置模拟" onClick={actions.resetSim} />
-      </SheetGroup>
-      <SheetGroup title="模拟步长">
-        {SIM_STEP_OPTIONS.map(value => (
-          <SheetButton
-            key={value}
-            label={simStepLabel(value)}
-            active={dt === value}
-            onClick={() => setSimulationConfig('修改仿真步长', { dt: value })}
-          />
-        ))}
-      </SheetGroup>
-      <SheetGroup title="选择与编辑">
-        <SheetButton label="撤销" hint={history.lastLabel ?? undefined} disabled={!history.canUndo} onClick={actions.undo} />
-        <SheetButton label="重做" hint={history.nextLabel ?? undefined} disabled={!history.canRedo} onClick={actions.redo} />
-        <SheetButton label="全选版片" disabled={panelIds.length === 0} onClick={actions.selectAllPanels} />
-        <SheetButton label="取消选择" disabled={selection.length === 0} onClick={actions.clearSelection} />
-        <SheetButton label="删除选中" disabled={selection.length === 0} onClick={actions.deleteSelection} />
-      </SheetGroup>
-      <SheetGroup title="版片显示">
-        <SheetButton label="显示全部版片" disabled={hiddenPanelCount === 0} onClick={actions.showAllPanels} />
-        <SheetButton label="隐藏未选版片" disabled={selectedPanelCount === 0 || selectedPanelCount === panelIds.length} onClick={actions.hideUnselected} />
-        <SheetButton label="隐藏选中版片" disabled={selectedPanelCount === 0} onClick={actions.hideSelected} />
-      </SheetGroup>
-      <SheetGroup title="模特与场景">
-        <SheetButton label="模特模型…" onClick={actions.importAvatar} />
-        <SheetButton label="参考物体…" onClick={actions.importReference} />
-        <SheetButton label="环境贴图…" onClick={actions.importEnvironment} />
-        <SheetButton label="恢复内置环境" onClick={actions.resetEnvironment} />
-        <SheetButton label="清除全部参考物体" disabled={referenceCount === 0} onClick={actions.clearReferences} />
-      </SheetGroup>
-      <SheetGroup title="工程">
-        <SheetButton label="新建工程" onClick={() => { actions.newProject(); onClose(); }} />
-        <SheetButton label="打开…" onClick={() => { actions.openProject(); onClose(); }} />
+      <SheetGroup title="文件">
+        <SheetButton label="打开" onClick={() => { actions.openProject(); onClose(); }} />
         <SheetButton label="保存" onClick={actions.saveProject} />
-        <SheetButton label="另存为…" onClick={actions.saveProjectAs} />
-        <SheetButton label="立即保存快照" onClick={actions.saveSnapshotNow} />
+        <SheetButton label="另存为" onClick={actions.saveProjectAs} />
         <SheetButton
           label={lastAutosaveAt ? `从快照恢复（${formatSavedAt(lastAutosaveAt)}）` : '从快照恢复'}
           disabled={!lastAutosaveAt}
           onClick={() => { actions.restoreAutosave(); onClose(); }}
         />
-      </SheetGroup>
-      <SheetGroup title="自动保存">
-        {AUTO_SAVE_ITEMS.map(item => (
-          <SheetButton
-            key={item.seconds}
-            label={item.label}
-            active={autoSaveSeconds === item.seconds}
-            onClick={() => actions.setAutoSaveSeconds(item.seconds)}
-          />
-        ))}
       </SheetGroup>
       {recent.length > 0 && (
         <SheetGroup title="最近打开">
@@ -285,29 +379,40 @@ function MenuSheet({ actions, onClose }: { actions: MenuActions; onClose: () => 
           ))}
         </SheetGroup>
       )}
+      <SheetGroup title="场景">
+        <SheetButton label="模特模型" onClick={actions.importAvatar} />
+        <SheetButton label="参考物体" onClick={actions.importReference} />
+        <SheetButton label="环境贴图" onClick={actions.importEnvironment} />
+      </SheetGroup>
+      <SheetGroup title="选择 · 编辑">
+        <SheetButton label="撤销" hint={history.lastLabel ?? undefined} disabled={!history.canUndo} onClick={actions.undo} />
+        <SheetButton label="重做" hint={history.nextLabel ?? undefined} disabled={!history.canRedo} onClick={actions.redo} />
+        <SheetButton label="全选版片" disabled={panelIds.length === 0} onClick={actions.selectAllPanels} />
+        <SheetButton label="取消选择" disabled={selection.length === 0} onClick={actions.clearSelection} />
+        <SheetButton label="删除选中" disabled={selection.length === 0} onClick={actions.deleteSelection} />
+      </SheetGroup>
       <SheetGroup title="导出">
-        <SheetButton label="服装 GLB…" onClick={actions.exportGlb} />
-        <SheetButton label="服装 OBJ…" onClick={actions.exportObj} />
+        <SheetButton label="服装 GLB" onClick={actions.exportGlb} />
+        <SheetButton label="服装 OBJ" onClick={actions.exportObj} />
         <SheetButton label="截图 PNG" onClick={actions.screenshot} />
-        <SheetButton label="动画 WebM…" onClick={actions.exportAnimation} />
+        <SheetButton label="动画 WebM" onClick={actions.exportAnimation} />
       </SheetGroup>
       <SheetGroup title="帮助">
-        <SheetButton label="快捷键总览…" onClick={() => { actions.showShortcuts(); onClose(); }} />
-        <SheetButton label="关于 OpenCloth" onClick={() => { actions.showAbout(); onClose(); }} />
+        <SheetButton label="关于" onClick={() => { actions.showAbout(); onClose(); }} />
       </SheetGroup>
-      <SheetNote>手机端不提供 2D 制版、模板库、PIN 打点与捏布拖拽；需要改版型或在模拟里拉扯布料时请在电脑端打开同一个 .ocproj.json 工程。</SheetNote>
+      <SheetNote>手机专注试衣调参；改版、打 PIN 与工程管理请用电脑端打开同一个 .ocproj.json 工程。</SheetNote>
     </>
   );
 }
 
 const SHEET_TITLES: Record<Exclude<MobileSheetId, null>, string> = {
   menu: '菜单',
-  camera: '视角',
+  view: '视图',
   display: '显示',
   props: '参数',
 };
 
-/** The sheet the phone dock and the floating viewport buttons open. */
+/** The sheet the phone dock and the floating view button open. */
 export function MobileSheet({ sheet, onClose, actions, engineRef }: {
   sheet: MobileSheetId;
   onClose: () => void;
@@ -317,7 +422,7 @@ export function MobileSheet({ sheet, onClose, actions, engineRef }: {
   if (!sheet) return null;
   return (
     <Sheet title={SHEET_TITLES[sheet]} onClose={onClose}>
-      {sheet === 'camera' && <CameraSheet actions={actions} engineRef={engineRef} onClose={onClose} />}
+      {sheet === 'view' && <ViewSheet actions={actions} engineRef={engineRef} onClose={onClose} />}
       {sheet === 'display' && <DisplaySheet onClose={onClose} />}
       {sheet === 'props' && <PropsSheet engineRef={engineRef} />}
       {sheet === 'menu' && <MenuSheet actions={actions} onClose={onClose} />}
@@ -330,20 +435,31 @@ const styles: Record<string, React.CSSProperties> = {
   sheet: {
     position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 1201,
     display: 'flex', flexDirection: 'column',
-    maxHeight: '78dvh', minHeight: 200,
+    height: '45dvh', minHeight: 200,
     background: '#232328', borderTopLeftRadius: 14, borderTopRightRadius: 14,
     borderTop: '1px solid #3a3a42', boxShadow: '0 -12px 32px rgba(0,0,0,0.55)',
     paddingBottom: 'calc(10px + env(safe-area-inset-bottom))',
   },
   grabber: { width: 42, height: 4, borderRadius: 2, background: '#4a4a52', margin: '8px auto 2px', flex: '0 0 auto' },
   sheetHead: {
+    position: 'relative',
     flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 10,
     padding: '4px 14px 8px', borderBottom: '1px solid #333',
   },
-  sheetTitle: { flex: 1, fontSize: 'var(--oc-fs-dialog-title)', color: '#4da6ff', letterSpacing: 1 },
+  sheetTitle: {
+    position: 'absolute', left: 0, right: 0, top: 0, bottom: 0,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    fontSize: 'var(--oc-fs-dialog-title)', color: '#4da6ff', letterSpacing: 1,
+    pointerEvents: 'none',
+  },
   closeBtn: {
-    padding: '6px 14px', background: '#2a2a30', border: '1px solid #3a3a42',
-    borderRadius: 4, color: '#ccc', fontSize: 'var(--oc-fs-label)', cursor: 'pointer',
+    position: 'relative', zIndex: 1, marginLeft: 'auto',
+    flex: '0 0 auto', width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center',
+    padding: 0, background: 'transparent', border: 'none', color: '#ccc', cursor: 'pointer',
+  },
+  closeBtnFace: {
+    width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
+    background: '#2a2a30', border: '1px solid #3a3a42', borderRadius: 6,
   },
   sheetBody: {
     flex: '1 1 auto', minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch',
@@ -351,10 +467,10 @@ const styles: Record<string, React.CSSProperties> = {
   },
   group: { marginTop: 12 },
   groupTitle: { fontSize: 'var(--oc-fs-body)', color: '#7d7d88', letterSpacing: 1, margin: '0 2px 6px' },
-  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(104px, 1fr))', gap: 6 },
+  grid: { display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 5 },
   cell: {
     display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'center', gap: 2,
-    minHeight: 46, padding: '6px 9px', textAlign: 'left',
+    minHeight: 44, padding: '6px 5px', textAlign: 'left',
     background: '#2a2a30', border: '1px solid #3a3a42', borderRadius: 6, color: '#ddd', cursor: 'pointer',
   },
   cellActive: { background: '#2a4a6a', border: '1px solid #4da6ff', color: '#fff' },
@@ -366,19 +482,33 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex', flexDirection: 'column', gap: 4, margin: '8px 2px',
     fontSize: 'var(--oc-fs-body)', color: '#bbb',
   },
+  advanced: {
+    marginTop: 10, marginBottom: 2, padding: '0 8px 2px',
+    background: '#232327', border: '1px solid #333', borderRadius: 6,
+  },
+  advancedHead: {
+    width: '100%', minHeight: 44, display: 'flex', alignItems: 'center', gap: 6,
+    padding: 0, background: 'transparent', border: 'none', textAlign: 'left',
+    color: '#bbb', fontSize: 'var(--oc-fs-heading)', cursor: 'pointer',
+  },
+  wideAction: {
+    width: '100%', minHeight: 44, margin: '8px 0 2px', padding: '0 12px',
+    background: '#2a2a30', border: '1px solid #3a3a42', borderRadius: 6,
+    color: '#ddd', fontSize: 'var(--oc-fs-heading)', textAlign: 'left', cursor: 'pointer',
+  },
   tabStrip: {
-    display: 'flex', gap: 4, overflowX: 'auto', WebkitOverflowScrolling: 'touch',
-    padding: '10px 0 8px', borderBottom: '1px solid #333',
+    display: 'flex', justifyContent: 'center', gap: 16, overflowX: 'auto', WebkitOverflowScrolling: 'touch',
+    padding: '7px 0 5px', borderBottom: '1px solid #333',
   },
   tab: {
-    flex: '0 0 auto', display: 'flex', alignItems: 'center', padding: '10px 14px',
+    flex: '0 0 auto', width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
     background: '#2a2a30', border: '1px solid #3a3a42', borderRadius: 6,
     color: '#ccc', fontSize: 'var(--oc-fs-label)', cursor: 'pointer',
   },
   tabActive: { background: '#2a4a6a', border: '1px solid #4da6ff', color: '#fff' },
   tabDisabled: { opacity: 0.35, cursor: 'default' },
   propsObjectName: {
-    fontSize: 'var(--oc-fs-label)', color: '#4da6ff', padding: '8px 2px 6px',
+    fontSize: 'var(--oc-fs-label)', color: '#4da6ff', padding: '6px 2px 5px',
     borderBottom: '1px solid #333', marginBottom: 6,
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
   },

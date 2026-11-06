@@ -10,13 +10,15 @@ import { styles } from '@/ui/panels/properties/styles';
 import { Icon } from '@/ui/icons';
 import type { ReactNode } from 'react';
 
+const ALL_PROP_TABS: PropTab[] = PROP_TAB_OPTIONS.map(option => option.key);
+
 /** Object, applicable tabs and tab content the properties surface edits right now. */
 export interface PropsTarget {
   /** Id of the single selected object, or null when nothing usable is selected. */
   nodeId: string | null;
   /** Label of the edited object, or 未选中对象. */
   objectName: string;
-  /** Tab actually shown, after the object's allowed set filters the requested one. */
+  /** Tab actually shown, after the allowed set and the caller's visible set filter the request. */
   tab: PropTab;
   /** Tabs the selected object accepts, in rail order. */
   allowedTabs: PropTab[];
@@ -26,8 +28,8 @@ export interface PropsTarget {
   bodyKey: string;
 }
 
-/** Resolves the selected scene object and its tab body for the desktop editor and the phone sheet. */
-export function usePropsTarget(engineRef: EngineRef): PropsTarget {
+/** Resolves the selected scene object and its tab body for one surface, limited to `visibleTabs`. */
+export function usePropsTarget(engineRef: EngineRef, visibleTabs: readonly PropTab[] = ALL_PROP_TABS): PropsTarget {
   const project = useProjectStore(s => s.project);
   const selection = useUIStore(s => s.selection);
   const propTab = useUIStore(s => s.propTab);
@@ -46,7 +48,11 @@ export function usePropsTarget(engineRef: EngineRef): PropsTarget {
   const allowedTabs = tabsForKind(kind);
   // With no object selected the editor opens on the project overview, not on the first rail tab.
   const fallbackTab = kind === null ? 'project' : allowedTabs[0];
-  const tab = allowedTabs.includes(propTab) ? propTab : fallbackTab;
+  // Keep the surface fallback when it is visible; otherwise take the first visible tab the object accepts.
+  const visibleFallback = visibleTabs.includes(fallbackTab)
+    ? fallbackTab
+    : visibleTabs.find(candidate => allowedTabs.includes(candidate)) ?? fallbackTab;
+  const tab = visibleTabs.includes(propTab) && allowedTabs.includes(propTab) ? propTab : visibleFallback;
 
   // A tab other than "工程" / "版型" / "渲染" is selectable only with one resolved object.
   const body = node && nodeId

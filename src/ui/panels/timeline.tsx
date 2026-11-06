@@ -3,6 +3,7 @@ import { normalizeRayTracing } from '@/model';
 import { usePerfStore, useProjectStore, useSimStore, useUIStore } from '@/store';
 import { rayTraceStateLabel, SIM_STEP_OPTIONS, simStepLabel } from '@/ui/optionTables';
 import { setSimulationConfig } from '@/ui/sceneCommands';
+import { formatElapsed } from '@/ui/timeFormat';
 import { Icon } from '@/ui/icons';
 
 /** Playback bar for the cloth simulation: the 3D view's frame rate or per-pixel sample count and its elapsed cost, transport buttons, step length, frame, playback time and status. */
@@ -59,7 +60,7 @@ export function Timeline() {
       {raytraced ? (
         <div
           style={styles.spp}
-          title={`3D 窗格每像素累计采样 ${samples3D} / ${maxSamples}，耗时 ${costLabel(costMs3D)}${rayNote ? `，${rayNote}` : ''}`}
+          title={`3D 窗格每像素累计采样 ${samples3D} / ${maxSamples}，耗时 ${formatElapsed(costMs3D)}${rayNote ? `，${rayNote}` : ''}`}
         >
           <span style={styles.sppLabel}>SPP:</span>
           <div style={styles.fps}>
@@ -67,7 +68,7 @@ export function Timeline() {
             <span style={styles.sppMax}>/{maxSamples}</span>
           </div>
           <span style={styles.sppLabel}>Cost:</span>
-          <span style={styles.sppValue}>{costLabel(costMs3D)}</span>
+          <span style={styles.sppValue}>{formatElapsed(costMs3D)}</span>
           {rayNote && <span style={styles.sppNote}>{rayNote}</span>}
         </div>
       ) : (
@@ -106,7 +107,7 @@ export function Timeline() {
           title={`已模拟 ${currentFrame} 帧；计时是从开始播放起累计的墙钟时间，暂停不计、重置清零，当前约 ${simRate} 步/秒。`}
         >
           帧 <span style={{ color: '#4da6ff', fontWeight: 600 }}>{currentFrame}</span>
-          <span style={styles.simTime}> · 计时 {costLabel(playedMs)}</span>
+          <span style={styles.simTime}> · 计时 {formatElapsed(playedMs)}</span>
         </div>
 
         <div
@@ -148,13 +149,6 @@ export function Timeline() {
       </div>
     </div>
   );
-}
-
-/** Elapsed sampling time: one decimal under a minute, minutes and seconds beyond. */
-function costLabel(costMs: number): string {
-  const s = costMs / 1000;
-  if (s < 60) return `${s.toFixed(1)}s`;
-  return `${Math.floor(s / 60)}m${String(Math.round(s % 60)).padStart(2, '0')}s`;
 }
 
 const styles: Record<string, React.CSSProperties> = {

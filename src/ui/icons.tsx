@@ -16,7 +16,7 @@ export const ICON_NAMES = [
   'atom', 'aperture',
   // Shared controls
   'chevron-down', 'chevron-right', 'eye', 'eye-off', 'plus', 'minus', 'check',
-  'collapse-all', 'expand-all', 'status-dot',
+  'collapse-all', 'expand-all', 'status-dot', 'menu', 'close',
   // Transport
   'play', 'pause', 'reset', 'step',
   // Garment templates

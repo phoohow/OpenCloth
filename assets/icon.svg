@@ -1,1 +1,27 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512"><rect width="512" height="512" rx="96" fill="#1a1a1e"/><path d="M170 126a28 28 0 1 1 56 0c0 17-10 26-24 30v22l126 62-14 30-112-54-112 54-14-30 126-62v-22c-14-4-24-13-24-30z" fill="none" stroke="#4da6ff" stroke-width="20" stroke-linejoin="round"/><path d="M144 292h224l-24 100H168z" fill="#4da6ff" opacity="0.9"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+
+  <!-- Background: rounded square -->
+  <rect width="512" height="512" rx="112" fill="#1a1a1e" />
+
+  <!-- T-shirt silhouette, mirrored about x=256 -->
+  <path fill="#5bb8ff"
+        d="M 256 456 L 380 456 L 380 183 L 433 205 L 467 100 L 390 56
+           L 312 56 Q 256 170 200 56
+           L 122 56 L 45 100 L 79 205 L 132 183 L 132 456 Z" />
+
+  <!-- Collar stitch -->
+  <path fill="none" stroke="#ffffff" stroke-opacity="0.45"
+        stroke-width="9" stroke-dasharray="16 15" stroke-linecap="round"
+        d="M 195 82 Q 256 176 317 82" />
+
+  <!-- Centre seam -->
+  <path fill="none" stroke="#ffffff" stroke-opacity="0.45"
+        stroke-width="9" stroke-dasharray="16 15" stroke-linecap="round"
+        d="M 256 146 L 256 440" />
+
+  <!-- Hem stitch -->
+  <path fill="none" stroke="#ffffff" stroke-opacity="0.45"
+        stroke-width="9" stroke-dasharray="16 15" stroke-linecap="round"
+        d="M 160 432 H 352" />
+
+</svg>

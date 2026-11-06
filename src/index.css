@@ -22,10 +22,10 @@ button {
 }
 
 /*
- * Control sizes one shell-wide; the phone mode widens the values at the bottom.
- * Type scale, small to large: note < micro < body < label < heading < dialog-title.
- * Components pick a token by role, never by a literal pixel size, so the two shells
- * stay in step when the phone values are widened.
+ * Control sizes one shell-wide. The phone block below tightens them for the compact shell.
+ * Type scale, small to large: note < micro < body < label < heading < dialog-title; the compact
+ * phone scale may merge adjacent steps. Components pick a token by role, never by a literal
+ * pixel size, so the two shells stay in step when the phone values change.
  */
 :root {
   --oc-fs-note: 10px;
@@ -44,18 +44,18 @@ button {
 }
 
 html[data-ui-mode="mobile"] {
-  --oc-fs-note: 12px;
-  --oc-fs-micro: 14px;
-  --oc-fs-body: 15px;
-  --oc-fs-label: 16px;
-  --oc-fs-heading: 17px;
-  --oc-fs-dialog-title: 17px;
-  --oc-h-control: 34px;
-  --oc-h-row: 40px;
-  --oc-h-slot: 40px;
-  --oc-h-section-header: 44px;
-  --oc-w-select: 170px;
-  --oc-w-field-label: 54px;
+  --oc-fs-note: 11px;
+  --oc-fs-micro: 12px;
+  --oc-fs-body: 13px;
+  --oc-fs-label: 14px;
+  --oc-fs-heading: 15px;
+  --oc-fs-dialog-title: 16px;
+  --oc-h-control: 26px;
+  --oc-h-row: 28px;
+  --oc-h-slot: 28px;
+  --oc-h-section-header: 30px;
+  --oc-w-select: 150px;
+  --oc-w-field-label: 42px;
   --oc-w-slider-thumb: 26px;
   /* Pull-to-refresh, pinch-to-zoom of the page and text selection would eat canvas gestures. */
   overscroll-behavior: none;
@@ -108,6 +108,28 @@ input[type="range"]::-moz-range-thumb {
   border-radius: 50%;
   cursor: pointer;
   border: none;
+}
+
+/* Touch sliders keep the thin track but give the finger a taller hit area. */
+html[data-ui-mode="mobile"] input[type="range"] {
+  height: 28px;
+  background: transparent;
+}
+
+html[data-ui-mode="mobile"] input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  background: #3a3a42;
+  border-radius: 2px;
+}
+
+html[data-ui-mode="mobile"] input[type="range"]::-webkit-slider-thumb {
+  margin-top: calc((4px - var(--oc-w-slider-thumb)) / 2);
+}
+
+html[data-ui-mode="mobile"] input[type="range"]::-moz-range-track {
+  height: 4px;
+  background: #3a3a42;
+  border-radius: 2px;
 }
 
 ::-webkit-scrollbar {
