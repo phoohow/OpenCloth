@@ -5,11 +5,11 @@ import type { FrameContext } from '@/render/frame/pass';
 import type { PostEffectId } from '@/render/modes/spec';
 
 /**
- * One stage of the post chain.
+ * One pass of the post chain.
  *
  * The chain hands each effect the image to read and the target to write, two different ones: an
  * effect can never read and write the same texture. The chain therefore alternates between scratch
- * targets when more than one effect runs, and lands the last one in the frame image target.
+ * targets when more than one effect runs, and lands the last one in the frame color buffer.
  */
 export interface PostEffect {
   readonly id: PostEffectId;

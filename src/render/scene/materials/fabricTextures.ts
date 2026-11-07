@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
 import type { Vec2 } from '@/model/types';
-import { retainImage } from '@/render/imageStore';
+import { retainImage } from '@/common/platform';
 
 /** Texture owned by one material for one map slot. */
 export interface FabricTextureHandle {

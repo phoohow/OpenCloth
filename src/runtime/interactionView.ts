@@ -11,7 +11,7 @@ import { PinMarkers } from '@/runtime/pinMarkers';
 import { SelectionOverlay } from '@/runtime/selectionOverlay';
 import type { OverlayKit } from '@/runtime/overlayKit';
 import { trianglePointToPanel2D } from '@/common/geom/panelSurface';
-import type { StageSlot } from '@/render';
+import type { SceneSlot } from '@/render';
 
 /** A cloth surface point resolved to its panel's flat pattern coordinates. */
 export interface ClothSurfacePoint {
@@ -33,11 +33,11 @@ const DEFAULT_PICK_RADIUS_FACTOR = 0.03;
 /** What the interaction view reads from the rest of the engine. */
 export interface InteractionViewDeps {
   /** Selection highlight. */
-  slot: StageSlot;
+  slot: SceneSlot;
   /** Pin markers. */
-  pinSlot: StageSlot;
+  pinSlot: SceneSlot;
   /** Drag marker. */
-  markerSlot: StageSlot;
+  markerSlot: SceneSlot;
   renderer: Renderer;
   overlays: OverlayKit;
   avatar: AvatarStage;

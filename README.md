@@ -65,7 +65,7 @@ src/
   pattern/   版型几何、模板、排料、放码、POM
   analysis/  合身 / 应变 / 压力的纯计算
   sim/       WebGPU 布料求解与碰撞
-  render/    WebGPU 设备、场景层与槽位、渲染帧、光栅与光追、材质与热图
+  render/    WebGPU 渲染器与设备上下文、场景层与场景槽位、渲染通道、光栅与光追、材质与热图
   avatar/    模特参数、姿态与碰撞体
   io/        序列化 serialization、导入导出 exporters/importers、本地存储 storage、DXF/PDF
   runtime/   应用编排：GarmentEngine 与构建 / 仿真 / 渲染流水线

@@ -11,7 +11,7 @@ import {
   clothMaterialSlotKey, clothMaterialSlotPlan, fabricForPanel, panelPrints,
 } from '@/model';
 import { FALLBACK_APPEARANCE } from '@/runtime/clothConstants';
-import type { StageSlot } from '@/render';
+import type { SceneSlot } from '@/render';
 
 /** Index range, material slot and owning panel of one cloth geometry group. */
 interface ClothGroupRange {
@@ -23,7 +23,7 @@ interface ClothGroupRange {
 
 /** What the cloth view reads from the rest of the engine. */
 export interface ClothViewDeps {
-  slot: StageSlot;
+  slot: SceneSlot;
   /** Merged input the drawn mesh mirrors; null before a build. */
   input: () => ClothSimInput | null;
   /** Panel meshes in merged order, the source of the merged UVs. */
@@ -93,7 +93,7 @@ export class ClothView {
   /** Pushes simulated positions and normals into the render mesh. */
   updateFromSim(positions: Float32Array, normals: Float32Array): void {
     this.surface?.updateFromSim(positions, normals);
-    this.deps.slot.markChanged('deform');
+    this.deps.slot.markRevision('deform');
   }
 
   /** Restores the mesh to a static layout. */
@@ -105,7 +105,7 @@ export class ClothView {
   setVisible(visible: boolean): void {
     if (!this.surface) return;
     this.surface.fabric.visible = visible;
-    this.deps.slot.markChanged('visibility');
+    this.deps.slot.markRevision('visibility');
   }
 
   /** Re-applies the material records to the built mesh; never rebuilds geometry. */
@@ -135,7 +135,7 @@ export class ClothView {
       this.bindMaterials(project);
     }
 
-    this.deps.slot.markChanged('material');
+    this.deps.slot.markRevision('material');
     this.deps.refreshPhysics(project);
   }
 

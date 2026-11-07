@@ -45,10 +45,13 @@ export function Viewport3D({ onEngineReady }: Viewport3DProps) {
   const [renderError, setRenderError] = useState<string | null>(null);
 
   const backend = useUIStore(s => s.backend);
+  const wire = useUIStore(s => s.wire);
   const layout = useUIStore(s => s.layout);
   const activeTool = useUIStore(s => s.activeTool);
   const measure3d = useUIStore(s => s.measure3d);
   const rayState3D = usePerfStore(s => s.rayState3D);
+  // Wire-only frames never trace, so the badge would describe a pass that did not run.
+  const tracing = backend === 'pathtrace' && wire !== 'only';
 
   useEffect(() => {
     let cancelled = false;
@@ -158,7 +161,7 @@ export function Viewport3D({ onEngineReady }: Viewport3DProps) {
         style={{ display: 'block', width: '100%', height: '100%', cursor: 'default' }}
       />
       <ViewportHint right={isMobileUi() ? MOBILE_HINT_RIGHT : 8}>{statusHint(layout, activeTool)}</ViewportHint>
-      {backend === 'pathtrace' && !isMobileUi() && (
+      {tracing && !isMobileUi() && (
         <div style={{
           position: 'absolute', top: 8, left: 8, padding: '5px 8px', color: '#bde7ff',
           background: 'rgba(18, 39, 55, 0.84)', border: '1px solid #2f6d92',
@@ -167,7 +170,7 @@ export function Viewport3D({ onEngineReady }: Viewport3DProps) {
       )}
       {measure3d && (
         <div style={{
-          position: 'absolute', top: backend === 'pathtrace' && !isMobileUi() ? 40 : 8, left: 8,
+          position: 'absolute', top: tracing && !isMobileUi() ? 40 : 8, left: 8,
           padding: '5px 8px', color: '#ffe2a6', background: 'rgba(55, 43, 18, 0.86)',
           border: '1px solid #8a6030', borderRadius: 4, fontSize: 'var(--oc-fs-micro)', pointerEvents: 'none',
         }}>

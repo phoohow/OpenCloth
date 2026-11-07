@@ -1,20 +1,20 @@
-/** What one frame should look like: the fill, the edges, the backend and the post chain. */
+/** What the active view mode resolves to for one frame: fill, edges, backend and post chain. */
 
 import type {
-  FillMode, RenderBackend, RenderConfig, ToneMappingMode, WireMode, WireOptions,
+  FillMode, RenderBackend, ToneMappingMode, ViewConfig, WireMode, WireOptions,
 } from '@/model/types';
 import { SCENE_LAYERS, TOP_LAYERS, type LayerId } from '@/render/scene/layers';
 
 /** Post effects a mode can ask for, in chain order. */
 export type PostEffectId = 'toneMap';
 
-/** Resolved description of one frame. */
-export interface RenderModeSpec {
+/** Resolved view mode for one frame. */
+export interface ViewModeSpec {
   readonly fill: FillMode;
   readonly wire: WireMode;
   readonly backend: RenderBackend;
   readonly wireOptions: WireOptions;
-  /** Layers the raster stages draw. */
+  /** Layers the raster passes draw. */
   readonly layers: readonly LayerId[];
   /** Whether traced samples are denoised before the compositor sees them. */
   readonly denoises: boolean;
@@ -42,8 +42,8 @@ function fillsSurface(wire: WireMode): boolean {
  */
 const DRAW_LAYERS: readonly LayerId[] = [...SCENE_LAYERS, ...TOP_LAYERS];
 
-/** Resolves the project's render settings into everything the frame needs. */
-export function resolveSpec(config: RenderConfig): RenderModeSpec {
+/** Resolves one frame's settings into everything the frame needs. */
+export function resolveViewMode(config: ViewConfig): ViewModeSpec {
   const { fill, wire, backend, wireOptions } = config;
   const traces = backend === 'pathtrace' && wire !== 'only';
   // Denoising only has meaning on traced samples; a raster frame has none.
@@ -64,11 +64,4 @@ export function resolveSpec(config: RenderConfig): RenderModeSpec {
     fillsSurface: fillsSurface(wire),
     traces,
   };
-}
-
-/** Whether a mode combination is selectable, so the UI can grey out the rest. */
-export function backendAvailable(fill: FillMode, wire: WireMode): boolean {
-  if (wire === 'only') return false;
-  // Both normal fills need the auxiliary buffer the tracer does not expose yet.
-  return fill !== 'normal' && fill !== 'vertexNormal';
 }

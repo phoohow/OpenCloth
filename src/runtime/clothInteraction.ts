@@ -6,7 +6,7 @@ import { evalBodyDistance } from '@/avatar/collider';
 import type { AvatarStage } from '@/runtime/avatarStage';
 import type { ClothPicker } from '@/runtime/clothPicker';
 import { DragMarker } from '@/runtime/dragMarker';
-import type { StageSlot } from '@/render';
+import type { SceneSlot } from '@/render';
 import type { PinMarkers } from '@/runtime/pinMarkers';
 import { grabWeightsAround } from '@/runtime/clothDrag';
 import { pinsByScreenDistance } from '@/runtime/pinHover';
@@ -26,7 +26,7 @@ export interface ClothInteractionHost {
   readonly pinMarkers: PinMarkers;
   readonly renderer: Renderer;
   /** Slot the drag marker is drawn in. */
-  readonly markerSlot: StageSlot;
+  readonly markerSlot: SceneSlot;
   /** Merged particle positions from the last readback, or null before it. */
   positions(): Float32Array | null;
   /** Solver the drag pulls, or null while it is being rebuilt. */

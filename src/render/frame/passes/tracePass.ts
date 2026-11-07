@@ -1,11 +1,11 @@
-/** Stage 2: optional path-traced radiance, left in the radiance target for the post chain. */
+/** Pass 2: optional path-traced radiance, left in the radiance target for the compositor. */
 
 import type { FrameContext, FramePass, PassId } from '@/render/frame/pass';
 import type { TraceBackend } from '@/render/trace/backend';
 
 /**
  * The only place a frame asks for traced samples. It draws radiance and reports what it got;
- * denoising and compositing are post effects, not part of this stage.
+ * denoising and compositing are post effects, not part of this pass.
  */
 export class TracePass implements FramePass {
   readonly id: PassId = 'trace';

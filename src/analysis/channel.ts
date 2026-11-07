@@ -43,7 +43,7 @@ export interface AnalysisStats {
 
 /** Vertex colours the channels write into the 3D viewport overlay. */
 export interface AnalysisOverlay {
-  update(field: FitField): void;
+  updateFit(field: FitField): void;
   updateStrain(strain: Float32Array, min: number, max: number): void;
   updateStrainBounds(strain: Float32Array, bounds: StrainBounds): void;
   updatePressure(pressureKpa: Float32Array, maxKpa: number): void;

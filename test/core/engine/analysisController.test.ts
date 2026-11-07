@@ -18,7 +18,7 @@ function harness() {
   const overlay = {
     setVisible: vi.fn(),
     setSlotCount: vi.fn(),
-    update: vi.fn(),
+    updateFit: vi.fn(),
     updateStrain: vi.fn(),
     updateStrainBounds: vi.fn(),
     updatePressure: vi.fn(),

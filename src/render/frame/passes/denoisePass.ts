@@ -1,4 +1,4 @@
-/** Stage 3: OIDN denoising over the traced radiance, before it is composited. */
+/** Pass 3: OIDN denoising over the traced radiance, before it is composited. */
 
 import * as THREE from 'three/webgpu';
 import { texture, uv } from 'three/tsl';
@@ -59,14 +59,28 @@ export class DenoisePass implements FramePass {
   private output: THREE.RenderTarget | null = null;
   private blit: THREE.MeshBasicNodeMaterial | null = null;
   private blitSource: THREE.Texture | null = null;
+  /** Whether dispose() ran; a late weight load must not install a denoiser. */
+  private disposed = false;
+  /** Increments whenever the selected model or lifetime changes; stale loads are dropped. */
+  private generation = 0;
 
   constructor(private readonly onFailure?: (message: string) => void) { }
 
-  /** Selects the model without loading it; a failed model is retried when it changes. */
+  /** Selects the model; a different model drops the weights and reloads on the next pass. */
   setModel(model: DenoiseModel): void {
     if (this.model === model) return;
     this.model = model;
-    if (this.failedModel === model) return;
+    this.failedModel = null;
+    this.generation += 1;
+    this.loading = null;
+    this.denoiser?.dispose();
+    this.denoiser = null;
+    this.clearOutput();
+  }
+
+  /** Clears a failed load so turning denoising back on retries it. */
+  retry(): void {
+    this.failedModel = null;
   }
 
   /** Drops the cleaned image and starts the cadence over; the samples no longer match it. */
@@ -80,7 +94,7 @@ export class DenoisePass implements FramePass {
 
   enabled(ctx: FrameContext): boolean {
     if (!ctx.spec.denoises || this.failedModel === this.model) return false;
-    // A restart also has to reach this stage on frames that drew nothing, or the cadence would keep
+    // A restart also has to reach this pass on frames that drew nothing, or the cadence would keep
     // counting from the view the camera has already left.
     return ctx.trace.restarted || ctx.trace.radiance !== null;
   }
@@ -101,18 +115,20 @@ export class DenoisePass implements FramePass {
     // The guide buffers are rasterized from the scene, so they must see the same objects the
     // tracer walked: the overlays and gizmos are raster-only and would otherwise steer the filter.
     const cleaned = ctx.sceneMgr.withoutUntracedLayers(() => this.apply(
-      ctx.device.renderer, ctx.sceneMgr.scene, ctx.camera.camera, ctx.targets.radiance,
+      ctx.renderer, ctx.sceneMgr.scene, ctx.camera.camera, ctx.targets.radiance,
     ));
     // Only a finished pass is a whole image. The denoiser hands back a buffer after every tile, and
     // the tiles it has not reached yet are still empty — copying one of those leaves black blocks
     // that never get replaced, because the copy happens once per pass.
-    if (cleaned && this.denoiser?.complete) this.publish(ctx.device.renderer, cleaned, ctx.targets.radiance);
+    if (cleaned && this.denoiser?.complete) this.publish(ctx.renderer, cleaned, ctx.targets.radiance);
     // Between two passes, and until the first one finishes, the last cleaned image stands in. It is
     // the image the user was looking at, which beats dropping back to noise.
     if (this.output) ctx.trace.radiance = this.output.texture;
   }
 
   dispose(): void {
+    this.disposed = true;
+    this.generation += 1;
     this.denoiser?.dispose();
     this.denoiser = null;
     this.loading = null;
@@ -187,7 +203,7 @@ export class DenoisePass implements FramePass {
   ): THREE.Texture | null {
     const denoiser = this.denoiser;
     if (!denoiser) {
-      void this.ensure(renderer);
+      this.ensure(renderer);
       return null;
     }
     // Auxiliary buffers are rendered from the scene, so the guide matches the traced frame.
@@ -198,29 +214,38 @@ export class DenoisePass implements FramePass {
   }
 
   /** Loads and installs the model once; failures disable denoising instead of breaking the frame. */
-  private async ensure(renderer: THREE.WebGPURenderer): Promise<void> {
-    if (this.loading || this.failedModel === this.model) return;
-    this.loading = Promise.all([
+  private ensure(renderer: THREE.WebGPURenderer): void {
+    if (this.disposed || this.loading || this.failedModel === this.model) return;
+    const generation = this.generation;
+    const model = this.model;
+    const loading: Promise<OIDNDenoiser | null> = Promise.all([
       import('oidn-webgpu'),
       import('three-gpu-pathtracer/webgpu'),
     ]).then(([oidn, pathtracer]) => {
       const initUNet = oidn.initUNetFromURL as unknown as InitUNetFromURL;
       const denoiser = new pathtracer.OIDNDenoiser({
         initUNetFromURL: initUNet,
-        auxWeightsUrl: bundledAssetUrl(OIDN_WEIGHTS[this.model]),
+        auxWeightsUrl: bundledAssetUrl(OIDN_WEIGHTS[model]),
         colorWeightsUrl: bundledAssetUrl(OIDN_COLOR_WEIGHTS),
       });
+      // Drop a denoiser whose model changed or whose pass was disposed while the weights loaded.
+      if (this.disposed || generation !== this.generation) {
+        denoiser.dispose();
+        return null;
+      }
       denoiser.init(renderer);
       this.denoiser = denoiser;
-      this.loading = null;
       return denoiser;
     }).catch((error: unknown) => {
-      this.loading = null;
-      this.failedModel = this.model;
+      if (this.disposed || generation !== this.generation) return null;
+      this.failedModel = model;
       console.warn('OIDN denoiser unavailable:', error);
       this.onFailure?.('OIDN 降噪权重加载失败，已改用无降噪渲染；关闭再开启降噪可重试。');
       return null;
     });
-    await this.loading;
+    this.loading = loading;
+    void loading.finally(() => {
+      if (this.loading === loading) this.loading = null;
+    });
   }
 }

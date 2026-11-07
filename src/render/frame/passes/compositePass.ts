@@ -1,4 +1,4 @@
-/** Stage 4: merges the raster image and the traced radiance into the resolved image. */
+/** Pass 4: merges the raster image and the traced radiance into the composite buffer. */
 
 import * as THREE from 'three/webgpu';
 import { mix, texture, uniform, uv } from 'three/tsl';
@@ -9,9 +9,9 @@ import type { FrameContext, FramePass, PassId } from '@/render/frame/pass';
  * The compositor. Two sources of one image: the raster scene colour and the path-traced radiance,
  * mixed by a weight that fades the traced image in as its sample pass matures.
  *
- * It always leaves the result in the resolved target, even on a raster frame — there it is a
+ * It always leaves the result in the composite buffer, even on a raster frame — there it is a
  * straight copy of the raster image. That is what lets the post chain keep its rule of "read one
- * image, write another": the image target goes on to receive the resolved image in place, with the
+ * image, write another": the color buffer goes on to receive the composite image in place, with the
  * depth the overlays still need.
  */
 export class CompositePass implements FramePass {
@@ -26,20 +26,20 @@ export class CompositePass implements FramePass {
   }
 
   run(ctx: FrameContext): void {
-    const { renderer } = ctx.device;
-    const raster = ctx.targets.image.texture;
+    const { renderer } = ctx;
+    const raster = ctx.targets.color.texture;
     const radiance = ctx.trace.radiance;
     if (radiance && ctx.trace.weight > 0) {
       this.ensureMix(raster, radiance);
       this.weight.value = ctx.trace.weight;
-      drawFullScreen(renderer, this.material!, ctx.targets.resolved);
+      drawFullScreen(renderer, this.material!, ctx.targets.composite);
     } else {
-      // Nothing to blend: the resolved image is the raster image, copied aside so the post chain
-      // can write over the image target without reading the texture it draws into.
+      // Nothing to blend: the composite is the raster image, copied aside so the post chain can
+      // write over the color buffer without reading the texture it draws into.
       renderer.setRenderTarget(null);
-      renderer.copyTextureToTexture(raster, ctx.targets.resolved.texture);
+      renderer.copyTextureToTexture(raster, ctx.targets.composite.texture);
     }
-    ctx.resolved = ctx.targets.resolved.texture;
+    ctx.composite = ctx.targets.composite.texture;
   }
 
   dispose(): void {

@@ -3,8 +3,7 @@ import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
 import { OBJExporter } from 'three/examples/jsm/exporters/OBJExporter.js';
 import { downloadTextFile } from '@/io/serialization/codec';
 import { fbxText, usdaText, type ExportMesh } from '@/io/exporters/meshExport';
-import { whenImagesReady } from '@/render';
-import { downloadBlob, downloadUrl } from '@/common/platform';
+import { downloadBlob, downloadUrl, whenImagesReady } from '@/common/platform';
 
 /** Toggles which scene contents the exporters write. */
 export interface ExportOptions {

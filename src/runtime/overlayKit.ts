@@ -7,7 +7,7 @@ import { TopstitchThreads, topstitchSegments } from '@/runtime/topstitchThreads'
 import { TrimInstances, trimInstances } from '@/runtime/trimInstances';
 import { SketchOverlay } from '@/runtime/sketchOverlay';
 import { MeasureOverlay } from '@/runtime/measureOverlay';
-import type { StageSlot } from '@/render';
+import type { SceneSlot } from '@/render';
 
 /**
  * The four decorative overlays that live on top of the cloth: seam threads, topstitch rows,
@@ -19,11 +19,11 @@ import type { StageSlot } from '@/render';
  */
 /** Slots the overlays draw into. */
 export interface OverlaySlots {
-  seams: StageSlot;
-  topstitch: StageSlot;
-  trims: StageSlot;
-  sketch: StageSlot;
-  measure: StageSlot;
+  seams: SceneSlot;
+  topstitch: SceneSlot;
+  trims: SceneSlot;
+  sketch: SceneSlot;
+  measure: SceneSlot;
 }
 
 export class OverlayKit {

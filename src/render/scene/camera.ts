@@ -1,7 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { CameraProjection } from '@/model/types';
-import type { ViewportDevice } from '@/render/device/viewport';
+import type { RenderContext } from '@/render/context';
 
 /** Either camera the viewport can render with. */
 export type ViewportCamera = THREE.PerspectiveCamera | THREE.OrthographicCamera;
@@ -29,8 +29,8 @@ export class SceneCamera {
   /** Removes the listeners that drive the camera dolly. */
   private detachZoom?: () => void;
 
-  constructor(private readonly device: ViewportDevice) {
-    const aspect = device.aspect();
+  constructor(private readonly context: RenderContext) {
+    const aspect = context.aspect();
     const perspective = new THREE.PerspectiveCamera(45, aspect, 0.1, 100);
     perspective.position.set(0, 1.4, 3.2);
 
@@ -39,7 +39,7 @@ export class SceneCamera {
     orthographic.up.copy(perspective.up);
     orthographic.lookAt(0, 0.9, 0);
 
-    const controls = new OrbitControls<THREE.Camera>(perspective, device.canvas);
+    const controls = new OrbitControls<THREE.Camera>(perspective, context.canvas);
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
     // One finger turns, two fingers dolly and truck; stated so a phone keeps those gestures
@@ -52,7 +52,7 @@ export class SceneCamera {
     this.orthographicCamera = orthographic;
     this.controls = controls;
     this.active = perspective;
-    this.detachZoom = attachZoomGestures(controls, device.canvas);
+    this.detachZoom = attachZoomGestures(controls, context.canvas);
     this.syncFrustum();
   }
 
@@ -62,7 +62,7 @@ export class SceneCamera {
   }
 
   /** Rebuilds the orthographic frustum from the stored view height and the given aspect. */
-  syncFrustum(aspect = this.device.aspect()): void {
+  syncFrustum(aspect = this.context.aspect()): void {
     const camera = this.orthographicCamera;
     const height = Math.max(0.001, this.orthoViewHeight);
     const width = height * aspect;

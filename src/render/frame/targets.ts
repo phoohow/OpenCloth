@@ -1,7 +1,6 @@
-/** Render targets one frame draws into, pooled by size and format. */
+/** Render targets one frame draws into, reallocated when the buffer sizes change. */
 
 import * as THREE from 'three/webgpu';
-import type { ViewportDevice } from '@/render/device/viewport';
 
 /** Size of one set of targets. */
 export interface FrameSize {
@@ -13,22 +12,8 @@ export interface FrameSize {
   traceHeight: number;
 }
 
-/** Sizes of the buffers one frame needs, from the drawing surface and the tracer's render scale. */
-export function measureFrame(device: ViewportDevice, renderScale = 1): FrameSize {
-  const drawing = new THREE.Vector2();
-  device.renderer.getDrawingBufferSize(drawing);
-  const css = new THREE.Vector2();
-  device.renderer.getSize(css);
-  return {
-    width: Math.max(1, Math.floor(drawing.x)),
-    height: Math.max(1, Math.floor(drawing.y)),
-    traceWidth: Math.max(1, Math.floor(css.x * renderScale)),
-    traceHeight: Math.max(1, Math.floor(css.y * renderScale)),
-  };
-}
-
 /**
- * The three images a frame needs, plus the depth the first of them carries.
+ * The three color buffers a frame needs, plus the depth the first of them carries.
  *
  * Every target holds linear values: three disables tone mapping and colour-space conversion when
  * it draws into a render target, so a display-referred target would double-decode. The canvas
@@ -36,23 +21,23 @@ export function measureFrame(device: ViewportDevice, renderScale = 1): FrameSize
  *
  * No two targets share a depth texture. three rebuilds the depth attachment of a target registered
  * after the first one holding it, which leaves the earlier target submitting against a destroyed
- * texture — the scene stage is then dropped and the image freezes while the overlays, drawn into a
+ * texture — the scene pass is then dropped and the image freezes while the overlays, drawn into a
  * later target, keep following the camera.
  */
 export class FrameTargets {
   /**
-   * The frame's image, and the only target with depth.
+   * The frame's color buffer, and the only target with depth.
    *
-   * The scene stage writes the lit raster here, the post chain resolves it in place, the overlays
-   * finish it, and the canvas is presented from it. Nothing but the scene stage writes depth, so
-   * the depth it lays down is still there when the overlays test against it.
+   * The scene pass writes the lit raster here, the post chain writes the processed image back,
+   * the overlays finish it, and the canvas is presented from it. Nothing but the scene pass writes
+   * depth, so the depth it lays down is still there when the overlays test against it.
    */
-  image!: THREE.RenderTarget;
+  color!: THREE.RenderTarget;
   /** Raster image merged with the traced radiance, linear; the post chain reads it. */
-  resolved!: THREE.RenderTarget;
+  composite!: THREE.RenderTarget;
   /** Path-traced radiance, linear HDR. */
   radiance!: THREE.RenderTarget;
-  /** Depth of the lit image, owned by the image target alone. */
+  /** Depth of the lit image, owned by the color buffer alone. */
   private depth: THREE.DepthTexture | null = null;
   private size: FrameSize | null = null;
 
@@ -68,16 +53,16 @@ export class FrameTargets {
     this.size = { ...size };
     const depth = new THREE.DepthTexture(size.width, size.height);
     this.depth = depth;
-    this.image = linearTarget(size.width, size.height, depth);
-    this.resolved = linearTarget(size.width, size.height, null);
+    this.color = linearTarget(size.width, size.height, depth);
+    this.composite = linearTarget(size.width, size.height, null);
     this.radiance = linearTarget(size.traceWidth, size.traceHeight, null);
     return true;
   }
 
-  /** Frees every target and the depth the image carries. */
+  /** Frees every target and the depth the color buffer carries. */
   dispose(): void {
-    this.image?.dispose();
-    this.resolved?.dispose();
+    this.color?.dispose();
+    this.composite?.dispose();
     this.radiance?.dispose();
     this.depth?.dispose();
     this.depth = null;

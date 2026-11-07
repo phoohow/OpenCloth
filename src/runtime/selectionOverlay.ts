@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { CLOTH_OVERLAY_NAME } from '@/runtime/clothConstants';
-import type { StageSlot } from '@/render';
+import type { SceneSlot } from '@/render';
 
 /** Translucent triangle overlay marking the selected panels; shares the cloth mesh attributes. */
 export class SelectionOverlay {
@@ -17,7 +17,7 @@ export class SelectionOverlay {
   }
 
   /** Rebuilds the overlay for these panels; an empty list clears it. Identical inputs are ignored. */
-  apply(scene: StageSlot, clothGeometry: THREE.BufferGeometry | null, panelIds: string[], triangles: Uint32Array): void {
+  apply(scene: SceneSlot, clothGeometry: THREE.BufferGeometry | null, panelIds: string[], triangles: Uint32Array): void {
     // The geometry id catches rebuilds that reuse the same panel list on a fresh mesh.
     const key = `${clothGeometry?.id ?? 0}:${panelIds.join('|')}`;
     if (key === this.key) return;
@@ -40,7 +40,7 @@ export class SelectionOverlay {
   }
 
   /** Takes the overlay out of the scene and forgets the selection. */
-  clear(scene: StageSlot): void {
+  clear(scene: SceneSlot): void {
     if (this.mesh) scene.remove(this.mesh);
     this.mesh = null;
     this.key = '';
@@ -48,7 +48,7 @@ export class SelectionOverlay {
   }
 
   /** Frees the overlay material; the shared geometry attributes belong to the cloth. */
-  dispose(scene: StageSlot): void {
+  dispose(scene: SceneSlot): void {
     this.clear(scene);
     this.material.dispose();
   }

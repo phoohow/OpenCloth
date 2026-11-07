@@ -78,9 +78,8 @@ function collectPanelChanges(
   }
 }
 
-/** Material records, prints and the render mode feed the cloth materials. */
+/** Material records and prints feed the cloth materials. */
 function fabricDiffers(prev: Project, next: Project): boolean {
-  if (prev.scene.render.fill !== next.scene.render.fill) return true;
   return !sameJson(prev.fabrics, next.fabrics)
     || !sameJson(prev.pattern.prints ?? {}, next.pattern.prints ?? {});
 }

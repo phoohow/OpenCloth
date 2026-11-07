@@ -49,14 +49,18 @@ export interface RayTracingConfig {
   clampIndirect: number;
 }
 
-/** Viewport rendering settings. */
+/** Rendering settings persisted with a project. */
 export interface RenderConfig {
-  fill: FillMode;
-  wire: WireMode;
-  backend: RenderBackend;
   wireOptions: WireOptions;
   toneMapping: ToneMappingMode;
   rayTracing?: RayTracingConfig;
+}
+
+/** One frame's settings: the project's render settings plus the display axes the UI owns. */
+export interface ViewConfig extends RenderConfig {
+  fill: FillMode;
+  wire: WireMode;
+  backend: RenderBackend;
 }
 
 /** Constant wind pushing the cloth. */

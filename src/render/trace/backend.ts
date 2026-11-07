@@ -2,7 +2,6 @@
 
 import * as THREE from 'three/webgpu';
 import type { RayTracingConfig } from '@/model/types';
-import type { ViewportDevice } from '@/render/device/viewport';
 import type { SceneMgr } from '@/render/scene/manager';
 import type { SceneCamera } from '@/render/scene/camera';
 import type { TraceProxies } from '@/render/trace/proxies';
@@ -13,7 +12,9 @@ import {
 
 /** What the backend needs from the viewport. */
 export interface TraceBackendDeps {
-  readonly device: ViewportDevice;
+  /** The viewport's three.js renderer, owned by the Renderer. */
+  readonly renderer: THREE.WebGPURenderer;
+  readonly device: GPUDevice;
   readonly sceneMgr: SceneMgr;
   readonly camera: SceneCamera;
   readonly proxies: TraceProxies;
@@ -42,6 +43,8 @@ export class PathTraceBackend implements TraceBackend {
   private tracer: PathTracer | null = null;
   private loading: Promise<PathTracer | null> | null = null;
   private disposed = false;
+  /** Increments on recovery and teardown; a build from an older generation is discarded. */
+  private generation = 0;
 
   constructor(private readonly deps: TraceBackendDeps) { }
 
@@ -59,10 +62,19 @@ export class PathTraceBackend implements TraceBackend {
   async ensure(config: RayTracingConfig): Promise<void> {
     if (this.disposed || this.tracer) return;
     if (this.capability && !this.capability.ok) throw new RayTracingUnsupportedError(this.capability);
+    const generation = this.generation;
     if (!this.loading) this.loading = this.build(config);
-    const built = await this.loading;
-    this.loading = null;
-    if (!built || this.disposed) return;
+    const loading = this.loading;
+    let built: PathTracer | null;
+    try {
+      built = await loading;
+    } finally {
+      if (this.loading === loading) this.loading = null;
+    }
+    if (!built || this.disposed || generation !== this.generation) {
+      built?.dispose();
+      return;
+    }
     this.tracer = built;
   }
 
@@ -79,6 +91,7 @@ export class PathTraceBackend implements TraceBackend {
 
   /** Drops the failed tracer and leaves the frame on the raster base. */
   recover(): void {
+    this.generation += 1;
     this.tracer?.dispose();
     this.tracer = null;
     this.loading = null;
@@ -86,6 +99,7 @@ export class PathTraceBackend implements TraceBackend {
 
   dispose(): void {
     this.disposed = true;
+    this.generation += 1;
     this.tracer?.dispose();
     this.tracer = null;
     void this.loading?.then(tracer => tracer?.dispose()).catch(() => { });
@@ -94,16 +108,20 @@ export class PathTraceBackend implements TraceBackend {
 
   /** Creates the tracer, runs the one-time probe and frees it when the device cannot trace. */
   private async build(config: RayTracingConfig): Promise<PathTracer | null> {
-    const { device, sceneMgr, camera, proxies } = this.deps;
-    if (device.disposed) return null;
+    const { renderer, device, sceneMgr, camera, proxies } = this.deps;
     // Loaded lazily: the path tracer and its kernels are only needed once a frame asks for them.
     const { PathTracer } = await import('@/render/trace/pathTracer');
-    const tracer = new PathTracer(device.renderer, proxies, config);
-    const probeTarget = this.probeTarget(device);
+    if (this.disposed) return null;
+    const tracer = new PathTracer(renderer, proxies, config);
+    if (this.disposed) {
+      tracer.dispose();
+      return null;
+    }
+    const probeTarget = this.probeTarget(renderer);
     let capability: RayTracingCapability | null;
     try {
       capability = this.capability ?? await probeRayTracing(
-        device, tracer, sceneMgr, camera.camera, probeTarget,
+        renderer, device, tracer, sceneMgr, camera.camera, probeTarget,
       );
     } finally {
       probeTarget.dispose();
@@ -115,7 +133,7 @@ export class PathTraceBackend implements TraceBackend {
         throw new RayTracingUnsupportedError(capability);
       }
     }
-    if (device.disposed) {
+    if (this.disposed) {
       tracer.dispose();
       return null;
     }
@@ -123,9 +141,9 @@ export class PathTraceBackend implements TraceBackend {
   }
 
   /** Small target the probe renders into, so it never has to touch the canvas. */
-  private probeTarget(device: ViewportDevice): THREE.RenderTarget {
+  private probeTarget(renderer: THREE.WebGPURenderer): THREE.RenderTarget {
     const size = new THREE.Vector2();
-    device.renderer.getSize(size);
+    renderer.getSize(size);
     return new THREE.RenderTarget(
       Math.max(1, Math.floor(size.x)),
       Math.max(1, Math.floor(size.y)),

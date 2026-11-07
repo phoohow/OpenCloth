@@ -1,7 +1,12 @@
 import * as THREE from 'three/webgpu';
 import type { LightConfig, SceneLight } from '@/model/types';
 import { iblStrength, normalizeLights } from '@/model';
-import type { SceneMgr } from '@/render/scene/manager';
+
+/** What the lighting needs from the scene it belongs to. */
+export interface LightingScene {
+  readonly scene: THREE.Scene;
+  setEnvironmentIntensity(value: number): void;
+}
 
 /** Inverse-square falloff for the punctual lights that have one. */
 const PUNCTUAL_DECAY = 2;
@@ -22,16 +27,19 @@ export class SceneLights {
   private areaLoading: Promise<void> | null = null;
   /** Settings the scene lights were last built from, kept for the deferred area-light support. */
   private lightConfig?: LightConfig;
+  /** Whether dispose() ran; the deferred area-light load must not touch the scene afterwards. */
+  private disposed = false;
 
   constructor(
-    private readonly sceneMgr: SceneMgr,
+    private readonly host: LightingScene,
     /** Tells the path tracer that lights or the environment changed. */
     private readonly invalidate: () => void,
   ) { }
 
   /** Rebuilds the scene lights so they match these settings. */
   applyConfig(cfg: LightConfig): void {
-    const scene = this.sceneMgr.scene;
+    if (this.disposed) return;
+    const scene = this.host.scene;
     this.lightConfig = cfg;
     const group = ensureLightGroup(scene);
     clearGroup(group);
@@ -41,7 +49,7 @@ export class SceneLights {
     ambient.name = '环境补光';
     group.add(ambient);
 
-    this.sceneMgr.setEnvironmentIntensity(iblStrength(cfg));
+    this.host.setEnvironmentIntensity(iblStrength(cfg));
 
     const lights = normalizeLights(cfg);
     for (const light of lights) {
@@ -58,6 +66,13 @@ export class SceneLights {
     }
 
     this.invalidate();
+  }
+
+  /** Removes and frees every light the scene was built with. */
+  dispose(): void {
+    this.disposed = true;
+    const group = this.host.scene.getObjectByName(LIGHT_GROUP_NAME);
+    if (group instanceof THREE.Group) clearGroup(group);
   }
 
   /** The three.js light matching one project light; null while area lights are unsupported. */
@@ -102,6 +117,7 @@ export class SceneLights {
   private async installAreaLightSupport(): Promise<void> {
     try {
       const { RectAreaLightTexturesLib } = await import('three/examples/jsm/lights/RectAreaLightTexturesLib.js');
+      if (this.disposed) return;
       (THREE as unknown as { RectAreaLightNode: { setLTC(lib: unknown): void } })
         .RectAreaLightNode.setLTC(RectAreaLightTexturesLib.init());
       this.areaLightSupported = true;

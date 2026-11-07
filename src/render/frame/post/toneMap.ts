@@ -16,7 +16,7 @@ import type { PostEffectId } from '@/render/modes/spec';
  * resolves its function through the renderer's node library and falls back to the raw colour when
  * the lookup misses, which shows up as "the tone mapping setting does nothing".
  *
- * The stage sits first in the post chain because it is what turns linear values into display
+ * The pass sits first in the post chain because it is what turns linear values into display
  * values, and everything after it — overlays, gizmos — authors colours that are already display
  * referred and must not be mapped again.
  */
@@ -33,14 +33,14 @@ export class ToneMapEffect implements PostEffect {
 
   run(ctx: FrameContext, source: THREE.Texture, target: THREE.RenderTarget): void {
     const curve = ctx.spec.toneMapping;
-    const exposure = ctx.device.renderer.toneMappingExposure;
+    const exposure = ctx.renderer.toneMappingExposure;
     if (!this.material
       || curve !== this.builtCurve
       || source !== this.builtSource
       || exposure !== this.builtExposure) {
       this.rebuild(source, curve, exposure);
     }
-    drawFullScreen(ctx.device.renderer, this.material!, target);
+    drawFullScreen(ctx.renderer, this.material!, target);
   }
 
   dispose(): void {

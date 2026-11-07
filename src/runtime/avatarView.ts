@@ -6,14 +6,14 @@ import { AvatarMotion, type AvatarMotionInfo } from '@/runtime/avatarMotion';
 import { SoftBodyDeformer } from '@/runtime/softBody';
 import { DynamicFitSampler } from '@/runtime/dynamicFitSampler';
 import type { DynamicPressureFrame } from '@/analysis';
-import type { StageSlot } from '@/render';
+import type { SceneSlot } from '@/render';
 
 /** Frames between two soft-body collision updates. */
 const SOFT_UPDATE_INTERVAL = 8;
 
 /** What the avatar view reads from the rest of the engine. */
 export interface AvatarViewDeps {
-  slot: StageSlot;
+  slot: SceneSlot;
   /** Latest pressure samples, kept while a heatmap is on. */
   contact: () => Float32Array | null;
   /** Merged input the dynamic sampler reads per-particle pressure from. */

@@ -314,9 +314,8 @@ describe('diffProject other subsystem fields', () => {
     });
   });
 
-  it('keeps the signature when render mode, tone mapping or ray tracing settings change', () => {
+  it('keeps the signature when tone mapping or ray tracing settings change', () => {
     expectNoRebuild(project => {
-      project.scene.render.backend = 'pathtrace';
       project.scene.render.toneMapping = 'none';
       project.scene.render.rayTracing!.maxSamples = 64;
       project.scene.render.rayTracing!.denoise = false;

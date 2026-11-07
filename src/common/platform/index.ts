@@ -1,3 +1,7 @@
+export {
+  imageAt, retainImage, whenImagesReady, type ImageLease,
+} from '@/common/platform/imageCache';
+
 /** Hands a blob to the browser as a downloaded file. */
 export function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);

@@ -2,7 +2,7 @@ import * as THREE from 'three/webgpu';
 import type { Project, TrimKind, Vec2 } from '@/model/types';
 import type { ClothSimInput } from '@/sim';
 import type { TriangleMesh } from '@/pattern/triangulate';
-import type { StageSlot } from '@/render';
+import type { SceneSlot } from '@/render';
 
 /** One 3D trim placed on the cloth. */
 export interface TrimInstance {
@@ -82,7 +82,7 @@ export class TrimInstances {
 
   /** Builds one instanced mesh per trim kind and adds the group to the scene. */
   attach(
-    scene: StageSlot,
+    scene: SceneSlot,
     instances: TrimInstance[],
     positions: Float32Array,
     normals?: Float32Array,
@@ -142,7 +142,7 @@ export class TrimInstances {
   }
 
   /** Removes the group from the scene and frees its geometries and material. */
-  detach(scene: StageSlot): void {
+  detach(scene: SceneSlot): void {
     if (!this.group) return;
     scene.remove(this.group);
     let material: THREE.Material | null = null;

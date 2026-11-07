@@ -1,18 +1,17 @@
-/** One stage of the frame, and the state the stages hand to each other. */
+/** One pass of the frame, and the state the passes hand to each other. */
 
 import type * as THREE from 'three/webgpu';
-import type { RenderModeSpec } from '@/render/modes/spec';
-import type { ModeRegistry } from '@/render/modes/registry';
+import type { ViewModeSpec } from '@/render/modes/spec';
+import type { ViewMode } from '@/render/modes/viewMode';
 import type { SceneMgr } from '@/render/scene/manager';
 import type { SceneCamera } from '@/render/scene/camera';
-import type { ViewportDevice } from '@/render/device/viewport';
 import type { TraceDefer } from '@/render/trace/gate';
-import type { FrameSize, FrameTargets } from '@/render/frame/targets';
+import type { FrameTargets } from '@/render/frame/targets';
 
-/** Stages of a frame, in the order they run. */
+/** Passes of a frame, in the order they run. */
 export type PassId = 'scene' | 'trace' | 'denoise' | 'composite' | 'post' | 'overlay' | 'present';
 
-/** What the trace stage leaves for the stages after it. Rewritten every frame, never accumulated. */
+/** What the trace pass leaves for the passes after it. Rewritten every frame, never accumulated. */
 export interface TraceOutput {
   /** Whether traced samples were drawn this frame. */
   traced: boolean;
@@ -22,7 +21,7 @@ export interface TraceOutput {
   samples: number;
   /** How far the traced image has faded in over the raster base, 0 when it is absent. */
   weight: number;
-  /** Traced radiance, or null when the stage did not run. */
+  /** Traced radiance, or null when the pass did not run. */
   radiance: THREE.Texture | null;
   /** Whether the sample pass started over this frame; anything built on it must be dropped. */
   restarted: boolean;
@@ -30,33 +29,33 @@ export interface TraceOutput {
   accumulating: boolean;
 }
 
-/** Everything a stage reads, plus the fields earlier stages fill for the later ones. */
+/** Everything a pass reads, plus the fields earlier passes fill for the later ones. */
 export interface FrameContext {
-  readonly device: ViewportDevice;
+  /** The three.js renderer the Renderer owns; passes issue their own draw commands on it. */
+  readonly renderer: THREE.WebGPURenderer;
   /** The scene manager, not the three.js scene; that one is `sceneMgr.scene`. */
   readonly sceneMgr: SceneMgr;
   readonly camera: SceneCamera;
-  readonly modes: ModeRegistry;
+  readonly viewMode: ViewMode;
   readonly targets: FrameTargets;
-  readonly size: FrameSize;
-  /** What the current mode resolved to. */
-  readonly spec: RenderModeSpec;
-  /** Written by the trace stage, narrowed by denoising, consumed by the compositor. */
+  /** What the current view mode resolved to. */
+  readonly spec: ViewModeSpec;
+  /** Written by the trace pass, narrowed by denoising, consumed by the compositor. */
   readonly trace: TraceOutput;
   /**
-   * Image the compositor resolved this frame; the post chain reads it. Null before it runs. On a
+   * Image the compositor produced this frame; the post chain reads it. Null before it runs. On a
    * frame that did not trace this is a copy of the raster image.
    */
-  resolved: THREE.Texture | null;
+  composite: THREE.Texture | null;
 }
 
 /**
- * A stage of the frame. Stages never call each other: the FrameMgr runs them in a fixed order, and
+ * A pass of the frame. Passes never call each other: the FrameMgr runs them in a fixed order, and
  * each one reads and writes only the context it is given.
  */
 export interface FramePass {
   readonly id: PassId;
-  /** Whether this stage takes part in the current frame. */
+  /** Whether this pass takes part in the current frame. */
   enabled(ctx: FrameContext): boolean;
   run(ctx: FrameContext): void;
   dispose?(): void;
@@ -70,7 +69,7 @@ export function idleTrace(): TraceOutput {
   };
 }
 
-/** Puts the trace output back to idle before a stage may fill it. */
+/** Puts the trace output back to idle before a pass may fill it. */
 export function resetTrace(output: TraceOutput): void {
   output.traced = false;
   output.defer = null;

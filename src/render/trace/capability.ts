@@ -1,8 +1,6 @@
 /** One-time probe telling whether this device can path trace at all. */
 
 import * as THREE from 'three/webgpu';
-import type { ViewportDevice } from '@/render/device/viewport';
-import { rendererDevice } from '@/render/device/viewport';
 import type { SceneMgr } from '@/render/scene/manager';
 import type { PathTracer } from '@/render/trace/pathTracer';
 
@@ -53,36 +51,30 @@ const PROBE_DETAIL_LIMIT = 180;
  * kernel then fails to parse — a healthy GPU must not be condemned for that.
  */
 export async function probeRayTracing(
-  device: ViewportDevice,
+  renderer: THREE.WebGPURenderer,
+  device: GPUDevice,
   tracer: PathTracer,
   sceneMgr: SceneMgr,
   camera: THREE.PerspectiveCamera | THREE.OrthographicCamera,
   target: THREE.RenderTarget,
 ): Promise<RayTracingCapability | null> {
   const viewSize = new THREE.Vector2();
-  device.renderer.getSize(viewSize);
+  renderer.getSize(viewSize);
   if (viewSize.x < VERIFY_MIN_SIZE || viewSize.y < VERIFY_MIN_SIZE) return null;
-
-  let gpu: GPUDevice;
-  try {
-    gpu = rendererDevice(device);
-  } catch (error) {
-    return { ok: false, failure: 'setup-failed', detail: probeDetail(errorText(error)) };
-  }
 
   const errors: string[] = [];
   let lost = '';
   const onError = (event: Event) => {
     errors.push((event as { error?: { message?: string } }).error?.message ?? 'uncaptured GPU error');
   };
-  gpu.addEventListener('uncapturederror', onError);
-  void gpu.lost.then(info => { lost = String(info.reason); });
+  device.addEventListener('uncapturederror', onError);
+  void device.lost.then(info => { lost = String(info.reason); });
   try {
     // The first call only records the scene change; the kernels go out on the ones after it.
     for (let frame = 0; frame < VERIFY_FRAMES; frame++) tracer.render(sceneMgr, camera, target);
 
     // Browsers without the drain call skip that check rather than failing the device.
-    const queue = gpu.queue as { onSubmittedWorkDone?: () => Promise<undefined> };
+    const queue = device.queue as { onSubmittedWorkDone?: () => Promise<undefined> };
     if (queue.onSubmittedWorkDone) {
       const settled = await Promise.race([
         queue.onSubmittedWorkDone().then(() => 'done' as const),
@@ -109,7 +101,7 @@ export async function probeRayTracing(
   } catch (error) {
     return { ok: false, failure: 'setup-failed', detail: probeDetail(errorText(error)) };
   } finally {
-    gpu.removeEventListener('uncapturederror', onError);
+    device.removeEventListener('uncapturederror', onError);
   }
 }
 

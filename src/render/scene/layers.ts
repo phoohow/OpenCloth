@@ -19,7 +19,7 @@ export interface LayerPolicy {
  * One policy per layer; the only place that decides what a layer takes part in.
  *
  * `trace` doubles as the split point of the frame: layers the tracer sees are drawn as the lit
- * image, the rest are drawn on top of the resolved image. See {@link SCENE_LAYERS}.
+ * image, the rest are drawn on top of the display image. See {@link SCENE_LAYERS}.
  */
 export const LAYERS: Record<LayerId, LayerPolicy> = {
   underlay: { raster: true, trace: true, exportable: false, pickable: false },
@@ -34,7 +34,7 @@ export const LAYER_ORDER: readonly LayerId[] = ['underlay', 'subject', 'overlay'
 /** Layers the raster scene pass draws as the lit image. */
 export const SCENE_LAYERS: readonly LayerId[] = LAYER_ORDER.filter(id => LAYERS[id].raster && LAYERS[id].trace);
 
-/** Layers drawn on top of the resolved image. */
+/** Layers drawn on top of the display image. */
 export const TOP_LAYERS: readonly LayerId[] = LAYER_ORDER.filter(id => LAYERS[id].raster && !LAYERS[id].trace);
 
 /** Every layer of one kind, in draw order. */

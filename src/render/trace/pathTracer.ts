@@ -77,7 +77,6 @@ export class PathTracer {
   private readonly indexAttributes = new WeakMap<THREE.BufferGeometry, THREE.BufferAttribute | null>();
   private readonly groupSignatures = new WeakMap<THREE.BufferGeometry, string>();
   private readonly tracerSize = new THREE.Vector2();
-  private readonly drawingSize = new THREE.Vector2();
   private topologyVersion = CAMERA_SWAP_KEY;
   private deformVersion = -1;
   /** Group version seen on the last capture; a change rebuilds the BVH roots of that geometry. */
@@ -339,7 +338,6 @@ export class PathTracer {
    * slot, so a sample round covers the whole image instead of lighting it in bands.
    */
   private syncRenderSize(target: THREE.RenderTarget): void {
-    this.renderer.getSize(this.drawingSize);
     const width = Math.max(1, target.width);
     const height = Math.max(1, target.height);
     if (this.tracerSize.x !== width || this.tracerSize.y !== height) {

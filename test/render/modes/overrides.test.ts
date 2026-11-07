@@ -1,7 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { disposeFillOverrides, fillOverride } from '@/render/modes/overrides';
-import { WireLayer } from '@/render/modes/wire';
+import { WireOverlay } from '@/render/modes/wire';
 import { SceneMgr } from '@/render/scene/manager';
 
 beforeEach(() => {
@@ -54,7 +54,7 @@ describe('fillOverride', () => {
   });
 });
 
-describe('WireLayer', () => {
+describe('WireOverlay', () => {
   /** Scene with one registered pattern surface beside the body, a reference and the heatmap. */
   function scene(surface: THREE.Mesh = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshPhysicalMaterial())) {
     const sceneMgr = new SceneMgr();
@@ -62,7 +62,7 @@ describe('WireLayer', () => {
     const reference = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshPhysicalMaterial());
     const heat = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial());
     sceneMgr.slot('cloth').add(surface);
-    sceneMgr.setSurface(surface, true);
+    sceneMgr.setPatternSurface(surface, true);
     sceneMgr.slot('avatar').add(body);
     sceneMgr.slot('references').add(reference);
     sceneMgr.slot('cloth').add(heat);
@@ -74,7 +74,7 @@ describe('WireLayer', () => {
   it('mirrors the material shape of the mesh it copies', () => {
     const { sceneMgr } = scene();
 
-    const wire = new WireLayer(sceneMgr);
+    const wire = new WireOverlay(sceneMgr);
     wire.setMode('over', options);
 
     const wireMesh = sceneMgr.slot('edges').objects[0] as THREE.Mesh;
@@ -88,7 +88,7 @@ describe('WireLayer', () => {
     const surface = new THREE.Mesh(geometry, [new THREE.MeshPhysicalMaterial(), new THREE.MeshPhysicalMaterial()]);
     const { sceneMgr } = scene(surface);
 
-    const wire = new WireLayer(sceneMgr);
+    const wire = new WireOverlay(sceneMgr);
     wire.setMode('over', options);
 
     const wireMesh = sceneMgr.slot('edges').objects[0] as THREE.Mesh;
@@ -99,7 +99,7 @@ describe('WireLayer', () => {
   it('leaves the body, reference models and overlays out of every wire mode', () => {
     for (const mode of ['over', 'only'] as const) {
       const { sceneMgr, surface, body, reference, heat } = scene();
-      const wire = new WireLayer(sceneMgr);
+      const wire = new WireOverlay(sceneMgr);
       wire.setMode(mode, options);
 
       const edges = sceneMgr.slot('edges').objects as THREE.Mesh[];
@@ -116,22 +116,22 @@ describe('WireLayer', () => {
     const sceneMgr = new SceneMgr();
     const surface = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshPhysicalMaterial());
     sceneMgr.slot('cloth').add(surface);
-    const wire = new WireLayer(sceneMgr);
+    const wire = new WireOverlay(sceneMgr);
     wire.setMode('over', options);
     expect(sceneMgr.slot('edges').objects).toHaveLength(0);
 
-    sceneMgr.setSurface(surface, true);
+    sceneMgr.setPatternSurface(surface, true);
     wire.sync();
     expect(sceneMgr.slot('edges').objects).toHaveLength(1);
 
-    sceneMgr.setSurface(surface, false);
+    sceneMgr.setPatternSurface(surface, false);
     wire.sync();
     expect(sceneMgr.slot('edges').objects).toHaveLength(0);
   });
 
   it('mirrors the garment visibility without touching the body', () => {
     const { sceneMgr, surface, body } = scene();
-    const wire = new WireLayer(sceneMgr);
+    const wire = new WireOverlay(sceneMgr);
     wire.setMode('over', options);
     const wireMesh = sceneMgr.slot('edges').objects[0] as THREE.Mesh;
 

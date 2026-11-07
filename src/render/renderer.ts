@@ -1,23 +1,23 @@
-/** The renderer one viewport owns: the GPU context, the scene and the frame manager. */
+/** The renderer one viewport owns: the private GPU context, the scene and the frame manager. */
 
+import * as THREE from 'three/webgpu';
 import type {
-  CameraProjection, LightConfig, RayTracingConfig, RenderConfig, ToneMappingMode,
+  CameraProjection, LightConfig, RayTracingConfig, ToneMappingMode, ViewConfig,
 } from '@/model/types';
 import { createDefaultRayTracing } from '@/model';
 import type { GpuDeviceProvider } from '@/common/ports';
-import { ViewportDevice, rendererDevice } from '@/render/device/viewport';
+import { RenderContext } from '@/render/context';
 import { SceneMgr } from '@/render/scene/manager';
-import { SceneCamera, type ViewportCamera } from '@/render/scene/camera';
-import { SceneLights } from '@/render/scene/lights';
+import type { SceneCamera, ViewportCamera } from '@/render/scene/camera';
 import { FALLBACK_BACKGROUND } from '@/render/scene/environment';
 import { buildStageFloor } from '@/render/scene/floor';
 import { TraceProxies } from '@/render/trace/proxies';
-import { ModeRegistry } from '@/render/modes/registry';
+import { ViewMode } from '@/render/modes/viewMode';
 import { FrameMgr, type FrameStats } from '@/render/frame/manager';
 import { PathTraceBackend } from '@/render/trace/backend';
 import type { TraceDefer } from '@/render/trace/gate';
 
-/** Stage of the ray tracing pipeline the view is in. */
+/** State of the ray tracing pipeline the view is in. */
 export type RayTraceState =
   | 'inactive'
   | 'building'
@@ -30,8 +30,8 @@ export type RayTraceState =
 /** What a viewport needs to create a renderer. */
 export interface RendererOptions {
   readonly canvas: HTMLCanvasElement;
-  /** Render settings the project starts with. */
-  readonly config: RenderConfig;
+  /** View settings the viewport starts with. */
+  readonly config: ViewConfig;
   /** Called once when OIDN weights cannot be loaded; denoising stays off afterwards. */
   readonly onDenoiseFailure?: (message: string) => void;
 }
@@ -42,78 +42,99 @@ export interface RendererOptions {
  * the scene through named slots, and a frame is one `render()` call.
  */
 export class Renderer {
+  private readonly frame: FrameMgr;
+  /** Watcher that keeps the drawing buffer in sync with the viewport's layout size. */
+  private resizeObserverValue?: ResizeObserver;
+  private disposedValue = false;
+
   private constructor(
-    private readonly device: ViewportDevice,
-    /** Scene data: four layers, named slots, the camera, lights and the environment. */
+    /** The three.js renderer this viewport manages. */
+    private readonly renderer: THREE.WebGPURenderer,
+    /** Canvas and GPU device the renderer created; only this class hands them out. */
+    private readonly ctx: RenderContext,
+    /** Scene data, camera and lights; the scene manager owns all of them. */
     readonly scene: SceneMgr,
-    /** The two cameras and the orbit gestures of this viewport. */
-    readonly camera: SceneCamera,
-    private readonly lights: SceneLights,
-    private readonly modes: ModeRegistry,
+    private readonly viewMode: ViewMode,
     private readonly traceBackend: PathTraceBackend,
     private readonly traceProxies: TraceProxies,
-    private readonly frame: FrameMgr,
-    private renderConfig: RenderConfig,
-  ) { }
+    private viewConfig: ViewConfig,
+    onDenoiseFailure?: (message: string) => void,
+  ) {
+    this.frame = new FrameMgr({
+      renderer,
+      sceneMgr: scene,
+      camera: scene.camera,
+      viewMode,
+      trace: traceBackend,
+      onDenoiserFailure: onDenoiseFailure,
+    });
+    this.frame.setDenoiseModel(viewConfig.rayTracing?.denoiseModel ?? 'base');
+  }
 
-  /** Initializes WebGPU and builds the scene, the modes and the frame manager. */
+  /** Initializes WebGPU and builds the scene, the view mode and the frame manager. */
   static async create(options: RendererOptions): Promise<Renderer> {
-    const device = await ViewportDevice.create(options.canvas);
-    const scene = new SceneMgr();
+    const renderer = await createThreeRenderer(options.canvas);
+    const device = (renderer.backend as unknown as { device?: GPUDevice }).device;
+    if (!device) {
+      renderer.dispose();
+      throw new Error('WebGPU renderer device unavailable after init');
+    }
+    const ctx = new RenderContext(options.canvas, device);
+
+    const scene = new SceneMgr(ctx);
     const proxies = new TraceProxies();
     buildStageFloor(scene, proxies);
     scene.setBackground(FALLBACK_BACKGROUND);
 
-    const camera = new SceneCamera(device);
-    const modes = new ModeRegistry(scene, options.config);
-    const traceBackend = new PathTraceBackend({ device, sceneMgr: scene, camera, proxies });
-    const frame = new FrameMgr({
-      device,
-      sceneMgr: scene,
-      camera,
-      modes,
-      trace: traceBackend,
-      onDenoiserFailure: options.onDenoiseFailure,
+    const viewMode = new ViewMode(scene, options.config);
+    const traceBackend = new PathTraceBackend({
+      renderer, device, sceneMgr: scene, camera: scene.camera, proxies,
     });
-    const lights = new SceneLights(scene, () => traceBackend.invalidate());
+    scene.setLightInvalidator(() => traceBackend.invalidate());
     return new Renderer(
-      device, scene, camera, lights, modes, traceBackend, proxies, frame, options.config,
+      renderer, ctx, scene, viewMode, traceBackend, proxies, options.config,
+      options.onDenoiseFailure,
     );
   }
 
   /** Canvas the frame is presented on. */
   get canvas(): HTMLCanvasElement {
-    return this.device.canvas;
+    return this.ctx.canvas;
   }
 
   /** Watcher that keeps the drawing buffer in sync with the viewport's layout size. */
   set resizeObserver(observer: ResizeObserver | undefined) {
-    this.device.resizeObserver = observer;
+    this.resizeObserverValue = observer;
   }
 
-  /** Whether the renderer and its GPU context were released. */
+  /** Whether the renderer and its GPU resources were released. */
   get disposed(): boolean {
-    return this.device.disposed;
+    return this.disposedValue;
   }
 
-  /** Render settings the next frame resolves into a spec. */
-  get config(): RenderConfig {
-    return this.renderConfig;
+  /** View settings the next frame resolves into a spec. */
+  get config(): ViewConfig {
+    return this.viewConfig;
+  }
+
+  /** The camera the scene manager owns; runtime code drives it through the Renderer. */
+  get camera(): SceneCamera {
+    return this.scene.camera;
   }
 
   /** Aspect of the drawing surface, guarded against a hidden pane. */
   aspect(): number {
-    return this.device.aspect();
+    return this.ctx.aspect();
   }
 
   /** The GPUDevice the renderer was initialized with; simulation resources share it. */
   gpuDevice(): GPUDevice {
-    return rendererDevice(this.device);
+    return this.ctx.device;
   }
 
   /** Same device behind the port the simulation declares, so it never reaches into three.js. */
   gpuProvider(): GpuDeviceProvider {
-    return { device: () => rendererDevice(this.device) };
+    return { device: () => this.ctx.device };
   }
 
   /** Draws one frame and reports what it did. */
@@ -125,35 +146,38 @@ export class Renderer {
   resize(width: number, height: number): void {
     // Hidden viewports report zero size; keep the last valid drawing buffer.
     if (width <= 0 || height <= 0) return;
-    this.device.resize(width, height);
-    this.camera.resize(width / height);
+    this.renderer.setSize(width, height, false);
+    this.scene.resizeCamera(width / height);
   }
 
   /** Swaps the viewport between perspective and orthographic cameras. */
   setCameraProjection(projection: CameraProjection): void {
-    this.camera.setProjection(projection);
+    this.scene.setCameraProjection(projection);
   }
 
   /** The camera the viewport renders, picks and frames with. */
   activeCamera(): ViewportCamera {
-    return this.camera.camera;
+    return this.scene.activeCamera();
   }
 
   /**
-   * Applies the project's render settings, touching only the parts that changed.
+   * Applies the viewport's view settings, touching only the parts that changed.
    *
    * The view settings (fill, wire, backend, tone mapping) rebuild the mode spec, the denoise model
-   * is handed to the denoise stage, and the tracer is built on the first ray-traced frame. A setting
+   * is handed to the denoise pass, and the tracer is built on the first ray-traced frame. A setting
    * the user did not touch keeps the samples the tracer already accumulated: only a real change in
    * the ray tracing settings restarts the pass.
    */
-  async applyRenderConfig(config: RenderConfig): Promise<void> {
-    const previous = this.renderConfig;
-    this.renderConfig = config;
+  async applyRenderConfig(config: ViewConfig): Promise<void> {
+    const previous = this.viewConfig;
+    this.viewConfig = config;
 
-    if (viewChanged(previous, config)) this.modes.applyConfig(config);
+    if (viewChanged(previous, config)) this.viewMode.applyConfig(config);
     const traceChanged = rayTracingChanged(previous.rayTracing, config.rayTracing);
     if (traceChanged && config.rayTracing) this.frame.setDenoiseModel(config.rayTracing.denoiseModel);
+    if (previous.rayTracing?.denoise !== true && config.rayTracing?.denoise === true) {
+      this.frame.retryDenoise();
+    }
 
     if (config.backend === 'pathtrace' && config.wire !== 'only') {
       const wasReady = this.traceBackend.ready;
@@ -167,19 +191,19 @@ export class Renderer {
 
   /** Rebuilds the scene's lights from the project's lighting settings. */
   applyLights(lights: LightConfig): void {
-    this.lights.applyConfig(lights);
+    this.scene.applyLights(lights);
   }
 
   /** Chooses the curve the post chain resolves the linear image with. */
   setToneMapping(mode: ToneMappingMode): void {
-    if (this.renderConfig.toneMapping === mode) return;
-    this.renderConfig = { ...this.renderConfig, toneMapping: mode };
-    this.modes.applyConfig(this.renderConfig);
+    if (this.viewConfig.toneMapping === mode) return;
+    this.viewConfig = { ...this.viewConfig, toneMapping: mode };
+    this.viewMode.applyConfig(this.viewConfig);
   }
 
   /** Which gate the last drawn frame is behind. */
   traceState(): RayTraceState {
-    if (this.renderConfig.backend !== 'pathtrace' || this.renderConfig.wire === 'only') return 'inactive';
+    if (this.viewConfig.backend !== 'pathtrace' || this.viewConfig.wire === 'only') return 'inactive';
     if (this.traceBackend.capability && !this.traceBackend.capability.ok) return 'unsupported';
     if (!this.traceBackend.ready) return 'building';
     const stats = this.frame.lastFrame;
@@ -209,19 +233,37 @@ export class Renderer {
 
   /** Frees both rendering paths, including a ray tracer still being loaded. */
   dispose(): void {
-    if (this.device.disposed) return;
+    if (this.disposedValue) return;
+    this.disposedValue = true;
     this.traceBackend.dispose();
     this.traceProxies.clear();
     this.frame.dispose();
-    this.modes.dispose();
-    this.camera.dispose();
+    this.viewMode.dispose();
     this.scene.dispose();
-    this.device.dispose();
+    this.resizeObserverValue?.disconnect();
+    this.renderer.dispose();
   }
 }
 
+/** Creates and configures the three.js renderer this viewport owns. */
+async function createThreeRenderer(canvas: HTMLCanvasElement): Promise<THREE.WebGPURenderer> {
+  // Keep a nonzero drawing buffer while the viewport is hidden by the layout.
+  const width = Math.max(1, canvas.clientWidth);
+  const height = Math.max(1, canvas.clientHeight);
+  const renderer = new THREE.WebGPURenderer({ canvas, antialias: true, alpha: false });
+  await renderer.init();
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(width, height, false);
+  // Tone mapping belongs to the post chain, which decides the curve per project; leaving a curve
+  // here would apply a second one to anything three draws straight to the canvas.
+  renderer.toneMapping = THREE.NoToneMapping;
+  renderer.toneMappingExposure = 1.0;
+  renderer.shadowMap.enabled = false;
+  return renderer;
+}
+
 /** Whether the settings that reshape the look of a frame changed. */
-function viewChanged(a: RenderConfig, b: RenderConfig): boolean {
+function viewChanged(a: ViewConfig, b: ViewConfig): boolean {
   return a.fill !== b.fill || a.wire !== b.wire || a.backend !== b.backend
     || a.toneMapping !== b.toneMapping
     || a.wireOptions.color !== b.wireOptions.color

@@ -16,7 +16,7 @@ interface WireEntry {
  * and differ in material, so a deforming cloth costs no per-frame rebuild; the body, reference
  * models and analysis overlays keep their own shading in every wire mode.
  */
-export class WireLayer {
+export class WireOverlay {
   private entries: WireEntry[] = [];
   private mode: WireMode = 'off';
   private options: WireOptions = { color: 0x66ccff, depth: 'tested' };
@@ -40,7 +40,7 @@ export class WireLayer {
   sync(): void {
     if (this.mode === 'off') return;
     const topology = this.sceneMgr.revisions.topology;
-    const sources = this.sceneMgr.surfaceMeshes();
+    const sources = this.sceneMgr.patternSurfaceMeshes();
     if (topology === this.builtTopology && this.mode === this.builtMode
       && sameSources(sources, this.entries)) {
       this.mirrorVisibility();

@@ -1,4 +1,4 @@
-/** Stage 1: underlay and subject, drawn into the frame image with depth. */
+/** Pass 1: underlay and subject, drawn into the frame color buffer with depth. */
 
 import { LAYERS, TOP_LAYERS, type LayerId } from '@/render/scene/layers';
 import type { FrameContext, FramePass, PassId } from '@/render/frame/pass';
@@ -15,14 +15,14 @@ export class ScenePass implements FramePass {
   }
 
   run(ctx: FrameContext): void {
-    const { device, sceneMgr, camera, modes, targets, spec } = ctx;
+    const { renderer, sceneMgr, camera, viewMode, targets, spec } = ctx;
     for (const id of Object.keys(LAYERS) as LayerId[]) {
       sceneMgr.setLayerVisible(id, LAYERS[id].raster && spec.layers.includes(id) && !TOP_LAYERS.includes(id));
     }
-    const restore = modes.applySurfaceOverride();
+    const restore = viewMode.applyFillOverride();
     try {
-      device.renderer.setRenderTarget(targets.image);
-      device.renderer.render(sceneMgr.scene, camera.camera);
+      renderer.setRenderTarget(targets.color);
+      renderer.render(sceneMgr.scene, camera.camera);
     } finally {
       restore();
     }

@@ -3,7 +3,7 @@ import { panelGrainLine, samplePanelOutline, sampleEdge } from '@/pattern/panel'
 import { measurementValue, pointAtT } from '@/pattern/geom';
 import { elementNodeId } from '@/model';
 import { panelFrame, printCenter, printFrame, topstitchRows, trimRadiusCm } from '@/ui/viewport2D/tools';
-import { imageAt } from '@/render';
+import { imageAt } from '@/common/platform';
 import { NEAR, type SceneState } from '@/ui/viewport2D/renderTypes';
 
 /** One internal line in its usage colour, or highlighted with vertex markers when selected. */

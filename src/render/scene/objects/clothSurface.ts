@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
-import { FitOverlay } from '@/render/scene/objects/fitOverlay';
-import type { StageSlot } from '@/render/scene/manager';
+import { HeatmapOverlay } from '@/render/scene/objects/heatmapOverlay';
+import type { SceneSlot } from '@/render/scene/manager';
 
 /** Index range and material slot of one cloth geometry group. */
 export interface SurfaceGroup {
@@ -17,14 +17,14 @@ export interface SurfaceGroup {
 export class ClothSurface {
   readonly geometry: THREE.BufferGeometry;
   readonly fabric: THREE.Mesh;
-  readonly overlay: FitOverlay;
+  readonly overlay: HeatmapOverlay;
   private positionAttr: THREE.BufferAttribute;
   private normalAttr: THREE.BufferAttribute;
   /** One material per geometry group slot, so each pattern piece can wear its own fabric. */
   private materials: THREE.Material[] = [];
 
   constructor(
-    private readonly slot: StageSlot,
+    private readonly slot: SceneSlot,
     // Flat xyz triples.
     initialPositions: Float32Array,
     indices: Uint32Array,
@@ -53,12 +53,12 @@ export class ClothSurface {
     this.fabric.receiveShadow = true;
     this.fabric.name = 'cloth';
 
-    this.overlay = new FitOverlay(this.geometry);
+    this.overlay = new HeatmapOverlay(this.geometry);
     this.overlay.setSlotCount(this.materials.length);
     this.slot.add(this.fabric);
     this.slot.add(this.overlay.mesh);
     // The fabric is the pattern surface: diagnostics restyle it, and never the heatmap overlay.
-    this.slot.markSurface(this.fabric, true);
+    this.slot.markPatternSurface(this.fabric, true);
     // The heatmap is a display-space colour overlay: the tracer has no use for it.
     this.slot.setTraceMask(this.overlay.mesh, 0);
   }
@@ -91,7 +91,7 @@ export class ClothSurface {
     this.fabric.material = this.materials;
     // The heatmap repeats its material so hidden panel groups stay hidden in both layers.
     this.overlay.setSlotCount(materials.length);
-    this.slot.markChanged('material');
+    this.slot.markRevision('material');
   }
 
   /** Materials currently bound to the fabric layer. */
@@ -109,12 +109,12 @@ export class ClothSurface {
           || previous.count !== group.count || previous.materialIndex !== group.materialIndex;
       });
     this.geometry.groups = groups;
-    if (changed) this.slot.markChanged('groups');
+    if (changed) this.slot.markRevision('groups');
   }
 
   /** Removes both layers from the slot and frees the geometry and their materials. */
   dispose(): void {
-    this.slot.markSurface(this.fabric, false);
+    this.slot.markPatternSurface(this.fabric, false);
     this.slot.remove(this.fabric);
     this.slot.remove(this.overlay.mesh);
     this.overlay.dispose();

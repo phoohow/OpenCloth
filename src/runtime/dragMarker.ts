@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu';
-import type { StageSlot } from '@/render';
+import type { SceneSlot } from '@/render';
 
 /** Ring radius in meters. It marks the grabbed point, not the whole grab area, so it stays small. */
 const RING_INNER_M = 0.0085;
@@ -32,7 +32,7 @@ export class DragMarker {
   }
 
   /** Starts following `particleIndex`, placing the ring at its current position. */
-  show(particleIndex: number, positions: Float32Array | null, scene: StageSlot, camera: THREE.Camera): void {
+  show(particleIndex: number, positions: Float32Array | null, scene: SceneSlot, camera: THREE.Camera): void {
     this.index = particleIndex;
     if (!this.group) {
       const group = new THREE.Group();
@@ -60,7 +60,7 @@ export class DragMarker {
   }
 
   /** Stops following and removes the marker from the scene. */
-  hide(scene: StageSlot): void {
+  hide(scene: SceneSlot): void {
     this.index = null;
     if (!this.group) return;
     scene.remove(this.group);
@@ -68,7 +68,7 @@ export class DragMarker {
   }
 
   /** Removes the marker and frees the geometry and material it owns. */
-  dispose(scene: StageSlot): void {
+  dispose(scene: SceneSlot): void {
     this.hide(scene);
     this.ringGeometry.dispose();
     this.coreGeometry.dispose();

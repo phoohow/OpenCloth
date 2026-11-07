@@ -13,7 +13,7 @@ L0 公共层，向所有模块提供与业务无关的基础能力。**不 impor
 | `time` | `timeAsync`、debounce、throttle |
 | `format` | `roundTo`、`formatPercent` |
 | `units` | cm / m / mm 换算常量与函数 |
-| `platform` | 浏览器文件下载（统一延迟 revoke）、文件读取、资源 URL 路由 |
+| `platform` | 浏览器文件下载（统一延迟 revoke）、文件读取、资源 URL 路由、共享图片解码缓存 |
 | `result` | `Result`、`assert`、`invariant`、`deepClone` |
 | `events` | `createSignal`、`Disposable`、`disposeAll` |
 | `random` | 可复现随机源 `seededRandom` |

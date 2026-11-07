@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { testSlot } from '../../helpers/testSlot';
-import type { StageSlot } from '@/render';
+import type { SceneSlot } from '@/render';
 import * as THREE from 'three/webgpu';
 import { PinMarkers } from '@/runtime/pinMarkers';
 
@@ -12,7 +12,7 @@ function row(count: number): Float32Array {
 }
 
 /** Marker meshes the slot currently holds, in insertion order. */
-function markersOf(slot: StageSlot): THREE.Mesh[] {
+function markersOf(slot: SceneSlot): THREE.Mesh[] {
   return slot.group.children.filter((child): child is THREE.Mesh => (child as THREE.Mesh).isMesh);
 }
 

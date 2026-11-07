@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import type { RenderConfig } from '@/model/types';
+import type { ViewConfig } from '@/model/types';
 import { createDefaultRayTracing } from '@/model';
-import { backendAvailable, resolveSpec } from '@/render/modes/spec';
+import { resolveViewMode } from '@/render/modes/spec';
 
 /** Raster, physical fill, no overlay: the settings a fresh project starts with. */
-function config(patch: Partial<RenderConfig> = {}): RenderConfig {
+function config(patch: Partial<ViewConfig> = {}): ViewConfig {
   return {
     fill: 'physical',
     wire: 'off',
@@ -16,35 +16,35 @@ function config(patch: Partial<RenderConfig> = {}): RenderConfig {
   };
 }
 
-describe('resolveSpec', () => {
+describe('resolveViewMode', () => {
   it('always tone maps, traced or not', () => {
-    expect(resolveSpec(config()).postProcess).toEqual(['toneMap']);
-    expect(resolveSpec(config({ backend: 'pathtrace' })).postProcess).toEqual(['toneMap']);
+    expect(resolveViewMode(config()).postProcess).toEqual(['toneMap']);
+    expect(resolveViewMode(config({ backend: 'pathtrace' })).postProcess).toEqual(['toneMap']);
   });
 
   it('keeps diagnostic colours out of the display curve', () => {
     for (const fill of ['uvCheck', 'normal', 'vertexNormal'] as const) {
-      const spec = resolveSpec(config({ fill }));
+      const spec = resolveViewMode(config({ fill }));
       expect(spec.toneMapping).toBe('none');
       expect(spec.postProcess).toEqual(['toneMap']);
     }
-    expect(resolveSpec(config({ fill: 'physical' })).toneMapping).toBe('aces');
+    expect(resolveViewMode(config({ fill: 'physical' })).toneMapping).toBe('aces');
   });
 
   it('does not denoise a raster frame', () => {
-    const spec = resolveSpec(config());
+    const spec = resolveViewMode(config());
     expect(spec.traces).toBe(false);
     expect(spec.denoises).toBe(false);
   });
 
   it('denoises traced samples before the compositor sees them', () => {
-    const spec = resolveSpec(config({ backend: 'pathtrace' }));
+    const spec = resolveViewMode(config({ backend: 'pathtrace' }));
     expect(spec.traces).toBe(true);
     expect(spec.denoises).toBe(true);
   });
 
   it('skips denoising when the project turns it off', () => {
-    const spec = resolveSpec(config({
+    const spec = resolveViewMode(config({
       backend: 'pathtrace',
       rayTracing: { ...createDefaultRayTracing(), denoise: false },
     }));
@@ -53,44 +53,28 @@ describe('resolveSpec', () => {
   });
 
   it('never traces a wire-only frame, whatever the backend says', () => {
-    const spec = resolveSpec(config({ backend: 'pathtrace', wire: 'only' }));
+    const spec = resolveViewMode(config({ backend: 'pathtrace', wire: 'only' }));
     expect(spec.traces).toBe(false);
     expect(spec.denoises).toBe(false);
     expect(spec.fillsSurface).toBe(false);
   });
 
   it('keeps the wire overlay out of the fill decision', () => {
-    const spec = resolveSpec(config({ wire: 'over' }));
+    const spec = resolveViewMode(config({ wire: 'over' }));
     expect(spec.fillsSurface).toBe(true);
     expect(spec.layers).toContain('overlay');
   });
 
   it('keeps the floor, the body and the overlays in every mode', () => {
     for (const fill of ['physical', 'uvCheck', 'normal', 'vertexNormal'] as const) {
-      const spec = resolveSpec(config({ fill }));
+      const spec = resolveViewMode(config({ fill }));
       expect(spec.layers).toEqual(['underlay', 'subject', 'overlay', 'gizmo']);
     }
   });
 
   it('keeps the floor when a diagnostic fill draws edges only', () => {
-    const spec = resolveSpec(config({ fill: 'normal', wire: 'only' }));
+    const spec = resolveViewMode(config({ fill: 'normal', wire: 'only' }));
     expect(spec.layers).toContain('underlay');
     expect(spec.layers).toContain('overlay');
-  });
-});
-
-describe('backendAvailable', () => {
-  it('rejects the backend for a wire-only frame', () => {
-    expect(backendAvailable('physical', 'only')).toBe(false);
-  });
-
-  it('rejects the backend for both normal fills', () => {
-    expect(backendAvailable('normal', 'off')).toBe(false);
-    expect(backendAvailable('vertexNormal', 'off')).toBe(false);
-  });
-
-  it('accepts the combinations the tracer can read', () => {
-    expect(backendAvailable('physical', 'off')).toBe(true);
-    expect(backendAvailable('uvCheck', 'over')).toBe(true);
   });
 });

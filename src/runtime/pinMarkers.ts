@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu';
-import type { StageSlot } from '@/render';
+import type { SceneSlot } from '@/render';
 
 /** Small spheres marking pinned cloth particles. */
 export class PinMarkers {
@@ -14,7 +14,7 @@ export class PinMarkers {
   private static readonly HIGHLIGHT_SCALE = 1.7;
 
   /** Places a marker on a particle; a null buffer leaves it at the scene origin. */
-  add(particleIndex: number, positions: Float32Array | null, scene: StageSlot): void {
+  add(particleIndex: number, positions: Float32Array | null, scene: SceneSlot): void {
     if (this.markers.has(particleIndex)) return;
     const marker = new THREE.Mesh(this.geometry, this.material);
     if (positions) this.placeMarker(marker, particleIndex, positions);
@@ -22,7 +22,7 @@ export class PinMarkers {
     this.markers.set(particleIndex, marker);
   }
 
-  remove(particleIndex: number, scene: StageSlot): void {
+  remove(particleIndex: number, scene: SceneSlot): void {
     const marker = this.markers.get(particleIndex);
     if (!marker) return;
     scene.remove(marker);
@@ -61,7 +61,7 @@ export class PinMarkers {
   }
 
   /** Removes all markers from the scene. */
-  clear(scene: StageSlot): void {
+  clear(scene: SceneSlot): void {
     for (const [, marker] of this.markers) scene.remove(marker);
     this.markers.clear();
     this.highlighted = null;
@@ -73,7 +73,7 @@ export class PinMarkers {
   }
 
   /** Clears the markers and frees the geometry and material they share. */
-  dispose(scene: StageSlot): void {
+  dispose(scene: SceneSlot): void {
     this.clear(scene);
     this.geometry.dispose();
     this.material.dispose();

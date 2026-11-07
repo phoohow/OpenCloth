@@ -212,9 +212,6 @@ export function createDefaultScene(): SceneConfig {
       iblIntensity: 1.0,
     },
     render: {
-      fill: 'physical',
-      wire: 'off',
-      backend: 'raster',
       wireOptions: DEFAULT_WIRE_OPTIONS,
       toneMapping: 'aces',
       rayTracing: createDefaultRayTracing(),

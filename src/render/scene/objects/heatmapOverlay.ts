@@ -3,8 +3,8 @@ import { fitColor, type FitField } from '@/analysis';
 import { pressureColor } from '@/analysis';
 import { strainColor, type StrainBounds } from '@/analysis';
 
-/** Coloured copy of the cloth geometry that shows body clearance as a heatmap. */
-export class FitOverlay {
+/** Coloured copy of the cloth geometry that shows the active analysis field as a heatmap. */
+export class HeatmapOverlay {
   readonly mesh: THREE.Mesh;
   private colorAttr: THREE.BufferAttribute;
   private readonly material: THREE.MeshBasicMaterial;
@@ -24,7 +24,7 @@ export class FitOverlay {
       polygonOffsetUnits: -1,
     });
     this.mesh = new THREE.Mesh(geometry, this.material);
-    this.mesh.name = 'fit-overlay';
+    this.mesh.name = 'heatmap-overlay';
     this.mesh.frustumCulled = false;
     this.mesh.visible = false;
   }
@@ -35,8 +35,8 @@ export class FitOverlay {
     this.mesh.material = Array.from({ length: slots }, () => this.material);
   }
 
-  /** Writes clearance colours into the shared geometry and shows the overlay. */
-  update(field: FitField): void {
+  /** Writes body-clearance colours into the shared geometry. */
+  updateFit(field: FitField): void {
     const colors = this.colorAttr.array as Float32Array;
     for (let i = 0; i < field.clearanceCm.length; i++) {
       const [r, g, b] = fitColor(field.clearanceCm[i]!, field.thresholds);

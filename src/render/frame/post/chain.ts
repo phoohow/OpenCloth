@@ -12,7 +12,7 @@ import type { PostEffectId } from '@/render/modes/spec';
  * Holds one instance of every effect and runs the subset the mode declared. The chain is data:
  * a mode lists ids, and the order of that list is the order the image travels through.
  *
- * Whatever it runs, it ends with the resolved image written into the frame image target, which is
+ * Whatever it runs, it ends with the processed image written into the frame color buffer, which is
  * also the target whose depth the overlays test against. An effect reads one texture and writes
  * another, so a chain of two needs a scratch target in between.
  */
@@ -20,6 +20,8 @@ export class PostChain {
   private readonly effects: ReadonlyMap<PostEffectId, PostEffect>;
   /** Targets the chain alternates through when more than one effect runs. */
   private readonly scratch: (THREE.RenderTarget | null)[] = [null, null];
+  /** Effects taking part in the current frame; reused so a frame allocates no list. */
+  private readonly activeEffects: PostEffect[] = [];
   /** Copy used when no effect claims the frame; rebuilt when the source texture changes. */
   private copy: THREE.MeshBasicNodeMaterial | null = null;
   private copySource: THREE.Texture | null = null;
@@ -30,19 +32,19 @@ export class PostChain {
     ]);
   }
 
-  /** Runs the declared effects over the resolved image and leaves the frame in the image target. */
+  /** Runs the declared effects over the composite image and leaves the frame in the color buffer. */
   run(ctx: FrameContext, source: THREE.Texture): void {
-    const chain: PostEffect[] = [];
+    const chain = this.activeEffects;
+    chain.length = 0;
     for (const id of ctx.spec.postProcess) {
       const effect = this.effects.get(id);
       if (effect && effect.enabled(ctx, source)) chain.push(effect);
     }
 
-    const { renderer } = ctx.device;
-    // The image target holds the depth the overlays still need. Clearing it here would make every
+    // The color buffer holds the depth the overlays still need. Clearing it here would make every
     // overlay draw through the subject.
-    const autoClear = renderer.autoClear;
-    renderer.autoClear = false;
+    const autoClear = ctx.renderer.autoClear;
+    ctx.renderer.autoClear = false;
     try {
       if (chain.length === 0) {
         this.blit(ctx, source);
@@ -51,12 +53,12 @@ export class PostChain {
       let image = source;
       for (let i = 0; i < chain.length; i++) {
         const last = i === chain.length - 1;
-        const target = last ? ctx.targets.image : this.scratchAt(ctx, i % 2);
+        const target = last ? ctx.targets.color : this.scratchAt(ctx, i % 2);
         chain[i]!.run(ctx, image, target);
         image = target.texture;
       }
     } finally {
-      renderer.autoClear = autoClear;
+      ctx.renderer.autoClear = autoClear;
     }
   }
 
@@ -72,15 +74,15 @@ export class PostChain {
 
   /** Scratch target of one parity, reallocated when the frame size changed. */
   private scratchAt(ctx: FrameContext, index: number): THREE.RenderTarget {
-    const image = ctx.targets.image;
+    const color = ctx.targets.color;
     const existing = this.scratch[index];
-    if (existing && existing.width === image.width && existing.height === image.height) return existing;
+    if (existing && existing.width === color.width && existing.height === color.height) return existing;
     existing?.dispose();
-    const target = new THREE.RenderTarget(image.width, image.height, {
-      type: image.texture.type,
+    const target = new THREE.RenderTarget(color.width, color.height, {
+      type: color.texture.type,
       depthBuffer: false,
     });
-    target.texture.colorSpace = image.texture.colorSpace;
+    target.texture.colorSpace = color.texture.colorSpace;
     this.scratch[index] = target;
     return target;
   }
@@ -99,6 +101,6 @@ export class PostChain {
       this.copy = material;
       this.copySource = source;
     }
-    drawFullScreen(ctx.device.renderer, this.copy, ctx.targets.image);
+    drawFullScreen(ctx.renderer, this.copy, ctx.targets.color);
   }
 }

@@ -9,7 +9,7 @@ export const fitChannel: AnalysisChannel<'fit'> = {
     const positions = liveOr(source.initialPositions(), source.lastGoodPositions());
     if (!collider || positions.length === 0) return null;
     const field = computeFitField(positions, collider, { thresholds: { tightCm, looseCm } });
-    overlay.update(field);
+    overlay.updateFit(field);
     return fitStats(field);
   },
 };

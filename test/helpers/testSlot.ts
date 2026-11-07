@@ -1,11 +1,11 @@
 import * as THREE from 'three/webgpu';
-import type { StageSlot, SlotName } from '@/render';
+import type { SceneSlot, SlotName } from '@/render';
 import { SLOT_LAYER } from '@/render/scene/slots';
 
-/** Stage slot backed by a bare group, for tests that only need a container. */
-export function testSlot(name: SlotName = 'measure'): StageSlot {
+/** Scene slot backed by a bare group, for tests that only need a container. */
+export function testSlot(name: SlotName = 'measure'): SceneSlot {
   const group = new THREE.Group();
-  const slot: StageSlot = {
+  const slot: SceneSlot = {
     name,
     layer: SLOT_LAYER[name],
     group,
@@ -22,8 +22,8 @@ export function testSlot(name: SlotName = 'measure'): StageSlot {
       group.clear();
     },
     setTraceMask() { },
-    markSurface() { },
-    markChanged() { },
+    markPatternSurface() { },
+    markRevision() { },
   };
   return slot;
 }

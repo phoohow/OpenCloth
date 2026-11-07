@@ -7,7 +7,7 @@ import {
 import { ChangeSet } from '@/runtime/change';
 import { AVATAR_NODE_ID } from '@/model';
 import { rayTraceFailureLabel } from '@/ui/optionTables';
-import type { CameraConfig, Pattern, Project, RenderConfig, Vec3 } from '@/model/types';
+import type { CameraConfig, Pattern, Project, Vec3, ViewConfig } from '@/model/types';
 
 /** Applies the UI store's selection to the panel and avatar highlights. */
 export function syncSelectionOverlay(engine: GarmentEngine, pattern: Pattern, selection: string[]): void {
@@ -418,7 +418,7 @@ export class EngineSync {
 }
 
 /** Project settings merged with the mode the user picked in the viewport controls. */
-export function liveRenderConfig(project: Project): RenderConfig {
+export function liveRenderConfig(project: Project): ViewConfig {
   const ui = useUIStore.getState();
   return { ...project.scene.render, fill: ui.fill, wire: ui.wire, backend: ui.backend };
 }
