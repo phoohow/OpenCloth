@@ -94,17 +94,12 @@ describe('draw list', () => {
     expect(item.wire?.technique).toBe('wire');
   });
 
-  it('lifts the wire past the tone curve while tracing', () => {
+  it('keeps the wire variant while tracing', () => {
     const { world } = worldWithCloth();
+    const item = buildDrawList(world.view, view({ wire: 'over', mode: 'pathtrace' })).items[0]!;
 
-    // The raster pipeline blends the wire into the scene image.
-    expect(buildDrawList(world.view, view({ wire: 'over' })).items[0]?.wireStage).toBe('scene');
-    // A traced image replaces that image, so the wire has to be drawn over the composed frame.
-    expect(buildDrawList(world.view, view({ wire: 'over', mode: 'pathtrace' })).items[0]?.wireStage)
-      .toBe('postTone');
-    // Wire-only frames never trace and keep the wire where the surfaces would have been.
-    expect(buildDrawList(world.view, view({ wire: 'only', mode: 'pathtrace' })).items[0]?.wireStage)
-      .toBe('scene');
+    // The wire survives the switch to tracing; SceneStore draws it past the tone curve.
+    expect(item.wire?.technique).toBe('wire');
   });
 
   it('resolves diagnostic fills for subject surfaces only', () => {

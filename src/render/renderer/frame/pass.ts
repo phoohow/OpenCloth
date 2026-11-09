@@ -10,7 +10,9 @@ import type { RenderView } from '@/render/renderer/view/types';
 import type { WorldView } from '@/render/world';
 
 /** Slot a pass occupies in the fixed pass order. */
-export type PassSlot = 'raster' | 'trace' | 'denoise' | 'composite' | 'post' | 'overlay' | 'present';
+export type PassSlot =
+  | 'raster' | 'trace' | 'denoise' | 'composite' | 'post'
+  | 'heatmap' | 'wire' | 'overlay' | 'present';
 
 /** Frame resource a pass declares as read or written. */
 export type ResourceId = 'color' | 'composite' | 'radiance' | 'surface';

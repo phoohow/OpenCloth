@@ -38,8 +38,6 @@ export interface DrawItem {
   readonly transform: Transform;
   readonly bounds: Bounds;
   readonly stage: DrawStage;
-  /** Stage the wire variant draws in, which the traced image pushes past the tone curve. */
-  readonly wireStage: DrawStage;
   readonly bucket: DrawBucket;
   readonly materialSource: MaterialRef | null;
 }

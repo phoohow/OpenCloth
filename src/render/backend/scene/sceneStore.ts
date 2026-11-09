@@ -21,8 +21,6 @@ interface RasterEntry {
   readonly root: THREE.Object3D;
   stage: DrawStage;
   wire: THREE.Mesh | null;
-  /** Stage the wire mesh sits in; kept apart so tracing can lift it past the tone curve. */
-  wireStage: DrawStage | null;
   meshId: MeshId | null;
   assetKey: AssetKey | null;
   instanceCount: number;
@@ -36,7 +34,7 @@ interface TraceEntry {
   source: THREE.Object3D | null;
 }
 
-/** Owns the raster and trace scenes and their shared geometry/material caches. */
+/** Owns the raster, trace and wire scenes and their shared geometry/material caches. */
 export class SceneStore {
   private readonly rasterScene = new THREE.Scene();
   private readonly sceneGroup = new THREE.Group();
@@ -44,6 +42,9 @@ export class SceneStore {
   private readonly gizmoGroup = new THREE.Group();
   private readonly traceScene = new THREE.Scene();
   private readonly traceGroup = new THREE.Group();
+  /** The wire overlay is unlit, so its root carries no lights and no background. */
+  private readonly wireScene = new THREE.Scene();
+  private readonly wireGroup = new THREE.Group();
   private readonly lights: THREE.Group[] = [new THREE.Group(), new THREE.Group()];
   private readonly ambients = [
     new THREE.AmbientLight(0xffffff, 0.15),
@@ -56,6 +57,7 @@ export class SceneStore {
   private readonly materials = new MaterialCompiler();
   private rasterHandle: SceneHandle;
   private traceHandle: SceneHandle;
+  private wireHandle: SceneHandle;
   private revision = 0;
   private lastLights = -1;
   private lastEnvironment = -1;
@@ -72,11 +74,17 @@ export class SceneStore {
     this.traceGroup.name = 'traceRoot';
     this.traceScene.add(this.traceGroup, this.lights[1]!);
     this.traceScene.add(this.ambients[1]!);
+    this.wireGroup.name = 'wireRoot';
+    this.wireScene.add(this.wireGroup);
     this.rasterHandle = {
       id: 'raster', revision: 0, geometryRevision: 0, materialRevision: 0, stage: 'scene',
     };
     this.traceHandle = {
       id: 'trace', revision: 0, geometryRevision: 0, materialRevision: 0, stage: 'scene',
+    };
+    // The wire root has a single group; its stage only records that it draws over the tone curve.
+    this.wireHandle = {
+      id: 'wire', revision: 0, geometryRevision: 0, materialRevision: 0, stage: 'postTone',
     };
   }
 
@@ -88,15 +96,21 @@ export class SceneStore {
     return this.traceHandle;
   }
 
-  /** Whether raster items exist in the display-space stage. */
-  hasStage(stage: DrawStage): boolean {
-    for (const entry of this.rasterEntries.values()) {
-      if (entry.stage === stage || entry.wireStage === stage) return true;
-    }
-    return false;
+  get wire(): SceneHandle {
+    return this.wireHandle;
   }
 
-  /** Applies one snapshot to both roots and returns what changed. */
+  /** Whether any entity draws a wire overlay; the wire pass then has something to put down. */
+  get hasWire(): boolean {
+    return this.wireGroup.children.length > 0;
+  }
+
+  /** Whether raster items exist in the display-space stage. */
+  hasStage(stage: DrawStage): boolean {
+    return this.group(stage).children.length > 0;
+  }
+
+  /** Applies one snapshot to every root and returns what changed. */
   apply(snapshot: SceneSnapshot): void {
     this.meshMap.clear();
     for (const mesh of snapshot.meshes) this.meshMap.set(mesh.id, mesh);
@@ -137,6 +151,13 @@ export class SceneStore {
       materialRevision: snapshot.versions.material,
       stage: 'scene',
     };
+    this.wireHandle = {
+      id: 'wire',
+      revision: this.revision,
+      geometryRevision: snapshot.versions.geometry,
+      materialRevision: snapshot.versions.material,
+      stage: 'postTone',
+    };
   }
 
   /** Three root for one stage of a scene handle. */
@@ -145,6 +166,8 @@ export class SceneStore {
       this.traceGroup.visible = true;
       return this.traceScene;
     }
+    // The wire root holds one group and draws over a finished frame, so it has no stages.
+    if (handle.id === 'wire') return this.wireScene;
     this.sceneGroup.visible = stage === 'scene';
     this.postToneGroup.visible = stage === 'postTone';
     this.gizmoGroup.visible = stage === 'gizmo';
@@ -186,7 +209,7 @@ export class SceneStore {
       if (!entry || entry.assetKey !== item.mesh.key) {
         if (entry) this.removeRaster(entry);
         entry = {
-          root: source, stage: item.rasterStage, wire: null, wireStage: null, meshId: null,
+          root: source, stage: item.rasterStage, wire: null, meshId: null,
           assetKey: item.mesh.key, instanceCount: 0,
         };
         this.rasterEntries.set(item.key, entry);
@@ -205,7 +228,7 @@ export class SceneStore {
       if (entry) this.removeRaster(entry);
       entry = {
         root: createObject(mesh.topology, geometry, instanceCount), stage: item.rasterStage,
-        wire: null, wireStage: null, meshId: mesh.id, assetKey: null, instanceCount,
+        wire: null, meshId: mesh.id, assetKey: null, instanceCount,
       };
       this.rasterEntries.set(item.key, entry);
       this.group(item.rasterStage).add(entry.root);
@@ -283,18 +306,18 @@ export class SceneStore {
       wire.material = this.materials.get(item.wire, this.textures);
       wire.renderOrder = 1;
       wire.frustumCulled = false;
-      // The wire stands beside the root in a stage group, so it carries its own copy of the pose.
+      // The wire stands beside the root in the overlay group, so it carries its own pose.
       applyTransform(wire, item.transform, item.key);
       wire.name = `wire:${item.key}`;
-      if (entry.wire === wire && entry.wireStage === item.wireStage) return;
-      if (entry.wire && entry.wireStage) this.group(entry.wireStage).remove(entry.wire);
+      if (entry.wire) return;
       entry.wire = wire;
-      entry.wireStage = item.wireStage;
-      this.group(item.wireStage).add(wire);
+      // A wire is a guide rather than shading, so it has its own root and is drawn past the tone
+      // curve in either pipeline: a traced frame replaces the raster image, and both then show one
+      // wire colour.
+      this.wireGroup.add(wire);
     } else if (entry.wire) {
-      if (entry.wireStage) this.group(entry.wireStage).remove(entry.wire);
+      this.wireGroup.remove(entry.wire);
       entry.wire = null;
-      entry.wireStage = null;
     }
   }
 
@@ -347,7 +370,7 @@ export class SceneStore {
 
   private removeRaster(entry: RasterEntry): void {
     this.group(entry.stage).remove(entry.root);
-    if (entry.wire && entry.wireStage) this.group(entry.wireStage).remove(entry.wire);
+    if (entry.wire) this.wireGroup.remove(entry.wire);
   }
 
   private removeTrace(entry: TraceEntry): void {

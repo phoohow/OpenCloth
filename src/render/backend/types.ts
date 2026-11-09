@@ -39,7 +39,7 @@ export type ProgramHandle = string;
 
 /** Opaque raster or trace scene root handle. */
 export interface SceneHandle {
-  readonly id: 'raster' | 'trace';
+  readonly id: 'raster' | 'trace' | 'wire';
   readonly revision: number;
   readonly geometryRevision: number;
   readonly materialRevision: number;

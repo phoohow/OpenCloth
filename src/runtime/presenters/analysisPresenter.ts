@@ -24,6 +24,8 @@ export interface AnalysisDeps {
   clothInput: () => ClothSimInput | null;
   collider: () => AvatarCollider | null;
   contact: () => Float32Array | null;
+  /** Shows or hides the decorative overlays that would cover a heatmap. */
+  revealCloth: (visible: boolean) => void;
 }
 
 /** Palettes and value ranges of the three channels. */
@@ -83,6 +85,7 @@ export class AnalysisPresenter {
     if (this.activeKind) this.deps.cloth()?.clearField();
     this.activeKind = null;
     this.countdown = 0;
+    this.deps.revealCloth(true);
   }
 
   setFit(enabled: boolean, tightCm: number, looseCm: number): FitStats | null {
@@ -149,6 +152,8 @@ export class AnalysisPresenter {
       this.deps.cloth()?.clearField();
     }
     this.countdown = 0;
+    // A heatmap replaces the cloth surface, so the rows and trims lying on it would hide the field.
+    this.deps.revealCloth(!this.active);
     return enabled ? first() : null;
   }
 

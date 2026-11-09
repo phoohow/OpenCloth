@@ -118,6 +118,7 @@ export class GarmentEngine {
       clothInput: () => this.build.input,
       collider: () => this.avatarView.collider,
       contact: () => this.solver.contact,
+      revealCloth: visible => this.revealCloth(visible),
     });
     this.overlays = new OverlayKit(host);
     this.environment = new EnvironmentStage();

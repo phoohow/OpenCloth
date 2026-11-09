@@ -5,7 +5,7 @@ import type {
 } from '@/render/common';
 import { CHANNEL_RASTER, CHANNEL_TRACE } from '@/render/common';
 import type { DrawStage, MaterialVariant, RenderView } from '@/render/renderer/view/types';
-import { techniqueOf, traces } from '@/render/renderer/view/types';
+import { techniqueOf } from '@/render/renderer/view/types';
 import type { RenderEntity, WorldView } from '@/render/world';
 
 /** Base, trace and wire variants of one entity. */
@@ -14,7 +14,6 @@ export interface ResolvedMaterials {
   readonly trace: readonly MaterialVariant[];
   readonly wire: MaterialVariant | null;
   readonly stage: DrawStage;
-  readonly wireStage: DrawStage;
 }
 
 /** Whether the entity is a pattern surface that diagnostics and wire recolor. */
@@ -33,16 +32,12 @@ export function resolveMaterials(
   const wire = raster && subject && wireMode !== 'off'
     ? wireVariant(view.settings, wireMode === 'only')
     : null;
-  // A traced image replaces the raster one, so a wire mesh left in the scene stage would be
-  // overdrawn. It goes past the tone curve instead, over the composed frame.
-  const wireStage: DrawStage = wire && traces(view) ? 'postTone' : stageOf(entity);
   if (raster && subject && wireMode === 'only') {
     return {
       base: [],
       trace: traceable ? traceVariants(entity, world) : [],
       wire,
       stage: stageOf(entity),
-      wireStage,
     };
   }
 
@@ -84,7 +79,6 @@ export function resolveMaterials(
     trace,
     wire,
     stage: override?.stage ?? stageOf(entity),
-    wireStage,
   };
 }
 

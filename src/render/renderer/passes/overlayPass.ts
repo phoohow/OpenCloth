@@ -1,8 +1,8 @@
-/** Draws the display-space and gizmo stages over the tone-mapped image. */
+/** Draws the gizmo stage over the finished image. */
 
 import type { FrameConditions, PassContext, RenderPass } from '@/render/renderer/frame/pass';
 
-/** Overlay slot: draws display-space and gizmo entities over the finished image. */
+/** Overlay slot: draws gizmo entities over everything the earlier passes put down. */
 export class OverlayPass implements RenderPass {
   readonly id = 'overlay';
   readonly slot = 'overlay' as const;
@@ -14,13 +14,8 @@ export class OverlayPass implements RenderPass {
   }
 
   execute(ctx: PassContext): void {
-    if (!ctx.scene.hasStage('postTone') && !ctx.scene.hasStage('gizmo')) return;
+    if (!ctx.scene.hasStage('gizmo')) return;
     ctx.commands.setTarget(ctx.resources.color, false);
-    if (ctx.scene.hasStage('postTone')) {
-      ctx.commands.drawScene(ctx.scene.raster, 'postTone', ctx.view.camera);
-    }
-    if (ctx.scene.hasStage('gizmo')) {
-      ctx.commands.drawScene(ctx.scene.raster, 'gizmo', ctx.view.camera);
-    }
+    ctx.commands.drawScene(ctx.scene.raster, 'gizmo', ctx.view.camera);
   }
 }

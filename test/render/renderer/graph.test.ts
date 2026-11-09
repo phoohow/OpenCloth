@@ -23,9 +23,12 @@ describe('FrameGraph', () => {
     const present = pass('present', 'present');
     const raster = pass('raster', 'raster');
     const overlay = pass('overlay', 'overlay');
-    const graph = new FrameGraph([present, overlay, raster]);
+    const heatmap = pass('heatmap', 'heatmap');
+    const wire = pass('wire', 'wire');
+    const graph = new FrameGraph([present, overlay, wire, heatmap, raster]);
 
-    expect(graph.execute(conditions, p => p.execute(ctx))).toEqual(['raster', 'overlay', 'present']);
+    expect(graph.execute(conditions, p => p.execute(ctx)))
+      .toEqual(['raster', 'heatmap', 'wire', 'overlay', 'present']);
   });
 
   it('skips disabled passes and keeps the order of the rest', () => {

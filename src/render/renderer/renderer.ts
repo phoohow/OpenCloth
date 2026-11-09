@@ -13,13 +13,15 @@ import {
   idleTrace, resetTrace, type FrameConditions, type FrameSize, type TraceOutput,
 } from '@/render/renderer/frame/pass';
 import { RendererFrameResources } from '@/render/renderer/frame/resources';
-import { CompositePass } from '@/render/renderer/passes/compositePass';
-import { DenoisePass } from '@/render/renderer/passes/denoisePass';
-import { OverlayPass } from '@/render/renderer/passes/overlayPass';
-import { PostPass } from '@/render/renderer/passes/postPass';
-import { PresentPass } from '@/render/renderer/passes/presentPass';
 import { RasterPass } from '@/render/renderer/passes/rasterPass';
 import { TracePass } from '@/render/renderer/passes/tracePass';
+import { DenoisePass } from '@/render/renderer/passes/denoisePass';
+import { CompositePass } from '@/render/renderer/passes/compositePass';
+import { PostPass } from '@/render/renderer/passes/postPass';
+import { HeatmapPass } from '@/render/renderer/passes/heatmapPass';
+import { WirePass } from '@/render/renderer/passes/wirePass';
+import { OverlayPass } from '@/render/renderer/passes/overlayPass';
+import { PresentPass } from '@/render/renderer/passes/presentPass';
 import { SceneBuilder, snapshotSignature } from '@/render/renderer/sceneBuilder';
 import { buildDrawList } from '@/render/renderer/view/drawList';
 import { traces } from '@/render/renderer/view/types';
@@ -84,6 +86,8 @@ class RenderPipeline implements Renderer {
       new DenoisePass(this.backend.denoise),
       new CompositePass(this.backend.programs),
       new PostPass(this.backend.programs),
+      new HeatmapPass(),
+      new WirePass(),
       new OverlayPass(),
       new PresentPass(this.backend.programs),
     ]);

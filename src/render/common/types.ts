@@ -296,8 +296,6 @@ export interface SceneItem {
   readonly transform: Transform;
   /** Stage inside the raster root; the trace root always draws in `scene`. */
   readonly rasterStage: DrawStage;
-  /** Stage the wire variant draws in; tracing moves it over the composed image. */
-  readonly wireStage: DrawStage;
   readonly bucket: DrawBucket;
   readonly rasterMaterials: readonly ResolvedMaterial[];
   readonly traceMaterials: readonly ResolvedMaterial[];

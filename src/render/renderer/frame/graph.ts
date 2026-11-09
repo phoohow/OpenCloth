@@ -3,7 +3,7 @@
 import type { FrameConditions, RenderPass, ResourceId } from '@/render/renderer/frame/pass';
 
 const SLOT_ORDER: readonly string[] = [
-  'raster', 'trace', 'denoise', 'composite', 'post', 'overlay', 'present',
+  'raster', 'trace', 'denoise', 'composite', 'post', 'heatmap', 'wire', 'overlay', 'present',
 ];
 
 /** Runs every enabled pass in slot order, checking resource reads against what earlier passes wrote. */
