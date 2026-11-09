@@ -23,6 +23,7 @@ import {
   CONSTRAINT_GROUP_ORDER, type ClothSimInput, type ConstraintGroup, type ConstraintGroupKind,
 } from '@/sim/simTypes';
 import { SelfCollisionSolver } from '@/sim/selfCollision';
+import { frameProfiler } from '@/base/perf';
 import {
   collideBodyForMesh, createMeshColliderBuffers, refreshMeshColliderBuffers, type MeshColliderBuffers,
 } from '@/sim/meshColliderBuffers';
@@ -665,29 +666,31 @@ export class ClothSimulator {
   async readback(): Promise<{ positions: Float32Array; normals: Float32Array }> {
     const pc = this.particleCount;
     try {
-      await Promise.all([
+      await frameProfiler.spanAsync('sim.map', () => Promise.all([
         this.readbackBuf.mapAsync(GPUMapMode.READ),
         this.readbackNormalsBuf.mapAsync(GPUMapMode.READ),
         this.readbackContactBuf.mapAsync(GPUMapMode.READ),
-      ]);
+      ]));
       const posData = new Float32Array(this.readbackBuf.getMappedRange());
       const normData = new Float32Array(this.readbackNormalsBuf.getMappedRange());
       const contactData = new Float32Array(this.readbackContactBuf.getMappedRange());
 
-      for (let i = 0; i < pc; i++) {
-        this.readPositions[i * 3] = posData[i * 4];
-        this.readPositions[i * 3 + 1] = posData[i * 4 + 1];
-        this.readPositions[i * 3 + 2] = posData[i * 4 + 2];
-        this.readNormals[i * 3] = normData[i * 4];
-        this.readNormals[i * 3 + 1] = normData[i * 4 + 1];
-        this.readNormals[i * 3 + 2] = normData[i * 4 + 2];
-        this.readContact[i] = contactData[i];
-      }
-      this.readbackBuf.unmap();
-      this.readbackNormalsBuf.unmap();
-      this.readbackContactBuf.unmap();
-      this.applySelfCollision();
-      this.resolveSeamTears();
+      frameProfiler.span('sim.unpack', () => {
+        for (let i = 0; i < pc; i++) {
+          this.readPositions[i * 3] = posData[i * 4];
+          this.readPositions[i * 3 + 1] = posData[i * 4 + 1];
+          this.readPositions[i * 3 + 2] = posData[i * 4 + 2];
+          this.readNormals[i * 3] = normData[i * 4];
+          this.readNormals[i * 3 + 1] = normData[i * 4 + 1];
+          this.readNormals[i * 3 + 2] = normData[i * 4 + 2];
+          this.readContact[i] = contactData[i];
+        }
+        this.readbackBuf.unmap();
+        this.readbackNormalsBuf.unmap();
+        this.readbackContactBuf.unmap();
+      });
+      frameProfiler.span('sim.selfCollision', () => this.applySelfCollision());
+      frameProfiler.span('sim.seams', () => this.resolveSeamTears());
       this.positionsVersion++;
     } catch {
       // Destroyed readback buffers: the caller's generation is gone; serve the last cache.

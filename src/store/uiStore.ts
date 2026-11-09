@@ -161,6 +161,8 @@ interface UIStore {
   showScenePanel: boolean;
   showPropertiesPanel: boolean;
   showTimeline: boolean;
+  /** Floating 3D frame profiler opened from Help ▸ 调试; session-only. */
+  showPerfPanel: boolean;
   /** Autosave period in seconds; 0 turns autosave off. */
   autoSaveSeconds: number;
   /** Timestamp of the last autosave written to the local archive. */
@@ -212,6 +214,7 @@ interface UIStore {
   toggleScenePanel: () => void;
   togglePropertiesPanel: () => void;
   toggleTimeline: () => void;
+  togglePerfPanel: () => void;
   setAutoSaveSeconds: (s: number) => void;
   setMeasure3d: (r: MeasureReadout | null) => void;
   setLastAutosaveAt: (at: string | null) => void;
@@ -268,6 +271,7 @@ export const useUIStore = create<UIStore>((set, get) => ({
   showScenePanel: prefs.showScenePanel,
   showPropertiesPanel: prefs.showPropertiesPanel,
   showTimeline: prefs.showTimeline,
+  showPerfPanel: false,
   autoSaveSeconds: prefs.autoSaveSeconds,
   lastAutosaveAt: null,
   toast: null,
@@ -358,6 +362,7 @@ export const useUIStore = create<UIStore>((set, get) => ({
   toggleScenePanel: () => set(s => ({ showScenePanel: !s.showScenePanel })),
   togglePropertiesPanel: () => set(s => ({ showPropertiesPanel: !s.showPropertiesPanel })),
   toggleTimeline: () => set(s => ({ showTimeline: !s.showTimeline })),
+  togglePerfPanel: () => set(s => ({ showPerfPanel: !s.showPerfPanel })),
   setAutoSaveSeconds: (s) => set({ autoSaveSeconds: s }),
   setMeasure3d: (r) => set({ measure3d: r }),
   setLastAutosaveAt: (at) => set({ lastAutosaveAt: at }),

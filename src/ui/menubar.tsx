@@ -36,6 +36,7 @@ export function Menubar({ actions }: { actions: MenuActions }) {
   const showScenePanel = useUIStore(s => s.showScenePanel);
   const showPropertiesPanel = useUIStore(s => s.showPropertiesPanel);
   const showTimeline = useUIStore(s => s.showTimeline);
+  const showPerfPanel = useUIStore(s => s.showPerfPanel);
   const autoSaveSeconds = useUIStore(s => s.autoSaveSeconds);
   const lastAutosaveAt = useUIStore(s => s.lastAutosaveAt);
 
@@ -54,6 +55,7 @@ export function Menubar({ actions }: { actions: MenuActions }) {
       showScenePanel,
       showPropertiesPanel,
       showTimeline,
+      showPerfPanel,
       autoSaveSeconds,
       lastAutosaveAt,
       canUndo: history.canUndo,
@@ -71,7 +73,7 @@ export function Menubar({ actions }: { actions: MenuActions }) {
     return buildMenus(state, actions);
   }, [project, recent, autosaves, clipboard, history, layout, focus, propTab, activeTool, displayMode,
     editPreview, displayOptions, cameraProjection, selection,
-    showTemplatePanel, showScenePanel, showPropertiesPanel, showTimeline,
+    showTemplatePanel, showScenePanel, showPropertiesPanel, showTimeline, showPerfPanel,
     autoSaveSeconds, lastAutosaveAt, actions]);
 
   // A click anywhere outside the bar closes the open dropdown.

@@ -30,6 +30,7 @@ export interface MenuState {
   showScenePanel: boolean;
   showPropertiesPanel: boolean;
   showTimeline: boolean;
+  showPerfPanel: boolean;
   autoSaveSeconds: number;
   lastAutosaveAt: string | null;
   canUndo: boolean;
@@ -320,6 +321,9 @@ export function buildMenus(state: MenuState, actions: MenuActions): TopMenu[] {
       entries: [
         leaf('shortcuts', '快捷键总览…', actions.showShortcuts, { accel: comboOf('shortcuts') }),
         leaf('about', '关于 OpenCloth', actions.showAbout),
+        menuSep(),
+        leaf('perfPanel', '调试：一帧耗时…', actions.togglePerfPanel,
+          { checked: state.showPerfPanel, note: '显示 3D 帧内各阶段的 CPU 耗时' }),
       ],
     },
   ];

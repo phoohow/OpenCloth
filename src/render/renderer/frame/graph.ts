@@ -1,5 +1,6 @@
 /** Fixed-order execution of the renderer's passes. */
 
+import { frameProfiler } from '@/base/perf';
 import type { FrameConditions, RenderPass, ResourceId } from '@/render/renderer/frame/pass';
 
 const SLOT_ORDER: readonly string[] = [
@@ -31,7 +32,7 @@ export class FrameGraph {
           throw new Error(`Pass "${pass.id}" reads "${resource}" before any pass writes it`);
         }
       }
-      run(pass);
+      frameProfiler.span(`pass:${pass.id}`, () => run(pass));
       for (const resource of pass.writes) available.add(resource);
       ran.push(pass.id);
     }

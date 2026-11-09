@@ -10,6 +10,7 @@ import { isMobileUi } from '@/ui/mobile/mobileUi';
 import { PaneDivider } from '@/ui/paneDivider';
 import { Toolbar2D, Toolbar3D } from '@/ui/paneToolbars';
 import { ToastHost } from '@/ui/widgets/toast';
+import { PerfPanel } from '@/ui/debug/perfPanel';
 import { createMenuActions, shortcutActions } from '@/ui/menu/actions';
 import type { MenuActions } from '@/ui/menu/actions';
 import { useUIStore, isSplitLayout, leftPaneOf, isRightPanelShown, type PaneId } from '@/store';
@@ -34,6 +35,7 @@ interface ShellProps {
 /** Picks the desktop or the phone shell and owns what the two share. */
 export function App() {
   const autoSaveSeconds = useUIStore(s => s.autoSaveSeconds);
+  const showPerfPanel = useUIStore(s => s.showPerfPanel);
   const engineRef = useRef<GarmentEngine | null>(null);
   const rendererRef = useRef<Viewport | null>(null);
   const projectInputRef = useRef<HTMLInputElement | null>(null);
@@ -59,6 +61,7 @@ export function App() {
   return (
     <>
       {isMobileUi() ? <MobileShell {...shellProps} /> : <DesktopShell {...shellProps} />}
+      {showPerfPanel && <PerfPanel />}
       <ToastHost />
       <input
         ref={projectInputRef}

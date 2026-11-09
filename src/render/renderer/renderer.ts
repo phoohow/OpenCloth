@@ -6,6 +6,7 @@ import type {
 } from '@/render/common';
 import { RayTracingUnsupportedError } from '@/render/common';
 import type { Backend } from '@/render/backend';
+import { frameProfiler } from '@/base/perf';
 import type { CameraHost } from '@/render/renderer/view/types';
 import { CameraController } from '@/render/renderer/view/cameraController';
 import { FrameGraph } from '@/render/renderer/frame/graph';
@@ -98,11 +99,15 @@ class RenderPipeline implements Renderer {
     const started = performance.now();
     const signature = snapshotSignature(view, versions, this.backend.textures.version);
     if (!this.lastSnapshot || this.lastWorld !== world || signature !== this.lastSignature) {
-      const drawList = buildDrawList(world, view);
-      this.lastSnapshot = this.sceneBuilder.build(world, drawList, versions);
+      const drawList = frameProfiler.span('render.drawList', () => buildDrawList(world, view));
+      const snapshot = frameProfiler.span(
+        'render.snapshot',
+        () => this.sceneBuilder.build(world, drawList, versions),
+      );
+      this.lastSnapshot = snapshot;
       this.lastSignature = signature;
       this.lastWorld = world;
-      this.backend.scene.apply(this.lastSnapshot);
+      frameProfiler.span('render.apply', () => this.backend.scene.apply(snapshot));
     }
     this.backend.resize(view.viewport.width, view.viewport.height);
     this.camera.resize(view.viewport.width / Math.max(1, view.viewport.height));

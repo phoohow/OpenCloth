@@ -5,6 +5,7 @@ import {
   useProjectStore, useSimStore, useUIStore,
 } from '@/store';
 import { ChangeSet } from '@/runtime/change';
+import { frameProfiler } from '@/base/perf';
 import { AVATAR_NODE_ID } from '@/model';
 import { rayTraceFailureLabel } from '@/ui/optionTables';
 import type { CameraConfig, Pattern, Project, Vec3 } from '@/model/types';
@@ -286,12 +287,14 @@ export class EngineSync {
   /** One animation frame: play steps, mirror engine state into the sim store, draw. */
   private loop = async (): Promise<void> => {
     if (this.cancelled) return;
+    frameProfiler.beginFrame();
 
     const simState = useSimStore.getState();
     const projState = useProjectStore.getState().project;
 
     // Playback wall-clock: consecutive playing ticks only, so paused gaps are not counted.
     const tickStart = performance.now();
+    const interval = this.lastFrameMs > 0 ? tickStart - this.lastFrameMs : 0;
     if (simState.isPlaying) {
       if (this.lastTickMs > 0) this.playedPending += tickStart - this.lastTickMs;
       this.lastTickMs = tickStart;
@@ -309,20 +312,24 @@ export class EngineSync {
 
     const frameDelta = this.lastFrameMs > 0 ? Math.min(tickStart - this.lastFrameMs, MAX_ANIMATION_DELTA_MS) : 0;
     this.lastFrameMs = tickStart;
-    if (frameDelta > 0) this.engine.advanceAvatarAnimation(frameDelta);
-    this.syncAvatarAnimation(simState);
 
     try {
-      this.applyEditPreview();
+      if (frameDelta > 0) {
+        frameProfiler.span('loop.animation', () => this.engine.advanceAvatarAnimation(frameDelta));
+      }
+      frameProfiler.span('loop.sync', () => this.syncAvatarAnimation(simState));
+      frameProfiler.span('loop.preview', () => this.applyEditPreview());
       if (simState.isPlaying) {
         // The auto-pause frame ends playback instead of stepping past it.
         const remaining = simState.stopFrame === null ? Infinity : simState.stopFrame - simState.currentFrame;
         if (remaining <= 0) {
           simState.pause();
         } else {
-          await this.engine.stepFrame(projState);
-          simState.incrementFrame();
-          noteSimSteps(1);
+          await frameProfiler.spanAsync('sim.step', async () => {
+            await this.engine.stepFrame(projState);
+            simState.incrementFrame();
+            noteSimSteps(1);
+          });
         }
       }
       // The engine owns the dressing stages, so the UI mirrors its state.
@@ -330,16 +337,22 @@ export class EngineSync {
       if (simState.isDressed !== this.engine.isDressed) simState.setDressed(this.engine.isDressed);
       if (useUIStore.getState().fitCheck) {
         const fit = useUIStore.getState();
-        const stats = this.engine.refreshFit(fit.fitTightCm, fit.fitLooseCm);
+        const stats = frameProfiler.span('analysis.fit', () => this.engine.refreshFit(fit.fitTightCm, fit.fitLooseCm));
         if (stats) simState.setFitStats(stats);
       }
       if (useUIStore.getState().strainCheck) {
         const strain = useUIStore.getState();
-        const stats = this.engine.refreshStrain(strain.strainMin, strain.strainMax, strain.strainByFabric);
+        const stats = frameProfiler.span(
+          'analysis.strain',
+          () => this.engine.refreshStrain(strain.strainMin, strain.strainMax, strain.strainByFabric),
+        );
         if (stats) simState.setStrainStats(stats);
       }
       if (useUIStore.getState().pressureCheck) {
-        const stats = this.engine.refreshPressure(useUIStore.getState().pressureMaxKpa);
+        const stats = frameProfiler.span(
+          'analysis.pressure',
+          () => this.engine.refreshPressure(useUIStore.getState().pressureMaxKpa),
+        );
         if (stats) simState.setPressureStats(stats);
       }
 
@@ -350,7 +363,7 @@ export class EngineSync {
         const ui = useUIStore.getState();
         this.viewport.applyProject(projState);
         this.viewport.applyView({ fill: ui.fill, wire: ui.wire, mode: ui.backend });
-        const stats = this.viewport.render();
+        const stats = frameProfiler.span('render.frame', () => this.viewport.render());
         noteDrawnFrame('3d', performance.now());
         noteRayTraceState(this.viewport.traceStatus());
         noteRayTracingSamples(stats.trace.samples, stats.trace.accumulating, performance.now());
@@ -358,6 +371,7 @@ export class EngineSync {
         noteRayTracingSamples(0, false, performance.now());
       }
     } finally {
+      frameProfiler.endFrame(interval);
       // Queued after the awaited work so one frame never overlaps the next.
       if (!this.cancelled) this.raf = requestAnimationFrame(this.loop);
     }

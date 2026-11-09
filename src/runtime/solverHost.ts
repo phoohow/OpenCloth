@@ -6,6 +6,7 @@ import type { ClothSimInput } from '@/sim';
 import { FrameCache, type CachedFrame } from '@/sim';
 import type { MeshCollider } from '@/avatar/collider';
 import { timeAsync } from '@/runtime/engineTiming';
+import { frameProfiler } from '@/base/perf';
 import { clothLayoutFingerprint } from '@/runtime/change';
 import type { BuildPipeline } from '@/runtime/buildPipeline';
 
@@ -123,8 +124,8 @@ export class SolverHost {
     if (!simulator || !this.ready || this.stepping) return;
     this.stepping = true;
     try {
-      simulator.step(config, fabric);
-      const { positions, normals } = await simulator.readback();
+      frameProfiler.span('sim.submit', () => simulator.step(config, fabric));
+      const { positions, normals } = await frameProfiler.spanAsync('sim.readback', () => simulator.readback());
       const badParticle = firstNonFinite(positions);
       // A non-finite frame makes every triangle degenerate, so the last good frame stays drawn.
       if (badParticle >= 0) {

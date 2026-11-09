@@ -29,6 +29,7 @@ import {
 import { add3, scale3 } from '@/base/math';
 import type { AvatarMotionInfo } from '@/runtime/avatarMotion';
 import { timeAsync } from '@/runtime/engineTiming';
+import { frameProfiler } from '@/base/perf';
 import { FALLBACK_PHYSICS } from '@/runtime/clothConstants';
 import type { FitStats } from '@/analysis';
 import type { StrainStats } from '@/analysis';
@@ -419,14 +420,24 @@ export class GarmentEngine {
 
   /** Writes one finite solver frame to every view that follows the cloth. */
   private presentFrame(positions: Float32Array, normals: Float32Array, contact: Float32Array | null): void {
-    this.lastPresented = positions;
-    this.lastNormals = normals;
-    const shown = this.displayedPositions(positions);
-    this.clothView.updateFromSim(shown, normals);
-    this.overlays.followSimulation(this.assembly.seamPairs, shown, normals);
-    this.avatarView.updateSoftBody(positions, contact);
-    this.avatarView.sampleDynamicFit();
-    this.interactionView.followPositions(this.solver.simulator?.getReadbackPositions() ?? positions, shown);
+    frameProfiler.begin('sim.present');
+    try {
+      this.lastPresented = positions;
+      this.lastNormals = normals;
+      const shown = this.displayedPositions(positions);
+      frameProfiler.span('present.cloth', () => this.clothView.updateFromSim(shown, normals));
+      frameProfiler.span(
+        'present.overlays',
+        () => this.overlays.followSimulation(this.assembly.seamPairs, shown, normals),
+      );
+      frameProfiler.span('present.avatar', () => this.avatarView.updateSoftBody(positions, contact));
+      frameProfiler.span('present.pressure', () => this.avatarView.sampleDynamicFit());
+      frameProfiler.span('present.markers', () => this.interactionView.followPositions(
+        this.solver.simulator?.getReadbackPositions() ?? positions, shown,
+      ));
+    } finally {
+      frameProfiler.end();
+    }
   }
 
   /** Puts every view back on the initial layout. */

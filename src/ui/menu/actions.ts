@@ -99,6 +99,7 @@ export interface MenuActions {
   toggleScenePanel: () => void;
   togglePropertiesPanel: () => void;
   toggleTimeline: () => void;
+  togglePerfPanel: () => void;
   showShortcuts: () => void;
   showAbout: () => void;
 }
@@ -330,6 +331,7 @@ export function createMenuActions(refs: MenuActionContext): MenuActions {
     toggleScenePanel: () => useUIStore.getState().toggleScenePanel(),
     togglePropertiesPanel: () => useUIStore.getState().togglePropertiesPanel(),
     toggleTimeline: () => useUIStore.getState().toggleTimeline(),
+    togglePerfPanel: () => useUIStore.getState().togglePerfPanel(),
 
     showShortcuts: () => useMenuStore.getState().openDialog('shortcuts'),
     showAbout: () => useMenuStore.getState().openDialog('about'),
