@@ -34,9 +34,15 @@ export class Surface {
     return Math.max(1, this.canvas.clientWidth) / Math.max(1, this.canvas.clientHeight);
   }
 
-  /** Matches the drawing buffer to a new viewport size. */
+  /**
+   * Matches the drawing buffer to a new viewport size. A repeated size is ignored: setSize
+   * rewrites the canvas dimensions, which reconfigures the presentation surface and must not
+   * happen on every frame.
+   */
   resize(width: number, height: number): void {
     if (width <= 0 || height <= 0) return;
+    const current = this.renderer.getSize(this.scratch);
+    if (current.x === width && current.y === height) return;
     this.renderer.setSize(width, height, false);
   }
 }
