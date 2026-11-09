@@ -53,13 +53,14 @@ export class DenoiseEngine {
   private loading: Promise<OIDNDenoiser | null> | null = null;
   private failedModel: DenoiseModel | null = null;
   private model: DenoiseModel = 'base';
+  /** Traced frames the engine was free for, so a running pass does not consume the cadence. */
   private frame = 0;
-  private denoisedAt = -1;
+  /** Frame the last pass finished on, or -1 before the first one of a pass run. */
+  private finishedAt = -1;
   private denoisedSamples = 0;
   /** When the current pass started, in `performance.now()` milliseconds; 0 when none is running. */
   private startedAt = 0;
   private output: THREE.RenderTarget | null = null;
-  private outputSource: THREE.Texture | null = null;
   private disposed = false;
   private generation = 0;
 
@@ -79,7 +80,7 @@ export class DenoiseEngine {
     this.loading = null;
     this.denoiser?.dispose();
     this.denoiser = null;
-    this.denoisedAt = -1;
+    this.finishedAt = -1;
     this.denoisedSamples = 0;
     this.startedAt = 0;
     this.clearOutput();
@@ -94,7 +95,7 @@ export class DenoiseEngine {
   reset(): void {
     this.denoiser?.reset();
     this.frame = 0;
-    this.denoisedAt = -1;
+    this.finishedAt = -1;
     this.denoisedSamples = 0;
     this.startedAt = 0;
     this.clearOutput();
@@ -116,7 +117,6 @@ export class DenoiseEngine {
       this.reset();
       return null;
     }
-    this.frame += 1;
 
     const denoiser = this.denoiser;
     if (!denoiser) {
@@ -124,33 +124,45 @@ export class DenoiseEngine {
       return null;
     }
 
-    // A running pass is spread over frames and finishes on its own; its result is picked up below.
-    if (!denoiser.running && this.due(frame)) {
-      denoiser.reset();
-      this.denoisedAt = this.frame;
-      this.denoisedSamples = frame.samples;
-      this.startedAt = performance.now();
-      this.apply(scene, camera, frame.radiance);
-      return this.heldTexture();
-    }
-
+    // A finished pass is collected before the cadence is asked again. Asking first would let the
+    // next pass reset the denoiser in the frame the image arrived, so a pass that takes longer
+    // than the interval would throw away every result it produced and never reach the screen.
     if (!denoiser.running && denoiser.complete) {
       const cleaned = denoiser.texture;
       if (cleaned) this.publish(cleaned, frame.radiance);
+      // The image now lives in this engine's own target, so the denoiser can start over.
+      denoiser.reset();
+      this.finishedAt = this.frame;
       this.startedAt = 0;
       return this.heldTexture();
     }
 
+    this.frame += 1;
+    // A running pass is spread over frames and finishes on its own; its result is picked up above.
+    if (denoiser.running) return this.checkTimeout(denoiser);
+
+    if (this.due(frame)) {
+      denoiser.reset();
+      this.denoisedSamples = frame.samples;
+      this.startedAt = performance.now();
+      this.apply(scene, camera, frame.radiance);
+    }
+    return this.heldTexture();
+  }
+
+  /** Gives up on a pass that never finished and reports why. */
+  private checkTimeout(denoiser: OIDNDenoiser): TextureHandle | null {
+    if (this.startedAt === 0 || performance.now() - this.startedAt <= DENOISE_TIMEOUT_MS) {
+      return this.heldTexture();
+    }
     // The weights load inside the library and a rejection there never reaches this code, so a
     // pass that never finishes is the only signal that denoising is unavailable.
-    if (this.startedAt > 0 && performance.now() - this.startedAt > DENOISE_TIMEOUT_MS) {
-      this.startedAt = 0;
-      this.failedModel = this.model;
-      this.denoiser = null;
-      denoiser.dispose();
-      this.clearOutput();
-      this.onFailure?.('OIDN 降噪未能启动，已改用无降噪渲染；关闭再开启降噪可重试。');
-    }
+    this.startedAt = 0;
+    this.failedModel = this.model;
+    this.denoiser = null;
+    denoiser.dispose();
+    this.clearOutput();
+    this.onFailure?.('OIDN 降噪未能启动，已改用无降噪渲染；关闭再开启降噪可重试。');
     return this.heldTexture();
   }
 
@@ -175,18 +187,20 @@ export class DenoiseEngine {
     // The raster blend-in would only smear a handful of samples, so the first pass waits until
     // the traced image stands on its own.
     if (frame.weight < 1) return false;
-    if (this.denoisedAt < 0) return true;
+    // Nothing new was sampled since the last pass, so cleaning again would repeat the same image.
+    if (frame.samples <= this.denoisedSamples) return false;
+    if (this.finishedAt < 0) return true;
     // The last pass after the sampler settles, even when the interval has not elapsed yet.
-    if (!frame.accumulating) return frame.samples > this.denoisedSamples;
-    return this.frame - this.denoisedAt >= DENOISE_INTERVAL_FRAMES;
+    if (!frame.accumulating) return true;
+    // Counted from the frame the previous pass finished on, so a slow pass does not spend the
+    // interval it just used and start over immediately.
+    return this.frame - this.finishedAt >= DENOISE_INTERVAL_FRAMES;
   }
 
   /** Copies a cleaned image into this engine's own target so it survives a denoiser reset. */
   private publish(source: THREE.Texture, radiance: TargetHandle): void {
-    if (source === this.outputSource) return;
     this.output = this.fitOutput(radiance);
     this.programs.blit(this.commands, asTextureHandle(source), asTargetHandle(this.output));
-    this.outputSource = source;
   }
 
   /** The output target, reallocated when the radiance target changed size. */
@@ -209,7 +223,6 @@ export class DenoiseEngine {
   private clearOutput(): void {
     this.output?.dispose();
     this.output = null;
-    this.outputSource = null;
   }
 
   /** One denoise step over the radiance target. */
