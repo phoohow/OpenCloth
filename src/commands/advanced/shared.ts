@@ -6,22 +6,10 @@ import type { ProjectContext } from '@/commands/command';
 import { makePanel, newPoint } from '@/commands/patternCreateCommands';
 import { edgeLength } from '@/pattern/geom';
 import { sampleOutline } from '@/pattern/panel';
-import { add, distance, normalize, scale, sub } from '@/base/geom';
+import { add2, clamp01, distance2, normalize2, scale2 } from '@/base/math';
+import { pointInPolygon } from '@/base/geom';
 import { hasSelfIntersection } from '@/base/geom/offset';
 import { distanceToPolyline } from '@/base/geom/polyCurve';
-import { insidePolygon } from '@/commands/patternStructureCommands';
-
-export const clamp01 = (v: number): number => Math.max(0, Math.min(1, v));
-
-export const rad = (deg: number): number => (deg * Math.PI) / 180;
-
-export const scaleAbout = (center: Vec2, p: Vec2, factor: number): Vec2 => add(center, scale(sub(p, center), factor));
-
-export const rotateAbout = (center: Vec2, p: Vec2, angle: number): Vec2 => {
-  const cos = Math.cos(angle), sin = Math.sin(angle);
-  const dx = p.x - center.x, dy = p.y - center.y;
-  return { x: center.x + dx * cos - dy * sin, y: center.y + dx * sin + dy * cos };
-};
 
 /** Every panel outline and hole loop edge id list, live so in-place edits reach the panel. */
 export function edgeArrays(pattern: Pattern): string[][] {
@@ -217,14 +205,14 @@ export function assertOwningPanelsSimple(pattern: Pattern, edgeIds: Iterable<str
 
 /** True when a point lies inside the ring or on it within tolerance. */
 export function insideOrOnRing(ring: Vec2[], p: Vec2): boolean {
-  return insidePolygon(ring, p) || distanceToPolyline(p, [...ring, ring[0]]) <= 1e-6;
+  return pointInPolygon(ring, p) || distanceToPolyline(p, [...ring, ring[0]]) <= 1e-6;
 }
 
 /** Unit perpendicular of `direction` whose probe point lies inside `outline`. */
 export function inwardDirection(outline: Vec2[], base: Vec2, direction: Vec2): Vec2 {
-  const candidates = [normalize({ x: -direction.y, y: direction.x }), normalize({ x: direction.y, y: -direction.x })];
+  const candidates = [normalize2({ x: -direction.y, y: direction.x }), normalize2({ x: direction.y, y: -direction.x })];
   for (const candidate of candidates) {
-    if (insidePolygon(outline, add(base, scale(candidate, 0.05)))) return candidate;
+    if (pointInPolygon(outline, add2(base, scale2(candidate, 0.05)))) return candidate;
   }
   throw new Error('无法确定版片的内侧方向');
 }
@@ -234,7 +222,7 @@ export function inwardDepth(outline: Vec2[], base: Vec2, normal: Vec2, reach: nu
   const steps = 200;
   for (let i = 1; i <= steps; i++) {
     const depth = (reach * i) / steps;
-    if (!insidePolygon(outline, add(base, scale(normal, depth)))) return (reach * (i - 1)) / steps;
+    if (!pointInPolygon(outline, add2(base, scale2(normal, depth)))) return (reach * (i - 1)) / steps;
   }
   return reach;
 }
@@ -245,9 +233,9 @@ export function splitLineEdge(pattern: Pattern, edgeId: string, at: Vec2): [stri
   const start = pattern.points[edge?.startPointId ?? '']?.pos;
   const end = pattern.points[edge?.endPointId ?? '']?.pos;
   if (!edge || !start || !end) throw new Error('边无法拆分');
-  const total = distance(start, end);
+  const total = distance2(start, end);
   if (total < 1e-6) throw new Error('边长度为零，无法拆分');
-  const fraction = clamp01(distance(start, at) / total);
+  const fraction = clamp01(distance2(start, at) / total);
   const midId = newPoint(pattern, at, 'corner');
   const ids: [string, string] = [genId('edge'), genId('edge')];
   const piece = (id: string, startPointId: string, endPointId: string): void => {
@@ -310,7 +298,7 @@ export function interiorPointIds(pattern: Pattern, chain: string[]): string[] {
 /** Distinct vertices of a closed polyline, or null when it does not close or is too short. */
 export function loopRing(points: Vec2[]): Vec2[] | null {
   if (points.length < 4) return null;
-  if (distance(points[0], points[points.length - 1]) > 1e-6) return null;
+  if (distance2(points[0], points[points.length - 1]) > 1e-6) return null;
   const ring = points.slice(0, points.length - 1);
   return ring.length >= 3 ? ring : null;
 }

@@ -28,8 +28,6 @@ export interface MarkerReport {
   currency: string;
 }
 
-export { polygonArea };
-
 /** Builds a marker report from the shared marker layout, optionally pricing the fabric. */
 export function buildMarkerReport(layout: MarkerLayout, options: MarkerCostOptions = {}): MarkerReport {
   const byPanel = new Map<string, MarkerPanelCount>();

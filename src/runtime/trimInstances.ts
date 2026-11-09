@@ -1,6 +1,7 @@
 /** Instanced 3D trims drawn above the cloth surface. */
 
 import type { Project, TrimKind, Vec2 } from '@/model/types';
+import { hexToLinearRgb } from '@/base/color';
 import type { TriangleMesh } from '@/pattern/triangulate';
 import { CHANNEL_RASTER } from '@/render/world';
 import type { EntityId, MaterialData, MaterialId, MeshData, MeshId, WorldWriter } from '@/render/world';
@@ -106,7 +107,7 @@ export class TrimInstances {
       const matrices = new Float32Array(list.length * 16);
       const colors = new Float32Array(list.length * 3);
       list.forEach((instance, index) => {
-        colors.set(hexToLinear(instance.color), index * 3);
+        colors.set(hexToLinearRgb(instance.color), index * 3);
       });
       const meshId = writer.createMesh({
         ...trimMesh(kind),
@@ -390,15 +391,4 @@ function surfaceMesh(positions: number[], normals: number[]): MeshData {
       color: new Float32Array(positions.length).fill(1),
     },
   };
-}
-
-/** Linear rgb of a hex color, matching the color space instance colors are read in. */
-function hexToLinear(hex: string): readonly [number, number, number] {
-  const value = Number.parseInt(hex.replace('#', ''), 16);
-  return [channel((value >> 16) & 0xff), channel((value >> 8) & 0xff), channel(value & 0xff)];
-}
-
-function channel(value: number): number {
-  const srgb = value / 255;
-  return srgb <= 0.04045 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4;
 }

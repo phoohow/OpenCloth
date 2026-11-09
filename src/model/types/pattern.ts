@@ -4,6 +4,7 @@
  */
 
 import type { ArcGeom, BezierHandle, ObjectTransform, Vec2, Vec3 } from '@/model/types/geometry';
+import type { CornerJoinStyle } from '@/base/geom';
 
 
 /** Named point of a panel outline or a construction guide. */
@@ -36,7 +37,7 @@ export type EdgeSemantic =
   | 'shoulder' | 'sleeveCap' | 'waist' | 'dart' | 'internal' | 'free';
 
 /** How two edges meet at a shared vertex of the offset seam allowance. */
-export type SeamAllowanceCorner = 'miter' | 'round' | 'bevel';
+export type SeamAllowanceCorner = CornerJoinStyle;
 
 /** One edge of the pattern, shared by the outlines and seams that reference it. */
 export interface PatternEdge {

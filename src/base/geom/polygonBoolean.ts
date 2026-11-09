@@ -1,4 +1,4 @@
-import type { Vec2 } from '@/base/geom/primitives';
+import type { Vec2 } from '@/base/math';
 import { ensureCCW, signedPolygonArea } from '@/base/geom/primitives';
 import polygonClipping from 'polygon-clipping';
 

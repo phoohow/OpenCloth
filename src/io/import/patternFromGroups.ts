@@ -1,7 +1,8 @@
 import { genId } from '@/base/id';
 import type { Panel, Pattern, Vec2 } from '@/model/types';
 import { createEmptyPattern, DEFAULT_MESH_RESOLUTION_CM } from '@/model';
-import { ensureCCW, polygonArea } from '@/base/geom';
+import { ensureCCW, pointInPolygon, polygonArea } from '@/base/geom';
+import { nearlyEqual2 } from '@/base/math';
 
 /** One imported drawing as point chains, in centimetres; open chains are welded into loops. */
 export interface ImportedGroup {
@@ -12,7 +13,7 @@ export interface ImportedGroup {
 /** Quantized coordinate key; imported chains meet within a fraction of a millimetre. */
 const posKey = (p: Vec2): string => `${Math.round(p.x * 1000)},${Math.round(p.y * 1000)}`;
 
-const samePoint = (a: Vec2, b: Vec2): boolean => Math.hypot(a.x - b.x, a.y - b.y) < 1e-3;
+const samePoint = (a: Vec2, b: Vec2): boolean => nearlyEqual2(a, b, 1e-3);
 
 /** Drops consecutive duplicate points. */
 function dedupe(chain: Vec2[]): Vec2[] {
@@ -108,15 +109,6 @@ function resolveLoop(pattern: Pattern, store: LoopStore, loop: Vec2[]): string[]
   return edgeIds;
 }
 
-function pointInPolygon(p: Vec2, poly: Vec2[]): boolean {
-  let inside = false;
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const a = poly[i]!, b = poly[j]!;
-    if ((a.y > p.y) !== (b.y > p.y) && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
-  }
-  return inside;
-}
-
 function chainCenter(chain: Vec2[]): Vec2 {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const p of chain) {
@@ -148,7 +140,7 @@ export function patternFromGroups(groups: ImportedGroup[]): Pattern {
     for (const loop of byArea) {
       const area = Math.abs(polygonArea(loop));
       const parent = candidates.find(candidate =>
-        Math.abs(polygonArea(candidate.loop)) > area && pointInPolygon(chainCenter(loop), candidate.loop));
+        Math.abs(polygonArea(candidate.loop)) > area && pointInPolygon(candidate.loop, chainCenter(loop)));
       if (parent) {
         parent.panel.holes = parent.panel.holes ?? [];
         parent.panel.holes.push(resolveLoop(pattern, store, loop));

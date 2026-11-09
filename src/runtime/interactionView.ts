@@ -1,7 +1,9 @@
 /** Pointer gestures on the cloth: picking, hovering, dragging, sketching, pins and selection. */
 
-import type { Vec3 } from '@/base/geom';
-import type { Bounds, CameraHost, CameraState } from '@/render/common';
+import type { Vec3 } from '@/base/math';
+import { add3, distance3, dot3, length3, scale3, sub3 } from '@/base/math';
+import { projectWorldToNdc } from '@/render/common';
+import type { Bounds, CameraHost } from '@/render/common';
 import type { Vec2 } from '@/model/types';
 import type { ClothSimInput, ClothSimulator, ParticlePickHit } from '@/sim';
 import { evalBodyDistance, type AvatarCollider } from '@/avatar/collider';
@@ -11,7 +13,7 @@ import { PinMarkers } from '@/runtime/pinMarkers';
 import { SelectionOverlay } from '@/runtime/selectionOverlay';
 import { DragMarker } from '@/runtime/dragMarker';
 import type { OverlayKit } from '@/runtime/overlayKit';
-import { trianglePointToPanel2D } from '@/base/geom/panelSurface';
+import { trianglePointToPanel2D } from '@/pattern/panel';
 import { bodyOccludesSegment } from '@/runtime/bodyOcclusion';
 import { pinsByScreenDistance } from '@/runtime/pinHover';
 import { grabWeightsAround } from '@/runtime/clothDrag';
@@ -125,7 +127,7 @@ export class InteractionView {
       index => {
         const offset = index * 3;
         if (offset + 2 >= positions.length) return null;
-        return projectToNdc(
+        return projectWorldToNdc(
           { x: positions[offset]!, y: positions[offset + 1]!, z: positions[offset + 2]! }, camera,
         );
       },
@@ -139,7 +141,7 @@ export class InteractionView {
     for (const index of ordered) {
       const offset = index * 3;
       const point = { x: positions[offset]!, y: positions[offset + 1]!, z: positions[offset + 2]! };
-      const distance = distanceBetween(camera.position, point);
+      const distance = distance3(camera.position, point);
       const direction = {
         x: (point.x - camera.position.x) / (distance || 1),
         y: (point.y - camera.position.y) / (distance || 1),
@@ -191,7 +193,7 @@ export class InteractionView {
     if (!picked) return null;
     const points = this.deps.overlays.addMeasurePoint(picked.world);
     if (points.length < 2) return { points: 1, distanceCm: null };
-    return { points: 2, distanceCm: distanceBetween(points[0]!, points[1]!) * 100 };
+    return { points: 2, distanceCm: distance3(points[0]!, points[1]!) * 100 };
   }
 
   /** Drops the measurement overlay and its placed points. */
@@ -225,14 +227,14 @@ export class InteractionView {
     const simulator = this.deps.simulator();
     if (!drag || !simulator) return;
     const ray = this.picker.screenRay(ndcX, ndcY);
-    const denominator = dot(drag.normal, ray.direction);
+    const denominator = dot3(drag.normal, ray.direction);
     if (Math.abs(denominator) < 1e-9) return;
-    const t = dot(drag.normal, sub(drag.center, ray.origin)) / denominator;
+    const t = dot3(drag.normal, sub3(drag.center, ray.origin)) / denominator;
     if (!(t > 0)) return;
-    let point = add(ray.origin, scale(ray.direction, t));
-    const offset = sub(point, drag.center);
-    const reach = length(offset);
-    if (reach > DRAG_MAX_REACH_M) point = add(drag.center, scale(offset, DRAG_MAX_REACH_M / reach));
+    let point = add3(ray.origin, scale3(ray.direction, t));
+    const offset = sub3(point, drag.center);
+    const reach = length3(offset);
+    if (reach > DRAG_MAX_REACH_M) point = add3(drag.center, scale3(offset, DRAG_MAX_REACH_M / reach));
     simulator.moveGrab([point.x, point.y, point.z]);
   }
 
@@ -296,12 +298,12 @@ export class InteractionView {
     return carried;
   }
 
-  /** Moves the markers and the drag ring onto a new set of positions. */
-  followPositions(positions: Float32Array): void {
+  /** Moves the markers, the drag ring and the selection highlight onto the drawn positions. */
+  followPositions(positions: Float32Array, surfacePositions?: Float32Array): void {
     this.pins.sync(positions);
     if (this.drag) this.marker.sync(positions, this.deps.camera.snapshot());
     const surface = this.deps.surface();
-    if (surface) this.selection.updateSurface(surface.positions, surface.normals);
+    if (surface) this.selection.updateSurface(surfacePositions ?? surface.positions, surface.normals);
   }
 
   /** Drops the selection highlight and every pin marker. */
@@ -328,66 +330,4 @@ export class InteractionView {
     );
     return point ? { panelId: panel.panelId, point } : null;
   }
-}
-
-/** Projects a world point to normalized device coordinates. */
-function projectToNdc(point: Vec3, camera: CameraState): Vec3 | null {
-  const forward = normalize(sub(camera.target, camera.position));
-  if (!forward) return null;
-  const right = normalize(cross(forward, camera.up));
-  if (!right) return null;
-  const up = cross(right, forward);
-  const rel = sub(point, camera.position);
-  const depth = dot(rel, forward);
-  if (depth <= camera.near) return null;
-  const x = dot(rel, right);
-  const y = dot(rel, up);
-  if (camera.projection === 'orthographic') {
-    const halfHeight = Math.max(0.001, camera.viewHeightMeters) / 2;
-    const halfWidth = halfHeight * Math.max(0.001, camera.aspect);
-    return { x: x / halfWidth, y: y / halfHeight, z: (depth - camera.near) / (camera.far - camera.near) };
-  }
-  const tanHalf = Math.tan(camera.fovDeg * Math.PI / 360);
-  return {
-    x: x / (depth * tanHalf * Math.max(0.001, camera.aspect)),
-    y: y / (depth * tanHalf),
-    z: (depth - camera.near) / (camera.far - camera.near),
-  };
-}
-
-function dot(a: Vec3, b: Vec3): number {
-  return a.x * b.x + a.y * b.y + a.z * b.z;
-}
-
-function sub(a: Vec3, b: Vec3): Vec3 {
-  return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z };
-}
-
-function add(a: Vec3, b: Vec3): Vec3 {
-  return { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z };
-}
-
-function scale(v: Vec3, s: number): Vec3 {
-  return { x: v.x * s, y: v.y * s, z: v.z * s };
-}
-
-function length(v: Vec3): number {
-  return Math.hypot(v.x, v.y, v.z);
-}
-
-function cross(a: Vec3, b: Vec3): Vec3 {
-  return {
-    x: a.y * b.z - a.z * b.y,
-    y: a.z * b.x - a.x * b.z,
-    z: a.x * b.y - a.y * b.x,
-  };
-}
-
-function normalize(v: Vec3): Vec3 | null {
-  const size = length(v);
-  return size > 1e-9 ? { x: v.x / size, y: v.y / size, z: v.z / size } : null;
-}
-
-function distanceBetween(a: Vec3, b: Vec3): number {
-  return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
 }

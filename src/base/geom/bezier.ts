@@ -1,5 +1,5 @@
-import type { Vec2 } from '@/base/geom/primitives';
-import { lerp, distance } from '@/base/geom/primitives';
+import type { Vec2 } from '@/base/math';
+import { lerp2, distance2 } from '@/base/math';
 
 /** Cubic Bezier curve in 2D: endpoints plus two control points. */
 export interface CubicBezier2 {
@@ -21,12 +21,12 @@ export function evalBezier(b: CubicBezier2, t: number): Vec2 {
 
 /** Splits a cubic Bezier at parameter t with de Casteljau. */
 export function splitBezier(b: CubicBezier2, t: number): [CubicBezier2, CubicBezier2] {
-  const p01 = lerp(b.p0, b.c0, t);
-  const p12 = lerp(b.c0, b.c1, t);
-  const p23 = lerp(b.c1, b.p1, t);
-  const p012 = lerp(p01, p12, t);
-  const p123 = lerp(p12, p23, t);
-  const mid = lerp(p012, p123, t);
+  const p01 = lerp2(b.p0, b.c0, t);
+  const p12 = lerp2(b.c0, b.c1, t);
+  const p23 = lerp2(b.c1, b.p1, t);
+  const p012 = lerp2(p01, p12, t);
+  const p123 = lerp2(p12, p23, t);
+  const mid = lerp2(p012, p123, t);
   return [
     { p0: b.p0, c0: p01, c1: p012, p1: mid },
     { p0: mid, c0: p123, c1: p23, p1: b.p1 },
@@ -42,8 +42,8 @@ export function adaptiveSampleBezier(b: CubicBezier2, tolerance = 0.1, maxDepth 
 
 function subdivide(b: CubicBezier2, tol: number, out: Vec2[], depth: number, maxDepth: number): void {
   const mid = evalBezier(b, 0.5);
-  const chord = lerp(b.p0, b.p1, 0.5);
-  if (distance(mid, chord) < tol || depth >= maxDepth) {
+  const chord = lerp2(b.p0, b.p1, 0.5);
+  if (distance2(mid, chord) < tol || depth >= maxDepth) {
     out.push(b.p1);
     return;
   }
@@ -81,13 +81,13 @@ export function smoothSplineSegments(points: readonly Vec2[], closed = false): C
   return segments;
 }
 
-/** Approximate curve parameter whose point is closest to `p` (32 samples). */
-export function curveTForPoint(curve: CubicBezier2, p: Vec2): number {
+/** Approximate curve parameter whose point is closest to `p`, by uniform sampling. */
+export function curveTForPoint(curve: CubicBezier2, p: Vec2, samples = 32): number {
   let bestT = 0;
   let bestD = Infinity;
-  for (let i = 0; i <= 32; i++) {
-    const t = i / 32;
-    const d = distance(evalBezier(curve, t), p);
+  for (let i = 0; i <= samples; i++) {
+    const t = i / samples;
+    const d = distance2(evalBezier(curve, t), p);
     if (d < bestD) { bestD = d; bestT = t; }
   }
   return bestT;

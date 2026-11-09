@@ -6,7 +6,7 @@ import { filletCorner, filletCorners } from '@/pattern/geom/fillet';
 import { evalArc } from '@/base/geom';
 import { edgeCurve } from '@/pattern/geom/bezier';
 import { edgeLength } from '@/pattern/geom/edgeSample';
-import { distance } from '@/base/geom';
+import { distance2 } from '@/base/math';
 
 const makeEdge = (s: string, e: string): PatternEdge => ({
   id: genId('edge'), type: 'line', startPointId: s, endPointId: e,
@@ -142,7 +142,7 @@ describe('filletCorner', () => {
     const tout = p.points[keptOut.startPointId].pos;
     let minDist = Infinity;
     for (let i = 0; i <= 40; i++) {
-      minDist = Math.min(minDist, distance(bezierPoint(original, i / 40), tout));
+      minDist = Math.min(minDist, distance2(bezierPoint(original, i / 40), tout));
     }
     expect(minDist).toBeLessThan(0.25);
 
@@ -172,7 +172,7 @@ describe('filletCorner', () => {
     expect(keptIn.type).toBe('arc');
     expect(keptIn.arc!.radius).toBeCloseTo(radius, 6);
     const tin = p.points[keptIn.endPointId].pos;
-    expect(distance(center, tin)).toBeCloseTo(radius, 6);
+    expect(distance2(center, tin)).toBeCloseTo(radius, 6);
     expect(fillet.type).toBe('arc');
     expect(keptOut.type).toBe('line');
     expect(keptOut.startPointId).toBe(fillet.endPointId);
@@ -210,7 +210,7 @@ describe('filletCorners', () => {
     expect(r!.edges).toHaveLength(5);
     // The edge between p1 and p2 got trimmed on both sides to length 6.
     const shared = r!.edges.find(e => e.type === 'line'
-      && Math.abs(distance(p.points[e.startPointId].pos, p.points[e.endPointId].pos) - 6) < 1e-6);
+      && Math.abs(distance2(p.points[e.startPointId].pos, p.points[e.endPointId].pos) - 6) < 1e-6);
     expect(shared).toBeDefined();
   });
 

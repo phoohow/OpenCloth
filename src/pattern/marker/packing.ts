@@ -1,3 +1,4 @@
+import { degToRad } from '@/base/math';
 /** One panel shape to place on the fabric. */
 export interface PackItem {
   id: string;
@@ -57,11 +58,10 @@ interface Orientation {
   height: number;
 }
 
-const DEG = Math.PI / 180;
 
 /** Axis-aligned bounding box of a `width` x `height` rectangle rotated by `angleDeg`. */
 function rotatedBounds(width: number, height: number, angleDeg: number): { width: number; height: number } {
-  const rad = angleDeg * DEG;
+  const rad = degToRad(angleDeg);
   const cos = Math.abs(Math.cos(rad));
   const sin = Math.abs(Math.sin(rad));
   return { width: width * cos + height * sin, height: width * sin + height * cos };

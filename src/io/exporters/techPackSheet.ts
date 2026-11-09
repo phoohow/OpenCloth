@@ -1,4 +1,5 @@
 import type { Project, Vec2 } from '@/model/types';
+import { computeBBox } from '@/base/geom';
 import {
   assemblePdf, CM_PT, closedPath, openPath, pdfNum, rectPath, textOps, textWidthPt,
 } from '@/io/pdf/pdfDocument';
@@ -139,29 +140,16 @@ interface DrawBox {
   h: number;
 }
 
-/** Axis-aligned bounds of a point set; null when it is empty. */
-function pointBounds(points: Vec2[]): { minX: number; minY: number; maxX: number; maxY: number } | null {
-  if (points.length === 0) return null;
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (const p of points) {
-    if (p.x < minX) minX = p.x;
-    if (p.y < minY) minY = p.y;
-    if (p.x > maxX) maxX = p.x;
-    if (p.y > maxY) maxY = p.y;
-  }
-  return { minX, minY, maxX, maxY };
-}
-
 /** Maps pattern coordinates into a page-point box, keeping the aspect ratio and centring the result. */
 function boxMapper(points: Vec2[], box: DrawBox, pad = 5): (p: Vec2) => Vec2 {
-  const bounds = pointBounds(points);
-  if (!bounds) return () => ({ x: box.x + box.w / 2, y: box.y + box.h / 2 });
-  const width = Math.max(bounds.maxX - bounds.minX, 1e-6);
-  const height = Math.max(bounds.maxY - bounds.minY, 1e-6);
+  if (points.length === 0) return () => ({ x: box.x + box.w / 2, y: box.y + box.h / 2 });
+  const bounds = computeBBox(points);
+  const width = Math.max(bounds.max.x - bounds.min.x, 1e-6);
+  const height = Math.max(bounds.max.y - bounds.min.y, 1e-6);
   const scale = Math.min((box.w - pad * 2) / width, (box.h - pad * 2) / height);
   const ox = box.x + (box.w - width * scale) / 2;
   const oy = box.y + (box.h - height * scale) / 2;
-  return p => ({ x: ox + (p.x - bounds.minX) * scale, y: oy + (p.y - bounds.minY) * scale });
+  return p => ({ x: ox + (p.x - bounds.min.x) * scale, y: oy + (p.y - bounds.min.y) * scale });
 }
 
 /** Grey closed outline with the holes punched inside it. */

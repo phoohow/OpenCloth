@@ -6,7 +6,8 @@ import { parseElementNodeId, type PatternElementKind } from '@/model';
 import polygonClipping from 'polygon-clipping';
 import { edgeLength, pointAtT } from '@/pattern/geom';
 import { computePolylineNormals, hasSelfIntersection } from '@/base/geom/offset';
-import { computeBBox } from '@/base/geom';
+import { computeBBox, pointInPolygon } from '@/base/geom';
+import { add2, averagePoint2, lerp2, normalize2, scale2, sub2 } from '@/base/math';
 import { samplePanelOutline } from '@/pattern/panel';
 import { SnapshotCommand } from '@/commands/patternSnapshot';
 import { addClosedLineOutline, makePanel, newEdge, newPoint } from '@/commands/patternCreateCommands';
@@ -27,28 +28,10 @@ type Pair = [number, number];
 
 const toRing = (pts: Vec2[]): Pair[] => pts.map(p => [p.x, p.y]);
 const ringToVec = (ring: Pair[]): Vec2[] => ring.map(([x, y]) => ({ x, y }));
-const sub = (a: Vec2, b: Vec2): Vec2 => ({ x: a.x - b.x, y: a.y - b.y });
-const add = (a: Vec2, b: Vec2): Vec2 => ({ x: a.x + b.x, y: a.y + b.y });
-const mul = (a: Vec2, s: number): Vec2 => ({ x: a.x * s, y: a.y * s });
-const lerpV = (a: Vec2, b: Vec2, k: number): Vec2 => ({ x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k });
-const norm = (v: Vec2): Vec2 => { const l = Math.hypot(v.x, v.y) || 1; return { x: v.x / l, y: v.y / l }; };
-
-/** Ray-casting point-in-polygon test. */
-export function insidePolygon(poly: Vec2[], p: Vec2): boolean {
-  let inside = false;
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const a = poly[i], b = poly[j];
-    if ((a.y > p.y) !== (b.y > p.y) && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
-  }
-  return inside;
-}
 
 /** Centroid of a panel's sampled outline, used to orient dart tips inward. */
 function panelCentroid(pattern: Pattern, panel: Panel): Vec2 {
-  const pts = samplePanelOutline(pattern, panel);
-  if (pts.length === 0) return { x: 0, y: 0 };
-  const sum = pts.reduce((s, p) => ({ x: s.x + p.x, y: s.y + p.y }), { x: 0, y: 0 });
-  return { x: sum.x / pts.length, y: sum.y / pts.length };
+  return averagePoint2(samplePanelOutline(pattern, panel));
 }
 
 /** Inserts a polygon ring as fresh points and line edges; returns its edge ids. */
@@ -67,7 +50,7 @@ export class AddInternalLineCommand extends SnapshotCommand {
     if (this.points.length < 2) throw new Error('内部线至少需要 2 个点');
     const outline = samplePanelOutline(pattern, panel);
     for (const p of this.points) {
-      if (!insidePolygon(outline, p)) throw new Error('内部线必须在版片轮廓内');
+      if (!pointInPolygon(outline, p)) throw new Error('内部线必须在版片轮廓内');
     }
     const id = genId('line');
     const line: InternalLine = { id, kind: this.kind, points: this.points.map(p => ({ x: p.x, y: p.y })) };
@@ -89,12 +72,12 @@ export class OutlineSplitCommand extends SnapshotCommand {
     const outline = samplePanelOutline(pattern, panel);
     const bbox = computeBBox(outline);
     const reach = Math.hypot(bbox.max.x - bbox.min.x, bbox.max.y - bbox.min.y) + 1;
-    const dir0 = norm(sub(this.cutPoints[0], this.cutPoints[1]));
-    const dir1 = norm(sub(this.cutPoints.at(-1)!, this.cutPoints.at(-2)!));
+    const dir0 = normalize2(sub2(this.cutPoints[0], this.cutPoints[1]));
+    const dir1 = normalize2(sub2(this.cutPoints.at(-1)!, this.cutPoints.at(-2)!));
     const extended = [
-      add(this.cutPoints[0], mul(dir0, reach)),
+      add2(this.cutPoints[0], scale2(dir0, reach)),
       ...this.cutPoints,
-      add(this.cutPoints.at(-1)!, mul(dir1, reach)),
+      add2(this.cutPoints.at(-1)!, scale2(dir1, reach)),
     ];
     const band = cutBand(extended, 0.02);
     const comps = difference([[toRing(outline)]], [[toRing(band)]]);
@@ -120,8 +103,8 @@ export class OutlineSplitCommand extends SnapshotCommand {
 /** Thin closed strip around a polyline, used to cut a panel with polygon-clipping. */
 function cutBand(points: Vec2[], w: number): Vec2[] {
   const normals = computePolylineNormals(points);
-  const fwd = points.map((p, i) => add(p, mul(normals[i], w)));
-  const back = points.map((p, i) => add(p, mul(normals[i], -w))).reverse();
+  const fwd = points.map((p, i) => add2(p, scale2(normals[i], w)));
+  const back = points.map((p, i) => add2(p, scale2(normals[i], -w))).reverse();
   return [...fwd, ...back];
 }
 
@@ -215,7 +198,7 @@ export class OutlineHoleCommand extends SnapshotCommand {
     if (hasSelfIntersection(this.loopPoints)) throw new Error('内孔轮廓不能自相交');
     const outline = samplePanelOutline(pattern, panel);
     for (const p of this.loopPoints) {
-      if (!insidePolygon(outline, p)) throw new Error('内孔必须完全位于版片轮廓内');
+      if (!pointInPolygon(outline, p)) throw new Error('内孔必须完全位于版片轮廓内');
     }
     const loop = insertRing(pattern, this.loopPoints);
     (panel.holes ??= []).push(loop);
@@ -264,7 +247,7 @@ export class CreateDartCommand extends SnapshotCommand {
     const [, edge1b] = this.splitLineAt(pattern, panel, this.edge1Id, baseA);
     const [, edge2b] = this.splitLineAt(pattern, panel, this.edge2Id, baseB);
     const corner = pattern.points[e1.endPointId]!.pos;
-    const tip = this.tipPos ?? lerpV(corner, panelCentroid(pattern, panel), 0.45);
+    const tip = this.tipPos ?? lerp2(corner, panelCentroid(pattern, panel), 0.45);
 
     // The two edges bracketing the corner (baseA->corner, corner->baseB) collapse into the tip.
     const tipId = newPoint(pattern, tip);

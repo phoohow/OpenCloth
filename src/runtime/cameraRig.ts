@@ -1,6 +1,7 @@
 /** Camera presets, framing and saved placement over the Contract camera host. */
 
 import type { Bounds, CameraHost, CameraPose } from '@/render/common';
+import { add3, normalize3, scale3, sub3 } from '@/base/math';
 import type { CameraConfig, CameraProjection, Vec3 } from '@/model/types';
 import {
   CAMERA_VIEW_FRAMES, fitCameraToBox, type CameraPreset,
@@ -37,7 +38,7 @@ export class CameraRig {
     const fit = fitCameraToBox(bounds, frame, snapshot.fovDeg, snapshot.aspect);
     this.deps.host.setPose({
       projection: this.deps.host.projection(),
-      position: add(center, scale(frame.direction, fit.distance)),
+      position: add3(center, scale3(frame.direction, fit.distance)),
       target: center,
       up: frame.up,
       fovDeg: snapshot.fovDeg,
@@ -48,13 +49,13 @@ export class CameraRig {
   /** Refits the scene box along the current view direction. */
   frameScene(): void {
     const snapshot = this.deps.host.snapshot();
-    const direction = normalize(sub(snapshot.position, snapshot.target)) ?? { x: 0, y: 0, z: 1 };
+    const direction = normalize3(sub3(snapshot.position, snapshot.target)) ?? { x: 0, y: 0, z: 1 };
     const fit = fitCameraToBox(
       this.deps.bounds(), { direction, up: snapshot.up }, snapshot.fovDeg, snapshot.aspect,
     );
     this.deps.host.setPose({
       projection: snapshot.projection,
-      position: add(snapshot.target, scale(direction, fit.distance)),
+      position: add3(snapshot.target, scale3(direction, fit.distance)),
       target: snapshot.target,
       up: snapshot.up,
       fovDeg: snapshot.fovDeg,
@@ -96,21 +97,4 @@ function centerOf(bounds: Bounds): Vec3 {
     y: (bounds.min.y + bounds.max.y) / 2,
     z: (bounds.min.z + bounds.max.z) / 2,
   };
-}
-
-function add(a: Vec3, b: Vec3): Vec3 {
-  return { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z };
-}
-
-function sub(a: Vec3, b: Vec3): Vec3 {
-  return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z };
-}
-
-function scale(v: Vec3, s: number): Vec3 {
-  return { x: v.x * s, y: v.y * s, z: v.z * s };
-}
-
-function normalize(v: Vec3): Vec3 | null {
-  const length = Math.hypot(v.x, v.y, v.z);
-  return length > 1e-9 ? { x: v.x / length, y: v.y / length, z: v.z / length } : null;
 }

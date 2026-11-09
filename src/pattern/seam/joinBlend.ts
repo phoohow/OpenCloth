@@ -1,6 +1,11 @@
 import type { Panel, Pattern, Seam, Vec2 } from '@/model/types';
 import { samplePanelOutline } from '@/pattern/panel/panelBuilder';
 import { sampleEdge } from '@/pattern/geom/edgeSample';
+import { pointInPolygon } from '@/base/geom';
+import { distanceToPolyline } from '@/base/geom/polyCurve';
+import {
+  EPS, angleBetween2, distance2, radToDeg, sub2, unit2,
+} from '@/base/math';
 
 /** Which end of a seam interval the joint sits at. */
 export type SeamJointEnd = 'start' | 'end';
@@ -29,37 +34,11 @@ export interface SeamJoint {
   pose: SewnPose;
 }
 
-const EPS = 1e-6;
-
 /** Radius around the joint within which the two panels are checked for covering each other. */
 const JOINT_PROBE_CM = 2;
 
 /** How far inside the other panel a point must be, past outline sampling noise, to count as covered. */
 const PENETRATION_CM = 0.4;
-
-const unit = (v: Vec2): Vec2 | null => {
-  const l = Math.hypot(v.x, v.y);
-  return l < EPS ? null : { x: v.x / l, y: v.y / l };
-};
-
-const sub = (a: Vec2, b: Vec2): Vec2 => ({ x: a.x - b.x, y: a.y - b.y });
-
-/** Unsigned angle between two directions, in degrees. */
-function angleBetweenDeg(a: Vec2, b: Vec2): number {
-  const dot = a.x * b.x + a.y * b.y;
-  const cross = a.x * b.y - a.y * b.x;
-  return (Math.atan2(Math.abs(cross), dot) * 180) / Math.PI;
-}
-
-/** Ray-cast point-in-polygon test. */
-function insidePolygon(poly: Vec2[], p: Vec2): boolean {
-  let inside = false;
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const a = poly[i], b = poly[j];
-    if ((a.y > p.y) !== (b.y > p.y) && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
-  }
-  return inside;
-}
 
 /** Panel holding an edge on its outer outline, or null. */
 function outlinePanel(pattern: Pattern, edgeId: string): Panel | null {
@@ -75,10 +54,10 @@ function travelAt(pattern: Pattern, edgeId: string, pointId: string): Vec2 | nul
   if (!edge) return null;
   const pts = sampleEdge(pattern, edgeId);
   if (pts.length < 2) return null;
-  if (edge.startPointId === pointId) return unit({ x: pts[1].x - pts[0].x, y: pts[1].y - pts[0].y });
+  if (edge.startPointId === pointId) return unit2(sub2(pts[1], pts[0]), EPS);
   if (edge.endPointId === pointId) {
     const n = pts.length;
-    return unit({ x: pts[n - 1].x - pts[n - 2].x, y: pts[n - 1].y - pts[n - 2].y });
+    return unit2(sub2(pts[n - 1], pts[n - 2]), EPS);
   }
   return null;
 }
@@ -88,7 +67,7 @@ function vertexIndex(poly: Vec2[], pos: Vec2): number {
   let best = -1;
   let bestDist = 1e-4;
   poly.forEach((p, i) => {
-    const d = Math.hypot(p.x - pos.x, p.y - pos.y);
+    const d = distance2(p, pos);
     if (d < bestDist) { bestDist = d; best = i; }
   });
   return best;
@@ -107,14 +86,12 @@ function leavingRay(pattern: Pattern, panel: Panel, seamEdgeId: string, pos: Vec
   const next = poly[(i + 1) % n];
   const away = distanceToEdge(pattern, seamEdgeId, prev) < distanceToEdge(pattern, seamEdgeId, next)
     ? next : prev;
-  return unit(sub(away, poly[i]));
+  return unit2(sub2(away, poly[i]), EPS);
 }
 
 /** Nearest distance from a point to an edge's samples; zero when the point sits on that edge. */
 function distanceToEdge(pattern: Pattern, edgeId: string, p: Vec2): number {
-  let best = Infinity;
-  for (const q of sampleEdge(pattern, edgeId)) best = Math.min(best, Math.hypot(p.x - q.x, p.y - q.y));
-  return best;
+  return distanceToPolyline(p, sampleEdge(pattern, edgeId));
 }
 
 /** B's interval parameter paired with A's at the given seam end. */
@@ -170,21 +147,21 @@ export function seamJoint(pattern: Pattern, seamId: string, end: SeamJointEnd): 
     return { x: pos.x + dx * cos - dy * sin, y: pos.y + dx * sin + dy * cos };
   };
 
-  const rayBSewn = unit(sub(pose({ x: posB.x + rayB.x, y: posB.y + rayB.y }), pos));
+  const rayBSewn = unit2(sub2(pose({ x: posB.x + rayB.x, y: posB.y + rayB.y }), pos), EPS);
   if (!rayBSewn) return null;
 
   const sewnB = outlineB.map(pose);
   // Overlap is judged where the joint meets the contour, and only for a real intrusion: the
   // point must lie inside the other panel and further than PENETRATION_CM from its samples.
-  const near = (p: Vec2): boolean => Math.hypot(p.x - pos.x, p.y - pos.y) <= JOINT_PROBE_CM;
+  const near = (p: Vec2): boolean => distance2(p, pos) <= JOINT_PROBE_CM;
   const intrudes = (p: Vec2, poly: Vec2[]): boolean => {
-    if (!insidePolygon(poly, p)) return false;
-    return poly.every(q => Math.hypot(p.x - q.x, p.y - q.y) > PENETRATION_CM);
+    if (!pointInPolygon(poly, p)) return false;
+    return poly.every(q => distance2(p, q) > PENETRATION_CM);
   };
   const overlap = sewnB.filter(near).some(p => intrudes(p, outlineA))
     || outlineA.filter(near).some(p => intrudes(p, sewnB));
 
-  const angleDeg = angleBetweenDeg(rayA, rayBSewn);
+  const angleDeg = radToDeg(angleBetween2(rayA, rayBSewn));
   return {
     seamId, end, panelAId: panelA.id, panelBId: panelB.id, pointAId, pointBId,
     pos, angleDeg, bendDeg: 180 - angleDeg, overlap, pose,

@@ -6,7 +6,10 @@ import { roundTo } from '@/base/format';
 import { validatePattern } from '@/model';
 import { sampleEdge } from '@/pattern/geom';
 import { adaptiveSampleArc, arcFromThreePoints } from '@/base/geom/arc';
-import { computeBBox, ensureCCW, polygonArea } from '@/base/geom';
+import { computeBBox, ensureCCW, pointInPolygon, polygonArea } from '@/base/geom';
+import { distance2, nearlyEqual2 } from '@/base/math';
+import { projectOnSegment2 } from '@/base/geom';
+import { distanceToPolyline, polylineLength } from '@/base/geom/polyCurve';
 import { parseDxf, expandInserts, type DxfEntity, type DxfVertex } from '@/io/dxf/dxfParser';
 import { layerRole, type DxfConvention, type LayerRole } from '@/io/dxf/layers';
 import { unescapeDxfValue } from '@/io/dxf/writer';
@@ -24,7 +27,7 @@ const UNIT_TO_MM: Record<NonNullable<ParseDxfOptions['units']>, number> = { mm: 
 
 const posKey = (p: Vec2): string => `${Math.round(p.x * 1000)},${Math.round(p.y * 1000)}`;
 
-const samePoint = (a: Vec2, b: Vec2): boolean => Math.hypot(a.x - b.x, a.y - b.y) < 1e-6;
+const samePoint = (a: Vec2, b: Vec2): boolean => nearlyEqual2(a, b);
 
 function dedupeChain(pts: Vec2[]): Vec2[] {
   const out: Vec2[] = [];
@@ -140,27 +143,6 @@ function weldLoops(chains: Vec2[][]): Vec2[][] {
   return loops;
 }
 
-function pointInPolygon(p: Vec2, poly: Vec2[]): boolean {
-  let inside = false;
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const a = poly[i], b = poly[j];
-    if ((a.y > p.y) !== (b.y > p.y) && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
-  }
-  return inside;
-}
-
-/** Distance from a point to a point sequence treated as a polyline. */
-function distanceToChain(p: Vec2, chain: Vec2[]): number {
-  let best = Infinity;
-  for (let i = 0; i + 1 < chain.length; i++) {
-    const a = chain[i], b = chain[i + 1];
-    const dx = b.x - a.x, dy = b.y - a.y;
-    const len2 = dx * dx + dy * dy;
-    const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2));
-    best = Math.min(best, Math.hypot(p.x - (a.x + dx * t), p.y - (a.y + dy * t)));
-  }
-  return best;
-}
 
 function chainCenter(chain: Vec2[]): Vec2 {
   const box = computeBBox(chain);
@@ -216,16 +198,13 @@ function nearestOnPanel(pattern: Pattern, panel: Panel, p: Vec2): { edgeId: stri
   for (const edgeId of [...panel.outlineEdgeIds, ...(panel.holes ?? []).flat()]) {
     const pts = sampleEdge(pattern, edgeId);
     let run = 0;
-    let total = 0;
-    for (let i = 1; i < pts.length; i++) total += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+    const total = polylineLength(pts);
     for (let i = 1; i < pts.length; i++) {
       const a = pts[i - 1], b = pts[i];
-      const dx = b.x - a.x, dy = b.y - a.y;
-      const segLen = Math.hypot(dx, dy);
-      const len2 = segLen * segLen;
-      const k = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2));
-      const dist = Math.hypot(p.x - (a.x + dx * k), p.y - (a.y + dy * k));
-      if (!best || dist < best.dist) best = { edgeId, t: total > 0 ? (run + segLen * k) / total : 0, dist };
+      const projection = projectOnSegment2(p, a, b);
+      const segLen = distance2(a, b);
+      const dist = distance2(p, projection.point);
+      if (!best || dist < best.dist) best = { edgeId, t: total > 0 ? (run + segLen * projection.t) / total : 0, dist };
       run += segLen;
     }
   }
@@ -236,12 +215,12 @@ function nearestOnPanel(pattern: Pattern, panel: Panel, p: Vec2): { edgeId: stri
 function pickPanel(candidates: { panel: Panel; loop: Vec2[] }[], pts: Vec2[]): Panel | null {
   if (candidates.length === 0) return null;
   const probe = chainCenter(pts);
-  const inside = candidates.find(c => pointInPolygon(probe, ensureCCW(c.loop)));
+  const inside = candidates.find(c => pointInPolygon(ensureCCW(c.loop), probe));
   if (inside) return inside.panel;
   let best: Panel | null = null;
   let bestDist = Infinity;
   for (const c of candidates) {
-    const d = distanceToChain(probe, ensureCCW(c.loop));
+    const d = distanceToPolyline(probe, ensureCCW(c.loop));
     if (d < bestDist) {
       bestDist = d;
       best = c.panel;
@@ -337,7 +316,7 @@ export function parsePatternDxf(text: string, opts: ParseDxfOptions = {}): Patte
     let groupPanelCount = 0;
     for (const loop of bySize) {
       const area = Math.abs(polygonArea(loop));
-      const parent = candidates.find(c => Math.abs(polygonArea(c.loop)) > area && pointInPolygon(chainCenter(loop), ensureCCW(c.loop)));
+      const parent = candidates.find(c => Math.abs(polygonArea(c.loop)) > area && pointInPolygon(ensureCCW(c.loop), chainCenter(loop)));
       if (parent) {
         parent.panel.holes = parent.panel.holes ?? [];
         parent.panel.holes.push(resolveEdge(pattern, store, ensureCCW(loop)));
@@ -374,7 +353,7 @@ export function parsePatternDxf(text: string, opts: ParseDxfOptions = {}): Patte
       const saChain = [...loop, loop[0]];
       const outlinePts = loopPoints(pattern, owner.outlineEdgeIds);
       if (outlinePts.length < 3) continue;
-      const mean = outlinePts.reduce((acc, p) => acc + distanceToChain(p, saChain), 0) / outlinePts.length;
+      const mean = outlinePts.reduce((acc, p) => acc + distanceToPolyline(p, saChain), 0) / outlinePts.length;
       owner.seamAllowanceCm = Math.max(0, roundTo(mean));
     }
 

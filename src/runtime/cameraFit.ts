@@ -1,6 +1,8 @@
 /** Camera presets and pure box framing, independent of three. */
 
-import type { Vec3 } from '@/base/geom';
+import type { Vec3 } from '@/base/math';
+import { degToRad } from '@/base/math';
+import { cross3, dot3, normalize3 } from '@/base/math';
 import type { Bounds } from '@/render/common';
 
 /** Named view the camera can jump to; the camera sits on the direction ray, looking at the scene. */
@@ -49,9 +51,9 @@ export interface CameraFit {
 
 /** Right, up and backward axes of the view frame. */
 function viewAxes(frame: ViewFrame): { right: Vec3; up: Vec3; back: Vec3 } {
-  const back = normalize(frame.direction) ?? { x: 0, y: 0, z: 1 };
-  const right = normalize(cross(frame.up, back)) ?? { x: 1, y: 0, z: 0 };
-  const up = normalize(cross(back, right)) ?? { x: 0, y: 1, z: 0 };
+  const back = normalize3(frame.direction) ?? { x: 0, y: 0, z: 1 };
+  const right = normalize3(cross3(frame.up, back)) ?? { x: 1, y: 0, z: 0 };
+  const up = normalize3(cross3(back, right)) ?? { x: 0, y: 1, z: 0 };
   return { right, up, back };
 }
 
@@ -72,9 +74,9 @@ export function projectBox(box: Bounds, frame: ViewFrame): ProjectedExtents {
       y: i & 2 ? half.y : -half.y,
       z: i & 4 ? half.z : -half.z,
     };
-    width = Math.max(width, Math.abs(dot(corner, right)));
-    height = Math.max(height, Math.abs(dot(corner, up)));
-    depth = Math.max(depth, Math.abs(dot(corner, back)));
+    width = Math.max(width, Math.abs(dot3(corner, right)));
+    height = Math.max(height, Math.abs(dot3(corner, up)));
+    depth = Math.max(depth, Math.abs(dot3(corner, back)));
   }
   return { width, height, depth };
 }
@@ -83,7 +85,7 @@ export function projectBox(box: Bounds, frame: ViewFrame): ProjectedExtents {
 export function perspectiveFitDistance(
   extents: ProjectedExtents, fovDeg: number, aspect: number, margin = FIT_MARGIN,
 ): number {
-  const vertical = Math.tan((fovDeg * Math.PI / 180) / 2);
+  const vertical = Math.tan(degToRad(fovDeg) / 2);
   const horizontal = vertical * Math.max(0.01, aspect);
   const fitted = Math.max(extents.height / vertical, extents.width / horizontal);
   return Math.max(0.1, (fitted + extents.depth) * margin);
@@ -103,21 +105,4 @@ export function fitCameraToBox(box: Bounds, frame: ViewFrame, fovDeg: number, as
     distance: perspectiveFitDistance(extents, fovDeg, aspect),
     viewHeight: orthoFitViewHeight(extents, aspect),
   };
-}
-
-function dot(a: Vec3, b: Vec3): number {
-  return a.x * b.x + a.y * b.y + a.z * b.z;
-}
-
-function cross(a: Vec3, b: Vec3): Vec3 {
-  return {
-    x: a.y * b.z - a.z * b.y,
-    y: a.z * b.x - a.x * b.z,
-    z: a.x * b.y - a.y * b.x,
-  };
-}
-
-function normalize(v: Vec3): Vec3 | null {
-  const length = Math.hypot(v.x, v.y, v.z);
-  return length > 1e-9 ? { x: v.x / length, y: v.y / length, z: v.z / length } : null;
 }

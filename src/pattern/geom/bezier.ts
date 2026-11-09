@@ -1,6 +1,7 @@
 import type { Pattern, PatternEdge, Vec2 } from '@/model/types';
 import type { CubicBezier2 } from '@/base/geom/bezier';
 import { splitBezier, curveTForPoint } from '@/base/geom/bezier';
+import { nearlyEqual2 } from '@/base/math';
 
 export * from '@/base/geom/bezier';
 
@@ -43,7 +44,7 @@ export function splitEdgeCurve(
 ): [PatternEdge, PatternEdge] {
   const curve = edgeCurve(pattern, edge)!;
   const [left, right] = splitBezier(curve, curveTForPoint(curve, at));
-  const midId = Object.keys(pattern.points).find(id => near(pattern.points[id].pos, at))
+  const midId = Object.keys(pattern.points).find(id => nearlyEqual2(pattern.points[id].pos, at))
     ?? (() => { throw new Error('split point missing'); })();
   const mid = pattern.points[midId]!;
   const start = pattern.points[edge.startPointId]!;
@@ -56,8 +57,4 @@ export function splitEdgeCurve(
   e1.type = 'bezier'; e2.type = 'bezier';
   e1.semantic = edge.semantic; e2.semantic = edge.semantic;
   return [e1, e2];
-}
-
-function near(a: Vec2, b: Vec2): boolean {
-  return Math.hypot(a.x - b.x, a.y - b.y) < 1e-6;
 }

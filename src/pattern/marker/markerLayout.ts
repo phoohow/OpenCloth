@@ -2,6 +2,7 @@ import type { Pattern, Vec2 } from '@/model/types';
 import { resolveSize } from '@/pattern/grading/resolveSize';
 import { panelGrainLine, panelOutlineWithAllowance } from '@/pattern/panel/panelBuilder';
 import { computeBBox } from '@/base/geom';
+import { degToRad, rotate2 } from '@/base/math';
 import { packPanels, type PackItem, type Placement } from '@/pattern/marker/packing';
 
 /** One size nested onto the marker; labels become part of each piece name. */
@@ -117,27 +118,17 @@ export function buildMarkerLayout(pattern: Pattern, options: MarkerLayoutOptions
 /** Maps one piece-local point into marker coordinates, mirrored and rotated by the placed angle. */
 export function placePoint(piece: MarkerPiece, place: Placement, p: Vec2): Vec2 {
   const localX = place.flipped ? piece.width - p.x : p.x;
-  const rad = place.angleDeg * Math.PI / 180;
-  const cos = Math.cos(rad);
-  const sin = Math.sin(rad);
+  const angle = degToRad(place.angleDeg);
   const corners = [
     { x: 0, y: 0 },
     { x: piece.width, y: 0 },
     { x: piece.width, y: piece.height },
     { x: 0, y: piece.height },
-  ];
-  let minX = Infinity;
-  let minY = Infinity;
-  for (const corner of corners) {
-    const rx = corner.x * cos - corner.y * sin;
-    const ry = corner.x * sin + corner.y * cos;
-    if (rx < minX) minX = rx;
-    if (ry < minY) minY = ry;
-  }
-  return {
-    x: localX * cos - p.y * sin - minX + place.x,
-    y: localX * sin + p.y * cos - minY + place.y,
-  };
+  ].map(corner => rotate2(corner, angle));
+  const minX = Math.min(...corners.map(corner => corner.x));
+  const minY = Math.min(...corners.map(corner => corner.y));
+  const point = rotate2({ x: localX, y: p.y }, angle);
+  return { x: point.x - minX + place.x, y: point.y - minY + place.y };
 }
 
 /** Marker coordinates of one placed piece's outline. */

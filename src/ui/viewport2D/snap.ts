@@ -1,5 +1,10 @@
 import type { ArcGeom, Pattern, PatternEdge, Vec2 } from '@/model/types';
 import { arcSpan } from '@/base/geom/arc';
+import { nearestOnPolyline, polylineMidpoint } from '@/base/geom';
+import {
+  TAU, distance2, nearlyEqual2, rotate2, wrapAngle,
+} from '@/base/math';
+import { projectOnLine2, segmentCrossing2 } from '@/base/geom';
 import { sampleEdge } from '@/pattern/panel';
 
 /** Kinds of snap candidate, ordered by pick priority. */
@@ -73,57 +78,19 @@ export function collectSnapCandidates(pattern: Pattern): SnapCandidate[] {
   return out;
 }
 
-/** Point at half the polyline's arc length, interpolated inside the segment holding that half. */
-function polylineMidpoint(pts: readonly Vec2[]): Vec2 | null {
-  const lengths: number[] = [];
-  let total = 0;
-  for (let i = 1; i < pts.length; i++) {
-    const len = Math.hypot(pts[i]!.x - pts[i - 1]!.x, pts[i]!.y - pts[i - 1]!.y);
-    lengths.push(len);
-    total += len;
-  }
-  if (lengths.length === 0 || total < 1e-9) return null;
-  const half = total / 2;
-  let walked = 0;
-  for (let i = 0; i < lengths.length; i++) {
-    const len = lengths[i]!;
-    if (walked + len >= half) {
-      const t = (half - walked) / (len || 1);
-      const a = pts[i]!, b = pts[i + 1]!;
-      return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
-    }
-    walked += len;
-  }
-  return pts[pts.length - 1]!;
-}
-
 /** Crossing points of straight edges that do not already share a vertex. */
 function lineIntersections(lines: readonly { a: Vec2; b: Vec2 }[]): SnapCandidate[] {
-  const shared = (x: Vec2, y: Vec2): boolean => Math.hypot(x.x - y.x, x.y - y.y) < 1e-6;
+  const shared = (x: Vec2, y: Vec2): boolean => nearlyEqual2(x, y);
   const out: SnapCandidate[] = [];
   for (let i = 0; i < lines.length; i++) {
     for (let j = i + 1; j < lines.length; j++) {
       const p = lines[i]!, q = lines[j]!;
       if (shared(p.a, q.a) || shared(p.a, q.b) || shared(p.b, q.a) || shared(p.b, q.b)) continue;
-      const at = segmentCrossing(p, q);
+      const at = segmentCrossing2(p.a, p.b, q.a, q.b);
       if (at) out.push({ pos: at, kind: 'intersection' });
     }
   }
   return out;
-}
-
-/** Interior crossing point of two segments, null when parallel or non-crossing. */
-function segmentCrossing(
-  p: { a: Vec2; b: Vec2 }, q: { a: Vec2; b: Vec2 },
-): Vec2 | null {
-  const dx1 = p.b.x - p.a.x, dy1 = p.b.y - p.a.y;
-  const dx2 = q.b.x - q.a.x, dy2 = q.b.y - q.a.y;
-  const den = dx1 * dy2 - dy1 * dx2;
-  if (Math.abs(den) < 1e-12) return null;
-  const t = ((q.a.x - p.a.x) * dy2 - (q.a.y - p.a.y) * dx2) / den;
-  const s = ((q.a.x - p.a.x) * dy1 - (q.a.y - p.a.y) * dx1) / den;
-  if (t <= 1e-6 || t >= 1 - 1e-6 || s <= 1e-6 || s >= 1 - 1e-6) return null;
-  return { x: p.a.x + t * dx1, y: p.a.y + t * dy1 };
 }
 
 /**
@@ -141,8 +108,8 @@ export function collectCursorCandidates(
     if (!edge) continue;
     const pts = sampleEdge(pattern, edgeId);
     if (pts.length < 2) continue;
-    const foot = nearestOnPolyline(pts, world);
-    if (foot && Math.hypot(foot.x - world.x, foot.y - world.y) <= tolerance) {
+    const foot = nearestOnPolyline(world, pts);
+    if (foot && distance2(foot, world) <= tolerance) {
       out.push({ pos: foot, kind: 'perpendicular', edgeId });
     }
     if (edge.type === 'line') {
@@ -151,7 +118,7 @@ export function collectCursorCandidates(
     }
     if (!anchor) continue;
     for (const point of tangentPoints(edge, pts, anchor)) {
-      if (Math.hypot(point.x - world.x, point.y - world.y) <= tolerance) {
+      if (distance2(point, world) <= tolerance) {
         out.push({ pos: point, kind: 'tangent', edgeId });
       }
     }
@@ -189,9 +156,8 @@ function arcTangentPoints(arc: ArcGeom, anchor: Vec2): Vec2[] {
 /** True when `angle` lies within the arc's swept range from its start toward its end. */
 function angleOnArc(arc: ArcGeom, angle: number): boolean {
   const span = arcSpan(arc);
-  let off = (angle - arc.startAngle) % (Math.PI * 2);
-  if (off < 0) off += Math.PI * 2;
-  return span >= 0 ? off <= span + 1e-9 : off >= Math.PI * 2 + span - 1e-9;
+  const off = wrapAngle(angle - arc.startAngle);
+  return span >= 0 ? off <= span + 1e-9 : off >= TAU + span - 1e-9;
 }
 
 /** Sampled bezier points where the anchor-to-point vector turns perpendicular to the edge. */
@@ -213,51 +179,31 @@ function bezierTangentPoints(pts: Vec2[], anchor: Vec2): Vec2[] {
 
 /** The point keeping the anchor's perpendicular offset from the edge, set on the edge normal at the cursor's foot. */
 function equidistantPoint(pts: readonly Vec2[], anchor: Vec2, world: Vec2, tolerance: number): Vec2 | null {
-  const foot = nearestOnPolyline(pts, world);
+  const foot = nearestOnPolyline(world, pts);
   if (!foot) return null;
   const mx = world.x - foot.x, my = world.y - foot.y;
   const offset = Math.hypot(mx, my);
   if (offset < 1e-9) return null;
-  const anchorFoot = nearestOnPolyline(pts, anchor);
+  const anchorFoot = nearestOnPolyline(anchor, pts);
   if (!anchorFoot) return null;
   const keep = Math.hypot(anchor.x - anchorFoot.x, anchor.y - anchorFoot.y);
   if (keep < 1e-9) return null;
   const pos = { x: foot.x + (mx / offset) * keep, y: foot.y + (my / offset) * keep };
-  const shift = Math.hypot(pos.x - world.x, pos.y - world.y);
+  const shift = distance2(pos, world);
   return shift > 1e-6 && shift <= tolerance ? pos : null;
-}
-
-/** Nearest point of a polyline to `p`, or null when the polyline is degenerate. */
-function nearestOnPolyline(pts: readonly Vec2[], p: Vec2): Vec2 | null {
-  let best: Vec2 | null = null;
-  let bestD = Infinity;
-  for (let i = 0; i + 1 < pts.length; i++) {
-    const a = pts[i]!, b = pts[i + 1]!;
-    const vx = b.x - a.x, vy = b.y - a.y;
-    const len2 = vx * vx + vy * vy;
-    if (len2 < 1e-12) continue;
-    const t = Math.max(0, Math.min(1, ((p.x - a.x) * vx + (p.y - a.y) * vy) / len2));
-    const at = { x: a.x + t * vx, y: a.y + t * vy };
-    const d = Math.hypot(at.x - p.x, at.y - p.y);
-    if (d < bestD) { bestD = d; best = at; }
-  }
-  return best;
 }
 
 /** Projection of `p` onto the edge's line when it falls outside the segment but stays close. */
 function extensionPoint(a: Vec2, b: Vec2, p: Vec2, tolerance: number): Vec2 | null {
-  const vx = b.x - a.x, vy = b.y - a.y;
-  const len2 = vx * vx + vy * vy;
-  if (len2 < 1e-12) return null;
-  const t = ((p.x - a.x) * vx + (p.y - a.y) * vy) / len2;
-  const length = Math.sqrt(len2);
+  const length = distance2(a, b);
+  if (length < 1e-6) return null;
+  const { point, t } = projectOnLine2(p, a, b);
   const margin = tolerance / length;
   if (t >= -margin && t <= 1 + margin) return null;
   // The continuation is local: only just past either end of the edge.
   const beyond = (t > 1 ? t - 1 : -t) * length;
   if (beyond > tolerance * EXTENSION_REACH) return null;
-  const at = { x: a.x + t * vx, y: a.y + t * vy };
-  return Math.hypot(at.x - p.x, at.y - p.y) <= tolerance ? at : null;
+  return distance2(point, p) <= tolerance ? point : null;
 }
 
 /** Best candidate for a world position: nearest after each kind's head start, inside `tolerance`. */
@@ -267,7 +213,7 @@ export function findSnap(
   let best: SnapCandidate | null = null;
   let bestScore = Infinity;
   for (const candidate of candidates) {
-    const distance = Math.hypot(candidate.pos.x - world.x, candidate.pos.y - world.y);
+    const distance = distance2(candidate.pos, world);
     if (distance > tolerance) continue;
     const score = distance - KIND_PULL[candidate.kind] * tolerance;
     if (score < bestScore - 1e-9) { best = candidate; bestScore = score; }
@@ -288,5 +234,6 @@ export function constrainAngle(from: Vec2, to: Vec2): Vec2 {
   const len = Math.hypot(dx, dy);
   const step = Math.PI / 4;
   const angle = Math.round(Math.atan2(dy, dx) / step) * step;
-  return { x: from.x + Math.cos(angle) * len, y: from.y + Math.sin(angle) * len };
+  const offset = rotate2({ x: len, y: 0 }, angle);
+  return { x: from.x + offset.x, y: from.y + offset.y };
 }

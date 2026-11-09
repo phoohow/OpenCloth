@@ -2,6 +2,7 @@ import type { Panel, Pattern, Vec2 } from '@/model/types';
 import { panelGrainLine, panelOutlineWithAllowance, sampleOutline, samplePanelOutline } from '@/pattern/panel';
 import { pointAtT, sampleEdge } from '@/pattern/geom';
 import { computeBBox } from '@/base/geom';
+import { normalize2, perp2 } from '@/base/math';
 import { assemblePdf, circlePath, closedPath, CM_PT, clamp, openPath, pdfNum, rectPath, textOps } from '@/io/pdf/pdfDocument';
 
 /** Page formats for `buildPatternPdf`, in portrait orientation. */
@@ -130,12 +131,8 @@ function edgeFrame(pattern: Pattern, edgeId: string, t: number): { p: Vec2; nx: 
   const idx = Math.min(pts.length - 1, Math.max(0, Math.round(t * (pts.length - 1))));
   const prev = pts[Math.max(0, idx - 1)];
   const next = pts[Math.min(pts.length - 1, idx + 1)];
-  let tx = next.x - prev.x;
-  let ty = next.y - prev.y;
-  const len = Math.hypot(tx, ty) || 1;
-  tx /= len;
-  ty /= len;
-  return { p, nx: ty, ny: -tx };
+  const normal = perp2(normalize2({ x: next.x - prev.x, y: next.y - prev.y }));
+  return { p, nx: normal.x, ny: normal.y };
 }
 
 /** Combined outline bounds of the visible panels, allowance included on request. */

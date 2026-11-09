@@ -1,5 +1,6 @@
 import type { Pattern, SeamEnd } from '@/model/types';
 import { edgeLength, sampleEdge } from '@/pattern/geom/edgeSample';
+import { clamp01 } from '@/base/math';
 
 /** A suggested seam pairing two edge intervals. */
 export interface SeamCandidate {
@@ -69,8 +70,6 @@ function bowFactor(pts: { x: number; y: number }[]): number {
   for (const p of pts) sum += Math.abs((p.x - pts[0].x) * nx + (p.y - pts[0].y) * ny);
   return sum / pts.length / len;
 }
-
-const clamp01 = (v: number): number => Math.max(0, Math.min(1, v));
 
 /**
  * Suggests seam pairings across the pattern: same-or-mirror semantics, similar sampled length, matching chord

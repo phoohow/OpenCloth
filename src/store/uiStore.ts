@@ -7,6 +7,9 @@ import { pickPrefs, readPrefs, writePrefs } from '@/store/prefs';
 /** 2D drafting and 3D fitting tools; each pane owns a subset. */
 export type ToolType = 'select' | 'point' | 'deletePoint' | 'line' | 'curve' | 'internalLine' | 'dart' | 'seam' | 'pin' | 'unpin' | 'sketch3d' | 'measure3d' | 'rect' | 'circle' | 'ellipse' | 'split' | 'hole' | 'notch' | 'annotation' | 'measure' | 'topstitch' | 'trim';
 
+/** Handle set the 3D transform gizmo shows for a selected panel. */
+export type TransformMode = 'translate' | 'rotate' | 'scale';
+
 /** Points placed in a pending 3D measurement, and the distance once two exist. */
 export interface MeasureReadout {
   points: number;
@@ -83,6 +86,8 @@ interface UIStore {
   splitRatio: number;
   focus: PaneId;
   activeTool: ToolType;
+  /** Gizmo handle set shown for the selected panels in the 3D viewport. */
+  transformMode: TransformMode;
   selection: string[];
   /** Properties-editor context shown in the right panel's lower section. */
   propTab: PropTab;
@@ -168,6 +173,9 @@ interface UIStore {
   setSplitRatio: (r: number) => void;
   setFocus: (p: PaneId) => void;
   setTool: (t: ToolType) => void;
+  /** Arms a 3D tool, or returns to the neutral tool when the armed one is picked again. */
+  toggleTool: (t: ToolType) => void;
+  setTransformMode: (m: TransformMode) => void;
   select: (ids: string[]) => void;
   toggleSelection: (id: string) => void;
   clearSelection: () => void;
@@ -223,6 +231,7 @@ export const useUIStore = create<UIStore>((set, get) => ({
   splitRatio: prefs.splitRatio,
   focus: prefs.focus,
   activeTool: 'select',
+  transformMode: 'translate',
   selection: [],
   propTab: prefs.propTab,
   sceneRatio: prefs.sceneRatio,
@@ -268,6 +277,11 @@ export const useUIStore = create<UIStore>((set, get) => ({
   setSplitRatio: (r) => set({ splitRatio: r }),
   setFocus: (p) => set({ focus: p }),
   setTool: (t) => set({ activeTool: t, focus: toolPane(t) }),
+  // Releasing a tool leaves the pane focus alone, so 3D shortcuts keep reaching the 3D pane.
+  toggleTool: (t) => set(s => s.activeTool === t
+    ? { activeTool: 'select' }
+    : { activeTool: t, focus: toolPane(t) }),
+  setTransformMode: (m) => set({ transformMode: m }),
   select: (ids) => set({ selection: ids }),
   toggleSelection: (id) => {
     const sel = get().selection;

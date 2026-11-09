@@ -1,10 +1,11 @@
-import type { PanelDrape, Pattern, Vec2 } from '@/model/types';
+import type { PanelDrape, Pattern } from '@/model/types';
 import { PatternBuilder } from '@/pattern/template/templateKit';
 import { layoutRows } from '@/pattern/template/patternLayout';
 import { frontArc, backArc } from '@/pattern/template/drapeArcs';
 import { cm, defineTemplate } from '@/pattern/template/garmentTemplate';
 import { addBodice, addSleeve, capHeightForArmhole } from '@/pattern/template/panelShapes';
 import { sampleEdge } from '@/pattern/panel/panelBuilder';
+import { polylineLength } from '@/base/geom';
 
 /** Body measurements of a T-shirt, in centimeters. */
 export interface TShirtParams {
@@ -69,7 +70,7 @@ export function generateTShirt(params: TShirtParams = DEFAULT_TSHIRT_PARAMS, fab
   });
 
   // The cap arc must match the armhole arc, so the cap height follows from the armhole length.
-  const armholeArc = arcLength(sampleEdge(builder.pattern, front.armholeRight));
+  const armholeArc = polylineLength(sampleEdge(builder.pattern, front.armholeRight));
   const capHeight = capHeightForArmhole(sleeveWidth, armholeArc, Math.max(sleeveLengthCm - 4, 8));
   const sleeveShaft = Math.max(sleeveLengthCm - capHeight, 2);
 
@@ -121,14 +122,6 @@ export function generateTShirt(params: TShirtParams = DEFAULT_TSHIRT_PARAMS, fab
   return builder.pattern;
 }
 
-/** Length along a sampled outline edge, in centimeters. */
-function arcLength(points: Vec2[]): number {
-  let sum = 0;
-  for (let i = 1; i < points.length; i++) {
-    sum += Math.hypot(points[i]!.x - points[i - 1]!.x, points[i]!.y - points[i - 1]!.y);
-  }
-  return sum;
-}
 
 export const tShirtTemplate = defineTemplate({
   key: 'tshirt',

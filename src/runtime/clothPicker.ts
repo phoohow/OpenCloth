@@ -1,9 +1,10 @@
 /** Screen rays, cloth surface intersection and particle picking, without three. */
 
-import type { Vec3 } from '@/base/geom';
+import { distance3, type Vec3 } from '@/base/math';
+import { distance3AtPoint, intersectRayTriangle3 } from '@/base/geom';
+import { degToRad } from '@/base/math';
 import type { Bounds, CameraHost, CameraState, Ray } from '@/render/common';
 import type { ClothSimInput, ParticlePickHit } from '@/sim';
-import { barycentricWeights3D } from '@/base/geom/panelSurface';
 
 /** Cloth surface hit: the triangle, its owning panel slot and the barycentric position on it. */
 export interface ClothSurfacePick {
@@ -94,8 +95,8 @@ export class ClothPicker {
     const height = Math.max(1, this.targets.viewportHeight());
     const camera = this.camera.snapshot();
     if (camera.projection === 'orthographic') return camera.viewHeightMeters / height;
-    const distance = Math.max(0.001, distanceTo(origin, camera.target));
-    const fov = camera.fovDeg * (Math.PI / 180);
+    const distance = Math.max(0.001, distance3(origin, camera.target));
+    const fov = degToRad(camera.fovDeg);
     return (2 * Math.tan(fov / 2) * distance) / height;
   }
 
@@ -162,57 +163,12 @@ export class ClothPicker {
 function intersectTriangle(
   ray: Ray, p0: Vec3, p1: Vec3, p2: Vec3,
 ): { distance: number; weights: [number, number, number] } | null {
-  const edge1 = sub(p1, p0);
-  const edge2 = sub(p2, p0);
-  const h = cross(ray.direction, edge2);
-  const det = dot(edge1, h);
-  if (Math.abs(det) < 1e-9) return null;
-  const invDet = 1 / det;
-  const s = sub(ray.origin, p0);
-  const u = dot(s, h) * invDet;
-  if (u < 0 || u > 1) return null;
-  const q = cross(s, edge1);
-  const v = dot(ray.direction, q) * invDet;
-  if (v < 0 || u + v > 1) return null;
-  const distance = dot(edge2, q) * invDet;
-  if (distance <= 1e-6) return null;
-  const weights = barycentricWeights3D(
-    [ray.origin.x + ray.direction.x * distance, ray.origin.y + ray.direction.y * distance, ray.origin.z + ray.direction.z * distance],
-    [p0.x, p0.y, p0.z], [p1.x, p1.y, p1.z], [p2.x, p2.y, p2.z],
-  );
-  return weights
-    ? { distance, weights: [weights[0], weights[1], weights[2]] }
-    : null;
+  const hit = intersectRayTriangle3(ray.origin, ray.direction, p0, p1, p2);
+  return hit ? { distance: hit.distance, weights: [1 - hit.u - hit.v, hit.u, hit.v] } : null;
 }
 
 function distanceToParticle(positions: Float32Array, index: number, point: Vec3): number {
-  const offset = index * 3;
-  if (offset + 2 >= positions.length) return Infinity;
-  return Math.hypot(
-    positions[offset]! - point.x,
-    positions[offset + 1]! - point.y,
-    positions[offset + 2]! - point.z,
-  );
-}
-
-function distanceTo(a: Vec3, b: Vec3): number {
-  return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
-}
-
-function sub(a: Vec3, b: Vec3): Vec3 {
-  return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z };
-}
-
-function dot(a: Vec3, b: Vec3): number {
-  return a.x * b.x + a.y * b.y + a.z * b.z;
-}
-
-function cross(a: Vec3, b: Vec3): Vec3 {
-  return {
-    x: a.y * b.z - a.z * b.y,
-    y: a.z * b.x - a.x * b.z,
-    z: a.x * b.y - a.y * b.x,
-  };
+  return distance3AtPoint(positions, index, point);
 }
 
 export type { CameraState, Ray };

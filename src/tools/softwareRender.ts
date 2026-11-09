@@ -1,3 +1,6 @@
+import {
+  cross3t as cross, degToRad, distance3t as dist, dot3t as dot, normalize3t as normalize, sub3t as sub,
+} from '@/base/math';
 /// <reference types="node" />
 
 /** Orthographic camera: yaw around the world Y axis, screen mapping and pixel scale. */
@@ -19,7 +22,6 @@ export type RGB = [number, number, number];
 /** Meters along the world x/y/z axes. */
 export type XYZ = [number, number, number];
 
-const DEG = Math.PI / 180;
 /** Key light direction, normalized. */
 const LIGHT: XYZ = normalize([0.35, 0.75, 0.9]);
 
@@ -44,7 +46,7 @@ export class SoftCanvas {
 
   /** Maps a world point to screen columns, rows and view depth (larger is nearer). */
   project(cam: Camera, p: XYZ): [number, number, number] {
-    const yaw = cam.yawDeg * DEG;
+    const yaw = degToRad(cam.yawDeg);
     const xr = p[0] * Math.cos(yaw) + p[2] * Math.sin(yaw);
     const zr = -p[0] * Math.sin(yaw) + p[2] * Math.cos(yaw);
     return [cam.originX + xr * cam.scale, cam.originY - (p[1] - cam.centerY) * cam.scale, zr];
@@ -169,21 +171,4 @@ export function triangleNormal(a: XYZ, b: XYZ, c: XYZ): XYZ {
   const n = cross(sub(b, a), sub(c, a));
   const len = Math.hypot(n[0], n[1], n[2]);
   return len < 1e-12 ? [0, 0, 1] : [n[0] / len, n[1] / len, n[2] / len];
-}
-
-function normalize(p: XYZ): XYZ {
-  const l = Math.hypot(p[0], p[1], p[2]) || 1;
-  return [p[0] / l, p[1] / l, p[2] / l];
-}
-function cross(p: XYZ, q: XYZ): XYZ {
-  return [p[1] * q[2] - p[2] * q[1], p[2] * q[0] - p[0] * q[2], p[0] * q[1] - p[1] * q[0]];
-}
-function sub(p: XYZ, q: XYZ): XYZ {
-  return [p[0] - q[0], p[1] - q[1], p[2] - q[2]];
-}
-function dist(p: XYZ, q: XYZ): number {
-  return Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
-}
-function dot(p: XYZ, q: XYZ): number {
-  return p[0] * q[0] + p[1] * q[1] + p[2] * q[2];
 }

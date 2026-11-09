@@ -1,6 +1,6 @@
 /** Render world: entities, meshes, materials, lights and their change counters. */
 
-import type { Vec3 } from '@/base/geom';
+import { intersectRayTriangle3, readPoint3At } from '@/base/geom';
 import { defaultChannels } from '@/render/world/layers';
 import type {
   Bounds,
@@ -308,10 +308,10 @@ class WorldStore {
         const a = triangleIndex(index, triangle * 3);
         const b = triangleIndex(index, triangle * 3 + 1);
         const c = triangleIndex(index, triangle * 3 + 2);
-        const p0 = transformPoint(readPoint(positions, a), entity.transform);
-        const p1 = transformPoint(readPoint(positions, b), entity.transform);
-        const p2 = transformPoint(readPoint(positions, c), entity.transform);
-        const hit = intersectTriangle(ray, p0, p1, p2);
+        const p0 = transformPoint(readPoint3At(positions, a), entity.transform);
+        const p1 = transformPoint(readPoint3At(positions, b), entity.transform);
+        const p2 = transformPoint(readPoint3At(positions, c), entity.transform);
+        const hit = intersectRayTriangle3(ray.origin, ray.direction, p0, p1, p2);
         if (!hit) continue;
         if (best && hit.distance >= best.distance) continue;
         best = {
@@ -399,48 +399,7 @@ function sameBounds(a: Bounds, b: Bounds): boolean {
     && a.max.x === b.max.x && a.max.y === b.max.y && a.max.z === b.max.z;
 }
 
-/** Reads one point from a flat xyz buffer. */
-function readPoint(positions: Float32Array, index: number): Vec3 {
-  return {
-    x: positions[index * 3] ?? 0,
-    y: positions[index * 3 + 1] ?? 0,
-    z: positions[index * 3 + 2] ?? 0,
-  };
-}
-
 /** Vertex index of one triangle corner. */
 function triangleIndex(index: Uint32Array | undefined, offset: number): number {
   return index ? index[offset] ?? 0 : offset;
-}
-
-/** Moller-Trumbore intersection with a world-space triangle. */
-function intersectTriangle(
-  ray: Ray, p0: Vec3, p1: Vec3, p2: Vec3,
-): { distance: number; u: number; v: number } | null {
-  const edge1 = { x: p1.x - p0.x, y: p1.y - p0.y, z: p1.z - p0.z };
-  const edge2 = { x: p2.x - p0.x, y: p2.y - p0.y, z: p2.z - p0.z };
-  const h = cross(ray.direction, edge2);
-  const det = dot(edge1, h);
-  if (Math.abs(det) < 1e-9) return null;
-  const invDet = 1 / det;
-  const s = { x: ray.origin.x - p0.x, y: ray.origin.y - p0.y, z: ray.origin.z - p0.z };
-  const u = dot(s, h) * invDet;
-  if (u < 0 || u > 1) return null;
-  const q = cross(s, edge1);
-  const v = dot(ray.direction, q) * invDet;
-  if (v < 0 || u + v > 1) return null;
-  const distance = dot(edge2, q) * invDet;
-  return distance > 1e-6 ? { distance, u, v } : null;
-}
-
-function cross(a: Vec3, b: Vec3): Vec3 {
-  return {
-    x: a.y * b.z - a.z * b.y,
-    y: a.z * b.x - a.x * b.z,
-    z: a.x * b.y - a.y * b.x,
-  };
-}
-
-function dot(a: Vec3, b: Vec3): number {
-  return a.x * b.x + a.y * b.y + a.z * b.z;
 }

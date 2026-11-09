@@ -1,7 +1,8 @@
 import { genId } from '@/base/id';
 import type { EdgeSemantic, Pattern, PatternEdge, Vec2 } from '@/model/types';
 
-import { distance, ensureCCW } from '@/base/geom';
+import { ensureCCW } from '@/base/geom';
+import { distance2 } from '@/base/math';
 
 /** Edge ids and vertex ids of a closed loop inserted into a pattern. */
 export interface EdgeLoop {
@@ -63,12 +64,12 @@ export function polygonToEdgeLoop(
 
   let ring = ensureCCW(polygon.map(p => ({ ...p })));
   if (options.winding === 'cw') ring = ring.reverse();
-  if (ring.length > 1 && distance(ring[0], ring[ring.length - 1]) <= tol) ring.pop();
+  if (ring.length > 1 && distance2(ring[0], ring[ring.length - 1]) <= tol) ring.pop();
 
   const candidates = candidatePoints(pattern, panelId, options.mergeScope ?? 'panel');
   const pointIds: string[] = [];
   for (const pos of ring) {
-    const hit = candidates.find(c => distance(c.pos, pos) <= tol);
+    const hit = candidates.find(c => distance2(c.pos, pos) <= tol);
     if (hit) {
       pointIds.push(hit.id);
       continue;

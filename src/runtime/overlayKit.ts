@@ -1,6 +1,6 @@
 /** Owner of the cloth decorative overlays and the two gesture overlays. */
 
-import type { Vec3 } from '@/base/geom';
+import type { Vec3 } from '@/base/math';
 import type { Project } from '@/model/types';
 import { MeasureOverlay } from '@/runtime/measureOverlay';
 import type { PresenterHost } from '@/runtime/presenters/host';

@@ -11,7 +11,7 @@ import {
 import { edgeLength, pointAtT, sampleEdge } from '@/pattern/geom/edgeSample';
 import { arcFromThreePoints, arcSpan } from '@/base/geom';
 import { samplePanelOutline } from '@/pattern/panel/panelBuilder';
-import { distance } from '@/base/geom';
+import { distance2 } from '@/base/math';
 import { ctxOf, addSquare } from './fixtures';
 
 /** Executes, checks topology, then undoes and compares against the pre-execute snapshot. */
@@ -269,11 +269,11 @@ describe('SetEdgeLengthCommand', () => {
     const edgeId = outlineOf(pattern, panel.id)[0];
     const edge = pattern.edges[edgeId];
     const oldLength = edgeLength(pattern, edgeId);
-    const oldChord = distance(pattern.points[edge.startPointId].pos, pattern.points[edge.endPointId].pos);
+    const oldChord = distance2(pattern.points[edge.startPointId].pos, pattern.points[edge.endPointId].pos);
     const startBefore = { ...pattern.points[edge.startPointId].pos };
     const cmd = new SetEdgeLengthCommand(edgeId, 8);
     cmd.execute(ctx);
-    const chordAfter = distance(pattern.points[edge.startPointId].pos, pattern.points[edge.endPointId].pos);
+    const chordAfter = distance2(pattern.points[edge.startPointId].pos, pattern.points[edge.endPointId].pos);
     expect(chordAfter).toBeCloseTo(oldChord * (8 / oldLength), 6);
     expect(pattern.points[edge.startPointId].pos).toEqual(startBefore);
     expect(pattern.points[edge.startPointId].handleOut).toBeDefined();
@@ -311,7 +311,7 @@ describe('SetEdgeAngleCommand', () => {
     const cmd = new SetEdgeAngleCommand(e0, e1, 60);
     cmd.execute(ctx);
     expect(Math.abs(chordAngle(pattern, e0, e1) - 60)).toBeLessThan(1e-6);
-    expect(distance(pattern.points[farId].pos, { x: 10, y: 0 })).toBeCloseTo(length, 6);
+    expect(distance2(pattern.points[farId].pos, { x: 10, y: 0 })).toBeCloseTo(length, 6);
     expect(validatePattern(pattern)).toEqual([]);
     cmd.undo(ctx);
     expect(Math.abs(chordAngle(pattern, e0, e1) - 90)).toBeLessThan(1e-6);
@@ -594,8 +594,8 @@ describe('SetArcParamsCommand', () => {
     expect(pattern.points[edge.startPointId].pos).toEqual(start);
     expect(pattern.points[edge.endPointId].pos).toEqual(end);
     expect(edge.arc!.radius).toBeCloseTo(9, 9);
-    expect(distance(edge.arc!.center, start)).toBeCloseTo(9, 9);
-    expect(distance(edge.arc!.center, end)).toBeCloseTo(9, 9);
+    expect(distance2(edge.arc!.center, start)).toBeCloseTo(9, 9);
+    expect(distance2(edge.arc!.center, end)).toBeCloseTo(9, 9);
 
     cmd.undo(ctx);
     expect(pattern).toEqual(before);
@@ -626,7 +626,7 @@ describe('SetArcParamsCommand', () => {
     expect(Math.abs(arcSpan(edge.arc!)) * 180 / Math.PI).toBeCloseTo(120, 6);
     expect(pattern.points.p0.pos).toEqual(start);
     expect(pattern.points.p1.pos).toEqual(end);
-    expect(distance(edge.arc!.center, start)).toBeCloseTo(edge.arc!.radius, 9);
+    expect(distance2(edge.arc!.center, start)).toBeCloseTo(edge.arc!.radius, 9);
   });
 
   it('clamps a radius below half the chord and rejects invalid values', () => {
@@ -637,7 +637,7 @@ describe('SetArcParamsCommand', () => {
     const edge = pattern.edges[edgeId];
     const start = pattern.points[edge.startPointId].pos;
     const end = pattern.points[edge.endPointId].pos;
-    const chord = distance(start, end);
+    const chord = distance2(start, end);
 
     new SetArcParamsCommand(edgeId, { radiusCm: 0.1 }).execute(ctx);
     expect(edge.arc!.radius).toBeCloseTo(chord / 2, 9);

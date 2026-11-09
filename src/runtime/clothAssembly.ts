@@ -1,4 +1,4 @@
-import { distance3At as distance } from '@/base/math';
+import { distance3At as distance } from '@/base/geom';
 import type { Dart, Pattern, Project, Seam } from '@/model/types';
 import type { PanelMesh } from '@/pattern/panel';
 import { edgeVertexRun, meshSpacingCm, panelCreaseEdges, toTriangleMesh } from '@/pattern/panel';

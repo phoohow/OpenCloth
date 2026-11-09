@@ -1,6 +1,6 @@
 /** Temporary polyline that follows a 3D sketch stroke while the pointer draws it. */
 
-import type { Vec3 } from '@/base/geom';
+import type { Vec3 } from '@/base/math';
 import { CHANNEL_RASTER } from '@/render/world';
 import type { EntityId, MaterialId, MeshId, WorldWriter } from '@/render/world';
 import type { PresenterHost } from '@/runtime/presenters/host';

@@ -3,12 +3,12 @@ import type { Pattern, PatternEdge, PatternPoint } from '@/model/types';
 import { SnapshotCommand } from '@/commands/patternSnapshot';
 import { edgeLength } from '@/pattern/geom';
 import { prunePattern } from '@/commands/patternStructureCommands';
-import { dot, distance, normalize, sub } from '@/base/geom';
+import { degToRad, dot2, distance2, normalize2, rotateAround2, scaleAround2, sub2 } from '@/base/math';
 import { arcSpan, evalArc } from '@/base/geom/arc';
 import { refitArcs } from '@/commands/patternMoveGeometry';
 import {
   assertOwningPanelsSimple, chainFractions, dropUnusedHandles, edgeArrays, handleExclusive, interiorPointIds,
-  rad, remapChainReferences, rotateAbout, scaleAbout, sharedVertexOf, spliceSequence,
+  remapChainReferences, sharedVertexOf, spliceSequence,
 } from '@/commands/advanced/shared';
 
 /**
@@ -32,12 +32,12 @@ export class SetEdgeLengthCommand extends SnapshotCommand {
     if (current < 1e-6) throw new Error('边长度为零，无法确定方向');
 
     const factor = this.lengthCm / current;
-    end.pos = scaleAbout(start.pos, end.pos, factor);
+    end.pos = scaleAround2(end.pos, start.pos, factor);
     if (edge.type === 'arc' && edge.arc) {
-      edge.arc = { ...edge.arc, center: scaleAbout(start.pos, edge.arc.center, factor), radius: edge.arc.radius * factor };
+      edge.arc = { ...edge.arc, center: scaleAround2(edge.arc.center, start.pos, factor), radius: edge.arc.radius * factor };
     } else if (edge.type === 'bezier') {
-      if (start.handleOut) start.handleOut = scaleAbout(start.pos, start.handleOut, factor);
-      if (end.handleIn) end.handleIn = scaleAbout(start.pos, end.handleIn, factor);
+      if (start.handleOut) start.handleOut = scaleAround2(start.handleOut, start.pos, factor);
+      if (end.handleIn) end.handleIn = scaleAround2(end.handleIn, start.pos, factor);
     }
     refitArcs(pattern, new Set([end.id]));
     assertOwningPanelsSimple(pattern, [this.edgeId], '改边长后轮廓自相交');
@@ -67,19 +67,19 @@ export class SetEdgeAngleCommand extends SnapshotCommand {
     const far = pattern.points[farId];
     const otherFar = pattern.points[otherFarId];
     if (!anchor || !far || !otherFar) throw new Error('边端点缺失，无法改角度');
-    const radius = distance(anchor.pos, far.pos);
+    const radius = distance2(anchor.pos, far.pos);
     if (radius < 1e-6) throw new Error('边长度为零，无法确定方向');
-    if (distance(anchor.pos, otherFar.pos) < 1e-6) throw new Error('相邻边长度为零，无法确定方向');
+    if (distance2(anchor.pos, otherFar.pos) < 1e-6) throw new Error('相邻边长度为零，无法确定方向');
 
-    const reference = normalize(sub(otherFar.pos, anchor.pos));
-    const currentVector = sub(far.pos, anchor.pos);
+    const reference = normalize2(sub2(otherFar.pos, anchor.pos));
+    const currentVector = sub2(far.pos, anchor.pos);
     const current = Math.atan2(
       reference.x * currentVector.y - reference.y * currentVector.x,
-      dot(reference, currentVector),
+      dot2(reference, currentVector),
     );
-    const delta = (current >= 0 ? rad(this.angleDeg) : -rad(this.angleDeg)) - current;
-    far.pos = rotateAbout(anchor.pos, far.pos, delta);
-    refitArcs(pattern, new Set([farId]), { midpoint: arc => rotateAbout(anchor.pos, evalArc(arc, 0.5), delta) });
+    const delta = (current >= 0 ? degToRad(this.angleDeg) : -degToRad(this.angleDeg)) - current;
+    far.pos = rotateAround2(far.pos, anchor.pos, delta);
+    refitArcs(pattern, new Set([farId]), { midpoint: arc => rotateAround2(evalArc(arc, 0.5), anchor.pos, delta) });
     this.rotateTangents(pattern, edge, anchor, far, farId, sharedId, delta);
     assertOwningPanelsSimple(pattern, [this.edgeId], '改角度后轮廓自相交');
   }
@@ -93,10 +93,10 @@ export class SetEdgeAngleCommand extends SnapshotCommand {
     const atAnchor: 'handleIn' | 'handleOut' = edge.endPointId === sharedId ? 'handleIn' : 'handleOut';
     const atFar: 'handleIn' | 'handleOut' = edge.endPointId === farId ? 'handleIn' : 'handleOut';
     if (anchor[atAnchor] && handleExclusive(pattern, sharedId, atAnchor, edge.id)) {
-      anchor[atAnchor] = rotateAbout(anchor.pos, anchor[atAnchor]!, delta);
+      anchor[atAnchor] = rotateAround2(anchor[atAnchor]!, anchor.pos, delta);
     }
     if (far[atFar] && handleExclusive(pattern, farId, atFar, edge.id)) {
-      far[atFar] = rotateAbout(far.pos, far[atFar]!, delta);
+      far[atFar] = rotateAround2(far[atFar]!, far.pos, delta);
     }
   }
 }
@@ -148,7 +148,7 @@ export class SetArcParamsCommand extends SnapshotCommand {
     if (this.params.sweepDeg !== undefined) {
       const deg = this.params.sweepDeg;
       if (!Number.isFinite(deg) || deg <= 0 || deg >= 360) throw new Error('圆心角需大于 0° 且小于 360°');
-      radius = chord / (2 * Math.sin(rad(deg) / 2));
+      radius = chord / (2 * Math.sin(degToRad(deg) / 2));
       const source = deg < 180 ? minorSide : deg > 180 ? -minorSide : 0;
       hSign = source || branchSide;
     } else {
@@ -208,14 +208,14 @@ export class MergeCollinearEdgesCommand extends SnapshotCommand {
     const lastEdge = pattern.edges[chain[chain.length - 1]];
     const end = pattern.points[lastEdge.endPointId]?.pos;
     if (!start || !end) throw new Error('边端点缺失，无法合并');
-    const straight = sub(end, start);
+    const straight = sub2(end, start);
     const span = Math.hypot(straight.x, straight.y);
     if (span < COLLINEAR_TOLERANCE_CM) throw new Error('合并后的边长度为零，无法合并');
     const normal = { x: straight.y / span, y: -straight.x / span };
     for (const pointId of interiorPointIds(pattern, chain)) {
       const pos = pattern.points[pointId]?.pos;
       if (!pos) throw new Error('边端点缺失，无法合并');
-      if (Math.abs(dot(sub(pos, start), normal)) > COLLINEAR_TOLERANCE_CM) throw new Error('所选边不在同一直线上，无法合并');
+      if (Math.abs(dot2(sub2(pos, start), normal)) > COLLINEAR_TOLERANCE_CM) throw new Error('所选边不在同一直线上，无法合并');
       if (this.hasForeignEdge(pattern, pointId, chain)) throw new Error('共线边的中间顶点被其他边引用，无法合并');
     }
 

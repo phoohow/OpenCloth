@@ -1,6 +1,6 @@
 /** Small spheres marking pinned cloth particles. */
 
-import type { Vec3 } from '@/base/geom';
+import type { Vec3 } from '@/base/math';
 import { CHANNEL_RASTER } from '@/render/world';
 import type { EntityId, MaterialId, MeshData, MeshId, WorldWriter } from '@/render/world';
 import { overlayMaterial, type PresenterHost } from '@/runtime/presenters/host';

@@ -47,13 +47,12 @@ function svgCursor(spec: CursorSpec): string {
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}") ${spec.hotspot[0]} ${spec.hotspot[1]}, auto`;
 }
 
+import { degToRad, rotateAround2, type Vec2 } from '@/base/math';
+
 /** One decimal is plenty for a 32 px cursor and keeps the data URL short. */
 const round = (value: number): string => String(Math.round(value * 10) / 10);
 
-interface Point {
-  x: number;
-  y: number;
-}
+type Point = Vec2;
 
 /**
  * Clamp glyph built as two rigid levers: each is one straight segment from grip to jaw tip and
@@ -68,16 +67,6 @@ const OPEN_DEG = 22;
 /** Coil drawn between the levers; it is the spring they ride on, not a joint in either lever. */
 const COIL_R = 3.2;
 
-/** Rotates a point around a pivot; SVG angles run clockwise. */
-function rotate(point: Point, pivot: Point, degrees: number): Point {
-  const radians = (degrees * Math.PI) / 180;
-  const cos = Math.cos(radians);
-  const sin = Math.sin(radians);
-  const dx = point.x - pivot.x;
-  const dy = point.y - pivot.y;
-  return { x: pivot.x + dx * cos - dy * sin, y: pivot.y + dx * sin + dy * cos };
-}
-
 /**
  * Two straight levers plus the coil. `open` swings each lever about its own pivot, which is the
  * only degree of freedom a real clamp has: nothing bends, one end goes out as the other comes in.
@@ -87,8 +76,8 @@ const clampPaths = (open: boolean): string[] => {
     const pivot = { x: side * PIVOT.x, y: PIVOT.y };
     // Mirrored halves turn opposite ways; the sign is what keeps the glyph symmetric.
     const angle = open ? -side * OPEN_DEG : 0;
-    const grip = rotate({ x: side * GRIP.x, y: GRIP.y }, pivot, angle);
-    const tip = rotate({ x: side * JAW.x, y: JAW.y }, pivot, angle);
+    const grip = rotateAround2({ x: side * GRIP.x, y: GRIP.y }, pivot, degToRad(angle));
+    const tip = rotateAround2({ x: side * JAW.x, y: JAW.y }, pivot, degToRad(angle));
     return `M ${round(grip.x)} ${round(grip.y)} L ${round(tip.x)} ${round(tip.y)}`;
   };
   return [

@@ -1,6 +1,6 @@
 /** Temporary two-point measurement: a segment with one marker per placed point. */
 
-import type { Vec3 } from '@/base/geom';
+import type { Vec3 } from '@/base/math';
 import { CHANNEL_RASTER } from '@/render/world';
 import type { EntityId, MaterialId, MeshId, Transform, WorldWriter } from '@/render/world';
 import { markerSphere } from '@/runtime/pinMarkers';

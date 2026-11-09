@@ -1,6 +1,7 @@
 import type { Pattern, Seam, Vec2 } from '@/model/types';
-import { sampleEdge, sampleEdgeInterval } from '@/pattern/panel';
-import { pointAtT } from '@/pattern/geom';
+import { edgeIntervalLength, sampleEdgeInterval } from '@/pattern/panel';
+import { edgeTForPoint, pointAtT } from '@/pattern/geom';
+import { polylineLength } from '@/base/geom';
 import { seamJoint, sewnOutline } from '@/pattern/seam';
 import { idsOfKind } from '@/model';
 import type { SceneState } from '@/ui/viewport2D/renderTypes';
@@ -28,16 +29,6 @@ function drawSeamInterval(
   });
   ctx.stroke();
   ctx.restore();
-}
-
-/** Arc length in centimetres of one edge interval. */
-function intervalLengthCm(pattern: Pattern, pick: { edgeId: string; t0: number; t1: number }): number {
-  const pts = sampleEdgeInterval(pattern, pick.edgeId, pick.t0, pick.t1);
-  let total = 0;
-  for (let i = 1; i < pts.length; i++) {
-    total += Math.hypot(pts[i]!.x - pts[i - 1]!.x, pts[i]!.y - pts[i - 1]!.y);
-  }
-  return total;
 }
 
 /** Arc-length middle of one edge interval, where the seam tag sits. */
@@ -156,8 +147,8 @@ export function drawSeamDraft(
   if (drag) {
     const pick = {
       edgeId: drag.edgeId,
-      t0: Math.min(arcT(scene.pattern, drag.edgeId, drag.start), arcT(scene.pattern, drag.edgeId, drag.current)),
-      t1: Math.max(arcT(scene.pattern, drag.edgeId, drag.start), arcT(scene.pattern, drag.edgeId, drag.current)),
+      t0: Math.min(edgeTForPoint(scene.pattern, drag.edgeId, drag.start), edgeTForPoint(scene.pattern, drag.edgeId, drag.current)),
+      t1: Math.max(edgeTForPoint(scene.pattern, drag.edgeId, drag.start), edgeTForPoint(scene.pattern, drag.edgeId, drag.current)),
     };
     drawSeamInterval(ctx, scene.pattern, pick, screen, SEAM_HOVER_COLOR, 3, [6, 3]);
   }
@@ -198,8 +189,8 @@ export function drawSeamDraft(
   ctx.stroke();
 
   // Lengths of both sides; a gap past the easing range turns the readout orange.
-  const lenA = intervalLengthCm(scene.pattern, first);
-  const lenB = intervalLengthCm(scene.pattern, target);
+  const lenA = edgeIntervalLength(scene.pattern, first.edgeId, first.t0, first.t1);
+  const lenB = edgeIntervalLength(scene.pattern, target.edgeId, target.t0, target.t1);
   const off = lenA > 0 ? Math.abs(lenB - lenA) / lenA : 0;
   ctx.setLineDash([]);
   ctx.font = '11px sans-serif';
@@ -208,22 +199,6 @@ export function drawSeamDraft(
   ctx.fillStyle = off > 0.1 ? '#ffa94d' : '#8a93a3';
   ctx.fillText(`${lenA.toFixed(1)} / ${lenB.toFixed(1)} cm`, (sA.x + sB.x) / 2 + 6, (sA.y + sB.y) / 2 - 4);
   ctx.restore();
-}
-
-/** Nearest arc-length fraction of a world position on an edge. */
-function arcT(pattern: Pattern, edgeId: string, p: Vec2): number {
-  const pts = sampleEdge(pattern, edgeId);
-  if (pts.length < 2) return 0;
-  let acc = 0;
-  const total = pts.reduce((sum, q, i) => i === 0 ? sum : sum + Math.hypot(q.x - pts[i - 1].x, q.y - pts[i - 1].y), 0) || 1;
-  let bestT = 0;
-  let bestD = Infinity;
-  for (let i = 0; i < pts.length; i++) {
-    const d = Math.hypot(pts[i].x - p.x, pts[i].y - p.y);
-    if (d < bestD) { bestD = d; bestT = acc; }
-    if (i + 1 < pts.length) acc += Math.hypot(pts[i + 1].x - pts[i].x, pts[i + 1].y - pts[i].y);
-  }
-  return bestT / total;
 }
 
 /** Spacing between the slanted dashes of a seam side, and half their tick length, in pixels. */
@@ -247,10 +222,7 @@ function strokeSeamSide(
     ctx.lineTo(x + nx * SEAM_TICK_HALF, y + ny * SEAM_TICK_HALF);
   };
 
-  let total = 0;
-  for (let i = 1; i < pts.length; i++) {
-    total += Math.hypot(pts[i]!.x - pts[i - 1]!.x, pts[i]!.y - pts[i - 1]!.y);
-  }
+  const total = polylineLength(pts);
 
   ctx.save();
   ctx.strokeStyle = color;

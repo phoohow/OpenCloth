@@ -1,4 +1,5 @@
 import type { Pattern, Vec2 } from '@/model/types';
+import { nearlyEqual2 } from '@/base/math';
 
 /** Print, topstitch and trim geometry shared with the engine. */
 export {
@@ -62,12 +63,12 @@ export function cleanDraftLoop(points: readonly Vec2[]): Vec2[] {
   const loop: Vec2[] = [];
   for (const point of points) {
     const previous = loop[loop.length - 1];
-    if (previous && Math.hypot(previous.x - point.x, previous.y - point.y) < 1e-6) continue;
+    if (previous && nearlyEqual2(previous, point)) continue;
     loop.push(point);
   }
   while (loop.length > 1) {
     const first = loop[0]!, last = loop[loop.length - 1]!;
-    if (Math.hypot(first.x - last.x, first.y - last.y) >= 1e-6) break;
+    if (!nearlyEqual2(first, last)) break;
     loop.pop();
   }
   return loop;

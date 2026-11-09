@@ -1,6 +1,8 @@
 /** Orbit camera of one viewport: projection, pointer gestures and neutral camera data. */
 
-import type { Vec3 } from '@/base/geom';
+import type { Vec3 } from '@/base/math';
+import { add3, cross3, normalize3, scale3, sub3 } from '@/base/math';
+import { clamp } from '@/base/math';
 import type {
   Bounds, CameraHost, CameraPose, CameraProjection, CameraState, Ray,
 } from '@/render/common';
@@ -96,33 +98,33 @@ export class CameraController implements CameraHost {
       y: Math.max(0.1, bounds.max.y - bounds.min.y),
       z: Math.max(0.1, bounds.max.z - bounds.min.z),
     };
-    const direction = normalize(sub(this.positionValue, this.targetValue)) ?? { x: 0, y: 0, z: 1 };
+    const direction = normalize3(sub3(this.positionValue, this.targetValue)) ?? { x: 0, y: 0, z: 1 };
     const radius = Math.hypot(size.x, size.y, size.z) / 2;
     const distance = Math.max(0.2, radius / Math.tan(this.fov * Math.PI / 360) * FIT_MARGIN);
     this.targetValue = center;
-    this.positionValue = add(center, scale(direction, distance));
+    this.positionValue = add3(center, scale3(direction, distance));
     this.viewHeight = Math.max(0.5, size.y * FIT_MARGIN);
     this.orbit = this.computeOrbit();
     this.emit();
   }
 
   ray(ndcX: number, ndcY: number, aspect = this.aspectValue): Ray {
-    const forward = normalize(sub(this.targetValue, this.positionValue)) ?? { x: 0, y: 0, z: -1 };
-    const right = normalize(cross(forward, this.upValue)) ?? { x: 1, y: 0, z: 0 };
-    const up = normalize(cross(right, forward)) ?? { x: 0, y: 1, z: 0 };
+    const forward = normalize3(sub3(this.targetValue, this.positionValue)) ?? { x: 0, y: 0, z: -1 };
+    const right = normalize3(cross3(forward, this.upValue)) ?? { x: 1, y: 0, z: 0 };
+    const up = normalize3(cross3(right, forward)) ?? { x: 0, y: 1, z: 0 };
     if (this.projectionValue === 'orthographic') {
       const halfHeight = this.viewHeight / 2;
       const halfWidth = halfHeight * Math.max(0.001, aspect);
-      const origin = add(
-        add(this.positionValue, scale(right, ndcX * halfWidth)),
-        scale(up, ndcY * halfHeight),
+      const origin = add3(
+        add3(this.positionValue, scale3(right, ndcX * halfWidth)),
+        scale3(up, ndcY * halfHeight),
       );
       return { origin, direction: forward };
     }
     const tanHalf = Math.tan(this.fov * Math.PI / 360);
-    const direction = normalize(add(
+    const direction = normalize3(add3(
       forward,
-      add(scale(right, ndcX * tanHalf * aspect), scale(up, ndcY * tanHalf)),
+      add3(scale3(right, ndcX * tanHalf * aspect), scale3(up, ndcY * tanHalf)),
     )) ?? forward;
     return { origin: { ...this.positionValue }, direction };
   }
@@ -147,7 +149,7 @@ export class CameraController implements CameraHost {
   }
 
   private computeOrbit(): Orbit {
-    const offset = sub(this.positionValue, this.targetValue);
+    const offset = sub3(this.positionValue, this.targetValue);
     const distance = Math.max(0.01, Math.hypot(offset.x, offset.y, offset.z));
     return {
       yaw: Math.atan2(offset.x, offset.z),
@@ -165,7 +167,7 @@ export class CameraController implements CameraHost {
       z: Math.cos(this.orbit.yaw) * cosPitch * this.orbit.distance,
     };
     this.targetValue = { ...this.orbit.target };
-    this.positionValue = add(this.orbit.target, offset);
+    this.positionValue = add3(this.orbit.target, offset);
     this.orbit = this.computeOrbit();
     this.emit();
   }
@@ -177,15 +179,15 @@ export class CameraController implements CameraHost {
   }
 
   private pan(dx: number, dy: number): void {
-    const forward = normalize(sub(this.targetValue, this.positionValue)) ?? { x: 0, y: 0, z: -1 };
-    const right = normalize(cross(forward, this.upValue)) ?? { x: 1, y: 0, z: 0 };
-    const up = normalize(cross(right, forward)) ?? { x: 0, y: 1, z: 0 };
+    const forward = normalize3(sub3(this.targetValue, this.positionValue)) ?? { x: 0, y: 0, z: -1 };
+    const right = normalize3(cross3(forward, this.upValue)) ?? { x: 1, y: 0, z: 0 };
+    const up = normalize3(cross3(right, forward)) ?? { x: 0, y: 1, z: 0 };
     const perPixel = this.projectionValue === 'orthographic'
       ? this.viewHeight / Math.max(1, this.canvas.clientHeight)
       : 2 * Math.tan(this.fov * Math.PI / 360) * this.orbit.distance / Math.max(1, this.canvas.clientHeight);
-    this.orbit.target = add(
-      add(this.orbit.target, scale(right, -dx * perPixel)),
-      scale(up, dy * perPixel),
+    this.orbit.target = add3(
+      add3(this.orbit.target, scale3(right, -dx * perPixel)),
+      scale3(up, dy * perPixel),
     );
     this.applyOrbit();
   }
@@ -247,34 +249,4 @@ export class CameraController implements CameraHost {
       this.canvas.removeEventListener('contextmenu', onContext);
     };
   }
-}
-
-function add(a: Vec3, b: Vec3): Vec3 {
-  return { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z };
-}
-
-function sub(a: Vec3, b: Vec3): Vec3 {
-  return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z };
-}
-
-function scale(v: Vec3, s: number): Vec3 {
-  return { x: v.x * s, y: v.y * s, z: v.z * s };
-}
-
-function cross(a: Vec3, b: Vec3): Vec3 {
-  return {
-    x: a.y * b.z - a.z * b.y,
-    y: a.z * b.x - a.x * b.z,
-    z: a.x * b.y - a.y * b.x,
-  };
-}
-
-function normalize(v: Vec3): Vec3 | null {
-  const length = Math.hypot(v.x, v.y, v.z);
-  if (!(length > 1e-9)) return null;
-  return { x: v.x / length, y: v.y / length, z: v.z / length };
-}
-
-function clamp(value: number, lo: number, hi: number): number {
-  return Math.max(lo, Math.min(hi, value));
 }

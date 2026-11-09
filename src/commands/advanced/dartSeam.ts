@@ -7,7 +7,8 @@ import { newEdge, newPoint } from '@/commands/patternCreateCommands';
 import { prunePattern } from '@/commands/patternStructureCommands';
 import { edgeLength, pointAtT } from '@/pattern/geom';
 import { sampleOutline, samplePanelOutline } from '@/pattern/panel';
-import { computeBBox, add, normalize, scale, sub } from '@/base/geom';
+import { computeBBox } from '@/base/geom';
+import { add2, normalize2, scale2, sub2 } from '@/base/math';
 import { hasSelfIntersection } from '@/base/geom/offset';
 import { jointCornerIds, seamJoint, type SeamJointEnd } from '@/pattern/seam';
 import { applyFillets } from '@/commands/patternEditCommands';
@@ -58,13 +59,13 @@ export class RhombusDartCommand extends SnapshotCommand {
 
     const outline = samplePanelOutline(pattern, panel);
     const middle = { x: (baseStart.x + baseEnd.x) / 2, y: (baseStart.y + baseEnd.y) / 2 };
-    const normal = inwardDirection(outline, middle, normalize(sub(baseEnd, baseStart)));
+    const normal = inwardDirection(outline, middle, normalize2(sub2(baseEnd, baseStart)));
     const bbox = computeBBox(outline);
     const reach = Math.hypot(bbox.max.x - bbox.min.x, bbox.max.y - bbox.min.y) + 1;
     if (inwardDepth(outline, middle, normal, reach) < this.lengthCm + 0.2) throw new Error('省长超出版片范围，无法创建菱形省');
 
-    const tip = add(middle, scale(normal, this.lengthCm));
-    const closing = add(middle, scale(normal, this.lengthCm / 2));
+    const tip = add2(middle, scale2(normal, this.lengthCm));
+    const closing = add2(middle, scale2(normal, this.lengthCm / 2));
     const tipId = newPoint(pattern, tip, 'corner');
     const leg1 = newEdge(pattern, 'line', baseStartId, tipId);
     const leg2 = newEdge(pattern, 'line', tipId, baseEndId);

@@ -4,7 +4,8 @@ import { edgeCurve, adaptiveSampleBezier } from '@/pattern/geom';
 import { adaptiveSampleArc } from '@/base/geom/arc';
 import { panelGrainLine, panelOutlineWithAllowance } from '@/pattern/panel';
 import { topstitchRows } from '@/pattern/panel';
-import { computeBBox, ensureCCW, perp, normalize, sub, dot } from '@/base/geom';
+import { computeBBox, ensureCCW } from '@/base/geom';
+import { perp2, normalize2, sub2, dot2, nearlyEqual2 } from '@/base/math';
 import { resolveSize } from '@/pattern/grading';
 import {
   buildMarkerLayout, placePoint, placedLabel, placedOutline,
@@ -103,11 +104,11 @@ function loopPolygon(pattern: Pattern, edgeIds: string[]): Vec2[] {
   for (const edgeId of edgeIds) {
     for (const p of sampleEdgeCm(pattern, edgeId)) {
       const last = pts[pts.length - 1];
-      if (last && Math.hypot(p.x - last.x, p.y - last.y) < 1e-9) continue;
+      if (last && nearlyEqual2(p, last, 1e-9)) continue;
       pts.push(p);
     }
   }
-  if (pts.length > 1 && Math.hypot(pts[0].x - pts[pts.length - 1].x, pts[0].y - pts[pts.length - 1].y) < 1e-6) pts.pop();
+  if (pts.length > 1 && nearlyEqual2(pts[0], pts[pts.length - 1])) pts.pop();
   return pts;
 }
 
@@ -369,12 +370,12 @@ function writePanelBlock(
     });
     const a = samples[Math.max(0, bi - 1)];
     const b = samples[Math.min(samples.length - 1, bi + 1)];
-    let normal = normalize(perp(sub(b, a)));
+    let normal = normalize2(perp2(sub2(b, a)));
     if (Math.hypot(normal.x, normal.y) < 0.5) continue;
     const center = { x: (box.min.x + box.max.x) / 2, y: (box.min.y + box.max.y) / 2 };
     // Notches point away from the panel material: outward on the outline, inward on a hole.
     if (owner.onHole) normal = { x: -normal.x, y: -normal.y };
-    if (dot(normal, sub(at, center)) < 0) normal = { x: -normal.x, y: -normal.y };
+    if (dot2(normal, sub2(at, center)) < 0) normal = { x: -normal.x, y: -normal.y };
     const layer = notch.style === 'drill' ? layerName('drill', convention) : layerName('notch', convention);
     writeLine(dxf, layer, { x: at.x - normal.x * 0.3, y: at.y - normal.y * 0.3 }, { x: at.x + normal.x * 0.2, y: at.y + normal.y * 0.2 });
   }

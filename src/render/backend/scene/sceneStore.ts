@@ -1,6 +1,7 @@
 /** Caches two GPU scene roots (raster and trace) built from one pure-data snapshot. */
 
 import * as THREE from 'three/webgpu';
+import { degToRad } from '@/base/math';
 import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import type {
   AssetKey, DrawStage, EntityId, MeshData, MeshId, ResolvedMaterial,
@@ -435,7 +436,7 @@ function buildLight(light: import('@/render/common').LightData, group: THREE.Gro
     case 'spot': {
       const spot = new THREE.SpotLight(
         color, light.intensity, light.distance,
-        light.coneAngleDeg * Math.PI / 180, light.penumbra, 2,
+        degToRad(light.coneAngleDeg), light.penumbra, 2,
       );
       spot.position.copy(position);
       spot.target.position.copy(target);

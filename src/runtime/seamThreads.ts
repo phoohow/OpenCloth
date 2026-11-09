@@ -1,6 +1,7 @@
 /** Thread overlay drawn between paired seam edges; it dims as a seam closes. */
 
-import { distance3At as distance } from '@/base/math';
+import { distance3At as distance } from '@/base/geom';
+import { hexToLinearRgb, type LinearRgb } from '@/base/color';
 import type { Seam } from '@/model/types';
 import { CHANNEL_RASTER } from '@/render/world';
 import type { EntityId, MaterialId, MeshId, WorldWriter } from '@/render/world';
@@ -8,7 +9,7 @@ import type { PresenterHost } from '@/runtime/presenters/host';
 import type { SeamPair } from '@/runtime/seamPair';
 
 /** Linear rgb triplet of a thread color. */
-type Rgb = readonly [number, number, number];
+type Rgb = LinearRgb;
 
 /** Thread overlay drawn between paired seam edges; it dims as a seam closes. */
 export class SeamThreads {
@@ -60,7 +61,7 @@ export class SeamThreads {
   setSeams(seams: Record<string, Seam>): void {
     this.seams = seams;
     this.palette = new Map(
-      Object.values(seams).map(seam => [seam.id, hexToLinear(seam.threadColor)]),
+      Object.values(seams).map(seam => [seam.id, hexToLinearRgb(seam.threadColor)]),
     );
   }
 
@@ -113,20 +114,9 @@ export class SeamThreads {
 }
 
 /** Thread color used when a pair's seam record is gone. */
-const THREAD_FALLBACK: Rgb = hexToLinear('#5cd9ff');
+const THREAD_FALLBACK: Rgb = hexToLinearRgb('#5cd9ff');
 
 /** Bright while open, fading to black (invisible under additive blending) near closure. */
 function fadeLevel(gap: number, open: number): number {
   return Math.min(1, gap / Math.max(open * 0.3, 0.01));
-}
-
-/** Linear rgb of a hex color, matching the color space vertex colors are read in. */
-function hexToLinear(hex: string): Rgb {
-  const value = Number.parseInt(hex.replace('#', ''), 16);
-  return [channel((value >> 16) & 0xff), channel((value >> 8) & 0xff), channel(value & 0xff)];
-}
-
-function channel(value: number): number {
-  const srgb = value / 255;
-  return srgb <= 0.04045 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4;
 }

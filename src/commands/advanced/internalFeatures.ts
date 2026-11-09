@@ -7,9 +7,9 @@ import { SnapshotCommand } from '@/commands/patternSnapshot';
 import { addClosedLineOutline, makePanel, placeRight } from '@/commands/patternCreateCommands';
 import { samplePanelOutline } from '@/pattern/panel';
 import { sampleEdge } from '@/pattern/geom';
-import { add, computeBBox, ensureCCW } from '@/base/geom';
+import { computeBBox, ensureCCW, pointInPolygon } from '@/base/geom';
+import { add2 } from '@/base/math';
 import { hasSelfIntersection, offsetPolyline } from '@/base/geom/offset';
-import { insidePolygon } from '@/commands/patternStructureCommands';
 import { insideOrOnRing, loopRing } from '@/commands/advanced/shared';
 
 /** Options for `OffsetInternalLineCommand`. */
@@ -88,7 +88,7 @@ export class PanelFromInternalLoopCommand extends SnapshotCommand {
     if (!ring) throw new Error('内部线不是闭合环，无法成片');
     if (hasSelfIntersection(ring)) throw new Error('内部线环自相交，无法成片');
     const outline = samplePanelOutline(pattern, panel);
-    if (!ring.every((p: Vec2) => insidePolygon(outline, p))) throw new Error('内部线环需完全位于版片轮廓内');
+    if (!ring.every((p: Vec2) => pointInPolygon(outline, p))) throw new Error('内部线环需完全位于版片轮廓内');
 
     const ccw = ensureCCW(ring);
     const holeIds = addClosedLineOutline(pattern, [...ccw].reverse());
@@ -96,7 +96,7 @@ export class PanelFromInternalLoopCommand extends SnapshotCommand {
 
     const bbox = computeBBox(ccw);
     const shift = placeRight(pattern, bbox.min, bbox.max);
-    const outlineIds = addClosedLineOutline(pattern, ccw.map(p => add(p, shift)));
+    const outlineIds = addClosedLineOutline(pattern, ccw.map(p => add2(p, shift)));
     const created = makePanel(pattern, ctx, {
       name: this.opts.name ?? `${panel.name}内片`, seamAllowanceCm: panel.seamAllowanceCm,
     }, outlineIds);

@@ -1,5 +1,6 @@
 import type { Pattern, Print, Topstitch, Trim, Vec2 } from '@/model/types';
 import { computeBBox } from '@/base/geom';
+import { degToRad, rotate2 } from '@/base/math';
 import { sampleEdgeInterval, samplePanelOutline } from '@/pattern/panel/panelBuilder';
 
 /** Smallest drawn trim diameter, in cm. */
@@ -21,13 +22,12 @@ export function panelFrame(pattern: Pattern, panelId: string): { center: Vec2; m
 
 /** Corners of a rotated rectangle, counter-clockwise by `angleDeg` in pattern coordinates. */
 export function rotatedFrame(center: Vec2, widthCm: number, heightCm: number, angleDeg: number): Vec2[] {
-  const rad = (angleDeg * Math.PI) / 180;
-  const cos = Math.cos(rad), sin = Math.sin(rad);
+  const angle = degToRad(angleDeg);
   const hw = widthCm / 2, hh = heightCm / 2;
-  const corner = (sx: number, sy: number): Vec2 => ({
-    x: center.x + sx * hw * cos - sy * hh * sin,
-    y: center.y + sx * hw * sin + sy * hh * cos,
-  });
+  const corner = (sx: number, sy: number): Vec2 => {
+    const offset = rotate2({ x: sx * hw, y: sy * hh }, angle);
+    return { x: center.x + offset.x, y: center.y + offset.y };
+  };
   return [corner(-1, -1), corner(1, -1), corner(1, 1), corner(-1, 1)];
 }
 

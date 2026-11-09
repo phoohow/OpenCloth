@@ -16,6 +16,7 @@ const service = createSceneService({
 export const {
   previewTransform,
   commitTransform,
+  commitPanelTransforms,
   setPanelsVisible,
   setReferencesVisible,
   setAvatarVisible,

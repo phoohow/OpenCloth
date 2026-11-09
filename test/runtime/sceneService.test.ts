@@ -104,4 +104,24 @@ describe('sceneService', () => {
     expect(engine.current!.setReferenceOpacity).toHaveBeenCalledWith('ref-1', 0.4);
     expect(notifyRefObjectsChanged).toHaveBeenCalled();
   });
+
+  it('3D 变换把多个版片写成一条可撤销命令', () => {
+    const { service, history, project } = makeService();
+    const ids = Object.keys(project().pattern.panels).slice(0, 2);
+    expect(ids).toHaveLength(2);
+    const moved = { x: 0.25, y: 0, z: -0.1 };
+    const transform = {
+      position: moved,
+      rotationEuler: { x: 0, y: 0, z: 0 },
+      scale: { x: 1, y: 1, z: 1 },
+    };
+
+    service.commitPanelTransforms(ids.map(panelId => ({ panelId, transform })), '3D 平移版片');
+    expect(history).toHaveLength(1);
+    expect(history[0]!.label).toBe('3D 平移版片');
+    ids.forEach(id => expect(project().pattern.panels[id]!.transform!.position.x).toBe(moved.x));
+
+    history[0]!.undo({ project: project() });
+    ids.forEach(id => expect(project().pattern.panels[id]!.transform!.position.x).toBe(0));
+  });
 });

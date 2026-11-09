@@ -2,7 +2,7 @@ import type { Panel, Pattern, Project } from '@/model/types';
 import { TRIM_KIND_LABELS } from '@/model';
 import { csvTable, type CsvRow } from '@/base/text';
 import { panelOutlineWithAllowance, sampleOutline, samplePanelOutline } from '@/pattern/panel/panelBuilder';
-import { polygonArea } from '@/pattern/marker/markerReport';
+import { polygonArea } from '@/base/geom';
 import { edgeIntervalLength } from '@/pattern/geom/edgeSample';
 
 /** Section of the bill of materials a row belongs to. */

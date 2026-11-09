@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildMarkerReport, markerReportCsv, polygonArea } from '@/pattern/marker/markerReport';
+import { polygonArea } from '@/base/geom';
+import { buildMarkerReport, markerReportCsv } from '@/pattern/marker/markerReport';
 import type { MarkerLayout, MarkerPlacement } from '@/pattern/marker/markerLayout';
 
 function placement(name: string, width: number, height: number): MarkerPlacement {

@@ -4,7 +4,8 @@ import type { Vec2 } from '@/model/types';
 import { AddInternalLineCommand } from '@/commands';
 import { samplePanelOutline } from '@/pattern/panel';
 import { useProjectStore, useSimStore, useUIStore } from '@/store';
-import { pointInPolygon } from '@/ui/viewport2D/hitTest';
+import { pointInPolygon } from '@/base/geom';
+import { averagePoint2, lerp2 } from '@/base/math';
 import { reportActionError } from '@/ui/widgets/toast';
 import { isTapGesture } from '@/ui/mobile/mobileUi';
 import { CLAMP_CURSOR, OPEN_CLAMP_CURSOR, PIN_CURSOR, UNPIN_CURSOR } from '@/ui/viewport3D/cursors';
@@ -444,13 +445,9 @@ export function useClothPicking(
 function clampIntoPanel(outline: Vec2[], point: Vec2): Vec2 | null {
   if (pointInPolygon(outline, point)) return point;
   if (outline.length === 0) return null;
-  const centre = outline.reduce(
-    (sum, p) => ({ x: sum.x + p.x / outline.length, y: sum.y + p.y / outline.length }),
-    { x: 0, y: 0 },
-  );
+  const centre = averagePoint2(outline);
   for (let step = 1; step <= 8; step++) {
-    const t = step / 8;
-    const candidate = { x: point.x + (centre.x - point.x) * t, y: point.y + (centre.y - point.y) * t };
+    const candidate = lerp2(point, centre, step / 8);
     if (pointInPolygon(outline, candidate)) return candidate;
   }
   return null;

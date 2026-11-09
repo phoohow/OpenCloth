@@ -1,3 +1,5 @@
+import { closestPointOnTriangle3 } from '@/base/geom';
+
 /** Smallest and largest grid cell edge, in metres. */
 const MIN_CELL = 0.015;
 const MAX_CELL = 0.05;
@@ -46,71 +48,8 @@ const closestOut = new Float64Array(3);
 /** Scratch cell range of one triangle; see `triangleCellRange`. */
 const cellRange = new Int32Array(6);
 
-/**
- * Closest point on a triangle to `p`, written into `out`. This is the reference for the `closestOnTriangle`
- * mirror in the collide shader; the fixture test pins its results so the two stay in step.
- */
-export function closestPointOnTriangle(
-  px: number, py: number, pz: number,
-  ax: number, ay: number, az: number,
-  bx: number, by: number, bz: number,
-  cx: number, cy: number, cz: number,
-  out: Float64Array,
-): void {
-  const abx = bx - ax, aby = by - ay, abz = bz - az;
-  const acx = cx - ax, acy = cy - ay, acz = cz - az;
-  const apx = px - ax, apy = py - ay, apz = pz - az;
-  const d1 = abx * apx + aby * apy + abz * apz;
-  const d2 = acx * apx + acy * apy + acz * apz;
-  if (d1 <= 0 && d2 <= 0) {
-    out[0] = ax; out[1] = ay; out[2] = az;
-    return;
-  }
-
-  const bpx = px - bx, bpy = py - by, bpz = pz - bz;
-  const d3 = abx * bpx + aby * bpy + abz * bpz;
-  const d4 = acx * bpx + acy * bpy + acz * bpz;
-  if (d3 >= 0 && d4 <= d3) {
-    out[0] = bx; out[1] = by; out[2] = bz;
-    return;
-  }
-
-  const vc = d1 * d4 - d3 * d2;
-  if (vc <= 0 && d1 >= 0 && d3 <= 0) {
-    const v = d1 / (d1 - d3);
-    out[0] = ax + abx * v; out[1] = ay + aby * v; out[2] = az + abz * v;
-    return;
-  }
-
-  const cpx = px - cx, cpy = py - cy, cpz = pz - cz;
-  const d5 = abx * cpx + aby * cpy + abz * cpz;
-  const d6 = acx * cpx + acy * cpy + acz * cpz;
-  if (d6 >= 0 && d5 <= d6) {
-    out[0] = cx; out[1] = cy; out[2] = cz;
-    return;
-  }
-
-  const vb = d5 * d2 - d1 * d6;
-  if (vb <= 0 && d2 >= 0 && d6 <= 0) {
-    const w = d2 / (d2 - d6);
-    out[0] = ax + acx * w; out[1] = ay + acy * w; out[2] = az + acz * w;
-    return;
-  }
-
-  const va = d3 * d6 - d5 * d4;
-  if (va <= 0 && d4 - d3 >= 0 && d5 - d6 >= 0) {
-    const w = (d4 - d3) / ((d4 - d3) + (d5 - d6));
-    out[0] = bx + (cx - bx) * w; out[1] = by + (cy - by) * w; out[2] = bz + (cz - bz) * w;
-    return;
-  }
-
-  const denom = 1 / (va + vb + vc);
-  const v = vb * denom;
-  const w = vc * denom;
-  out[0] = ax + abx * v + acx * w;
-  out[1] = ay + aby * v + acy * w;
-  out[2] = az + abz * v + acz * w;
-}
+/** Reference for the `closestOnTriangle` mirror in the collide shader; the fixture test pins it. */
+export { closestPointOnTriangle3 as closestPointOnTriangle } from '@/base/geom';
 
 /** Cell edge that keeps a handful of triangles per cell, from the mean edge length. */
 function meanEdgeCell(vertices: Float32Array, triangleCount: number): number {
@@ -324,7 +263,7 @@ export function nearestMeshPoint(
         for (let k = cellStart[c]; k < end; k++) {
           const t = cellTriangles[k];
           const o = t * 9;
-          closestPointOnTriangle(
+          closestPointOnTriangle3(
             px, py, pz,
             vertices[o], vertices[o + 1], vertices[o + 2],
             vertices[o + 3], vertices[o + 4], vertices[o + 5],

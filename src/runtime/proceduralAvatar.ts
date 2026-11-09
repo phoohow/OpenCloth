@@ -4,6 +4,8 @@ import type { AssetMesh, MaterialData, MeshData } from '@/render/common';
 import type { AvatarParams } from '@/model/types';
 import { bodyLandmarks, type BodyLandmarks } from '@/avatar';
 import { appliedLimbPose, armChain, legChain, type Point3 } from '@/avatar';
+import { quaternionFromUnitVectors, rotateEuler3, rotateQuaternion3, type Quaternion } from '@/base/math';
+import { computeVertexNormals } from '@/base/geom';
 
 /** Downward local axis the limb lathes run along. */
 const DOWN: Point3 = [0, -1, 0];
@@ -16,8 +18,6 @@ interface RawMesh {
 
 /** Elliptical cross-section at one height of a lofted body part. */
 interface Station { y: number; rx: number; rz: number; }
-
-type Quaternion = [x: number, y: number, z: number, w: number];
 
 /** Placement of one part: translation, rotation and local depth scale. */
 interface Placement {
@@ -190,48 +190,7 @@ function scaledSphere(radius: number, widthSegments: number, heightSegments: num
 /** Quaternion turning the downward axis onto `dir`. */
 function downTo(dir: Point3): Quaternion {
   const length = Math.hypot(dir[0], dir[1], dir[2]) || 1;
-  const x = dir[0] / length, y = dir[1] / length, z = dir[2] / length;
-  const r = DOWN[1] * y + 1;
-  let q: Quaternion;
-  if (r < 1e-6) {
-    q = Math.abs(DOWN[0]) > Math.abs(DOWN[2]) ? [-DOWN[1], DOWN[0], 0, 0] : [0, -DOWN[2], DOWN[1], 0];
-  } else {
-    q = [
-      DOWN[1] * z - DOWN[2] * y,
-      DOWN[2] * x - DOWN[0] * z,
-      DOWN[0] * y - DOWN[1] * x,
-      r,
-    ];
-  }
-  const norm = Math.hypot(q[0], q[1], q[2], q[3]) || 1;
-  return [q[0] / norm, q[1] / norm, q[2] / norm, q[3] / norm];
-}
-
-/** Rotates a vector by XYZ Euler angles. */
-function rotateEuler(v: Point3, euler: Point3): Point3 {
-  const cx = Math.cos(euler[0]), sx = Math.sin(euler[0]);
-  const cy = Math.cos(euler[1]), sy = Math.sin(euler[1]);
-  const cz = Math.cos(euler[2]), sz = Math.sin(euler[2]);
-  const m00 = cy * cz, m01 = -cy * sz, m02 = sy;
-  const m10 = cx * sz + sx * sy * cz, m11 = cx * cz - sx * sy * sz, m12 = -sx * cy;
-  const m20 = sx * sz - cx * sy * cz, m21 = sx * cz + cx * sy * sz, m22 = cx * cy;
-  return [
-    m00 * v[0] + m01 * v[1] + m02 * v[2],
-    m10 * v[0] + m11 * v[1] + m12 * v[2],
-    m20 * v[0] + m21 * v[1] + m22 * v[2],
-  ];
-}
-
-/** Applies a quaternion rotation to a vector. */
-function rotateQuaternion(v: Point3, q: Quaternion): Point3 {
-  const tx = 2 * (q[1] * v[2] - q[2] * v[1]);
-  const ty = 2 * (q[2] * v[0] - q[0] * v[2]);
-  const tz = 2 * (q[0] * v[1] - q[1] * v[0]);
-  return [
-    v[0] + q[3] * tx + (q[1] * tz - q[2] * ty),
-    v[1] + q[3] * ty + (q[2] * tx - q[0] * tz),
-    v[2] + q[3] * tz + (q[0] * ty - q[1] * tx),
-  ];
+  return quaternionFromUnitVectors(DOWN, [dir[0] / length, dir[1] / length, dir[2] / length]);
 }
 
 /** Bakes a part placement into its vertex positions. */
@@ -240,44 +199,13 @@ function bakeMesh(raw: RawMesh, placement: Placement): RawMesh {
   const depth = placement.depth ?? 1;
   for (let i = 0; i < raw.positions.length; i += 3) {
     let v: Point3 = [raw.positions[i], raw.positions[i + 1], raw.positions[i + 2] * depth];
-    if (placement.rotation) v = rotateQuaternion(v, placement.rotation);
-    else if (placement.euler) v = rotateEuler(v, placement.euler);
+    if (placement.rotation) v = rotateQuaternion3(v, placement.rotation);
+    else if (placement.euler) v = rotateEuler3(v, placement.euler);
     positions[i] = v[0] + placement.position[0];
     positions[i + 1] = v[1] + placement.position[1];
     positions[i + 2] = v[2] + placement.position[2];
   }
   return { positions, indices: raw.indices };
-}
-
-/** Per-vertex normals accumulated from the triangle winding of an indexed mesh. */
-function computeNormals(positions: Float32Array, indices: Uint32Array): Float32Array {
-  const normals = new Float32Array(positions.length);
-  for (let t = 0; t < indices.length; t += 3) {
-    const a = indices[t] * 3, b = indices[t + 1] * 3, c = indices[t + 2] * 3;
-    const abx = positions[b] - positions[a];
-    const aby = positions[b + 1] - positions[a + 1];
-    const abz = positions[b + 2] - positions[a + 2];
-    const acx = positions[c] - positions[a];
-    const acy = positions[c + 1] - positions[a + 1];
-    const acz = positions[c + 2] - positions[a + 2];
-    const nx = aby * acz - abz * acy;
-    const ny = abz * acx - abx * acz;
-    const nz = abx * acy - aby * acx;
-    normals[a] += nx; normals[a + 1] += ny; normals[a + 2] += nz;
-    normals[b] += nx; normals[b + 1] += ny; normals[b + 2] += nz;
-    normals[c] += nx; normals[c + 1] += ny; normals[c + 2] += nz;
-  }
-  for (let i = 0; i < normals.length; i += 3) {
-    const length = Math.hypot(normals[i], normals[i + 1], normals[i + 2]);
-    if (length < 1e-9) {
-      normals[i] = 0; normals[i + 1] = 1; normals[i + 2] = 0;
-      continue;
-    }
-    normals[i] /= length;
-    normals[i + 1] /= length;
-    normals[i + 2] /= length;
-  }
-  return normals;
 }
 
 /** Torso stations: groin dome, hip, waist, bust, shoulders and the neck stump. */
@@ -311,7 +239,7 @@ export function proceduralAvatarMeshes(params: AvatarParams): AssetMesh[] {
     const baked = bakeMesh(raw, placement);
     const mesh: MeshData = {
       topology: 'triangle',
-      streams: { position: baked.positions, normal: computeNormals(baked.positions, baked.indices) },
+      streams: { position: baked.positions, normal: computeVertexNormals(baked.positions, baked.indices) },
       index: baked.indices,
     };
     meshes.push({ name, mesh, material: SKIN });

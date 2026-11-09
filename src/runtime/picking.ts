@@ -1,6 +1,6 @@
 /** Screen picking over world meshes and opaque assets, resolved through the domain binding table. */
 
-import type { Vec3 } from '@/base/geom';
+import type { Vec3 } from '@/base/math';
 import {
   CHANNEL_RASTER, type AssetPort, type CameraHost, type EntityId, type Ray, type RayHit,
 } from '@/render/common';

@@ -1,5 +1,7 @@
 import type { Pattern, Print, Vec2 } from '@/model/types';
 import { sampleEdge } from '@/pattern/panel';
+import { edgeTForPoint } from '@/pattern/geom';
+import { distance2 } from '@/base/math';
 import { isSplitLayout, type ToolType, type ViewLayout } from '@/store';
 import type { MoveGeometry } from '@/commands';
 
@@ -85,7 +87,7 @@ export function nearestOnEdge(pattern: Pattern, edgeId: string, p: Vec2): Vec2 {
   let best = p;
   let bestD = Infinity;
   for (const q of sampleEdge(pattern, edgeId)) {
-    const d = Math.hypot(q.x - p.x, q.y - p.y);
+    const d = distance2(q, p);
     if (d < bestD) { bestD = d; best = q; }
   }
   return best;
@@ -93,20 +95,7 @@ export function nearestOnEdge(pattern: Pattern, edgeId: string, p: Vec2): Vec2 {
 
 /** Arc-length fraction of the nearest sample on an edge. */
 export function arcFraction(pattern: Pattern, edgeId: string, p: Vec2): number {
-  const pts = sampleEdge(pattern, edgeId);
-  if (pts.length < 2) return 0;
-  const acc = [0];
-  for (let i = 1; i < pts.length; i++) {
-    acc.push(acc[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y));
-  }
-  const total = acc[acc.length - 1] || 1;
-  let bestT = 0;
-  let bestD = Infinity;
-  for (let i = 0; i < pts.length; i++) {
-    const d = Math.hypot(pts[i].x - p.x, pts[i].y - p.y);
-    if (d < bestD) { bestD = d; bestT = acc[i]! / total; }
-  }
-  return bestT;
+  return edgeTForPoint(pattern, edgeId, p);
 }
 
 /** Dry-run pattern copy with one handle replaced; smooth points mirror their pair. */

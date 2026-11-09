@@ -1,6 +1,6 @@
 /** Shared render vocabulary: pure data exchanged by GPU, world, renderer and viewport. */
 
-import type { Vec3 } from '@/base/geom';
+import type { Vec3 } from '@/base/math';
 
 export type EntityId = number;
 export type MeshId = number;

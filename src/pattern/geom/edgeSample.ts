@@ -1,6 +1,7 @@
 import type { Measurement, Pattern, Vec2 } from '@/model/types';
 import { adaptiveSampleBezier, edgeCurve } from '@/pattern/geom/bezier';
-import { adaptiveSampleArc } from '@/base/geom';
+import { adaptiveSampleArc, cumulativePolylineLengths } from '@/base/geom';
+import { clamp, distance2, radToDeg } from '@/base/math';
 
 /** Samples one pattern edge as polyline points; curve and arc edges use adaptive tolerance. */
 export function sampleEdge(pattern: Pattern, edgeId: string, reverse = false): Vec2[] {
@@ -22,21 +23,12 @@ export function sampleEdge(pattern: Pattern, edgeId: string, reverse = false): V
   return reverse ? [...pts].reverse() : pts;
 }
 
-/** Cumulative chord lengths of a polyline. */
-function chordLengths(pts: Vec2[]): number[] {
-  const acc = [0];
-  for (let i = 1; i < pts.length; i++) {
-    acc.push(acc[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y));
-  }
-  return acc;
-}
-
 /** Point at arc-length fraction t along an edge. */
 export function pointAtT(pattern: Pattern, edgeId: string, t: number): Vec2 | null {
   const pts = sampleEdge(pattern, edgeId);
   if (pts.length < 2) return pts[0] ?? null;
-  const acc = chordLengths(pts);
-  const target = Math.min(1, Math.max(0, t)) * acc[acc.length - 1];
+  const acc = cumulativePolylineLengths(pts);
+  const target = clamp(t, 0, 1) * acc[acc.length - 1];
   for (let i = 1; i < acc.length; i++) {
     if (acc[i] >= target) {
       const span = acc[i] - acc[i - 1] || 1;
@@ -56,7 +48,7 @@ export function sampleEdgeInterval(
 ): Vec2[] {
   const pts = sampleEdge(pattern, edgeId);
   if (pts.length < 2 || (t0 === 0 && t1 === 1)) return reverse ? [...pts].reverse() : pts;
-  const acc = chordLengths(pts);
+  const acc = cumulativePolylineLengths(pts);
   const total = acc[acc.length - 1] || 1;
   const lo = Math.min(t0, t1) * total;
   const hi = Math.max(t0, t1) * total;
@@ -68,16 +60,31 @@ export function sampleEdgeInterval(
   return reverse ? [...out].reverse() : out;
 }
 
+/** Arc-length fraction of the edge sample nearest to `p`. */
+export function edgeTForPoint(pattern: Pattern, edgeId: string, p: Vec2): number {
+  const pts = sampleEdge(pattern, edgeId);
+  if (pts.length < 2) return 0;
+  const acc = cumulativePolylineLengths(pts);
+  const total = acc[acc.length - 1] || 1;
+  let bestIndex = 0;
+  let bestDistance = Infinity;
+  for (let i = 0; i < pts.length; i++) {
+    const distance = distance2(pts[i], p);
+    if (distance < bestDistance) { bestDistance = distance; bestIndex = i; }
+  }
+  return acc[bestIndex]! / total;
+}
+
 /** Total sampled length of an edge, in cm. */
 export function edgeLength(pattern: Pattern, edgeId: string): number {
   const pts = sampleEdge(pattern, edgeId);
-  const acc = chordLengths(pts);
+  const acc = cumulativePolylineLengths(pts);
   return acc[acc.length - 1] ?? 0;
 }
 
 /** Sampled length of the arc-length sub-interval [t0, t1] of an edge, in cm. */
 export function edgeIntervalLength(pattern: Pattern, edgeId: string, t0 = 0, t1 = 1): number {
-  const acc = chordLengths(sampleEdgeInterval(pattern, edgeId, t0, t1));
+  const acc = cumulativePolylineLengths(sampleEdgeInterval(pattern, edgeId, t0, t1));
   return acc[acc.length - 1] ?? 0;
 }
 
@@ -94,6 +101,6 @@ export function measurementValue(pattern: Pattern, measurement: Measurement): nu
       : null;
   }
   if (!a || !b) return null;
-  if (measurement.kind === 'angle') return (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
-  return Math.hypot(b.x - a.x, b.y - a.y);
+  if (measurement.kind === 'angle') return radToDeg(Math.atan2(b.y - a.y, b.x - a.x));
+  return distance2(a, b);
 }

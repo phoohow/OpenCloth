@@ -4,6 +4,10 @@ import { useRenderHost, type RenderSession } from '@/ui/viewport3D/renderHost';
 import { useProjectStore, useSimStore, useUIStore, usePerfStore, isSplitLayout, type ViewLayout, type ToolType } from '@/store';
 import { EngineSync, fallBackToRaster, syncSelectionOverlay } from '@/ui/viewport3D/engineSync';
 import { useClothPicking } from '@/ui/viewport3D/useClothPicking';
+import { useTransformGizmo } from '@/ui/viewport3D/useTransformGizmo';
+import { TransformGizmoOverlay } from '@/ui/viewport3D/transformGizmoOverlay';
+import { TransformModeSwitch } from '@/ui/viewport3D/transformModeSwitch';
+import { AxisIndicator } from '@/ui/viewport3D/axisIndicator';
 import { ViewportHint } from '@/ui/widgets/viewportHint';
 import { rayTraceStateLabel } from '@/ui/optionTables';
 import { MOBILE_VIEWPORT_HINT, isMobileUi } from '@/ui/mobile/mobileUi';
@@ -30,9 +34,10 @@ const statusHint = (layout: ViewLayout, tool: ToolType): string => {
   if (tool === 'measure3d') {
     return '3D 试衣 · 单击布料表面两点测量直线距离，第三次单击重新开始，Esc 清除 · 其余位置照常旋转缩放';
   }
+  const gizmo = '选中版片后拖动辅助轴变换（W 平移 / E 旋转 / S 缩放，Esc 取消拖动）';
   return isSplitLayout(layout)
-    ? '3D 试衣 · 移动中悬停布料可用夹子拖拽 · 拖拽旋转 · 滚轮缩放 · 双击选片 · 快捷键需点击聚焦本窗格'
-    : '3D 试衣 · 模拟中夹住布料可拖拽 · 拖拽旋转 · 滚轮缩放 · 右键平移 · Alt+点击打PIN · Alt+Shift+点击取消PIN · 双击选择版片 · 小键盘 2/8/4/6/0/5 正视/后视/左视/右视/仰视/俯视，1/3/7/9 四个 45° 侧视 · Esc取消选中';
+    ? `3D 试衣 · 移动中悬停布料可用夹子拖拽 · 拖拽旋转 · 滚轮缩放 · 双击选片 · ${gizmo} · 快捷键需点击聚焦本窗格`
+    : `3D 试衣 · 模拟中夹住布料可拖拽 · 拖拽旋转 · 滚轮缩放 · 右键平移 · Alt+点击打PIN · Alt+Shift+点击取消PIN · 双击选择版片 · ${gizmo} · 左下角坐标轴可点击切换视角 · 小键盘 2/8/4/6/0/5 正视/后视/左视/右视/仰视/俯视，1/3/7/9 四个 45° 侧视 · Esc取消选中`;
 };
 
 /** 3D fitting viewport: owns the renderer context, the garment engine and their store sync. */
@@ -43,6 +48,7 @@ export function Viewport3D({ onEngineReady }: Viewport3DProps) {
   const engineRef = useRef<Viewport['engine'] | null>(null);
   const errorRef = useRef<string | null>(null);
   const [renderError, setRenderError] = useState<string | null>(null);
+  const [sessionReady, setSessionReady] = useState(false);
   const renderHost = useRenderHost();
 
   const backend = useUIStore(s => s.backend);
@@ -119,6 +125,7 @@ export function Viewport3D({ onEngineReady }: Viewport3DProps) {
       syncSelectionOverlay(engine, initial.pattern, useUIStore.getState().selection);
       useSimStore.getState().bumpPins();
       onEngineReady?.(engine, viewport);
+      setSessionReady(true);
 
       // Store sync and the frame loop live in the controller from here on.
       sync = new EngineSync(viewport, setRenderError, initial);
@@ -137,6 +144,7 @@ export function Viewport3D({ onEngineReady }: Viewport3DProps) {
 
     return () => {
       cancelled = true;
+      setSessionReady(false);
       resizeObserver?.disconnect();
       sync?.dispose();
       session?.dispose();
@@ -147,6 +155,8 @@ export function Viewport3D({ onEngineReady }: Viewport3DProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // The gizmo listener owns the capture phase first, so a handle press never starts a camera orbit.
+  const gizmo = useTransformGizmo(canvasRef, containerRef, engineRef, viewportRef);
   useClothPicking(canvasRef, containerRef, engineRef);
 
   return (
@@ -157,6 +167,9 @@ export function Viewport3D({ onEngineReady }: Viewport3DProps) {
         data-testid="viewport-3d"
         style={{ display: 'block', width: '100%', height: '100%', cursor: 'default' }}
       />
+      <TransformGizmoOverlay state={gizmo} />
+      {isMobileUi() && gizmo.layout && <TransformModeSwitch />}
+      {sessionReady && <AxisIndicator viewportRef={viewportRef} engineRef={engineRef} />}
       <ViewportHint right={isMobileUi() ? MOBILE_HINT_RIGHT : 8}>{statusHint(layout, activeTool)}</ViewportHint>
       {tracing && !isMobileUi() && (
         <div style={{

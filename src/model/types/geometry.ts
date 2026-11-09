@@ -3,13 +3,14 @@
  * centimetres (Vec2) and world metres (Vec3).
  */
 
-import type { Vec3 } from '@/base/geom';
+import type { Vec2, Vec3 } from '@/base/math';
+import type { ArcGeom } from '@/base/geom/arc';
 
 /** Core data model types shared by the pattern editor, simulation, and serialization. */
 
 
-export type { Vec2, Vec3, ArcGeom } from '@/base/geom';
-export { vec2, vec3 } from '@/base/geom';
+export type { Vec2, Vec3, ArcGeom };
+export { vec2, vec3 } from '@/base/math';
 
 /** Point where a curve leaves or reaches a pattern point, in absolute pattern coordinates. */
 export interface BezierHandle {

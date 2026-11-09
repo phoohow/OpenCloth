@@ -39,6 +39,9 @@ export const SHORTCUTS: ShortcutDef[] = [
 
   { id: 'dress', label: '自动着装', combo: 'Ctrl+D', scope: '全局' },
 
+  { id: 'gizmoTranslate', label: '版片平移手柄', combo: 'W', scope: '3D 视口' },
+  { id: 'gizmoRotate', label: '版片旋转手柄', combo: 'E', scope: '3D 视口' },
+  { id: 'gizmoScale', label: '版片缩放手柄', combo: 'S', scope: '3D 视口' },
   { id: 'playPause', label: '播放 / 暂停', combo: 'Space', scope: '3D 视口' },
   { id: 'stepFrame', label: '单步', combo: '.', scope: '3D 视口' },
   { id: 'resetSim', label: '重置模拟', combo: 'R', scope: '3D 视口' },

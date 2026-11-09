@@ -1,6 +1,6 @@
 import { genId } from '@/base/id';
 import type { Pattern, PatternEdge, Vec2 } from '@/model/types';
-import { add, sub, dot, distance, lerp, normalize, scale } from '@/base/geom';
+import { add2, sub2, dot2, distance2, lerp2, normalize2, scale2 } from '@/base/math';
 
 import { edgeCurve, splitEdgeCurve } from '@/pattern/geom/bezier';
 import { arcFromThreePoints, arcSpan } from '@/base/geom';
@@ -24,7 +24,7 @@ const arcPoint = (center: Vec2, radius: number, angle: number): Vec2 => ({
 /** Total chord length of a sampled polyline. */
 function chordTotal(pts: Vec2[]): number {
   let acc = 0;
-  for (let i = 1; i < pts.length; i++) acc += distance(pts[i - 1], pts[i]);
+  for (let i = 1; i < pts.length; i++) acc += distance2(pts[i - 1], pts[i]);
   return acc;
 }
 
@@ -34,7 +34,7 @@ function tangentAtEdgeEnd(pattern: Pattern, edge: PatternEdge, atEnd: boolean): 
   if (pts.length < 2) return null;
   const a = atEnd ? pts[pts.length - 2] : pts[0];
   const b = atEnd ? pts[pts.length - 1] : pts[1];
-  return distance(a, b) < 1e-12 ? null : normalize(sub(b, a));
+  return distance2(a, b) < 1e-12 ? null : normalize2(sub2(b, a));
 }
 
 /** Point on the edge at `dist` from the given side, or null when the edge is shorter. */
@@ -58,20 +58,20 @@ function cutPoint(pattern: Pattern, edge: PatternEdge, dist: number, side: CutSi
     if (target < 0) return null;
     let acc = 0;
     for (let i = 1; i < pts.length; i++) {
-      const seg = distance(pts[i - 1], pts[i]);
+      const seg = distance2(pts[i - 1], pts[i]);
       if (acc + seg >= target) {
         const k = seg < 1e-12 ? 0 : (target - acc) / seg;
-        return lerp(pts[i - 1], pts[i], k);
+        return lerp2(pts[i - 1], pts[i], k);
       }
       acc += seg;
     }
     return null;
   }
 
-  const len = distance(start, end);
+  const len = distance2(start, end);
   if (len < 1e-12 || dist > len) return null;
   const t = side === 'start' ? dist / len : 1 - dist / len;
-  return lerp(start, end, t);
+  return lerp2(start, end, t);
 }
 
 /** Registers the tangent point and replacement edge trimming the cut off one side. */
@@ -146,9 +146,9 @@ export function filletCorner(
   if (!dirIn || !dirOut) return null;
   // Rays leaving the corner along each edge.
   const u = dirOut;
-  const w = scale(dirIn, -1);
+  const w = scale2(dirIn, -1);
 
-  const cosT = Math.min(1, Math.max(-1, dot(u, w)));
+  const cosT = Math.min(1, Math.max(-1, dot2(u, w)));
   const sinH = Math.sqrt(Math.max(0, (1 - cosT) / 2));
   const cosH = Math.sqrt(Math.max(0, (1 + cosT) / 2));
   // sinH near 0 is a cusp, cosH near 0 a straight angle; neither has a fillet wedge.
@@ -157,13 +157,13 @@ export function filletCorner(
   const tangentLen = radius * cosH / sinH;
   if (tangentLen < 1e-6 || tangentLen > inLen - 1e-6 || tangentLen > outLen - 1e-6) return null;
 
-  const bis = normalize(add(u, w));
+  const bis = normalize2(add2(u, w));
   const centerDist = radius / sinH;
-  const mid = add(corner.pos, scale(bis, centerDist - radius));
+  const mid = add2(corner.pos, scale2(bis, centerDist - radius));
 
   const cutIn = cutPoint(pattern, inEdge, tangentLen, 'end');
   const cutOut = cutPoint(pattern, outEdge, tangentLen, 'start');
-  if (!cutIn || !cutOut || distance(cutIn, cutOut) < 1e-6) return null;
+  if (!cutIn || !cutOut || distance2(cutIn, cutOut) < 1e-6) return null;
 
   const arcGeom = arcFromThreePoints(cutIn, mid, cutOut);
   if (!arcGeom || !(arcGeom.radius > 0)) return null;

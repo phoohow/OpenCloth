@@ -23,6 +23,10 @@ import { EnvironmentStage } from '@/runtime/environmentStage';
 import { ReferenceStage, type ReferenceObject } from '@/runtime/referenceStage';
 import { OverlayKit } from '@/runtime/overlayKit';
 import { DressingController } from '@/runtime/dressingController';
+import {
+  identityDelta, isIdentityDelta, transformPositions, type GizmoDelta, type GizmoFrame,
+} from '@/runtime/gizmoMath';
+import { add3, scale3 } from '@/base/math';
 import type { AvatarMotionInfo } from '@/runtime/avatarMotion';
 import { timeAsync } from '@/runtime/engineTiming';
 import { FALLBACK_PHYSICS } from '@/runtime/clothConstants';
@@ -62,6 +66,16 @@ export class GarmentEngine {
   private readonly interactionView: InteractionView;
   /** Viewport camera: presets, projection and the saved placement. */
   private readonly camera: CameraRig;
+  /** In-flight gizmo drag, applied to the drawn particles without rebuilding the solver. */
+  private transformPreview: {
+    ranges: { start: number; end: number }[];
+    centers: Vec3[];
+    delta: GizmoDelta;
+  } | null = null;
+  /** Particle array the last simulation frame drew, before any gizmo preview. */
+  private lastPresented: Float32Array | null = null;
+  /** Normals of the last simulation frame. */
+  private lastNormals: Float32Array | null = null;
 
   constructor(
     private readonly host: PresenterHost,
@@ -405,18 +419,46 @@ export class GarmentEngine {
 
   /** Writes one finite solver frame to every view that follows the cloth. */
   private presentFrame(positions: Float32Array, normals: Float32Array, contact: Float32Array | null): void {
-    this.clothView.updateFromSim(positions, normals);
-    this.overlays.followSimulation(this.assembly.seamPairs, positions, normals);
+    this.lastPresented = positions;
+    this.lastNormals = normals;
+    const shown = this.displayedPositions(positions);
+    this.clothView.updateFromSim(shown, normals);
+    this.overlays.followSimulation(this.assembly.seamPairs, shown, normals);
     this.avatarView.updateSoftBody(positions, contact);
     this.avatarView.sampleDynamicFit();
-    this.interactionView.followPositions(this.solver.simulator?.getReadbackPositions() ?? positions);
+    this.interactionView.followPositions(this.solver.simulator?.getReadbackPositions() ?? positions, shown);
   }
 
   /** Puts every view back on the initial layout. */
   private presentRest(positions: Float32Array): void {
-    this.clothView.resetTo(positions);
-    this.overlays.followRest(this.assembly.seamPairs, positions);
-    this.interactionView.followPositions(this.solver.simulator?.getReadbackPositions() ?? positions);
+    this.lastPresented = positions;
+    this.lastNormals = null;
+    const shown = this.displayedPositions(positions);
+    this.clothView.resetTo(shown);
+    this.overlays.followRest(this.assembly.seamPairs, shown);
+    this.interactionView.followPositions(this.solver.simulator?.getReadbackPositions() ?? positions, shown);
+  }
+
+  /** Particle arrays with the in-flight gizmo delta baked into the selected panels. */
+  private displayedPositions(positions: Float32Array): Float32Array {
+    const preview = this.transformPreview;
+    if (!preview || isIdentityDelta(preview.delta)) return positions;
+    return transformPositions(positions, preview.ranges, preview.centers, preview.delta);
+  }
+
+  /** Redraws the last solver frame, applying or dropping the live preview. */
+  private repaintFromLast(): void {
+    const source = this.lastPresented ?? this.build.positions;
+    if (!source || source.length === 0) return;
+    const shown = this.displayedPositions(source);
+    if (this.lastNormals && this.lastNormals.length === shown.length) {
+      this.clothView.updateFromSim(shown, this.lastNormals);
+      this.overlays.followSimulation(this.assembly.seamPairs, shown, this.lastNormals);
+    } else {
+      this.clothView.resetTo(shown);
+      this.overlays.followRest(this.assembly.seamPairs, shown);
+    }
+    this.interactionView.followPositions(source, shown);
   }
 
   /** Restores the simulation to its initial positions. */
@@ -556,6 +598,74 @@ export class GarmentEngine {
     this.interactionView.endDrag();
   }
 
+  /** World centres and extent of the selected panels, read from the last drawn frame. */
+  panelGizmoFrame(panelIds: string[]): GizmoFrame | null {
+    const positions = this.lastPresented ?? this.build.positions;
+    if (!positions || positions.length < 3) return null;
+    const centers: Record<string, Vec3> = {};
+    const ranges: { start: number; end: number }[] = [];
+    for (const id of panelIds) {
+      const range = this.assembly.layout.rangeOf(id);
+      if (!range) continue;
+      const center = rangeCenter(positions, range);
+      if (!center) continue;
+      centers[id] = center;
+      ranges.push(range);
+    }
+    const ids = Object.keys(centers);
+    if (ids.length === 0) return null;
+    const center = ids.reduce(
+      (sum, id) => add3(sum, scale3(centers[id]!, 1 / ids.length)),
+      { x: 0, y: 0, z: 0 },
+    );
+    let radius = 0;
+    for (const range of ranges) {
+      const stride = Math.max(1, Math.floor((range.end - range.start) / 64));
+      for (let i = range.start; i < range.end; i += stride) {
+        const offset = i * 3;
+        radius = Math.max(radius, Math.hypot(
+          positions[offset]! - center.x,
+          positions[offset + 1]! - center.y,
+          positions[offset + 2]! - center.z,
+        ));
+      }
+    }
+    return { center, radius: Math.max(0.03, radius), centers };
+  }
+
+  /** Freezes the selected panels' centres and starts a live transform preview. */
+  beginPanelTransformPreview(panelIds: string[]): GizmoFrame | null {
+    const frame = this.panelGizmoFrame(panelIds);
+    if (!frame) return null;
+    const ranges: { start: number; end: number }[] = [];
+    const centers: Vec3[] = [];
+    for (const id of panelIds) {
+      const range = this.assembly.layout.rangeOf(id);
+      const panelCenter = frame.centers[id];
+      if (!range || !panelCenter) continue;
+      ranges.push(range);
+      centers.push(panelCenter);
+    }
+    if (ranges.length === 0) return null;
+    this.transformPreview = { ranges, centers, delta: identityDelta() };
+    return frame;
+  }
+
+  /** Moves the live preview to a new delta; null restores the drawn frame. */
+  updatePanelTransformPreview(delta: GizmoDelta | null): void {
+    const preview = this.transformPreview;
+    if (!preview) return;
+    preview.delta = delta ?? identityDelta();
+    this.repaintFromLast();
+  }
+
+  /** Drops the live preview and redraws the cloth where the solver left it. */
+  endPanelTransformPreview(): void {
+    if (!this.transformPreview) return;
+    this.transformPreview = null;
+    this.repaintFromLast();
+  }
+
   /** Highlights the listed panels; ids without cloth triangles are ignored. */
   setSelectedPanels(panelIds: string[]): void {
     this.interactionView.setSelectedPanels(panelIds);
@@ -651,6 +761,9 @@ export class GarmentEngine {
   }
   /** Removes and disposes the cloth meshes, seam threads, simulator and dressing run. */
   private clearCloth(): void {
+    this.transformPreview = null;
+    this.lastPresented = null;
+    this.lastNormals = null;
     this.overlays.reset();
     this.overlays.endSketch();
     this.clearMeasurement();
@@ -671,4 +784,18 @@ export class GarmentEngine {
     this.stage.dispose();
     this.environment.release(this.host);
   }
+}
+
+/** Mean of a particle range, in world meters. */
+function rangeCenter(positions: Float32Array, range: { start: number; end: number }): Vec3 | null {
+  const end = Math.min(range.end, Math.floor(positions.length / 3));
+  if (end <= range.start) return null;
+  let x = 0, y = 0, z = 0;
+  for (let i = range.start; i < end; i++) {
+    x += positions[i * 3]!;
+    y += positions[i * 3 + 1]!;
+    z += positions[i * 3 + 2]!;
+  }
+  const count = end - range.start;
+  return { x: x / count, y: y / count, z: z / count };
 }

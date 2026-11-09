@@ -11,6 +11,7 @@ import { flatLayout } from '@/tools/flatLayout';
 import { explodeOffBody } from '@/pattern/drape';
 import { collapseSeamPairs, type SeamPairRef } from '@/pattern/drape';
 import { GARMENT_TEMPLATES } from '@/pattern/template';
+import { polylineLength } from '@/base/geom';
 import { SoftCanvas, capsuleTriangles, type Camera, type RGB, type XYZ } from '@/tools/softwareRender';
 import { writePng } from '@/tools/pngOut';
 
@@ -301,8 +302,8 @@ function seamLengthReport(scene: Scene): string[] {
   const lengths = scene.seams.map(seam => {
     const a = sampleEdge(scene.pattern, seam.a.edgeId);
     const b = sampleEdge(scene.pattern, seam.b.edgeId, seam.flip);
-    return `${seam.type === 'gather' ? 'gather' : 'seam'} ${(polylineLength(a) * 100).toFixed(1)}/`
-      + `${(polylineLength(b) * 100).toFixed(1)}cm`;
+    return `${seam.type === 'gather' ? 'gather' : 'seam'} ${polylineLength(a).toFixed(1)}/`
+      + `${polylineLength(b).toFixed(1)}cm`;
   });
   return [`seam edge lengths: ${lengths.join(' | ')}`];
 }
@@ -315,12 +316,6 @@ function report(scene: Scene, opts: Options): string[] {
     ...seamGapReport(scene, opts.stage),
     ...seamLengthReport(scene),
   ];
-}
-
-function polylineLength(pts: Array<{ x: number; y: number }>): number {
-  let sum = 0;
-  for (let i = 0; i + 1 < pts.length; i++) sum += Math.hypot(pts[i + 1].x - pts[i].x, pts[i + 1].y - pts[i].y);
-  return sum * 0.01;
 }
 
 function render(opts: Options): void {

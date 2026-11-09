@@ -1,8 +1,8 @@
 import type { Panel, PanelDrape, Vec2 } from '@/model/types';
 import { vec2 } from '@/model/types';
+import { evalBezier } from '@/base/geom/bezier';
+import { distance2, lerp } from '@/base/math';
 import type { PatternBuilder } from '@/pattern/template/templateKit';
-
-const mix = (a: number, b: number, t: number): number => a + (b - a) * t;
 
 /** Bodice panel plus its named outline edges, in outline order. */
 export interface BodiceEdges {
@@ -167,20 +167,16 @@ export function capHeightForArmhole(widthCm: number, armholeArcCm: number, maxCa
 }
 
 /** Length of a cubic Bezier polyline, sampled densely enough for drafting armpits and caps. */
-function cubicLength([p0, c0, c1, p3]: Vec2[], steps = 24): number {
-  let sum = 0;
-  let px = p0.x;
-  let py = p0.y;
+function cubicLength([p0, c0, c1, p1]: Vec2[], steps = 24): number {
+  const curve = { p0, c0, c1, p1 };
+  let total = 0;
+  let previous = p0;
   for (let i = 1; i <= steps; i++) {
-    const t = i / steps;
-    const mt = 1 - t;
-    const x = mt * mt * mt * p0.x + 3 * mt * mt * t * c0.x + 3 * mt * t * t * c1.x + t * t * t * p3.x;
-    const y = mt * mt * mt * p0.y + 3 * mt * mt * t * c0.y + 3 * mt * t * t * c1.y + t * t * t * p3.y;
-    sum += Math.hypot(x - px, y - py);
-    px = x;
-    py = y;
+    const point = evalBezier(curve, i / steps);
+    total += distance2(previous, point);
+    previous = point;
   }
-  return sum;
+  return total;
 }
 
 /** Skirt or dress panel plus its named outline edges. */
@@ -218,12 +214,12 @@ export function addFlaredPanel(builder: PatternBuilder, o: FlaredOptions): Flare
 
   const hem = builder.line(hemL, hemR, 'hem');
   const sideRight = builder.bezier(hemR, waistR,
-    vec2(mix(halfHem, halfWaist, 0.35) + bow, o.lengthCm * 0.35),
-    vec2(mix(halfHem, halfWaist, 0.7) + bow, o.lengthCm * 0.7), 'sideSeam');
+    vec2(lerp(halfHem, halfWaist, 0.35) + bow, o.lengthCm * 0.35),
+    vec2(lerp(halfHem, halfWaist, 0.7) + bow, o.lengthCm * 0.7), 'sideSeam');
   const waist = builder.line(waistR, waistL, 'waist');
   const sideLeft = builder.bezier(waistL, hemL,
-    vec2(-mix(halfHem, halfWaist, 0.7) - bow, o.lengthCm * 0.7),
-    vec2(-mix(halfHem, halfWaist, 0.35) - bow, o.lengthCm * 0.35), 'sideSeam');
+    vec2(-lerp(halfHem, halfWaist, 0.7) - bow, o.lengthCm * 0.7),
+    vec2(-lerp(halfHem, halfWaist, 0.35) - bow, o.lengthCm * 0.35), 'sideSeam');
 
   const panel = builder.panel({
     name: o.name,

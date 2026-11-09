@@ -1,4 +1,5 @@
 import type { ClothSimInput } from '@/sim/simTypes';
+import { distance3AtPoint, pointRayDistance3 } from '@/base/geom';
 
 // Particle-to-panel and ray-pick helpers operating on CPU data only.
 
@@ -52,15 +53,7 @@ export function pointToRayDistance(
   ox: number, oy: number, oz: number,
   dx: number, dy: number, dz: number,
 ): number {
-  const dLen = Math.hypot(dx, dy, dz);
-  if (dLen === 0) return Infinity;
-  const nx = dx / dLen, ny = dy / dLen, nz = dz / dLen;
-  const wx = px - ox, wy = py - oy, wz = pz - oz;
-  if (wx * nx + wy * ny + wz * nz <= 0) return Infinity;
-  const cx = wy * nz - wz * ny;
-  const cy = wz * nx - wx * nz;
-  const cz = wx * ny - wy * nx;
-  return Math.hypot(cx, cy, cz);
+  return pointRayDistance3({ x: px, y: py, z: pz }, { x: ox, y: oy, z: oz }, { x: dx, y: dy, z: dz });
 }
 
 /** Uniform hash grid over particle positions, built for ray picking. */
@@ -213,7 +206,5 @@ export function pickNearestToPoint(
 
 /** Distance from one particle to a point. */
 function pointToPositionDistance(positions: Float32Array, index: number, point: Vec3Like): number {
-  const offset = index * 3;
-  if (offset + 2 >= positions.length) return Infinity;
-  return Math.hypot(positions[offset] - point.x, positions[offset + 1] - point.y, positions[offset + 2] - point.z);
+  return distance3AtPoint(positions, index, point);
 }

@@ -36,6 +36,8 @@ export interface SceneServicePorts {
 export interface SceneService {
   previewTransform(nodeId: string, transform: ObjectTransform, engineRef: EngineRef): void;
   commitTransform(nodeId: string, transform: ObjectTransform, engineRef: EngineRef, label?: string): void;
+  /** Writes several panel transforms as one undoable step. */
+  commitPanelTransforms(entries: readonly { panelId: string; transform: ObjectTransform }[], label?: string): void;
   setPanelsVisible(panelIds: string[], visible: boolean): void;
   setReferencesVisible(refIds: string[], visible: boolean, engineRef: EngineRef): void;
   setAvatarVisible(visible: boolean, engineRef: EngineRef): void;
@@ -106,6 +108,21 @@ export function createSceneService(ports: SceneServicePorts): SceneService {
       label,
       execute: ctx => apply(ctx, transform),
       undo: ctx => apply(ctx, before),
+    });
+  };
+
+  /** Writes every selected panel transform in one command, so one undo restores the whole drag. */
+  const commitPanelTransforms: SceneService['commitPanelTransforms'] = (entries, label = '3D 变换') => {
+    if (entries.length === 0) return;
+    const before = entries.map(entry => readTransform(project(), entry.panelId));
+    if (before.some(value => value === null)) return;
+    const apply = (ctx: ProjectContext, values: readonly ObjectTransform[]) => {
+      entries.forEach((entry, i) => writeTransform(ctx.project, entry.panelId, values[i]!));
+    };
+    ports.execute({
+      label,
+      execute: ctx => apply(ctx, entries.map(entry => entry.transform)),
+      undo: ctx => apply(ctx, before as ObjectTransform[]),
     });
   };
 
@@ -416,6 +433,7 @@ export function createSceneService(ports: SceneServicePorts): SceneService {
   return {
     previewTransform,
     commitTransform,
+    commitPanelTransforms,
     setPanelsVisible,
     setReferencesVisible,
     setAvatarVisible,

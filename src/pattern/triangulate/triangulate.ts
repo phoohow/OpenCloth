@@ -1,4 +1,5 @@
 import type { Vec2 } from '@/model/types';
+import { angleBetween2, distance2, nearlyEqual2 } from '@/base/math';
 
 /** Triangles over a flat [x, y, ...] polygon-space vertex buffer. */
 export interface TriangleMesh {
@@ -53,7 +54,7 @@ export function resampleClosedOutline(points: Vec2[], spacing: number): Vec2[] {
   }
   // The last chain closes back onto the first corner.
   const first = out[0], last = out[out.length - 1];
-  if (first && last && Math.hypot(first.x - last.x, first.y - last.y) < 1e-9) out.pop();
+  if (first && last && nearlyEqual2(first, last, 1e-9)) out.pop();
   return out.length >= 3 ? out : points.slice();
 }
 
@@ -63,12 +64,12 @@ function outlineTurn(points: Vec2[], i: number): number {
   const prev = points[(i - 1 + n) % n]!;
   const cur = points[i]!;
   const next = points[(i + 1) % n]!;
-  const ax = cur.x - prev.x, ay = cur.y - prev.y;
-  const bx = next.x - cur.x, by = next.y - cur.y;
-  const la = Math.hypot(ax, ay), lb = Math.hypot(bx, by);
-  if (la < 1e-9 || lb < 1e-9) return Math.PI;
-  const cos = Math.min(1, Math.max(-1, (ax * bx + ay * by) / (la * lb)));
-  return Math.acos(cos);
+  const incoming = { x: cur.x - prev.x, y: cur.y - prev.y };
+  const outgoing = { x: next.x - cur.x, y: next.y - cur.y };
+  if (Math.hypot(incoming.x, incoming.y) < 1e-9 || Math.hypot(outgoing.x, outgoing.y) < 1e-9) {
+    return Math.PI;
+  }
+  return angleBetween2(incoming, outgoing);
 }
 
 /** Resamples one open chain into equal segments, keeping both of its endpoints. */
@@ -76,7 +77,7 @@ function resampleChain(chain: Vec2[], spacing: number): Vec2[] {
   const n = chain.length;
   if (n < 2) return chain.slice();
   let total = 0;
-  for (let i = 1; i < n; i++) total += pointDistance(chain[i - 1]!, chain[i]!);
+  for (let i = 1; i < n; i++) total += distance2(chain[i - 1]!, chain[i]!);
   const segments = Math.max(1, Math.round(total / spacing));
   const out: Vec2[] = [chain[0]!];
   if (segments > 1) {
@@ -85,7 +86,7 @@ function resampleChain(chain: Vec2[], spacing: number): Vec2[] {
     let next = step;
     for (let i = 1; i < n; i++) {
       const a = chain[i - 1]!, b = chain[i]!;
-      const len = pointDistance(a, b);
+      const len = distance2(a, b);
       if (!(len > 1e-9)) continue;
       while (next < walked + len - 1e-9) {
         const t = (next - walked) / len;
@@ -97,11 +98,6 @@ function resampleChain(chain: Vec2[], spacing: number): Vec2[] {
   }
   out.push({ ...chain[n - 1]! });
   return out;
-}
-
-/** Distance between two points. */
-function pointDistance(a: Vec2, b: Vec2): number {
-  return Math.hypot(b.x - a.x, b.y - a.y);
 }
 
 /** Extracts edges that belong to only one triangle. */

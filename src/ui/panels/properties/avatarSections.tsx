@@ -8,7 +8,8 @@ import {
 } from '@/ui/widgets/propertyRows';
 import { Icon } from '@/ui/icons';
 import { styles } from '@/ui/panels/properties/styles';
-import { CUSTOM_MODEL, PROCEDURAL_MODEL, toDeg, toRad } from '@/ui/panels/properties/constants';
+import { degToRad, radToDeg } from '@/base/math';
+import { CUSTOM_MODEL, PROCEDURAL_MODEL } from '@/ui/panels/properties/constants';
 
 /** Joint rotation fields the avatar sliders edit. */
 type JointKey = 'shoulderFlexRad' | 'elbowBendRad' | 'hipFlexRad' | 'kneeBendRad';
@@ -26,12 +27,12 @@ export function AvatarData({ project, engineRef }: { project: Project; engineRef
 
   /** Joint angle of one side in degrees. */
   const jointDeg = (side: 'left' | 'right', key: JointKey) =>
-    toDeg(avatar.params.joints?.[side]?.[key] ?? 0);
+    radToDeg(avatar.params.joints?.[side]?.[key] ?? 0);
 
   /** Writes one joint angle, keeping the other joints and the global pose. */
   const setJoint = (side: 'left' | 'right', key: JointKey, label: string, degrees: number) => {
     const joints = cloneJoints(avatar.params.joints) ?? {};
-    joints[side] = { ...joints[side], [key]: toRad(degrees) };
+    joints[side] = { ...joints[side], [key]: degToRad(degrees) };
     setAvatar(label, { params: { ...avatar.params, joints } });
   };
 
@@ -49,12 +50,12 @@ export function AvatarData({ project, engineRef }: { project: Project; engineRef
           onChange={v => setAvatar('修改臀围', { params: { ...avatar.params, hipCm: v } })} />
       </Section>
       <Section title="姿态">
-        <SliderRow label="手臂外展" min={0} max={90} step={1} unit="°" value={toDeg(avatar.params.poseArmAngleRad ?? 0.12)} commitOnRelease
-          onChange={v => setAvatar('修改手臂外展', { params: { ...avatar.params, poseArmAngleRad: toRad(v) } })} />
-        <SliderRow label="腿部开合" min={0} max={45} step={1} unit="°" value={toDeg(avatar.params.poseLegSpreadRad ?? 0)} commitOnRelease
-          onChange={v => setAvatar('修改腿部开合', { params: { ...avatar.params, poseLegSpreadRad: toRad(v) } })} />
-        <SliderRow label="躯干倾斜" min={-20} max={20} step={1} unit="°" value={toDeg(avatar.params.poseTorsoLeanRad ?? 0)} commitOnRelease
-          onChange={v => setAvatar('修改躯干倾斜', { params: { ...avatar.params, poseTorsoLeanRad: toRad(v) } })} />
+        <SliderRow label="手臂外展" min={0} max={90} step={1} unit="°" value={radToDeg(avatar.params.poseArmAngleRad ?? 0.12)} commitOnRelease
+          onChange={v => setAvatar('修改手臂外展', { params: { ...avatar.params, poseArmAngleRad: degToRad(v) } })} />
+        <SliderRow label="腿部开合" min={0} max={45} step={1} unit="°" value={radToDeg(avatar.params.poseLegSpreadRad ?? 0)} commitOnRelease
+          onChange={v => setAvatar('修改腿部开合', { params: { ...avatar.params, poseLegSpreadRad: degToRad(v) } })} />
+        <SliderRow label="躯干倾斜" min={-20} max={20} step={1} unit="°" value={radToDeg(avatar.params.poseTorsoLeanRad ?? 0)} commitOnRelease
+          onChange={v => setAvatar('修改躯干倾斜', { params: { ...avatar.params, poseTorsoLeanRad: degToRad(v) } })} />
         <div style={styles.note}>肩与肘</div>
         <SliderRow label="左肩前摆" min={-80} max={80} step={1} unit="°" value={jointDeg('left', 'shoulderFlexRad')} commitOnRelease
           onChange={v => setJoint('left', 'shoulderFlexRad', '修改左肩', v)} />

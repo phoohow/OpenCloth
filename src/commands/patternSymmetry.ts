@@ -2,18 +2,11 @@ import { genId } from '@/base/id';
 import type { Panel, Pattern, Vec2 } from '@/model/types';
 
 import { arcFromThreePoints, evalArc } from '@/base/geom/arc';
+import { reflectAcrossLine2 } from '@/base/math';
 import { prunePattern } from '@/commands/patternPrune';
 
 /** Mirror axis: an outline edge id, or the pattern 'x' / 'y' axis. */
 export type MirrorAxis = 'x' | 'y' | string;
-
-const sub = (a: Vec2, b: Vec2): Vec2 => ({ x: a.x - b.x, y: a.y - b.y });
-const add = (a: Vec2, b: Vec2): Vec2 => ({ x: a.x + b.x, y: a.y + b.y });
-const mul = (a: Vec2, s: number): Vec2 => ({ x: a.x * s, y: a.y * s });
-const norm = (v: Vec2): Vec2 => {
-  const l = Math.hypot(v.x, v.y) || 1;
-  return { x: v.x / l, y: v.y / l };
-};
 
 /** Reflection across the pattern X/Y axes or the line through a mirror edge. */
 function reflector(pattern: Pattern, axis: MirrorAxis): (p: Vec2) => Vec2 {
@@ -24,13 +17,7 @@ function reflector(pattern: Pattern, axis: MirrorAxis): (p: Vec2) => Vec2 {
   const a = pattern.points[edge.startPointId]?.pos;
   const b = pattern.points[edge.endPointId]?.pos;
   if (!a || !b) throw new Error('镜像轴边端点缺失');
-  const d = norm(sub(b, a));
-  return p => {
-    const rel = sub(p, a);
-    const along = rel.x * d.x + rel.y * d.y;
-    const foot = add(a, mul(d, along));
-    return { x: 2 * foot.x - p.x, y: 2 * foot.y - p.y };
-  };
+  return p => reflectAcrossLine2(p, a, b);
 }
 
 /** Builds a mirrored point record from a source point, reversing its handle roles. */

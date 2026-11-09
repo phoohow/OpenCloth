@@ -1,4 +1,5 @@
 import type { AvatarParams, BodyLandmark } from '@/model/types';
+import { clamp } from '@/base/math';
 import { cmToM } from '@/base/units';
 
 /** Half width and half depth of an elliptical body cross-section, in meters. */
@@ -58,10 +59,6 @@ const LEAN_LIMIT_RAD = 0.78;
 /** Largest leg splay the shared body geometry accepts. */
 const LEG_SPREAD_LIMIT_RAD = 1.2;
 
-/** Clamps an angle into the range the body geometry can represent. */
-function clampAngle(value: number, limit: number): number {
-  return Math.min(Math.max(value, -limit), limit);
-}
 
 /** Vertical torso outline anchors: height, girth reference radius and depth-to-width ratio. */
 const TORSO_PROFILE: Array<{ at: (p: BodyProportions) => number; r: (p: BodyProportions) => number; depth: number }> = [
@@ -115,7 +112,7 @@ export function bodyProportions(params: AvatarParams): BodyProportions {
     hipX: hipR * 0.45,
     armRakeRad: params.poseArmAngleRad ?? 0.12,
     legRakeRad: Math.min(Math.max(params.poseLegSpreadRad ?? 0, 0), LEG_SPREAD_LIMIT_RAD),
-    torsoLeanRad: clampAngle(params.poseTorsoLeanRad ?? 0, LEAN_LIMIT_RAD),
+    torsoLeanRad: clamp(params.poseTorsoLeanRad ?? 0, -LEAN_LIMIT_RAD, LEAN_LIMIT_RAD),
   };
 }
 

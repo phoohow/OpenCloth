@@ -15,14 +15,14 @@ export interface PropTabOption {
   label: string;
 }
 
-/** Properties-editor tabs in rail order: identity, look, physics, pattern data, placement, render, project. */
+/** Properties-editor tabs in rail order: identity, look, physics, placement, render, pattern data, project. */
 export const PROP_TAB_OPTIONS: PropTabOption[] = [
   { key: 'object', icon: 'cube', label: '对象' },
   { key: 'material', icon: 'swatch', label: '材质' },
   { key: 'simulator', icon: 'waves', label: '模拟' },
-  { key: 'pattern', icon: 'ruler', label: '版型' },
   { key: 'transform', icon: 'move', label: '变换' },
   { key: 'render', icon: 'image', label: '渲染' },
+  { key: 'pattern', icon: 'ruler', label: '版型' },
   { key: 'project', icon: 'briefcase', label: '工程' },
 ];
 

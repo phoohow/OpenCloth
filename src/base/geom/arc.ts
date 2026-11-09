@@ -1,15 +1,26 @@
-import type { ArcGeom, Vec2 } from '@/base/geom/primitives';
+import { TAU, clamp01, wrapAngle, wrapAngleSigned, type Vec2 } from '@/base/math';
 
-/** Shortest signed delta from a to b on the unit circle. */
-function angleDelta(a: number, b: number, ccw: boolean): number {
-  let d = (b - a) % (Math.PI * 2);
-  if (d < 0) d += Math.PI * 2;
-  return ccw ? d : d - Math.PI * 2;
+/** Circular arc between two endpoints, with angles in radians. */
+export interface ArcGeom {
+  center: Vec2;
+  radius: number;
+  startAngle: number;
+  endAngle: number;
+  ccw: boolean;
 }
 
 /** Signed sweep of an arc in radians; negative runs clockwise from start to end. */
 export function arcSpan(arc: ArcGeom): number {
-  return angleDelta(arc.startAngle, arc.endAngle, arc.ccw);
+  const delta = wrapAngle(arc.endAngle - arc.startAngle);
+  return arc.ccw ? delta : delta - TAU;
+}
+
+/** Fraction of the arc nearest to `p`; the middle when the arc has no sweep. */
+export function arcTForPoint(arc: ArcGeom, p: Vec2): number {
+  const sweep = arcSpan(arc);
+  if (sweep === 0) return 0.5;
+  const angle = Math.atan2(p.y - arc.center.y, p.x - arc.center.x);
+  return clamp01(wrapAngleSigned(angle - arc.startAngle) / sweep);
 }
 
 /** Point on the arc at fraction t of its sweep. */
@@ -38,17 +49,10 @@ export function arcFromThreePoints(a: Vec2, mid: Vec2, b: Vec2): ArcGeom | null 
   const midAngle = Math.atan2(cy - uy, cx - ux);
   const endAngle = Math.atan2(by - uy, bx - ux);
   // Counter-clockwise when the mid angle falls on the CCW path from start to end.
-  const ccwToMid = wrapClockwise(midAngle - startAngle);
-  const ccwToEnd = wrapClockwise(endAngle - startAngle);
+  const ccwToMid = wrapAngle(midAngle - startAngle);
+  const ccwToEnd = wrapAngle(endAngle - startAngle);
   const ccw = ccwToMid <= ccwToEnd + 1e-9;
   return { center, radius, startAngle, endAngle, ccw };
-}
-
-/** Angle wrapped into [0, 2π). */
-function wrapClockwise(angle: number): number {
-  let d = angle % (Math.PI * 2);
-  if (d < 0) d += Math.PI * 2;
-  return d;
 }
 
 /** Samples the arc so chord deviation stays under the tolerance, at 8 points minimum. */

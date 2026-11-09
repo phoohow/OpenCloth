@@ -10,6 +10,9 @@ import { prunePattern } from '@/commands/patternStructureCommands';
 import { filletCorner } from '@/pattern/geom';
 import { edgeCurve, splitBezier } from '@/pattern/geom';
 import { edgeLength, pointAtT } from '@/pattern/geom';
+import { arcSpan, arcTForPoint, evalBezier } from '@/base/geom';
+import { clamp01, distance2 } from '@/base/math';
+import { projectOnSegment2 } from '@/base/geom';
 
 /** Outline edges a fillet replaced, with the lengths needed to rescale seam intervals. */
 export interface FilletChange {
@@ -88,7 +91,7 @@ export class AddPointOnEdgeCommand implements Command {
       }
     } else if (edge.type === 'arc' && edge.arc) {
       const arc = edge.arc;
-      const splitAngle = arc.startAngle + arcSweep(arc) * arcFractionAt(arc, at);
+      const splitAngle = arc.startAngle + arcSpan(arc) * arcTForPoint(arc, at);
       const a1 = { ...arc, endAngle: splitAngle };
       const a2 = { ...arc, startAngle: splitAngle };
       const e1 = mkEdge(edge.startPointId, pointId); e1.type = 'arc'; e1.arc = a1;
@@ -153,10 +156,7 @@ export class AddPointOnEdgeCommand implements Command {
     if (edge.type === 'line') {
       const a = pattern.points[edge.startPointId]!.pos;
       const b = pattern.points[edge.endPointId]!.pos;
-      const dx = b.x - a.x, dy = b.y - a.y;
-      const lenSq = dx * dx + dy * dy;
-      const t = lenSq === 0 ? 0.5 : Math.max(0, Math.min(1, ((this.at.x - a.x) * dx + (this.at.y - a.y) * dy) / lenSq));
-      return { x: a.x + dx * t, y: a.y + dy * t };
+      return projectOnSegment2(this.at, a, b).point;
     }
     return { ...this.at };
   }
@@ -170,51 +170,22 @@ function splitFraction(pattern: Pattern, id1: string, id2: string, at: Vec2): nu
   const a = pattern.points[e1.startPointId]?.pos;
   const b = pattern.points[e2.endPointId]?.pos;
   if (!a || !b) return 0.5;
-  const total = Math.hypot(b.x - a.x, b.y - a.y) || 1;
-  const before = Math.hypot(at.x - a.x, at.y - a.y);
-  return Math.max(0, Math.min(1, before / total));
+  const total = distance2(a, b) || 1;
+  const before = distance2(a, at);
+  return clamp01(before / total);
 }
 
 /** Curve parameter whose point is nearest to `p`. */
 function curveParameterForPoint(pattern: Pattern, edge: PatternEdge, p: Vec2): number {
   const curve = edgeCurve(pattern, edge);
   if (!curve) return 0.5;
-  let bestT = 0.5;
-  let bestD = Infinity;
+  let best = { t: 0.5, d: Infinity };
   for (let i = 0; i <= 48; i++) {
     const t = i / 48;
-    const q = evalBezierAt(curve, t);
-    const d = Math.hypot(q.x - p.x, q.y - p.y);
-    if (d < bestD) { bestD = d; bestT = t; }
+    const d = distance2(evalBezier(curve, t), p);
+    if (d < best.d) best = { t, d };
   }
-  return bestT;
-}
-
-function evalBezierAt(b: { p0: Vec2; c0: Vec2; c1: Vec2; p1: Vec2 }, t: number): Vec2 {
-  const mt = 1 - t;
-  const a = mt * mt * mt, bc = 3 * mt * mt * t, c = 3 * mt * t * t, d = t * t * t;
-  return {
-    x: a * b.p0.x + bc * b.c0.x + c * b.c1.x + d * b.p1.x,
-    y: a * b.p0.y + bc * b.c0.y + c * b.c1.y + d * b.p1.y,
-  };
-}
-
-/** Signed sweep of an arc in radians. */
-function arcSweep(arc: { startAngle: number; endAngle: number; ccw: boolean }): number {
-  let d = (arc.endAngle - arc.startAngle) % (Math.PI * 2);
-  if (d < 0) d += Math.PI * 2;
-  return arc.ccw ? d : d - Math.PI * 2;
-}
-
-/** Arc-length fraction along an arc whose point is nearest to `p`. */
-function arcFractionAt(arc: { center: Vec2; radius: number; startAngle: number; endAngle: number; ccw: boolean }, p: Vec2): number {
-  const angle = Math.atan2(p.y - arc.center.y, p.x - arc.center.x);
-  let delta = (angle - arc.startAngle) % (Math.PI * 2);
-  if (delta < 0) delta += Math.PI * 2;
-  if (!arc.ccw && delta > Math.PI) delta -= Math.PI * 2;
-  if (arc.ccw && delta > Math.PI) delta -= Math.PI * 2;
-  const sweep = arcSweep(arc);
-  return sweep === 0 ? 0.5 : Math.max(0, Math.min(1, delta / sweep));
+  return best.t;
 }
 
 /** Deletes selected panels with their edges, points, darts and internal lines. */
@@ -454,7 +425,6 @@ export function applyFillets(pattern: Pattern, pointIds: string[], radiusCm: num
 
 /** Moves seam intervals that sat on a filleted edge onto the trimmed edge that remains. */
 function remapSeamsAfterFillet(pattern: Pattern, changes: FilletChange[]): void {
-  const clamp01 = (v: number): number => Math.max(0, Math.min(1, v));
   const dead: string[] = [];
   for (const seam of Object.values(pattern.seams)) {
     for (const end of [seam.a, seam.b]) {

@@ -1,6 +1,6 @@
 /** Marker of the particle a pointer drag is pulling. */
 
-import type { Vec3 } from '@/base/geom';
+import type { Vec3 } from '@/base/math';
 import type { CameraState } from '@/render/common';
 import { CHANNEL_RASTER } from '@/render/world';
 import type {

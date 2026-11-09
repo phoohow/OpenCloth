@@ -1,7 +1,9 @@
 import type { MeshSampling, Pattern, Panel, SeamAllowanceCorner, Vec2 } from '@/model/types';
 import { DEFAULT_MESH_RESOLUTION_CM } from '@/model';
 import { hasSelfIntersection, offsetOutlinePerEdge, offsetPolygonStyled, safeOffsetPolygon } from '@/base/geom';
-import { computeBBox, ensureCCW } from '@/base/geom';
+import { computeBBox, cumulativePolylineLengths, ensureCCW } from '@/base/geom';
+import { distance2, nearlyEqual2 } from '@/base/math';
+import { projectOnSegment2, segmentsIntersect2 } from '@/base/geom';
 import { extractBoundaryEdges, resampleClosedOutline, type TriangleMesh } from '@/pattern/triangulate/triangulate';
 import { remeshPolygon } from '@/pattern/triangulate/remesh';
 import { sampleEdge } from '@/pattern/geom/edgeSample';
@@ -44,7 +46,7 @@ export function sampleOutline(pattern: Pattern, edgeIds: string[]): Vec2[] {
     for (let i = 0; i < pts.length; i++) {
       if (i === 0 && outline.length > 0) {
         const last = outline[outline.length - 1];
-        if (Math.hypot(last.x - pts[i].x, last.y - pts[i].y) < 1e-6) continue;
+        if (nearlyEqual2(last, pts[i])) continue;
       }
       outline.push(pts[i]);
     }
@@ -52,7 +54,7 @@ export function sampleOutline(pattern: Pattern, edgeIds: string[]): Vec2[] {
   // Drop the closing point that repeats the outline start.
   if (outline.length > 1) {
     const first = outline[0], last = outline[outline.length - 1];
-    if (Math.hypot(first.x - last.x, first.y - last.y) < 1e-6) outline.pop();
+    if (nearlyEqual2(first, last)) outline.pop();
   }
   return outline;
 }
@@ -279,23 +281,12 @@ class EdgeTrack {
   constructor(edgeId: string, points: Vec2[]) {
     this.edgeId = edgeId;
     this.points = points;
-    this.arc = [0];
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    for (let i = 0; i < points.length; i++) {
-      const p = points[i]!;
-      if (i > 0) {
-        const prev = points[i - 1]!;
-        this.arc.push(this.arc[i - 1]! + Math.hypot(p.x - prev.x, p.y - prev.y));
-      }
-      if (p.x < minX) minX = p.x;
-      if (p.x > maxX) maxX = p.x;
-      if (p.y < minY) minY = p.y;
-      if (p.y > maxY) maxY = p.y;
-    }
-    this.minX = minX - TRACK_MARGIN_CM;
-    this.maxX = maxX + TRACK_MARGIN_CM;
-    this.minY = minY - TRACK_MARGIN_CM;
-    this.maxY = maxY + TRACK_MARGIN_CM;
+    this.arc = cumulativePolylineLengths(points);
+    const bounds = computeBBox(points);
+    this.minX = bounds.min.x - TRACK_MARGIN_CM;
+    this.maxX = bounds.max.x + TRACK_MARGIN_CM;
+    this.minY = bounds.min.y - TRACK_MARGIN_CM;
+    this.maxY = bounds.max.y + TRACK_MARGIN_CM;
   }
 
   /** True when `p` falls inside the edge's bounding box plus the assignment margin. */
@@ -307,16 +298,13 @@ class EdgeTrack {
   project(p: Vec2): { d: number; t: number } {
     const pts = this.points;
     if (pts.length === 0) return { d: Infinity, t: 0 };
-    if (pts.length === 1) return { d: Math.hypot(pts[0]!.x - p.x, pts[0]!.y - p.y), t: 0 };
+    if (pts.length === 1) return { d: distance2(pts[0]!, p), t: 0 };
     let best = { d: Infinity, t: 0 };
     for (let i = 1; i < pts.length; i++) {
       const a = pts[i - 1]!, b = pts[i]!;
-      const dx = b.x - a.x, dy = b.y - a.y;
-      const len2 = dx * dx + dy * dy;
-      const k = len2 > 0 ? Math.min(1, Math.max(0, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2)) : 0;
-      const qx = a.x + dx * k, qy = a.y + dy * k;
-      const d = Math.hypot(p.x - qx, p.y - qy);
-      if (d < best.d) best = { d, t: this.arc[i - 1]! + Math.hypot(qx - a.x, qy - a.y) };
+      const projection = projectOnSegment2(p, a, b);
+      const d = distance2(p, projection.point);
+      if (d < best.d) best = { d, t: this.arc[i - 1]! + distance2(a, projection.point) };
     }
     return best;
   }
@@ -337,10 +325,7 @@ export function edgeVertexRun(
 /** Points along a polyline every `spacing` units, endpoints included. */
 function resample(pts: Vec2[], spacing: number): Vec2[] {
   if (pts.length < 2) return pts;
-  const acc = [0];
-  for (let i = 1; i < pts.length; i++) {
-    acc.push(acc[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y));
-  }
+  const acc = cumulativePolylineLengths(pts);
   const total = acc[acc.length - 1];
   if (!(total > 0)) return pts;
 
@@ -428,7 +413,7 @@ export function panelCreaseEdges(pattern: Pattern, panelId: string, mesh: Triang
         if (crossed.has(key)) continue;
         const pa = vertexPos(mesh, a), pb = vertexPos(mesh, b);
         if (!boxesOverlap(minX, maxX, minY, maxY, pa, pb)) continue;
-        if (segmentsCross(p1, p2, pa, pb)) crossed.add(key);
+        if (segmentsIntersect2(p1, p2, pa, pb, CONTACT_EPS)) crossed.add(key);
       }
     }
   }
@@ -468,23 +453,3 @@ function boxesOverlap(minX: number, maxX: number, minY: number, maxY: number, a:
 }
 
 const CONTACT_EPS = 1e-6;
-
-/** Signed turn from `o` to `a` then `b`. */
-function turn(o: Vec2, a: Vec2, b: Vec2): number {
-  return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
-}
-
-/** True when `p` sits on the closed segment `ab`. */
-function onSegment(a: Vec2, b: Vec2, p: Vec2): boolean {
-  if (Math.abs(turn(a, b, p)) > CONTACT_EPS) return false;
-  return p.x >= Math.min(a.x, b.x) - CONTACT_EPS && p.x <= Math.max(a.x, b.x) + CONTACT_EPS
-    && p.y >= Math.min(a.y, b.y) - CONTACT_EPS && p.y <= Math.max(a.y, b.y) + CONTACT_EPS;
-}
-
-/** True when the two segments cross or touch; contact counts, so a fold through a vertex creases both edges. */
-function segmentsCross(p1: Vec2, p2: Vec2, q1: Vec2, q2: Vec2): boolean {
-  const d1 = turn(p1, p2, q1), d2 = turn(p1, p2, q2);
-  const d3 = turn(q1, q2, p1), d4 = turn(q1, q2, p2);
-  if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) return true;
-  return onSegment(p1, p2, q1) || onSegment(p1, p2, q2) || onSegment(q1, q2, p1) || onSegment(q1, q2, p2);
-}

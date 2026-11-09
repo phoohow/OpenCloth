@@ -1,11 +1,7 @@
 import type { ArcGeom, EdgeType, Panel, Pattern, Vec2 } from '@/model/types';
 import { arcFromThreePoints, evalArc } from '@/base/geom/arc';
+import { add2, nearlyEqual2 } from '@/base/math';
 import { panelCutBounds } from '@/pattern/panel';
-
-/** Coincidence tolerance in cm for treating two positions as the same spot. */
-const EPS = 1e-6;
-const near = (a: Vec2, b: Vec2): boolean => Math.hypot(a.x - b.x, a.y - b.y) < EPS;
-const moved = (p: Vec2, d: Vec2): Vec2 => ({ x: p.x + d.x, y: p.y + d.y });
 
 /** One translated value plus the key needed to restore it. */
 export type MoveRecord =
@@ -57,7 +53,7 @@ export function pointMoveGeometry(pattern: Pattern, pointIds: readonly string[])
         const line = pattern.internalLines[lineId];
         if (!line) continue;
         line.points.forEach((p, i) => {
-          if (near(p, at) && claim(`internal:${lineId}:${i}`)) {
+          if (nearlyEqual2(p, at) && claim(`internal:${lineId}:${i}`)) {
             geom.lineVertices.push({ lineId, index: i });
           }
         });
@@ -168,9 +164,9 @@ export function translateGeometry(
         kind: point.kind,
       },
     });
-    point.pos = moved(point.pos, delta);
-    if (point.handleIn) point.handleIn = moved(point.handleIn, delta);
-    if (point.handleOut) point.handleOut = moved(point.handleOut, delta);
+    point.pos = add2(point.pos, delta);
+    if (point.handleIn) point.handleIn = add2(point.handleIn, delta);
+    if (point.handleOut) point.handleOut = add2(point.handleOut, delta);
   }
 
   for (const vertex of geom.lineVertices) {
@@ -178,7 +174,7 @@ export function translateGeometry(
     const old = line?.points[vertex.index];
     if (!line || !old) continue;
     records.push({ kind: 'internal', lineId: vertex.lineId, index: vertex.index, old: { ...old } });
-    line.points = line.points.map((p, i) => (i === vertex.index ? moved(p, delta) : p));
+    line.points = line.points.map((p, i) => (i === vertex.index ? add2(p, delta) : p));
   }
 
   refitArcs(pattern, movedIds, { translation: delta }, records);
@@ -219,7 +215,7 @@ export function refitArcs(
     const end = pattern.points[edge.endPointId]?.pos;
     if (!start || !end) continue;
     if (options.translation && startMoved && endMoved) {
-      edge.arc = { ...edge.arc, center: moved(edge.arc.center, options.translation) };
+      edge.arc = { ...edge.arc, center: add2(edge.arc.center, options.translation) };
       continue;
     }
     const refit = arcFromThreePoints(start, midpointOf(edge.arc), end);

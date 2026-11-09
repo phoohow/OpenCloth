@@ -1,6 +1,7 @@
 /** Topstitch rows drawn as a thin ribbon above the cloth surface. */
 
 import type { Pattern, Project, Topstitch, Vec2 } from '@/model/types';
+import { hexToLinearRgb } from '@/base/color';
 import type { TriangleMesh } from '@/pattern/triangulate';
 import { topstitchRows } from '@/pattern/panel';
 import { CHANNEL_RASTER } from '@/render/world';
@@ -223,7 +224,7 @@ function segmentColors(segments: TopstitchSegment[]): Float32Array {
     const hex = segments[i].color;
     let color = cache.get(hex);
     if (!color) {
-      color = hexToLinear(hex);
+      color = hexToLinearRgb(hex);
       cache.set(hex, color);
     }
     for (let vertex = 0; vertex < 6; vertex++) {
@@ -234,15 +235,4 @@ function segmentColors(segments: TopstitchSegment[]): Float32Array {
     }
   }
   return colors;
-}
-
-/** Linear rgb of a hex color, matching the color space vertex colors are read in. */
-function hexToLinear(hex: string): readonly [number, number, number] {
-  const value = Number.parseInt(hex.replace('#', ''), 16);
-  return [channel((value >> 16) & 0xff), channel((value >> 8) & 0xff), channel(value & 0xff)];
-}
-
-function channel(value: number): number {
-  const srgb = value / 255;
-  return srgb <= 0.04045 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4;
 }

@@ -1,3 +1,4 @@
+import { distance3At } from '@/base/geom';
 import { DEFAULT_COMPRESSION_LIMIT, DEFAULT_STRETCH_LIMIT } from '@/model';
 
 /** Smallest rest edge length used as the strain denominator. */
@@ -10,20 +11,10 @@ const TRIANGLE_EDGES: ReadonlyArray<readonly [number, number]> = [
   [2, 0],
 ];
 
-/** Returns the length of one edge, or NaN when a coordinate is not finite. */
-function edgeLength(positions: Float32Array, a: number, b: number): number {
-  const a3 = a * 3;
-  const b3 = b * 3;
-  const dx = positions[b3] - positions[a3];
-  const dy = positions[b3 + 1] - positions[a3 + 1];
-  const dz = positions[b3 + 2] - positions[a3 + 2];
-  return Math.hypot(dx, dy, dz);
-}
-
 /** Returns the signed relative length change of one edge, or null when it cannot be measured. */
 function edgeStrain(rest: Float32Array, current: Float32Array, a: number, b: number): number | null {
-  const restLength = edgeLength(rest, a, b);
-  const currentLength = edgeLength(current, a, b);
+  const restLength = distance3At(rest, a, b);
+  const currentLength = distance3At(current, a, b);
   if (!Number.isFinite(restLength) || !Number.isFinite(currentLength)) return null;
   const value = (currentLength - restLength) / Math.max(restLength, MIN_REST_LENGTH);
   return Number.isFinite(value) ? value : null;

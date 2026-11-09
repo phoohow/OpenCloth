@@ -90,6 +90,13 @@ const VIEW_ITEMS = CAMERA_PRESETS.map(p => ({
 
 const PROJECTION_ITEMS = CAMERA_PROJECTIONS.map(p => ({ key: p.value, label: p.label }));
 
+/** Handle sets of the selected panel's 3D transform gizmo. */
+const TRANSFORM_ITEMS = [
+  { key: 'translate', label: '平移 (W)', note: '拖动箭头沿轴移动，拖动方块在平面内移动，中心方块自由移动；松手后重建布料并重置模拟' },
+  { key: 'rotate', label: '旋转 (E)', note: '拖动彩色圆环绕对应轴旋转；松手后重建布料并重置模拟' },
+  { key: 'scale', label: '缩放 (S)', note: '拖动轴端方块单轴缩放，中心方块等比缩放；松手后重建布料并重置模拟' },
+];
+
 const DISPLAY_ITEMS = DISPLAY_MODES.map(m => ({ key: m.value, label: m.label }));
 const WIRE_ITEMS = WIRE_MODES.map(m => ({ key: m.value, label: m.label }));
 
@@ -332,7 +339,7 @@ function seamEmptyHint(skipped: SeamScanSkipped): string {
 /** Tool row that sits above the 3D try-on pane. */
 export function Toolbar3D({ engineRef }: { engineRef: MutableRefObject<GarmentEngine | null> }) {
   const activeTool = useUIStore(s => s.activeTool);
-  const setTool = useUIStore(s => s.setTool);
+  const toggleTool = useUIStore(s => s.toggleTool);
   const displayMode = useUIStore(displayModeOf);
   const setDisplayMode = useUIStore(s => s.setDisplayMode);
   const wire = useUIStore(s => s.wire);
@@ -341,6 +348,8 @@ export function Toolbar3D({ engineRef }: { engineRef: MutableRefObject<GarmentEn
   const setCameraProjection = useUIStore(s => s.setCameraProjection);
   const editPreview = useUIStore(s => s.editPreview);
   const setEditPreview = useUIStore(s => s.setEditPreview);
+  const transformMode = useUIStore(s => s.transformMode);
+  const setTransformMode = useUIStore(s => s.setTransformMode);
   const pinsVersion = useSimStore(s => s.pinsVersion);
   const rayUnavailable = rayTracingUnavailableReason(usePerfStore(s => s.rayUnsupported3D));
 
@@ -353,12 +362,21 @@ export function Toolbar3D({ engineRef }: { engineRef: MutableRefObject<GarmentEn
 
   return (
     <div style={styles.bar}>
+      <ToolMenu
+        icon="move"
+        label="变换"
+        title={`变换 · ${TRANSFORM_ITEMS.find(item => item.key === transformMode)?.label ?? ''}（选中版片后显示手柄）`}
+        options={TRANSFORM_ITEMS.map(item => ({ key: item.key, label: item.label, hint: item.note }))}
+        current={transformMode}
+        onPick={key => setTransformMode(key as typeof transformMode)}
+      />
       {TOOLS_3D.map(t => (
         <ToolButton
           key={t.key}
           tool={t}
           active={activeTool === t.key}
-          onPick={setTool}
+          onPick={toggleTool}
+          toggle
           badge={t.key === 'pin' && pinCount > 0 ? { count: pinCount, label: `已打 ${pinCount} 个` } : undefined}
         />
       ))}
@@ -396,12 +414,14 @@ export function Toolbar3D({ engineRef }: { engineRef: MutableRefObject<GarmentEn
   );
 }
 
-function ToolButton({ tool, active, onPick, badge }: {
+function ToolButton({ tool, active, onPick, badge, toggle }: {
   tool: { key: ToolType; label: string; icon: IconName; hint?: string };
   active: boolean;
   onPick: (t: ToolType) => void;
   /** Count drawn after the icon; the button widens to hold it. */
   badge?: { count: number; label: string };
+  /** Whether picking the armed tool again releases it. */
+  toggle?: boolean;
 }) {
   const hover = [tool.label, tool.hint, badge?.label].filter(Boolean).join(' · ');
   return (
@@ -411,7 +431,9 @@ function ToolButton({ tool, active, onPick, badge }: {
         ...(badge ? styles.toolBtnCounted : null),
         ...(active ? styles.toolBtnActive : null),
       }}
-      title={hover}
+      title={toggle && active ? `${hover} · 再次单击取消` : hover}
+      aria-label={tool.label}
+      aria-pressed={active}
       onClick={() => onPick(tool.key)}
     >
       <Icon name={tool.icon} size={15} />
@@ -456,8 +478,10 @@ function TrimTool({ active, kind, onPick }: {
 }
 
 /** Icon button that opens a list of alternatives. */
-function ToolMenu({ icon, title, options, current, onPick }: {
+function ToolMenu({ icon, label, title, options, current, onPick }: {
   icon: IconName;
+  /** Short accessible name; the tooltip may carry more detail. */
+  label?: string;
   title: string;
   options: Array<{ key: string; label: string; hint?: string }>;
   current: string;
@@ -470,6 +494,8 @@ function ToolMenu({ icon, title, options, current, onPick }: {
       <button
         style={{ ...styles.toolBtn, width: 34, ...(current ? styles.toolBtnActive : null) }}
         title={title}
+        aria-label={label}
+        aria-pressed={current !== ''}
         onClick={() => setOpen(o => !o)}
       >
         <Icon name={icon} size={15} />
@@ -502,7 +528,15 @@ function Dropdown({ label, items, value, onPick, title }: {
   const anchorRef = useRef<HTMLDivElement>(null);
   return (
     <div ref={anchorRef} style={{ position: 'relative' }}>
-      <button style={styles.textBtn} title={title} onClick={() => setOpen(o => !o)}>{label}<Icon name="chevron-down" size={11} style={{ marginLeft: 4 }} /></button>
+      <button
+        style={styles.textBtn}
+        title={title ?? label}
+        aria-label={label}
+        onClick={() => setOpen(o => !o)}
+      >
+        {label}
+        <Icon name="chevron-down" size={11} style={{ marginLeft: 4 }} />
+      </button>
       <MenuPopup open={open} anchor={anchorRef} onClose={() => setOpen(false)}>
         {items.map(item => (
           <div

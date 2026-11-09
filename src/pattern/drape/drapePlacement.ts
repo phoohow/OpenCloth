@@ -1,9 +1,9 @@
 import type { Panel, PanelDrape, BodyLandmark } from '@/model/types';
+import { degToRad } from '@/base/math';
 import { landmarkY, type BodyEllipse, type BodyLandmarks } from '@/avatar';
 import type { PanelMesh } from '@/pattern/panel/panelBuilder';
 import { inferDrape } from '@/pattern/drape/drapeInfer';
 
-const DEG = Math.PI / 180;
 
 /** Landmark each region hangs from unless the panel overrides it. */
 const REGION_ANCHOR: Record<PanelDrape['region'], BodyLandmark> = {
@@ -114,9 +114,9 @@ export function drapeReversesWinding(panel: Panel): boolean {
 function columnAngle(x: number, bounds: PanelBounds, drape: ResolvedDrape): number {
   const width = Math.max(bounds.maxX - bounds.minX, 1e-3);
   const u = Math.min(Math.max((x - bounds.minX) / width, 0), 1);
-  const centerRad = (drape.startDeg + drape.sweepDeg / 2) * DEG;
+  const centerRad = degToRad(drape.startDeg + drape.sweepDeg / 2);
   const sign = Math.sign(drape.sweepDeg) || 1;
-  return centerRad + sign * (u - 0.5) * Math.abs(drape.sweepDeg) * DEG;
+  return centerRad + sign * (u - 0.5) * degToRad(Math.abs(drape.sweepDeg));
 }
 
 /** Height of a vertex in meters: the top edge sits at the anchor and fabric depth hangs below. */
@@ -169,7 +169,7 @@ function wrapTorso(mesh: PanelMesh, drape: ResolvedDrape, body: BodyLandmarks, b
   const centerX = body.torsoCenterXAt(topY);
   const ease = drape.easeCm * 0.01;
   const meanR = Math.max((ring.rx + ring.rz) / 2, 1e-3);
-  const sweepRad = Math.max(Math.abs(drape.sweepDeg) * DEG, DEG);
+  const sweepRad = Math.max(degToRad(Math.abs(drape.sweepDeg)), degToRad(1));
   const topR = meanR + ease;
   const hemR = Math.max((bounds.maxX - bounds.minX) * 0.01 / sweepRad, topR);
   for (let i = 0; i < mesh.vertexCount; i++) {
@@ -185,7 +185,7 @@ function wrapTorso(mesh: PanelMesh, drape: ResolvedDrape, body: BodyLandmarks, b
 
 /** Radius that runs the panel's full width around the tube without squeezing it. */
 function tubeRadius(drape: ResolvedDrape, bounds: PanelBounds, limbR: number): number {
-  const sweepRad = Math.max(Math.abs(drape.sweepDeg) * DEG, DEG);
+  const sweepRad = Math.max(degToRad(Math.abs(drape.sweepDeg)), degToRad(1));
   const fromWidth = (bounds.maxX - bounds.minX) * 0.01 / sweepRad;
   return Math.max(fromWidth, limbR + drape.easeCm * 0.01);
 }

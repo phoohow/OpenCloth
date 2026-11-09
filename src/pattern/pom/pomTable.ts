@@ -1,6 +1,7 @@
 import type { Pattern, PomPoint, Project, SizeDef, Vec2 } from '@/model/types';
 import { orderedSizes } from '@/pattern/grading/grading';
 import { edgeLength } from '@/pattern/geom/edgeSample';
+import { distance2, unit2 } from '@/base/math';
 import { evaluatePomFormula } from '@/pattern/pom/formula';
 import { resolveSize } from '@/pattern/grading/resolveSize';
 
@@ -56,7 +57,7 @@ export function basePomValue(pom: PomPoint, pattern: Pattern, project: Project):
   const a = pom.refs.pointAId ? pattern.points[pom.refs.pointAId]?.pos : null;
   const b = pom.refs.pointBId ? pattern.points[pom.refs.pointBId]?.pos : null;
   if (!a || !b) return null;
-  return Math.hypot(b.x - a.x, b.y - a.y);
+  return distance2(a, b);
 }
 
 /** Appends a numeric suffix until the proposed name is unique among the POMs. */
@@ -244,9 +245,9 @@ export function computePomGradingDeltas(table: PomTable, basePattern: Pattern): 
       const a = basePattern.points[ends[0]!]?.pos;
       const b = basePattern.points[ends[1]!]?.pos;
       if (!a || !b) continue;
-      const chord = Math.hypot(b.x - a.x, b.y - a.y);
-      if (chord < 1e-6) continue;
-      const dir = { x: (b.x - a.x) / chord, y: (b.y - a.y) / chord };
+      const chord = distance2(a, b);
+      const dir = unit2({ x: b.x - a.x, y: b.y - a.y });
+      if (!dir || chord < 1e-6) continue;
       const arc = pom.kind === 'edge' && pom.refs.edgeId
         ? edgeLength(basePattern, pom.refs.edgeId)
         : chord;

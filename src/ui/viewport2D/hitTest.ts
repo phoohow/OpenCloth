@@ -1,4 +1,7 @@
 import type { Pattern, Vec2 } from '@/model/types';
+import { computeBBox, distanceToPolyline, pointInPolygon } from '@/base/geom';
+import { distance2, nearlyEqual2 } from '@/base/math';
+import { projectOnSegment2 } from '@/base/geom';
 import { sampleEdge, sampleEdgeInterval } from '@/pattern/panel';
 import { pointAtT } from '@/pattern/geom';
 import { elementNodeId, idsOfKind, parseElementNodeId, type PatternElementKind } from '@/model';
@@ -83,19 +86,6 @@ interface ElementGeometry {
 /** Axis-aligned bounds in world centimeters. */
 export interface Rect { min: Vec2; max: Vec2 }
 
-/** Ray-casting point-in-polygon test. */
-export function pointInPolygon(poly: Vec2[], p: Vec2): boolean {
-  let inside = false;
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const a = poly[i], b = poly[j];
-    if ((a.y > p.y) !== (b.y > p.y) &&
-      p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) {
-      inside = !inside;
-    }
-  }
-  return inside;
-}
-
 /** Pattern point addressed by id during hit-testing. */
 export interface NamedPoint { id: string; pos: Vec2 }
 
@@ -106,7 +96,7 @@ export function nearestPointWithinRadius(
   let bestId: string | null = null;
   let bestDist = radius;
   for (const pt of points) {
-    const d = Math.hypot(pt.pos.x - target.x, pt.pos.y - target.y);
+    const d = distance2(pt.pos, target);
     if (d <= bestDist) {
       bestDist = d;
       bestId = pt.id;
@@ -127,7 +117,7 @@ export function pickPointHandle(
 ): HandleHit | null {
   let nearestVertex = Infinity;
   for (const point of Object.values(pattern.points)) {
-    nearestVertex = Math.min(nearestVertex, Math.hypot(point.pos.x - target.x, point.pos.y - target.y));
+    nearestVertex = Math.min(nearestVertex, distance2(point.pos, target));
   }
   let best: { hit: HandleHit; distance: number } | null = null;
   for (const pointId of pointIds) {
@@ -136,7 +126,7 @@ export function pickPointHandle(
     for (const which of ['in', 'out'] as const) {
       const handle = which === 'in' ? point.handleIn : point.handleOut;
       if (!handle) continue;
-      const distance = Math.hypot(handle.x - target.x, handle.y - target.y);
+      const distance = distance2(handle, target);
       if (distance > radius || distance >= nearestVertex) continue;
       if (best && best.distance <= distance) continue;
       best = { hit: { pointId, which, pos: { x: handle.x, y: handle.y } }, distance };
@@ -146,12 +136,7 @@ export function pickPointHandle(
 }
 
 /** Closest point on segment a-b to p, with its clamped parameter. */
-export function projectOnSegment(p: Vec2, a: Vec2, b: Vec2): { point: Vec2; t: number } {
-  const dx = b.x - a.x, dy = b.y - a.y;
-  const lenSq = dx * dx + dy * dy;
-  const t = lenSq === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq));
-  return { point: { x: a.x + dx * t, y: a.y + dy * t }, t };
-}
+export { projectOnSegment2 as projectOnSegment } from '@/base/geom';
 
 /** Edge under the cursor, with the projected position on it. */
 export interface EdgeHit {
@@ -173,8 +158,8 @@ export function nearestEdgeSegment(
     const segCount = pts.length - 1;
     if (segCount < 1) continue;
     for (let i = 0; i < segCount; i++) {
-      const { point, t } = projectOnSegment(target, pts[i], pts[i + 1]);
-      const distance = Math.hypot(target.x - point.x, target.y - point.y);
+      const { point, t } = projectOnSegment2(target, pts[i], pts[i + 1]);
+      const distance = distance2(target, point);
       if (distance > radius || (best && best.distance <= distance)) continue;
       best = { edgeId, point, t: (i + t) / segCount, distance };
     }
@@ -223,14 +208,9 @@ export function panelsOfPoint(pattern: Pattern, pointId: string): string[] {
 /** Whether the points' bounding box overlaps the rect. */
 export function rectIntersectsBBox(rect: Rect, points: readonly Vec2[]): boolean {
   if (points.length === 0) return false;
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (const p of points) {
-    if (p.x < minX) minX = p.x;
-    if (p.y < minY) minY = p.y;
-    if (p.x > maxX) maxX = p.x;
-    if (p.y > maxY) maxY = p.y;
-  }
-  return maxX >= rect.min.x && minX <= rect.max.x && maxY >= rect.min.y && minY <= rect.max.y;
+  const bounds = computeBBox(points);
+  return bounds.max.x >= rect.min.x && bounds.min.x <= rect.max.x
+    && bounds.max.y >= rect.min.y && bounds.min.y <= rect.max.y;
 }
 
 /** Element rows of the given kinds whose geometry the marquee rect covers. Panels stay plain scene ids. */
@@ -268,19 +248,7 @@ export function pickElements(
 /** Shortest distance from a point to any of the disjoint sampled strokes. */
 function distanceToPaths(paths: readonly Vec2[][], target: Vec2): number {
   let best = Infinity;
-  for (const path of paths) best = Math.min(best, distanceToPolyline(path, target));
-  return best;
-}
-
-/** Shortest distance from a point to a polyline; a single point measures to itself. */
-function distanceToPolyline(points: readonly Vec2[], target: Vec2): number {
-  if (points.length === 0) return Infinity;
-  if (points.length === 1) return Math.hypot(target.x - points[0].x, target.y - points[0].y);
-  let best = Infinity;
-  for (let i = 0; i + 1 < points.length; i++) {
-    const hit = projectOnSegment(target, points[i], points[i + 1]).point;
-    best = Math.min(best, Math.hypot(target.x - hit.x, target.y - hit.y));
-  }
+  for (const path of paths) best = Math.min(best, distanceToPolyline(target, path));
   return best;
 }
 
@@ -383,11 +351,9 @@ export function pickInternalLineVertex(
     const ownerId = internalLineOwnerId(pattern, lineId);
     if (ownerId && pattern.panels[ownerId]?.locked) continue;
     const last = line.points.length - 1;
-    const closed = line.points.length > 2 && Math.hypot(
-      line.points[0].x - line.points[last].x, line.points[0].y - line.points[last].y,
-    ) < 1e-6;
+    const closed = line.points.length > 2 && nearlyEqual2(line.points[0], line.points[last]);
     line.points.forEach((p, index) => {
-      const distance = Math.hypot(p.x - target.x, p.y - target.y);
+      const distance = distance2(p, target);
       if (distance > bestDistance || (best && distance >= bestDistance)) return;
       const indices = closed && (index === 0 || index === last) ? [0, last] : [index];
       best = { lineId, indices };
@@ -417,7 +383,7 @@ export function pickHoverTarget(
   for (const printId of idsOfKind(selection, 'print')) {
     const print = pattern.prints?.[printId];
     const frame = print?.visible ? printFrame(pattern, print) : null;
-    if (frame?.some(corner => Math.hypot(corner.x - target.x, corner.y - target.y) <= radius)) {
+    if (frame?.some(corner => distance2(corner, target) <= radius)) {
       return { kind: 'element', elementKind: 'print', id: printId };
     }
   }
@@ -491,19 +457,19 @@ export function pickPressRole(
 
   for (const notch of Object.values(pattern.notches ?? {})) {
     const at = pointAtT(pattern, notch.edgeId, notch.t);
-    if (!at || Math.hypot(at.x - target.x, at.y - target.y) > radius) continue;
+    if (!at || distance2(at, target) > radius) continue;
     const ownerId = panelIdOfEdge(pattern, notch.edgeId);
     return ownerId && !pattern.panels[ownerId]?.locked ? 'grab' : null;
   }
   for (const note of Object.values(pattern.annotations ?? {})) {
-    if (Math.hypot(note.pos.x - target.x, note.pos.y - target.y) <= radius) return null;
+    if (distance2(note.pos, target) <= radius) return null;
   }
 
   for (const printId of idsOfKind(selection, 'print')) {
     const print = pattern.prints?.[printId];
     if (!print?.visible) continue;
     const frame = printFrame(pattern, print);
-    if (frame?.some(corner => Math.hypot(corner.x - target.x, corner.y - target.y) <= radius)) return 'grab';
+    if (frame?.some(corner => distance2(corner, target) <= radius)) return 'grab';
   }
 
   // Everything below sits on a panel, so a target outside the visible panels can skip the rest.

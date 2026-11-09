@@ -5,6 +5,7 @@ import { SetArcParamsCommand, SetEdgeAngleCommand, SetEdgeLengthCommand } from '
 import type { Command } from '@/commands';
 import { edgeLength } from '@/pattern/geom';
 import { arcSpan } from '@/base/geom/arc';
+import { angleBetween2, radToDeg, sub2 } from '@/base/math';
 import { patchValue } from '@/ui/sceneCommands';
 import { edgeLabel } from '@/ui/sceneTree';
 import {
@@ -64,7 +65,7 @@ export function EdgeData({ project, nodeId }: { project: Project; nodeId: string
               onCommit={v => execute(new SetArcParamsCommand(edge.id, { radiusCm: v }))} />
           </Row>
           <Row label="圆心角(°)">
-            <NumberField value={Math.abs(arcSpan(edge.arc)) * 180 / Math.PI} step={0.5} precision={1} min={1} max={359} title="圆心角；两端点保持不动"
+            <NumberField value={radToDeg(Math.abs(arcSpan(edge.arc)))} step={0.5} precision={1} min={1} max={359} title="圆心角；两端点保持不动"
               onCommit={v => execute(new SetArcParamsCommand(edge.id, { sweepDeg: v }))} />
           </Row>
         </>
@@ -115,7 +116,7 @@ function AngleRow({ pattern, edge, neighbours, onCommit }: {
   const from = (e: PatternEdge): string => (e.startPointId === sharedId ? e.endPointId : e.startPointId);
   const a = pattern.points[from(edge)]!.pos;
   const b = pattern.points[from(reference)]!.pos;
-  const current = Math.abs(((Math.atan2(a.y - at.y, a.x - at.x) - Math.atan2(b.y - at.y, b.x - at.x)) * 180 / Math.PI + 540) % 360 - 180);
+  const current = radToDeg(angleBetween2(sub2(a, at), sub2(b, at)));
 
   return (
     <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>

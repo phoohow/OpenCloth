@@ -9,7 +9,7 @@ import { arcFromThreePoints } from '@/base/geom/arc';
 import {
   bezierFromFit, deviationFromArc, distanceToPolyline, fitBezierHandles, maxDistanceToPolyline,
 } from '@/base/geom/polyCurve';
-import { distance, dot, normalize, sub } from '@/base/geom';
+import { distance2, dot2, normalize2, sub2 } from '@/base/math';
 import {
   arrayContainsChain, chainFractions, dropUnusedHandles, edgeArrays, remapChainReferences, spliceSequence,
 } from '@/commands/advanced/shared';
@@ -142,7 +142,7 @@ export class SimplifyCurveCommand extends SnapshotCommand {
       const outgoing = spans[j % spans.length];
       const turn = Math.abs(Math.atan2(
         incoming.tangentEnd.x * outgoing.tangentStart.y - incoming.tangentEnd.y * outgoing.tangentStart.x,
-        dot(incoming.tangentEnd, outgoing.tangentStart),
+        dot2(incoming.tangentEnd, outgoing.tangentStart),
       ));
       pattern.points[pointId].kind = turn > 0.14 ? 'corner' : 'smooth';
     });
@@ -181,7 +181,7 @@ function denseSamples(pattern: Pattern, chain: string[], tolerance: number, clos
     dense.push(point);
     const next = i + 1 < raw.length ? raw[i + 1] : closed ? raw[0] : null;
     if (!next) return;
-    const runs = Math.max(1, Math.ceil(distance(point, next) / step));
+    const runs = Math.max(1, Math.ceil(distance2(point, next) / step));
     for (let k = 1; k < runs; k++) {
       const f = k / runs;
       dense.push({ x: point.x + (next.x - point.x) * f, y: point.y + (next.y - point.y) * f });
@@ -225,9 +225,9 @@ function spanDirection(dense: Vec2[], index: number, forwards: boolean, closed: 
   const other = closed
     ? (index + (forwards ? 1 : n - 1)) % n
     : Math.max(0, Math.min(n - 1, index + (forwards ? 1 : -1)));
-  const delta = forwards ? sub(dense[other], dense[index]) : sub(dense[index], dense[other]);
+  const delta = forwards ? sub2(dense[other], dense[index]) : sub2(dense[index], dense[other]);
   if (Math.hypot(delta.x, delta.y) < 1e-9) return { x: 1, y: 0 };
-  return normalize(delta);
+  return normalize2(delta);
 }
 
 /**
@@ -269,7 +269,7 @@ function anchorPointIds(pattern: Pattern, chain: string[], dense: Vec2[], anchor
     const pos = dense[index];
     for (const id of existing) {
       const point = pattern.points[id];
-      if (point && distance(point.pos, pos) <= 1e-6) return id;
+      if (point && distance2(point.pos, pos) <= 1e-6) return id;
     }
     const outerEnd = !closed && (j === 0 || j === anchors.length - 1);
     return newPoint(pattern, pos, outerEnd ? undefined : 'smooth');
