@@ -38,6 +38,8 @@ export interface DrawItem {
   readonly transform: Transform;
   readonly bounds: Bounds;
   readonly stage: DrawStage;
+  /** Stage the wire variant draws in, which the traced image pushes past the tone curve. */
+  readonly wireStage: DrawStage;
   readonly bucket: DrawBucket;
   readonly materialSource: MaterialRef | null;
 }
@@ -68,6 +70,11 @@ export function defaultViewSettings(): ViewSettings {
       clampIndirect: 8,
     },
   };
+}
+
+/** Whether the view traces; a wire-only frame stays on the raster pipeline. */
+export function traces(view: RenderView): boolean {
+  return view.settings.mode === 'pathtrace' && view.settings.wire !== 'only';
 }
 
 /** Technique a base material kind resolves to. */

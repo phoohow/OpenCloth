@@ -22,6 +22,7 @@ import { RasterPass } from '@/render/renderer/passes/rasterPass';
 import { TracePass } from '@/render/renderer/passes/tracePass';
 import { SceneBuilder, snapshotSignature } from '@/render/renderer/sceneBuilder';
 import { buildDrawList } from '@/render/renderer/view/drawList';
+import { traces } from '@/render/renderer/view/types';
 import type { RenderView } from '@/render/renderer/view/types';
 import type { WorldView } from '@/render/world';
 
@@ -105,7 +106,7 @@ class RenderPipeline implements Renderer {
     const size = this.frameSize(view);
     this.resources.ensure(size);
 
-    const wantsTrace = view.settings.mode === 'pathtrace' && view.settings.wire !== 'only';
+    const wantsTrace = traces(view);
     if (wantsTrace) this.prepareTrace(view.settings.trace, view, versions);
     const traceState = this.readiness(wantsTrace);
 
@@ -139,7 +140,7 @@ class RenderPipeline implements Renderer {
 
   /** Reading of the last frame's trace gate. */
   traceStatus(view: RenderView): TraceStatus {
-    if (view.settings.mode !== 'pathtrace' || view.settings.wire === 'only') return 'inactive';
+    if (!traces(view)) return 'inactive';
     if (this.traceFailure) return 'unsupported';
     if (!this.backend.trace.ready) return 'building';
     if (this.lastDefer) return this.lastDefer;

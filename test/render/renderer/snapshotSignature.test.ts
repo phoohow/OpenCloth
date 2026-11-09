@@ -60,6 +60,9 @@ describe('snapshotSignature', () => {
     const settings = defaultViewSettings();
     expect(snapshotSignature(view({ settings: { ...settings, fill: 'uvCheck' } }), versions(), 0)).not.toBe(base);
     expect(snapshotSignature(view({ settings: { ...settings, wire: 'over' } }), versions(), 0)).not.toBe(base);
+    // The mode moves the wire between stages, so it has to rebuild the scene as well.
+    expect(snapshotSignature(view({ settings: { ...settings, mode: 'pathtrace' } }), versions(), 0))
+      .not.toBe(base);
     expect(snapshotSignature(
       view({ settings: { ...settings, wireOptions: { color: 0xff0000, depth: 'tested' } } }), versions(), 0,
     )).not.toBe(base);

@@ -21,6 +21,8 @@ interface RasterEntry {
   readonly root: THREE.Object3D;
   stage: DrawStage;
   wire: THREE.Mesh | null;
+  /** Stage the wire mesh sits in; kept apart so tracing can lift it past the tone curve. */
+  wireStage: DrawStage | null;
   meshId: MeshId | null;
   assetKey: AssetKey | null;
   instanceCount: number;
@@ -88,7 +90,9 @@ export class SceneStore {
 
   /** Whether raster items exist in the display-space stage. */
   hasStage(stage: DrawStage): boolean {
-    for (const entry of this.rasterEntries.values()) if (entry.stage === stage) return true;
+    for (const entry of this.rasterEntries.values()) {
+      if (entry.stage === stage || entry.wireStage === stage) return true;
+    }
     return false;
   }
 
@@ -182,7 +186,7 @@ export class SceneStore {
       if (!entry || entry.assetKey !== item.mesh.key) {
         if (entry) this.removeRaster(entry);
         entry = {
-          root: source, stage: item.rasterStage, wire: null, meshId: null,
+          root: source, stage: item.rasterStage, wire: null, wireStage: null, meshId: null,
           assetKey: item.mesh.key, instanceCount: 0,
         };
         this.rasterEntries.set(item.key, entry);
@@ -201,7 +205,7 @@ export class SceneStore {
       if (entry) this.removeRaster(entry);
       entry = {
         root: createObject(mesh.topology, geometry, instanceCount), stage: item.rasterStage,
-        wire: null, meshId: mesh.id, assetKey: null, instanceCount,
+        wire: null, wireStage: null, meshId: mesh.id, assetKey: null, instanceCount,
       };
       this.rasterEntries.set(item.key, entry);
       this.group(item.rasterStage).add(entry.root);
@@ -279,23 +283,26 @@ export class SceneStore {
       wire.material = this.materials.get(item.wire, this.textures);
       wire.renderOrder = 1;
       wire.frustumCulled = false;
-      if (!entry.wire) {
-        entry.wire = wire;
-        this.group(entry.stage).add(wire);
-      }
+      // The wire stands beside the root in a stage group, so it carries its own copy of the pose.
+      applyTransform(wire, item.transform, item.key);
+      wire.name = `wire:${item.key}`;
+      if (entry.wire === wire && entry.wireStage === item.wireStage) return;
+      if (entry.wire && entry.wireStage) this.group(entry.wireStage).remove(entry.wire);
+      entry.wire = wire;
+      entry.wireStage = item.wireStage;
+      this.group(item.wireStage).add(wire);
     } else if (entry.wire) {
-      this.group(entry.stage).remove(entry.wire);
+      if (entry.wireStage) this.group(entry.wireStage).remove(entry.wire);
       entry.wire = null;
+      entry.wireStage = null;
     }
   }
 
   private selectStage(entry: RasterEntry, stage: DrawStage): void {
     if (entry.stage === stage) return;
     this.group(entry.stage).remove(entry.root);
-    if (entry.wire) this.group(entry.stage).remove(entry.wire);
     entry.stage = stage;
     this.group(stage).add(entry.root);
-    if (entry.wire) this.group(stage).add(entry.wire);
   }
 
   private syncLights(snapshot: SceneSnapshot): void {
@@ -340,7 +347,7 @@ export class SceneStore {
 
   private removeRaster(entry: RasterEntry): void {
     this.group(entry.stage).remove(entry.root);
-    if (entry.wire) this.group(entry.stage).remove(entry.wire);
+    if (entry.wire && entry.wireStage) this.group(entry.wireStage).remove(entry.wire);
   }
 
   private removeTrace(entry: TraceEntry): void {

@@ -30,6 +30,7 @@ export function buildDrawList(world: WorldView, view: RenderView): DrawList {
       transform: entity.transform,
       bounds: entity.bounds,
       stage: resolved.stage,
+      wireStage: resolved.wireStage,
       bucket,
       materialSource: entity.materials[0] ?? null,
     });
