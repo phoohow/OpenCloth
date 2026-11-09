@@ -5,6 +5,9 @@ import {
   asTargetHandle, asTextureHandle, type FrameSize, type TargetHandle, type TextureHandle,
 } from '@/render/backend/types';
 
+/** Coverage samples of the scene color target. */
+const SCENE_SAMPLES = 4;
+
 /** The color buffers a frame needs, plus the depth the first of them carries. */
 export class TargetPool {
   /** Lit raster image; the only target with depth. */
@@ -29,7 +32,7 @@ export class TargetPool {
     this.size = { ...size };
     const depth = new THREE.DepthTexture(size.width, size.height);
     this.depth = depth;
-    this.color = asTargetHandle(linearTarget(size.width, size.height, depth));
+    this.color = asTargetHandle(linearTarget(size.width, size.height, depth, SCENE_SAMPLES));
     this.composite = asTargetHandle(linearTarget(size.width, size.height, null));
     this.radiance = asTargetHandle(linearTarget(size.traceWidth, size.traceHeight, null));
     return true;
@@ -73,11 +76,12 @@ export class TargetPool {
 
 /** Half-float linear target, with a depth attachment when one is given. */
 function linearTarget(
-  width: number, height: number, depth: THREE.DepthTexture | null,
+  width: number, height: number, depth: THREE.DepthTexture | null, samples = 0,
 ): THREE.RenderTarget {
   const target = new THREE.RenderTarget(width, height, {
     type: THREE.HalfFloatType,
     depthBuffer: depth !== null,
+    samples,
     ...(depth ? { depthTexture: depth } : {}),
   });
   target.texture.colorSpace = THREE.LinearSRGBColorSpace;

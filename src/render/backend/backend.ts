@@ -64,7 +64,7 @@ export class Backend {
 
   /** Initializes WebGPU and builds the shared resources one viewport owns. */
   static async create(options: BackendOptions): Promise<Backend> {
-    const renderer = await createThreeRenderer(options.canvas, options.antialias ?? true);
+    const renderer = await createThreeRenderer(options.canvas, options.antialias ?? false);
     const device = (renderer.backend as unknown as { device?: GPUDevice }).device;
     if (!device) {
       renderer.dispose();
