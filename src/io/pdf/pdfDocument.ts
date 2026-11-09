@@ -1,5 +1,5 @@
 import type { Vec2 } from '@/model/types';
-import { clamp } from '@/common/math';
+import { clamp } from '@/base/math';
 
 /** Page points per centimetre at 1:1. */
 export const CM_PT = 28.3465;
@@ -48,10 +48,8 @@ export function textWidthPt(text: string, sizePt: number): number {
 }
 
 /**
- * Text run in page points. Non-ASCII runs switch to the predefined Adobe-GB1 font
- * (`STSong-Light`), so Chinese prints without embedding a font file; `latin` drops
- * non-ASCII characters instead. With `cjk` and no rotation, ASCII and non-ASCII
- * segments are set separately so digits and units keep their Helvetica shapes.
+ * Text run in page points. Non-ASCII runs switch to the predefined Adobe-GB1 font (`STSong-Light`), so
+ * Chinese prints without embedding a font file; `latin` drops non-ASCII characters instead.
  */
 export function textOps(p: Vec2, sizePt: number, text: string, angleDeg = 0, font: 'latin' | 'cjk' = 'latin'): string {
   const size = pdfNum(clamp(sizePt, 5, 40));
@@ -125,10 +123,9 @@ export function rectPath(x: number, y: number, w: number, h: number): string {
 const FIRST_PAGE_OBJECT = 7;
 
 /**
- * Assembles a PDF 1.4 document from finished page content streams: Catalog, Pages, the
- * Helvetica and Adobe-GB1 fonts, then one Page and Content object per stream. Every emitted
- * byte is ASCII (CJK runs are hex strings), so string length equals byte length and the
- * recorded xref offsets stay exact.
+ * Assembles a PDF 1.4 document from finished page content streams: Catalog, Pages, the Helvetica and
+ * Adobe-GB1 fonts, then one Page and Content object per stream. Every emitted byte is ASCII (CJK runs are hex
+ * strings), so string length equals byte length and the recorded xref offsets stay exact.
  */
 export function assemblePdf(pageContents: string[], pageWidthPt: number, pageHeightPt: number): Uint8Array {
   const kids = pageContents.map((_, i) => `${FIRST_PAGE_OBJECT + i * 2} 0 R`).join(' ');

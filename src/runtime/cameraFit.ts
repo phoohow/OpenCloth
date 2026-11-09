@@ -1,4 +1,7 @@
-import * as THREE from 'three/webgpu';
+/** Camera presets and pure box framing, independent of three. */
+
+import type { Vec3 } from '@/base/geom';
+import type { Bounds } from '@/render/common';
 
 /** Named view the camera can jump to; the camera sits on the direction ray, looking at the scene. */
 export type CameraPreset =
@@ -7,26 +10,25 @@ export type CameraPreset =
 
 /** View direction and up vector of one preset. */
 export interface ViewFrame {
-  /** Direction from the scene centre to the camera. */
-  direction: THREE.Vector3;
-  /** World up vector the camera is rolled against. */
-  up: THREE.Vector3;
+  direction: Vec3;
+  up: Vec3;
 }
 
 const SQRT_HALF = Math.SQRT1_2;
+const UP = { x: 0, y: 1, z: 0 };
 
 /** Axis-aligned view frames: four sides, top and bottom, then four 45-degree corners. */
 export const CAMERA_VIEW_FRAMES: Record<CameraPreset, ViewFrame> = {
-  front: { direction: new THREE.Vector3(0, 0, 1), up: new THREE.Vector3(0, 1, 0) },
-  back: { direction: new THREE.Vector3(0, 0, -1), up: new THREE.Vector3(0, 1, 0) },
-  left: { direction: new THREE.Vector3(-1, 0, 0), up: new THREE.Vector3(0, 1, 0) },
-  right: { direction: new THREE.Vector3(1, 0, 0), up: new THREE.Vector3(0, 1, 0) },
-  top: { direction: new THREE.Vector3(0, 1, 0), up: new THREE.Vector3(0, 0, -1) },
-  bottom: { direction: new THREE.Vector3(0, -1, 0), up: new THREE.Vector3(0, 0, 1) },
-  frontLeft: { direction: new THREE.Vector3(-SQRT_HALF, 0, SQRT_HALF), up: new THREE.Vector3(0, 1, 0) },
-  frontRight: { direction: new THREE.Vector3(SQRT_HALF, 0, SQRT_HALF), up: new THREE.Vector3(0, 1, 0) },
-  backLeft: { direction: new THREE.Vector3(-SQRT_HALF, 0, -SQRT_HALF), up: new THREE.Vector3(0, 1, 0) },
-  backRight: { direction: new THREE.Vector3(SQRT_HALF, 0, -SQRT_HALF), up: new THREE.Vector3(0, 1, 0) },
+  front: { direction: { x: 0, y: 0, z: 1 }, up: UP },
+  back: { direction: { x: 0, y: 0, z: -1 }, up: UP },
+  left: { direction: { x: -1, y: 0, z: 0 }, up: UP },
+  right: { direction: { x: 1, y: 0, z: 0 }, up: UP },
+  top: { direction: { x: 0, y: 1, z: 0 }, up: { x: 0, y: 0, z: -1 } },
+  bottom: { direction: { x: 0, y: -1, z: 0 }, up: { x: 0, y: 0, z: 1 } },
+  frontLeft: { direction: { x: -SQRT_HALF, y: 0, z: SQRT_HALF }, up: UP },
+  frontRight: { direction: { x: SQRT_HALF, y: 0, z: SQRT_HALF }, up: UP },
+  backLeft: { direction: { x: -SQRT_HALF, y: 0, z: -SQRT_HALF }, up: UP },
+  backRight: { direction: { x: SQRT_HALF, y: 0, z: -SQRT_HALF }, up: UP },
 };
 
 /** Extra room left around the framed box, as a multiplier of the exact fit. */
@@ -41,42 +43,38 @@ export interface ProjectedExtents {
 
 /** World-space placement that frames a box from one view direction. */
 export interface CameraFit {
-  /** Camera position, `distance` along the frame direction from the box centre. */
   distance: number;
-  /** Orthographic frustum height in world units at zoom 1. */
   viewHeight: number;
 }
 
 /** Right, up and backward axes of the view frame. */
-function viewAxes(frame: ViewFrame): { right: THREE.Vector3; up: THREE.Vector3; back: THREE.Vector3 } {
-  const eye = frame.direction.clone();
-  const matrix = new THREE.Matrix4().lookAt(eye, new THREE.Vector3(0, 0, 0), frame.up);
-  return {
-    right: new THREE.Vector3().setFromMatrixColumn(matrix, 0),
-    up: new THREE.Vector3().setFromMatrixColumn(matrix, 1),
-    back: new THREE.Vector3().setFromMatrixColumn(matrix, 2),
-  };
+function viewAxes(frame: ViewFrame): { right: Vec3; up: Vec3; back: Vec3 } {
+  const back = normalize(frame.direction) ?? { x: 0, y: 0, z: 1 };
+  const right = normalize(cross(frame.up, back)) ?? { x: 1, y: 0, z: 0 };
+  const up = normalize(cross(back, right)) ?? { x: 0, y: 1, z: 0 };
+  return { right, up, back };
 }
 
 /** Measures a box along the view axes, so the framing only needs the projected extents. */
-export function projectBox(box: THREE.Box3, frame: ViewFrame): ProjectedExtents {
-  const center = box.getCenter(new THREE.Vector3());
-  const size = box.getSize(new THREE.Vector3());
+export function projectBox(box: Bounds, frame: ViewFrame): ProjectedExtents {
+  const half = {
+    x: (box.max.x - box.min.x) / 2,
+    y: (box.max.y - box.min.y) / 2,
+    z: (box.max.z - box.min.z) / 2,
+  };
   const { right, up, back } = viewAxes(frame);
-  const corner = new THREE.Vector3();
   let width = 0;
   let height = 0;
   let depth = 0;
-  // Only the eight corners can be extreme on an axis-aligned box.
   for (let i = 0; i < 8; i++) {
-    corner.set(
-      center.x + ((i & 1) ? size.x / 2 : -size.x / 2),
-      center.y + ((i & 2) ? size.y / 2 : -size.y / 2),
-      center.z + ((i & 4) ? size.z / 2 : -size.z / 2),
-    ).sub(center);
-    width = Math.max(width, Math.abs(corner.dot(right)));
-    height = Math.max(height, Math.abs(corner.dot(up)));
-    depth = Math.max(depth, Math.abs(corner.dot(back)));
+    const corner = {
+      x: i & 1 ? half.x : -half.x,
+      y: i & 2 ? half.y : -half.y,
+      z: i & 4 ? half.z : -half.z,
+    };
+    width = Math.max(width, Math.abs(dot(corner, right)));
+    height = Math.max(height, Math.abs(dot(corner, up)));
+    depth = Math.max(depth, Math.abs(dot(corner, back)));
   }
   return { width, height, depth };
 }
@@ -99,10 +97,27 @@ export function orthoFitViewHeight(extents: ProjectedExtents, aspect: number, ma
 }
 
 /** Distance and orthographic height that frame the box for the viewport's current aspect. */
-export function fitCameraToBox(box: THREE.Box3, frame: ViewFrame, fovDeg: number, aspect: number): CameraFit {
+export function fitCameraToBox(box: Bounds, frame: ViewFrame, fovDeg: number, aspect: number): CameraFit {
   const extents = projectBox(box, frame);
   return {
     distance: perspectiveFitDistance(extents, fovDeg, aspect),
     viewHeight: orthoFitViewHeight(extents, aspect),
   };
+}
+
+function dot(a: Vec3, b: Vec3): number {
+  return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+function cross(a: Vec3, b: Vec3): Vec3 {
+  return {
+    x: a.y * b.z - a.z * b.y,
+    y: a.z * b.x - a.x * b.z,
+    z: a.x * b.y - a.y * b.x,
+  };
+}
+
+function normalize(v: Vec3): Vec3 | null {
+  const length = Math.hypot(v.x, v.y, v.z);
+  return length > 1e-9 ? { x: v.x / length, y: v.y / length, z: v.z / length } : null;
 }

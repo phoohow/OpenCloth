@@ -1,6 +1,6 @@
 import type { PaneId, PropTab, ViewLayout } from '@/store/types';
 import type { CameraProjection, EditPreviewTier, FillMode, RenderBackend, WireMode } from '@/model/types';
-import { clamp } from '@/common/math';
+import { clamp } from '@/base/math';
 
 /** Key holding the persisted UI preferences. */
 export const PREFS_KEY = 'oc-ui-prefs-v2';

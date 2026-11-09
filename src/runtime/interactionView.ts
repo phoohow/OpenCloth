@@ -1,23 +1,27 @@
-import * as THREE from 'three/webgpu';
+/** Pointer gestures on the cloth: picking, hovering, dragging, sketching, pins and selection. */
+
+import type { Vec3 } from '@/base/geom';
+import type { Bounds, CameraHost, CameraState } from '@/render/common';
 import type { Vec2 } from '@/model/types';
-import type { ClothSimInput } from '@/sim';
-import type { ClothSimulator } from '@/sim';
-import type { ParticlePickHit } from '@/sim';
-import type { Renderer } from '@/render';
-import type { AvatarStage } from '@/runtime/avatarStage';
+import type { ClothSimInput, ClothSimulator, ParticlePickHit } from '@/sim';
+import { evalBodyDistance, type AvatarCollider } from '@/avatar/collider';
+import type { PresenterHost } from '@/runtime/presenters/host';
 import { ClothPicker, type ClothSurfacePick } from '@/runtime/clothPicker';
-import { ClothInteraction } from '@/runtime/clothInteraction';
 import { PinMarkers } from '@/runtime/pinMarkers';
 import { SelectionOverlay } from '@/runtime/selectionOverlay';
+import { DragMarker } from '@/runtime/dragMarker';
 import type { OverlayKit } from '@/runtime/overlayKit';
-import { trianglePointToPanel2D } from '@/common/geom/panelSurface';
-import type { SceneSlot } from '@/render';
+import { trianglePointToPanel2D } from '@/base/geom/panelSurface';
+import { bodyOccludesSegment } from '@/runtime/bodyOcclusion';
+import { pinsByScreenDistance } from '@/runtime/pinHover';
+import { grabWeightsAround } from '@/runtime/clothDrag';
+import {
+  DRAG_GRAB_RADIUS_M, DRAG_GRAB_STRENGTH, DRAG_MAX_REACH_M, PIN_HOVER_RADIUS_PX,
+} from '@/runtime/clothConstants';
 
 /** A cloth surface point resolved to its panel's flat pattern coordinates. */
 export interface ClothSurfacePoint {
-  /** Owning panel id. */
   panelId: string;
-  /** Pattern-space point, in centimetres. */
   point: Vec2;
 }
 
@@ -27,76 +31,62 @@ export interface MeasureReading {
   distanceCm: number | null;
 }
 
-/** Default screen tolerance for particle picking, as a fraction of viewport height. */
-const DEFAULT_PICK_RADIUS_FACTOR = 0.03;
+/** Cloth surface arrays the overlays and picks share. */
+export interface ClothSurface {
+  positions: Float32Array;
+  normals: Float32Array;
+  uv: Float32Array;
+}
 
 /** What the interaction view reads from the rest of the engine. */
 export interface InteractionViewDeps {
-  /** Selection highlight. */
-  slot: SceneSlot;
-  /** Pin markers. */
-  pinSlot: SceneSlot;
-  /** Drag marker. */
-  markerSlot: SceneSlot;
-  renderer: Renderer;
+  host: PresenterHost;
+  camera: CameraHost;
   overlays: OverlayKit;
-  avatar: AvatarStage;
-  /** Merged cloth the picks land on. */
+  avatarVisible: () => boolean;
+  collider: () => AvatarCollider | null;
   input: () => ClothSimInput | null;
-  /** Merged render mesh the picks run against. */
-  mesh: () => THREE.Mesh | null;
-  /** Owning panel of each merged triangle, indexed by triangle number. */
   trianglePanelIds: () => (string | null)[];
   simulator: () => ClothSimulator | null;
   simReady: () => boolean;
-  /** Particle positions the markers and drags follow. */
   positions: () => Float32Array | null;
-  geometry: () => THREE.BufferGeometry | null;
-  /** Merged triangles of the listed panels, for the selection highlight. */
+  surface: () => ClothSurface | null;
   overlayTriangles: (panelIds: string[]) => Uint32Array;
-  /** Whether a panel contributes cloth triangles. */
   hasTriangles: (panelId: string) => boolean;
-  /** Objects a camera framing counts. */
-  frameObjects: () => THREE.Object3D[];
+  bounds: () => Bounds;
+  viewport: () => { width: number; height: number };
 }
 
-/**
- * Everything the pointer does to the cloth: picking, hovering, dragging, sketching, measuring,
- * pinning and the panel selection highlight.
- */
+/** Default screen tolerance for particle picking, as a fraction of viewport height. */
+const DEFAULT_PICK_RADIUS_FACTOR = 0.03;
+
+/** Pins the hover may test for occlusion before giving up. */
+const PIN_OCCLUSION_TRIES = 3;
+
+/** Drawn markers and the gestures that resolve against them. */
 export class InteractionView {
   private readonly picker: ClothPicker;
-  private readonly interaction: ClothInteraction;
-  private readonly pins = new PinMarkers();
+  private readonly pins: PinMarkers;
   private readonly selection = new SelectionOverlay();
+  private readonly marker = new DragMarker();
+  /** In-flight pointer drag. */
+  private drag: { center: Vec3; normal: Vec3; particle: number } | null = null;
 
   constructor(private readonly deps: InteractionViewDeps) {
-    this.picker = new ClothPicker(deps.renderer, {
-      mesh: deps.mesh,
+    this.picker = new ClothPicker(deps.camera, {
+      input: deps.input,
       trianglePanelIds: deps.trianglePanelIds,
-      triangleParticles: triangle => mergedTriangleParticles(deps.input(), triangle),
-      particlePositions: deps.positions,
       panelIds: () => deps.input()?.panels.map(panel => panel.panelId) ?? [],
-      pickNearestParticle: (origin, direction, radius) =>
-        deps.simulator()?.pickNearestParticle(origin, direction, radius) ?? null,
+      particlePositions: deps.positions,
+      pickNearestParticle: (origin, dir, radius) =>
+        deps.simulator()?.pickNearestParticle(origin, dir, radius) ?? null,
       pickParticleAtPoint: (point, radius, panelSlot) =>
         deps.simulator()?.pickNearestAtPoint(point, radius, panelSlot) ?? null,
-      frameObjects: deps.frameObjects,
+      bounds: deps.bounds,
+      viewportHeight: () => deps.viewport().height,
     });
-    this.interaction = new ClothInteraction({
-      picker: this.picker,
-      avatar: deps.avatar,
-      pinMarkers: this.pins,
-      markerSlot: deps.markerSlot,
-      renderer: deps.renderer,
-      positions: deps.positions,
-      simulator: () => (deps.simReady() ? deps.simulator() : null),
-      pickParticle: (ndcX, ndcY) => this.picker.pickClothParticleAtScreen(ndcX, ndcY, DEFAULT_PICK_RADIUS_FACTOR),
-    });
+    this.pins = new PinMarkers();
   }
-
-  /** Picker the camera presets and refit gestures run through. */
-  get targets(): ClothPicker { return this.picker; }
 
   /** Nearest cloth particle to the ray through a screen point. */
   pickParticle(ndcX: number, ndcY: number, radiusFactor = DEFAULT_PICK_RADIUS_FACTOR): ParticlePickHit | null {
@@ -111,17 +101,58 @@ export class InteractionView {
 
   /** True when the garment is the front-most surface under a screen point. */
   hoverCloth(ndcX: number, ndcY: number): boolean {
-    return this.interaction.hoverClothAtScreen(ndcX, ndcY);
+    const distance = this.picker.clothDistanceAtScreen(ndcX, ndcY);
+    if (distance === null) return false;
+    if (!this.deps.avatarVisible()) return true;
+    const collider = this.deps.collider();
+    const ray = this.picker.screenRay(ndcX, ndcY);
+    if (!collider) return true;
+    return !bodyOccludesSegment(
+      (x, y, z) => evalBodyDistance(collider, x, y, z),
+      ray.origin, ray.direction, distance,
+    );
   }
 
   /** Pinned particle whose marker sits within `radiusPx` of a screen point, or null. */
-  hoverPin(ndcX: number, ndcY: number, radiusPx?: number): number | null {
-    return this.interaction.hoverPinAtScreen(ndcX, ndcY, radiusPx);
+  hoverPin(ndcX: number, ndcY: number, radiusPx = PIN_HOVER_RADIUS_PX): number | null {
+    const positions = this.deps.positions();
+    if (!positions) return null;
+    const camera = this.deps.camera.snapshot();
+    const { width, height } = this.deps.viewport();
+    if (!width || !height) return null;
+    const ordered = pinsByScreenDistance(
+      this.pins.list(),
+      index => {
+        const offset = index * 3;
+        if (offset + 2 >= positions.length) return null;
+        return projectToNdc(
+          { x: positions[offset]!, y: positions[offset + 1]!, z: positions[offset + 2]! }, camera,
+        );
+      },
+      ndcX, ndcY, width, height, radiusPx, PIN_OCCLUSION_TRIES,
+    );
+    if (!ordered.length) return null;
+    if (!this.deps.avatarVisible()) return ordered[0]!;
+    const collider = this.deps.collider();
+    if (!collider) return ordered[0]!;
+    const signedDistance = (x: number, y: number, z: number) => evalBodyDistance(collider, x, y, z);
+    for (const index of ordered) {
+      const offset = index * 3;
+      const point = { x: positions[offset]!, y: positions[offset + 1]!, z: positions[offset + 2]! };
+      const distance = distanceBetween(camera.position, point);
+      const direction = {
+        x: (point.x - camera.position.x) / (distance || 1),
+        y: (point.y - camera.position.y) / (distance || 1),
+        z: (point.z - camera.position.z) / (distance || 1),
+      };
+      if (!bodyOccludesSegment(signedDistance, camera.position, direction, distance)) return index;
+    }
+    return null;
   }
 
   /** Highlights the pin a remove click would release; null restores every marker. */
   setHoveredPin(particleIndex: number | null): void {
-    this.interaction.setHoveredPin(particleIndex);
+    this.pins.highlight(particleIndex);
   }
 
   /** Raycasts the cloth surface and returns the owning panel of the hit triangle. */
@@ -154,16 +185,13 @@ export class InteractionView {
     this.deps.overlays.endSketch();
   }
 
-  /**
-   * Places one measurement point on the cloth surface. The third call starts a new measurement;
-   * the reading reports the distance once two points exist.
-   */
+  /** Places one measurement point; the third call starts a new measurement. */
   measure(ndcX: number, ndcY: number): MeasureReading | null {
     const picked = this.picker.pickSurfaceAtScreen(ndcX, ndcY);
     if (!picked) return null;
     const points = this.deps.overlays.addMeasurePoint(picked.world);
     if (points.length < 2) return { points: 1, distanceCm: null };
-    return { points: 2, distanceCm: points[0]!.distanceTo(points[1]!) * 100 };
+    return { points: 2, distanceCm: distanceBetween(points[0]!, points[1]!) * 100 };
   }
 
   /** Drops the measurement overlay and its placed points. */
@@ -171,26 +199,61 @@ export class InteractionView {
     this.deps.overlays.clearMeasurement();
   }
 
-  /** Grabs the cloth under a screen point for a pointer drag; false when the point misses it. */
+  /** Grabs the cloth under a screen point; false when the point misses it. */
   beginDrag(ndcX: number, ndcY: number): boolean {
-    return this.interaction.beginDrag(ndcX, ndcY);
+    const simulator = this.deps.simulator();
+    if (!simulator) return false;
+    const hit = this.pickParticle(ndcX, ndcY);
+    const positions = this.deps.positions();
+    if (!hit || !positions || positions.length < (hit.index + 1) * 3) return false;
+    const ray = this.picker.screenRay(ndcX, ndcY);
+    const center = {
+      x: positions[hit.index * 3]!,
+      y: positions[hit.index * 3 + 1]!,
+      z: positions[hit.index * 3 + 2]!,
+    };
+    const weights = grabWeightsAround(positions, center, DRAG_GRAB_RADIUS_M, DRAG_GRAB_STRENGTH);
+    if (!simulator.setGrab(weights, [center.x, center.y, center.z])) return false;
+    this.drag = { center, normal: ray.direction, particle: hit.index };
+    this.marker.show(hit.index, positions, this.deps.host, this.deps.camera.snapshot());
+    return true;
   }
 
   /** Moves the drag target to where the pointer ray crosses the plane it started on. */
   moveDrag(ndcX: number, ndcY: number): void {
-    this.interaction.moveDrag(ndcX, ndcY);
+    const drag = this.drag;
+    const simulator = this.deps.simulator();
+    if (!drag || !simulator) return;
+    const ray = this.picker.screenRay(ndcX, ndcY);
+    const denominator = dot(drag.normal, ray.direction);
+    if (Math.abs(denominator) < 1e-9) return;
+    const t = dot(drag.normal, sub(drag.center, ray.origin)) / denominator;
+    if (!(t > 0)) return;
+    let point = add(ray.origin, scale(ray.direction, t));
+    const offset = sub(point, drag.center);
+    const reach = length(offset);
+    if (reach > DRAG_MAX_REACH_M) point = add(drag.center, scale(offset, DRAG_MAX_REACH_M / reach));
+    simulator.moveGrab([point.x, point.y, point.z]);
   }
 
-  /** Releases the pointer drag; the cloth keeps the velocity the pull gave it. */
+  /** Releases the drag; the cloth keeps the velocity the pull gave it. */
   endDrag(): void {
-    this.interaction.endDrag();
+    if (!this.drag) return;
+    this.drag = null;
+    this.marker.hide(this.deps.host);
+    this.deps.simulator()?.clearGrab();
+  }
+
+  /** True while a pointer holds the cloth. */
+  get dragging(): boolean {
+    return this.drag !== null;
   }
 
   /** Highlights the listed panels; ids without cloth triangles are ignored. */
   setSelectedPanels(panelIds: string[]): void {
     const ids = panelIds.filter(id => this.deps.hasTriangles(id));
-    const geometry = this.deps.input() ? this.deps.geometry() : null;
-    this.selection.apply(this.deps.slot, geometry, ids, this.deps.overlayTriangles(ids));
+    const surface = this.deps.surface();
+    this.selection.apply(this.deps.host, surface, ids, this.deps.overlayTriangles(ids));
   }
 
   /** Selected panel ids, in selection order. */
@@ -203,12 +266,12 @@ export class InteractionView {
     const simulator = this.deps.simulator();
     if (!simulator) return false;
     if (!await simulator.setParticlePin(particleIndex, pinned)) return false;
-    if (pinned) this.addPinMarker(particleIndex);
-    else this.pins.remove(particleIndex, this.deps.pinSlot);
+    if (pinned) this.pins.add(particleIndex, this.deps.positions(), this.deps.host);
+    else this.pins.remove(particleIndex, this.deps.host);
     return true;
   }
 
-  /** Particle indices carrying a PIN marker, that is, the points pinned by hand. */
+  /** Particle indices carrying a PIN marker. */
   getPinMarkers(): readonly number[] {
     return this.pins.list();
   }
@@ -219,7 +282,7 @@ export class InteractionView {
     if (!simulator) return false;
     const indices = simulator.getPinnedParticles();
     const released = indices.length === 0 || await simulator.setParticlePins(indices, false);
-    this.pins.clear(this.deps.pinSlot);
+    this.pins.clear(this.deps.host);
     return released;
   }
 
@@ -228,27 +291,31 @@ export class InteractionView {
     const carried: number[] = [];
     for (const index of this.pins.list()) {
       if (index < particleCount) carried.push(index);
-      else this.pins.remove(index, this.deps.pinSlot);
+      else this.pins.remove(index, this.deps.host);
     }
     return carried;
   }
 
-  /** Moves the markers and the drag target onto a new set of positions. */
+  /** Moves the markers and the drag ring onto a new set of positions. */
   followPositions(positions: Float32Array): void {
     this.pins.sync(positions);
-    this.interaction.syncMarker(positions);
+    if (this.drag) this.marker.sync(positions, this.deps.camera.snapshot());
+    const surface = this.deps.surface();
+    if (surface) this.selection.updateSurface(surface.positions, surface.normals);
   }
 
   /** Drops the selection highlight and every pin marker. */
   reset(): void {
-    this.selection.clear(this.deps.slot);
-    this.pins.clear(this.deps.pinSlot);
+    this.selection.clear(this.deps.host);
+    this.pins.clear(this.deps.host);
   }
 
-  /** Frees the selection overlay and pin markers. */
+  /** Ends the drag and frees the overlays. */
   dispose(): void {
-    this.selection.dispose(this.deps.slot);
-    this.pins.dispose(this.deps.pinSlot);
+    this.endDrag();
+    this.marker.dispose(this.deps.host);
+    this.selection.dispose(this.deps.host);
+    this.pins.dispose(this.deps.host);
   }
 
   /** Flat pattern point of a surface pick, or null when the triangle has no panel. */
@@ -261,16 +328,66 @@ export class InteractionView {
     );
     return point ? { panelId: panel.panelId, point } : null;
   }
-
-  private addPinMarker(particleIndex: number): void {
-    const positions = this.deps.positions();
-    if (positions) this.pins.add(particleIndex, positions, this.deps.pinSlot);
-  }
 }
 
-/** Triangle particles of the merged input, or null when the triangle is out of range. */
-function mergedTriangleParticles(input: ClothSimInput | null, triangle: number): readonly number[] | null {
-  if (!input || triangle < 0 || triangle * 3 + 2 >= input.indices.length) return null;
-  const base = triangle * 3;
-  return [input.indices[base]!, input.indices[base + 1]!, input.indices[base + 2]!];
+/** Projects a world point to normalized device coordinates. */
+function projectToNdc(point: Vec3, camera: CameraState): Vec3 | null {
+  const forward = normalize(sub(camera.target, camera.position));
+  if (!forward) return null;
+  const right = normalize(cross(forward, camera.up));
+  if (!right) return null;
+  const up = cross(right, forward);
+  const rel = sub(point, camera.position);
+  const depth = dot(rel, forward);
+  if (depth <= camera.near) return null;
+  const x = dot(rel, right);
+  const y = dot(rel, up);
+  if (camera.projection === 'orthographic') {
+    const halfHeight = Math.max(0.001, camera.viewHeightMeters) / 2;
+    const halfWidth = halfHeight * Math.max(0.001, camera.aspect);
+    return { x: x / halfWidth, y: y / halfHeight, z: (depth - camera.near) / (camera.far - camera.near) };
+  }
+  const tanHalf = Math.tan(camera.fovDeg * Math.PI / 360);
+  return {
+    x: x / (depth * tanHalf * Math.max(0.001, camera.aspect)),
+    y: y / (depth * tanHalf),
+    z: (depth - camera.near) / (camera.far - camera.near),
+  };
+}
+
+function dot(a: Vec3, b: Vec3): number {
+  return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+function sub(a: Vec3, b: Vec3): Vec3 {
+  return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z };
+}
+
+function add(a: Vec3, b: Vec3): Vec3 {
+  return { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z };
+}
+
+function scale(v: Vec3, s: number): Vec3 {
+  return { x: v.x * s, y: v.y * s, z: v.z * s };
+}
+
+function length(v: Vec3): number {
+  return Math.hypot(v.x, v.y, v.z);
+}
+
+function cross(a: Vec3, b: Vec3): Vec3 {
+  return {
+    x: a.y * b.z - a.z * b.y,
+    y: a.z * b.x - a.x * b.z,
+    z: a.x * b.y - a.y * b.x,
+  };
+}
+
+function normalize(v: Vec3): Vec3 | null {
+  const size = length(v);
+  return size > 1e-9 ? { x: v.x / size, y: v.y / size, z: v.z / size } : null;
+}
+
+function distanceBetween(a: Vec3, b: Vec3): number {
+  return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
 }

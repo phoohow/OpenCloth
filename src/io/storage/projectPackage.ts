@@ -1,5 +1,5 @@
 import type { Project } from '@/model/types';
-import { deepClone } from '@/common/result';
+import { deepClone } from '@/base/result';
 import { readFileAsDataUrl } from '@/io/serialization/codec';
 import { getModelBlob } from '@/io/storage/objectStore';
 

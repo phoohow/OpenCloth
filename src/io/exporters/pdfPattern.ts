@@ -1,7 +1,7 @@
 import type { Panel, Pattern, Vec2 } from '@/model/types';
 import { panelGrainLine, panelOutlineWithAllowance, sampleOutline, samplePanelOutline } from '@/pattern/panel';
 import { pointAtT, sampleEdge } from '@/pattern/geom';
-import { computeBBox } from '@/common/geom';
+import { computeBBox } from '@/base/geom';
 import { assemblePdf, circlePath, closedPath, CM_PT, clamp, openPath, pdfNum, rectPath, textOps } from '@/io/pdf/pdfDocument';
 
 /** Page formats for `buildPatternPdf`, in portrait orientation. */
@@ -480,13 +480,9 @@ function emptyPageContent(tiling: PdfTiling): string {
 }
 
 /**
- * Renders the pattern as an A4/A3 PDF paper pattern. `mode: 'single'` packs every panel on one
- * page and shrinks it to fit; `mode: 'tile'` prints the whole bounds at 1:1 across a page grid,
- * each page clipped to its tile with registration crosses and the overlap noted. Pure function
- * of the pattern; identical inputs produce identical bytes.
- * Non-ASCII annotation text (e.g. Chinese names) is dropped rather than rendered as garbage,
- * because the pattern sheet uses the embedded-free Helvetica font; panels stay identifiable
- * through their `P<n>` index labels and outlines.
+ * Renders the pattern as an A4/A3 PDF paper pattern. `mode: 'single'` packs every panel on one page and
+ * shrinks it to fit; `mode: 'tile'` prints the whole bounds at 1:1 across a page grid, each page clipped to
+ * its tile with registration crosses and the overlap noted.
  */
 export function buildPatternPdf(pattern: Pattern, options: PdfPatternOptions = {}): Uint8Array {
   if (options.mode === 'tile') {

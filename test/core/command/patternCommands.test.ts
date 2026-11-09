@@ -9,7 +9,7 @@ import {
   MovePanelsHeightCommand, MovePointsCommand, edgePointIds, movePanelsCommands, panelMoveGeometry,
   pointMoveGeometry, previewMove, previewPanelMove,
 } from '@/commands/patternCommands';
-import { arcFromThreePoints, evalArc } from '@/common/geom';
+import { arcFromThreePoints, evalArc } from '@/base/geom';
 
 function makeCtx(project: Project): ProjectContext {
   return { project };

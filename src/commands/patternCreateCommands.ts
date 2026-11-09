@@ -1,9 +1,9 @@
-import { genId } from '@/common/id';
+import { genId } from '@/base/id';
 import type { Command, ProjectContext } from '@/commands/command';
 import type { ArcGeom, Panel, Pattern, PatternEdge, PointKind, Vec2 } from '@/model/types';
 import { DEFAULT_MESH_RESOLUTION_CM } from '@/model';
 import { setEdgeCurve, smoothSplineSegments } from '@/pattern/geom';
-import { arcFromThreePoints } from '@/common/geom/arc';
+import { arcFromThreePoints } from '@/base/geom/arc';
 import { samplePanelOutline } from '@/pattern/panel';
 import { SnapshotCommand } from '@/commands/patternSnapshot';
 

@@ -1,4 +1,4 @@
-import { genId } from '@/common/id';
+import { genId } from '@/base/id';
 import type { Command, ProjectContext } from '@/commands/command';
 import type {
   Annotation, Measurement, MeasurementRefs, Notch, Pattern, Print, Project, SeamAllowanceCorner,
@@ -274,7 +274,6 @@ function checkRange(value: number, min: number, max: number, message: string): v
   if (!Number.isFinite(value) || value < min || value > max) throw new Error(message);
 }
 
-// ============ Prints ============
 
 /** Fields a new print starts from, beyond the panel and image. */
 export interface PrintOptions {
@@ -340,7 +339,6 @@ export class UpdatePrintCommand extends SnapshotCommand {
   }
 }
 
-// ============ Topstitch ============
 
 /** Fields a new topstitch starts from. */
 export interface TopstitchOptions {
@@ -414,7 +412,6 @@ export class UpdateTopstitchCommand extends SnapshotCommand {
   }
 }
 
-// ============ Trims ============
 
 /** Fields a new trim starts from. */
 export interface TrimOptions {
@@ -470,7 +467,6 @@ export class UpdateTrimCommand extends SnapshotCommand {
   }
 }
 
-// ============ Size chart ============
 
 /** Project-level edit that captures `sizes` and `activeSizeId` for exact rollback. */
 abstract class SizeCommand implements Command {

@@ -1,12 +1,12 @@
-import { genId } from '@/common/id';
+import { genId } from '@/base/id';
 import type { Panel, Pattern, Vec2 } from '@/model/types';
 import { createEmptyPattern, DEFAULT_MESH_RESOLUTION_CM } from '@/model';
 import { normalizePattern } from '@/model';
-import { roundTo } from '@/common/format';
+import { roundTo } from '@/base/format';
 import { validatePattern } from '@/model';
 import { sampleEdge } from '@/pattern/geom';
-import { adaptiveSampleArc, arcFromThreePoints } from '@/common/geom/arc';
-import { computeBBox, ensureCCW, polygonArea } from '@/common/geom';
+import { adaptiveSampleArc, arcFromThreePoints } from '@/base/geom/arc';
+import { computeBBox, ensureCCW, polygonArea } from '@/base/geom';
 import { parseDxf, expandInserts, type DxfEntity, type DxfVertex } from '@/io/dxf/dxfParser';
 import { layerRole, type DxfConvention, type LayerRole } from '@/io/dxf/layers';
 import { unescapeDxfValue } from '@/io/dxf/writer';

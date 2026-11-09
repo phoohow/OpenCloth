@@ -1,4 +1,4 @@
-import { genId } from '@/common/id';
+import { genId } from '@/base/id';
 
 import { putModelBlob } from '@/io/storage';
 import type { GarmentEngine } from '@/runtime';

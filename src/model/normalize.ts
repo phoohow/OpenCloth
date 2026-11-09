@@ -1,11 +1,4 @@
-/**
- * Field-level repair for documents that came from an older build, an importer or a hand edit.
- *
- * Each function takes one slice of the document, fills what is optional, clamps what must stay in
- * range and drops records that can no longer be drawn (a mark whose panel is gone). Nothing here
- * throws: structural damage is `codec`'s job to reject, this file's job is to make a readable
- * document usable. Migrations that *restructure* live in `io/migrations.ts` and run first.
- */
+/** Field-level repair for documents that came from an older build, an importer or a hand edit. */
 import type { Fabric, GarmentLayer, Notch, Pattern, PomPoint } from '@/model/types';
 import { DEFAULT_LAYER_THICKNESS_CM, GARMENT_LAYERS, normalizeFabricPhysics } from '@/model/defaults';
 

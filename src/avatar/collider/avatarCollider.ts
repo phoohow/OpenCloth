@@ -2,7 +2,6 @@ import type { AvatarParams } from '@/model/types';
 import { bodyLandmarks, type BodyEllipse, type BodyLandmarks } from '@/avatar/landmarks';
 import { appliedLimbPose, armChain, legChain } from '@/avatar/pose';
 
-export { fitCapsulesFromGroup } from '@/avatar/collider/meshCapsuleFitter';
 export type { MeshCollider } from '@/avatar/collider/meshCollider';
 export { evalBodyDistance } from '@/avatar/collider/bodyDistance';
 

@@ -1,12 +1,12 @@
-import { genId } from '@/common/id';
+import { genId } from '@/base/id';
 import type { Command, ProjectContext } from '@/commands/command';
 import type { ArcGeom, InternalLine, Panel, Pattern, PatternEdge, SeamEnd, Vec2 } from '@/model/types';
 import { parseElementNodeId, type PatternElementKind } from '@/model';
 
 import polygonClipping from 'polygon-clipping';
 import { edgeLength, pointAtT } from '@/pattern/geom';
-import { computePolylineNormals, hasSelfIntersection } from '@/common/geom/offset';
-import { computeBBox } from '@/common/geom';
+import { computePolylineNormals, hasSelfIntersection } from '@/base/geom/offset';
+import { computeBBox } from '@/base/geom';
 import { samplePanelOutline } from '@/pattern/panel';
 import { SnapshotCommand } from '@/commands/patternSnapshot';
 import { addClosedLineOutline, makePanel, newEdge, newPoint } from '@/commands/patternCreateCommands';
@@ -15,7 +15,7 @@ import { prunePattern } from '@/commands/patternPrune';
 import { buildMirrorEdges, type MirrorAxis } from '@/commands/patternSymmetry';
 import {
   differencePolygons, intersectPolygons, unionPolygons, type PolygonList,
-} from '@/common/geom/polygonBoolean';
+} from '@/base/geom/polygonBoolean';
 
 export { prunePattern };
 export type { MirrorAxis };

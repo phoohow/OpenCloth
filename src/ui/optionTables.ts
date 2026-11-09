@@ -6,7 +6,7 @@ import { DEFAULT_SKIN_APPEARANCE } from '@/model';
 import type { PropTab, DisplayMode } from '@/store';
 import type { IconName } from '@/ui/icons';
 import type { DisplayOptions } from '@/ui/viewport2D/render';
-import type { RayTraceFailure, RayTraceState, RayTracingCapability } from '@/render';
+import type { RayTraceFailure, TraceStatus as RayTraceState, RayTracingCapability } from '@/render/common';
 
 /** One properties-editor tab: rail icon plus the Chinese label shared by rail and menu. */
 export interface PropTabOption {
@@ -26,7 +26,7 @@ export const PROP_TAB_OPTIONS: PropTabOption[] = [
   { key: 'project', icon: 'briefcase', label: '工程' },
 ];
 
-/** 2D display switches, shared by the 视图 ▸ 2D 显示 menu and the 2D toolbar dropdown. */
+/** 2D display switches, shared by the View ▸ 2D Display menu and the 2D toolbar dropdown. */
 export const DISPLAY_LAYER_OPTIONS: Array<{ key: keyof DisplayOptions; label: string }> = [
   { key: 'internal', label: '内部线' },
   { key: 'darts', label: '省道' },
@@ -72,6 +72,7 @@ export interface CameraProjectionOption {
   label: string;
 }
 
+/** Camera projections offered by the 3D toolbar. */
 export const CAMERA_PROJECTIONS: CameraProjectionOption[] = [
   { value: 'perspective', menuId: 'cameraProjectionPerspective', label: '透视' },
   { value: 'orthographic', menuId: 'cameraProjectionOrthographic', label: '正交' },

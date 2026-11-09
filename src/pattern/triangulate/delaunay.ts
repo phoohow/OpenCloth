@@ -14,14 +14,8 @@ function inCircumcircle(
 }
 
 /**
- * Delaunay triangulation of a flat [x0, y0, x1, y1, ...] point set, by Bowyer-Watson insertion.
- * Returns counter-clockwise index triples in a flat array, without the surrounding super triangle.
- * Input points are expected to be distinct and free of duplicate coordinates.
- *
- * Each point is inserted from the triangle found by walking across shared edges from the previous
- * insertion, and the cavity only visits the removed triangles' neighbours. Walking and the local
- * cavity keep one insertion near O(1) instead of scanning every triangle, which matters because
- * pattern pieces carry thousands of lattice seeds.
+ * Delaunay triangulation of a flat [x0, y0, x1, y1, ...] point set, by Bowyer-Watson insertion. Returns
+ * counter-clockwise index triples in a flat array, without the surrounding super triangle.
  */
 export function delaunayTriangulate(points: ArrayLike<number>): number[] {
   const count = points.length >> 1;

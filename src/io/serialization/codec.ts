@@ -12,11 +12,8 @@ export const projectCodec = {
   },
 
   /**
-   * Reads a current-schema document and fills optional fields with defaults. A file written by
-   * a different format version is refused rather than half-read.
-   *
-   * Topology is deliberately not validated here: a pattern with a broken outline should still
-   * open so the problem list can show it, rather than locking the user out of their own file.
+   * Reads a current-schema document and fills optional fields with defaults. A file written by a different
+   * format version is refused rather than half-read.
    */
   decode(json: string): Project {
     const raw = JSON.parse(json);
@@ -40,4 +37,4 @@ export const projectCodec = {
 
 export {
   downloadTextFile, downloadBytesFile, readFileAsText, readFileAsDataUrl,
-} from '@/common/platform';
+} from '@/base/platform';

@@ -23,7 +23,6 @@ import { strainReportCsv } from '@/analysis';
 import { reportActionError } from '@/ui/widgets/toast';
 import { styles } from '@/ui/panels/properties/styles';
 
-// ===== Pattern, project and render tabs ("版型" / "工程" / "渲染") =====
 
 /** Size chart, points of measure and the grading rules that read them. */
 export function PatternTab({ project, engineRef }: { project: Project; engineRef: EngineRef }) {

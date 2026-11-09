@@ -1,6 +1,5 @@
 /** WGSL compute shaders of the GPU PBD/XPBD cloth simulation passes. */
 
-// ============ Integration pass ============
 export const INTEGRATE_WGSL = /* wgsl */`
 struct SimParams {
   dt: f32,
@@ -62,7 +61,6 @@ fn integrate(@builtin(global_invocation_id) gid: vec3<u32>) {
 }
 `;
 
-// ============ Constraint solve pass (XPBD) ============
 export const SOLVE_WGSL = /* wgsl */`
 struct SimParams {
   dt: f32,
@@ -114,7 +112,6 @@ fn solve(@builtin(global_invocation_id) gid: vec3<u32>) {
 }
 `;
 
-// ============ Body collision pass (mesh triangles or capsule fallback) + floor collision ============
 export const COLLIDE_WGSL = /* wgsl */`
 struct SimParams {
   dt: f32,
@@ -363,7 +360,6 @@ fn collide(@builtin(global_invocation_id) gid: vec3<u32>) {
 }
 `;
 
-// ============ Velocity update + position writeback pass ============
 export const UPDATE_WGSL = /* wgsl */`
 struct SimParams {
   dt: f32,
@@ -403,7 +399,6 @@ fn updateVelocity(@builtin(global_invocation_id) gid: vec3<u32>) {
 }
 `;
 
-// ============ Normal computation pass ============
 // One invocation per particle sums the face normals of its welded vertex group, so every vertex
 // owns its own normal slot and no two invocations ever write the same one.
 export const NORMALS_WGSL = /* wgsl */`
@@ -464,7 +459,6 @@ fn computeNormals(@builtin(global_invocation_id) gid: vec3<u32>) {
 }
 `;
 
-// ============ Pin/unpin pass (inverse mass write) ============
 export const SET_PIN_WGSL = /* wgsl */`
 struct PinParams {
   indexCount: u32,

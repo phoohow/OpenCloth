@@ -148,10 +148,10 @@ export class BuildPipeline {
   }
 
   /**
-   * Rebuilds the cloth from an in-flight 2D edit and redraws it at the preview tier's mesh
-   * density, or redraws the committed pattern when the edit ends. The applied geometry signature
-   * and the solver layout keep describing the committed pattern, so the edit's own commit still
-   * rebuilds; the committed panel meshes are only borrowed for the merge and restored afterwards.
+   * Rebuilds the cloth from an in-flight 2D edit and redraws it at the preview tier's mesh density, or
+   * redraws the committed pattern when the edit ends. The applied geometry signature and the solver layout
+   * keep describing the committed pattern, so the edit's own commit still rebuilds; the committed panel
+   * meshes are only borrowed for the merge and restored afterwards.
    */
   preview(project: Project, tier: EditPreviewTier): void {
     const drawn = this.merged;

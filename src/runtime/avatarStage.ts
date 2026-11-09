@@ -1,240 +1,237 @@
-import * as THREE from 'three/webgpu';
+/** The body garment is dressed onto: its asset, world entity and collision body. */
+
 import type { Avatar, ObjectTransform, SkinAppearance } from '@/model/types';
 import { IDENTITY_TRANSFORM } from '@/model';
+import type {
+  AssetAnimation, AssetAppearance, AssetDisplay, AssetHandle, AssetSource,
+} from '@/render/common';
+import { CHANNEL_ALL, type EntityId } from '@/render/world';
 import {
-  generateAvatarCollider, fitCapsulesFromGroup, type AvatarCollider,
+  buildMeshCollider, generateAvatarCollider, type AvatarCollider,
 } from '@/avatar/collider';
-import { meshColliderFromObject } from '@/runtime/avatarMeshCollider';
-import { generateProceduralAvatar } from '@/avatar/generator';
-import { loadModelFromFile, loadModelFromUrl, type LoadedModel } from '@/io/importers';
 import { getModelBlob } from '@/io/storage';
-import { applyTransform } from '@/runtime/objectTransforms';
-import { AVATAR_OVERLAY_NAME } from '@/runtime/clothConstants';
-import { applyBodySkin } from '@/render';
-import type { SceneSlot } from '@/render';
+import type { PresenterHost } from '@/runtime/presenters/host';
+import { proceduralAvatarMeshes } from '@/runtime/proceduralAvatar';
+
+/** Key the body asset is loaded under and released by. */
+const AVATAR_ASSET_KEY = 'avatar';
 
 /** Extra room around the body grid so animated limbs stay inside it, in meters. */
 const ANIMATION_COLLIDER_MARGIN_M = 0.3;
 
-/** Translucent material for the clones marking the avatar as selected. */
-const SELECTION_MATERIAL = new THREE.MeshBasicMaterial({
-  color: 0xfff3b0, transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false,
-  polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
-});
-
-/** The body garment is dressed onto: its scene group, collision body and selection overlay. */
+/** The body garment is dressed onto: its asset, world entity, collision body and motion clips. */
 export class AvatarStage {
-  /**
-   * Collision body fitted to the current model, baked in the group's local frame: a scene
-   * transform applied later by `place()` is not reflected in it.
-   */
+  /** Collision body fitted to the current asset, baked in the body's local frame. */
   collider: AvatarCollider | null = null;
 
-  private group: THREE.Group | null = null;
-  /** Slot the body lives in, the gateway for change notifications the tracer reads. */
-  private slot: SceneSlot | null = null;
-  private overlays: THREE.Mesh[] = [];
+  private host: PresenterHost | null = null;
+  /** Asset owning the body object, its clips and its soft deformation. */
+  private asset: AssetHandle | null = null;
+  private entity: EntityId | null = null;
+  private display: AssetDisplay = 'visible';
+  private appearance: SkinAppearance | undefined;
   /** Appearance key the body materials were last written for. */
   private appliedSkin = '';
-  /** Motion clips of the current body file. */
-  private clips: THREE.AnimationClip[] = [];
-  private mixer: THREE.AnimationMixer | null = null;
-  private action: THREE.AnimationAction | null = null;
-  private activeClip = -1;
-  private playing = false;
-  /** Seconds into the active clip, wrapped at its duration. */
-  private elapsed = 0;
+  /** Whether the selected body is drawn highlighted. */
+  private highlighted = false;
 
-  /** True while the selection overlay clones are in the scene. */
-  get hasOverlay(): boolean { return this.overlays.length > 0; }
+  /** Asset of the current body; null before the first build. */
+  get handle(): AssetHandle | null { return this.asset; }
 
-  /** Scene group holding the body, or null before the first build. */
-  get object(): THREE.Group | null { return this.group; }
+  /** True while the body carries the selection highlight. */
+  get hasOverlay(): boolean { return this.highlighted && this.asset !== null; }
 
-  /** Replaces the scene avatar with the project's body and rebuilds its collision body. */
-  async build(avatar: Avatar, scene: SceneSlot): Promise<void> {
-    this.detach(scene);
-    const loaded = avatar.source === 'procedural'
-      ? null
-      : await this.loadModel(avatar);
-    const group = loaded?.group ?? generateProceduralAvatar(avatar.params);
-    if (loaded) group.name = 'avatar';
-    const collider = loaded
-      ? fitCapsulesFromGroup(group)
-      : generateAvatarCollider(avatar.params);
+  /** True while the body is drawn with its stored display. */
+  objectVisible(): boolean { return this.asset !== null && this.display === 'visible'; }
+
+  /** Replaces the scene body with the project's avatar and rebuilds its collision body. */
+  async build(avatar: Avatar, host: PresenterHost): Promise<void> {
+    this.detach(host);
+    const asset = await this.load(avatar, host);
+    const collision = asset.collision();
     // Animated bodies need slack around the rest grid for limbs that move outside it.
-    const margin = loaded && loaded.animations.length > 0 ? ANIMATION_COLLIDER_MARGIN_M : 0;
+    const margin = asset.animations().length > 0 ? ANIMATION_COLLIDER_MARGIN_M : 0;
     // The capsules remain the fallback and the fit-analysis proxy; the triangle grid drives collision.
-    collider.mesh = meshColliderFromObject(group, margin);
-    this.group = group;
-    this.slot = scene;
+    const collider = generateAvatarCollider(avatar.params);
+    collider.mesh = collision ? buildMeshCollider(collision.vertices, undefined, margin) : null;
+
+    this.host = host;
+    this.asset = asset;
     this.collider = collider;
-    this.clips = loaded?.animations ?? [];
-    this.mixer = this.clips.length > 0 ? new THREE.AnimationMixer(group) : null;
-    this.action = null;
-    this.activeClip = -1;
-    this.playing = false;
-    this.elapsed = 0;
-    this.applySkin(avatar.appearance);
-    scene.add(this.group);
+    this.display = avatar.display;
+    this.appearance = avatar.appearance;
+    this.entity = host.writer.createEntity({
+      layer: 'subject',
+      tags: ['avatar'],
+      mesh: { kind: 'asset', key: AVATAR_ASSET_KEY },
+      channels: CHANNEL_ALL,
+      bounds: asset.bounds,
+    });
+    host.bind('avatar', this.entity);
+    this.applySkin();
+    asset.setDisplay(avatar.display);
+    this.place(avatar.transform);
   }
 
   /** Rewrites the body materials for a new skin appearance without rebuilding the body. */
   applyAppearance(appearance?: SkinAppearance): void {
-    if (!this.group || skinKey(appearance) === this.appliedSkin) return;
-    this.applySkin(appearance);
-    this.slot?.markRevision('material');
+    if (appearanceKey(appearance) === this.appliedSkin) return;
+    this.appearance = appearance;
+    this.applySkin();
+    this.host?.writer.touch('material');
   }
 
-  /** Places the avatar group at its stored scene transform. */
-  place(transform: ObjectTransform | undefined): void {
-    if (!this.group) return;
-    applyTransform(this.group, transform ?? IDENTITY_TRANSFORM);
-    this.slot?.markRevision('transform');
+  /** Places the body at its stored scene transform. */
+  place(transform?: ObjectTransform): void {
+    this.asset?.pose(transform ?? IDENTITY_TRANSFORM);
+    if (this.entity !== null && this.asset) {
+      this.host?.writer.updateEntity(this.entity, { bounds: this.asset.bounds });
+    }
+    this.host?.writer.touch('transform');
   }
 
   /** Motion clips the current body carries, in file order. */
-  get animationClips(): readonly THREE.AnimationClip[] { return this.clips; }
+  animationClips(): readonly AssetAnimation[] { return this.asset?.animations() ?? []; }
 
   /** True while a clip is advancing. */
-  get isAnimating(): boolean { return this.playing && this.action !== null; }
+  get isAnimating(): boolean { return this.asset?.playback().playing ?? false; }
 
-  /** Index of the active clip; -1 when none is selected. */
-  get clipIndex(): number { return this.activeClip; }
+  /** Index of the selected clip; -1 when none is selected. */
+  get clipIndex(): number { return this.asset?.playback().clip ?? -1; }
 
   /** Seconds into the active clip. */
-  get clipTimeSeconds(): number { return this.elapsed; }
+  get clipTimeSeconds(): number { return this.asset?.playback().timeSeconds ?? 0; }
 
   /** Length of the active clip in seconds; 0 without one. */
-  get clipDurationSeconds(): number { return this.action ? this.action.getClip().duration : 0; }
+  get clipDurationSeconds(): number {
+    const playback = this.asset?.playback();
+    if (!playback || playback.clip < 0) return 0;
+    return this.asset?.animations()[playback.clip]?.duration ?? 0;
+  }
 
   /** Selects and plays a clip; an out-of-range index is ignored. */
   playClip(index: number): boolean {
-    if (!this.mixer || index < 0 || index >= this.clips.length) return false;
-    if (!this.action || this.activeClip !== index) {
-      this.action?.stop();
-      const action = this.mixer.clipAction(this.clips[index]!);
-      action.reset();
-      action.setLoop(THREE.LoopRepeat, Infinity);
-      action.enabled = true;
-      this.action = action;
-      this.activeClip = index;
-      this.elapsed = 0;
-    }
-    this.action.play();
-    this.playing = true;
-    return true;
+    return this.asset?.play(index) ?? false;
   }
 
   /** Holds the current pose without advancing. */
   pauseClip(): void {
-    this.playing = false;
+    this.asset?.setPlaying(false);
   }
 
-  /** Drops the active clip and leaves the body at its last pose. */
+  /** Holds the current pose; the clip stays selected. */
   stopClip(): void {
-    this.playing = false;
-    this.action?.stop();
-    this.action = null;
-    this.activeClip = -1;
-    this.elapsed = 0;
+    this.asset?.setPlaying(false);
   }
 
   /** Advances the active clip; true when the body pose changed. */
   advanceClip(dtMs: number): boolean {
-    if (!this.playing || !this.action || !this.mixer) return false;
-    this.mixer.update(dtMs / 1000);
-    this.elapsed = this.action.time;
-    this.slot?.markRevision('deform');
-    return true;
+    const changed = this.asset?.advance(dtMs / 1000) ?? false;
+    if (changed) this.host?.writer.touch('transform');
+    return changed;
   }
 
   /** Seeks the active clip to a time in milliseconds, updating the pose immediately. */
   seekClip(ms: number): void {
-    if (!this.action || !this.mixer) return;
-    const duration = Math.max(this.action.getClip().duration, 1e-6);
-    const t = Math.min(Math.max(ms / 1000, 0), duration);
-    this.action.time = t;
-    this.mixer.update(0);
-    this.elapsed = t;
-    this.slot?.markRevision('deform');
+    if (!this.asset) return;
+    this.asset.seek(ms / 1000);
+    this.host?.writer.touch('transform');
   }
 
-  /** Shows, hides or fades the avatar without touching its overlay clones. */
-  applyDisplay(display: 'visible' | 'hidden' | 'translucent'): void {
-    if (!this.group) return;
-    this.group.visible = display !== 'hidden';
-    this.group.traverse(obj => {
-      if (!(obj instanceof THREE.Mesh) || obj.name === AVATAR_OVERLAY_NAME) return;
-      const mat = obj.material as THREE.MeshStandardMaterial;
-      mat.transparent = display === 'translucent';
-      mat.opacity = display === 'translucent' ? 0.35 : 1;
-    });
-    this.slot?.markRevision('visibility');
-    this.slot?.markRevision('material');
+  /** Shows, hides or fades the body without touching its highlight. */
+  applyDisplay(display: AssetDisplay): void {
+    if (display === this.display) return;
+    this.display = display;
+    this.asset?.setDisplay(display);
+    this.asset?.setAppearance(this.skinAppearance());
+    this.host?.writer.touch('visibility');
+    this.host?.writer.touch('material');
   }
 
-  /** Rebuilds the translucent clones that mark the avatar as selected. */
-  highlight(highlighted: boolean): void {
-    this.clearOverlay();
-    if (!highlighted || !this.group) return;
-    this.group.traverse(obj => {
-      if (!(obj instanceof THREE.Mesh) || obj.name === AVATAR_OVERLAY_NAME) return;
-      const overlay = new THREE.Mesh(obj.geometry, SELECTION_MATERIAL);
-      overlay.name = AVATAR_OVERLAY_NAME;
-      overlay.renderOrder = 2;
-      obj.add(overlay);
-      this.overlays.push(overlay);
-    });
+  /** Draws or drops the translucent highlight over the body. */
+  highlight(on: boolean): void {
+    if (this.highlighted === on) return;
+    this.highlighted = on;
+    this.asset?.setHighlighted(on);
   }
 
-  /** Removes the avatar group and its overlays from the scene. */
-  detach(scene: SceneSlot): void {
-    this.clearOverlay();
-    if (!this.group) return;
-    scene.remove(this.group);
-    this.group = null;
-    this.slot = null;
+  /** Removes the body entity from the world and releases its asset. */
+  detach(host: PresenterHost): void {
+    if (this.entity !== null) {
+      host.unbind(this.entity);
+      host.writer.destroyEntity(this.entity);
+    }
+    host.assets.release(AVATAR_ASSET_KEY);
+    this.entity = null;
+    this.asset = null;
+    this.host = null;
     this.collider = null;
+    this.display = 'visible';
+    this.appearance = undefined;
     this.appliedSkin = '';
-    this.clips = [];
-    this.mixer = null;
-    this.action = null;
-    this.activeClip = -1;
-    this.playing = false;
-    this.elapsed = 0;
+    this.highlighted = false;
   }
 
-  /** Loads the avatar from its model url, else from the stored imported bytes. */
-  private async loadModel(avatar: Avatar): Promise<LoadedModel | null> {
-    const targetHeight = (avatar.heightCm ?? avatar.params.heightCm) / 100;
+  /** Releases the body when the viewport tears the scene down. */
+  dispose(): void {
+    if (this.host) this.detach(this.host);
+  }
+
+  /** Loads the body source, falling back to the procedural mannequin when a model fails. */
+  private async load(avatar: Avatar, host: PresenterHost): Promise<AssetHandle> {
+    const source = await this.sourceOf(avatar);
+    if (source.kind === 'meshes') return host.assets.load(AVATAR_ASSET_KEY, source);
     try {
-      if (avatar.glbUrl) return await loadModelFromUrl(avatar.glbUrl, { targetHeight });
-      if (avatar.glbObjectKey) {
-        const blob = await getModelBlob(avatar.glbObjectKey);
-        if (!blob) return null;
-        const file = new File([blob], avatar.modelName ?? 'avatar.glb');
-        return await loadModelFromFile(file, { targetHeight });
-      }
+      return await host.assets.load(AVATAR_ASSET_KEY, source);
     } catch (err) {
       console.warn('Avatar model unavailable, falling back to the procedural mannequin:', err);
+      return host.assets.load(AVATAR_ASSET_KEY, {
+        kind: 'meshes', meshes: proceduralAvatarMeshes(avatar.params),
+      });
     }
-    return null;
   }
 
-  private clearOverlay(): void {
-    for (const overlay of this.overlays) overlay.removeFromParent();
-    this.overlays = [];
+  /** Model source of an imported body, or the generated meshes of a procedural one. */
+  private async sourceOf(avatar: Avatar): Promise<AssetSource> {
+    if (avatar.source !== 'procedural') {
+      const targetHeight = (avatar.heightCm ?? avatar.params.heightCm) / 100;
+      try {
+        if (avatar.glbUrl) return { kind: 'model', url: avatar.glbUrl, targetHeight };
+        if (avatar.glbObjectKey) {
+          const blob = await getModelBlob(avatar.glbObjectKey);
+          if (blob) {
+            return {
+              kind: 'model',
+              data: await blob.arrayBuffer(),
+              fileName: avatar.modelName ?? 'avatar.glb',
+              targetHeight,
+            };
+          }
+        }
+      } catch (err) {
+        console.warn('Avatar model unavailable, falling back to the procedural mannequin:', err);
+      }
+    }
+    return { kind: 'meshes', meshes: proceduralAvatarMeshes(avatar.params) };
   }
 
-  /** Writes the appearance onto the current group and records what was applied. */
-  private applySkin(appearance?: SkinAppearance): void {
-    this.appliedSkin = skinKey(appearance);
-    if (this.group) applyBodySkin(this.group, appearance);
+  /** Writes the appearance onto the current asset and records what was applied. */
+  private applySkin(): void {
+    this.appliedSkin = appearanceKey(this.appearance);
+    this.asset?.setAppearance(this.skinAppearance());
+  }
+
+  /** Skin values of the current body, faded while the body is translucent. */
+  private skinAppearance(): AssetAppearance {
+    const skin = this.appearance;
+    return {
+      ...(skin ? { color: skin.color, roughness: skin.roughness, clearcoat: skin.clearcoat } : {}),
+      opacity: this.display === 'translucent' ? 0.35 : 1,
+    };
   }
 }
 
 /** Comparable key of a skin appearance. */
-function skinKey(appearance?: SkinAppearance): string {
+function appearanceKey(appearance?: SkinAppearance): string {
   return JSON.stringify(appearance ?? null);
 }

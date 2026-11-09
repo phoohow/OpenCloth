@@ -8,7 +8,6 @@ import type { Avatar } from '@/model/types/avatar';
 import type { SceneConfig } from '@/model/types/scene';
 import type { PomPoint, SizeDef } from '@/model/types/size';
 
-// ============ Project root ============
 
 /** File header of a saved project. */
 export interface ProjectMeta {

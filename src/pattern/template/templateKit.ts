@@ -1,4 +1,4 @@
-import { genId } from '@/common/id';
+import { genId } from '@/base/id';
 import type {
   Panel, PanelDrape, Pattern, PatternEdge, PatternPoint, Seam, SeamEnd, Vec2, EdgeSemantic,
 } from '@/model/types';

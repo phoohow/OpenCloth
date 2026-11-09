@@ -5,8 +5,8 @@ import {
   offsetPolygonStyled,
   offsetOutlinePerEdge,
   hasSelfIntersection,
-} from '@/common/geom';
-import { computeBBox, signedPolygonArea } from '@/common/geom';
+} from '@/base/geom';
+import { computeBBox, signedPolygonArea } from '@/base/geom';
 
 // Counter-clockwise 10x10 square.
 const square = [vec2(0, 0), vec2(10, 0), vec2(10, 10), vec2(0, 10)];

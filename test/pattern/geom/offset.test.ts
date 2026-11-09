@@ -6,8 +6,8 @@ import {
   computePolylineNormals,
   hasSelfIntersection,
   safeOffsetPolygon,
-} from '@/common/geom';
-import { computeBBox, signedPolygonArea, ensureCCW } from '@/common/geom';
+} from '@/base/geom';
+import { computeBBox, signedPolygonArea, ensureCCW } from '@/base/geom';
 
 // Counter-clockwise 10x10 square.
 const square = [vec2(0, 0), vec2(10, 0), vec2(10, 10), vec2(0, 10)];

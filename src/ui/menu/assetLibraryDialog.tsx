@@ -13,7 +13,7 @@ import { AddFabricCommand, AddFabricRecordCommand } from '@/commands';
 import { AddTrimCommand } from '@/commands';
 import { CompositeCommand } from '@/commands';
 import { samplePanelOutline } from '@/pattern/panel';
-import { computeBBox } from '@/common/geom';
+import { computeBBox } from '@/base/geom';
 import { useProjectStore, useUIStore } from '@/store';
 import { idsOfKind } from '@/model';
 import { patchValue } from '@/ui/sceneCommands';

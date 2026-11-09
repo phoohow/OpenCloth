@@ -47,14 +47,10 @@ const RECOVERY_ROUNDS = 32;
 const SPLIT_ROUNDS = 24;
 
 /**
- * Triangulates one pattern piece into the simulation mesh. The interior is seeded at about
- * `targetEdgeLength` spacing, either by a jittered hexagonal lattice or, with `blueNoise`, by
- * Poisson-disk sampling; then the outline loops and the seeds go through Delaunay triangulation,
- * the triangles outside the piece are dropped, and long edges are split until none is left above
- * four thirds of the target. Delaunay legalization alternates with Laplacian relaxation, which
- * turns the seeds into an even, isotropic mesh. Only interior vertices move, so the outline keeps
- * its shape, and both triangles of a split edge share one midpoint, so the mesh stays crack-free
- * under deformation.
+ * Triangulates one pattern piece into the simulation mesh. The interior is seeded at about `targetEdgeLength`
+ * spacing, either by a jittered hexagonal lattice or, with `blueNoise`, by Poisson-disk sampling; then the
+ * outline loops and the seeds go through Delaunay triangulation, the triangles outside the piece are dropped,
+ * and long edges are split until none is left above four thirds of the target.
  */
 export function remeshPolygon(
   outline: Vec2[],
@@ -126,10 +122,10 @@ function loopIndices(start: number, count: number): number[] {
 }
 
 /**
- * Adds a jittered hexagonal lattice of interior vertices, one per `spacing` cell: hexagons pack the
- * plane at one density with the most regular triangles, and the jitter keeps the mesh from lining up
- * with straight edges of the piece. The band along the outline is left to the refinement so no seed
- * competes with a boundary edge, and points that fall into a hole or off the piece are left out.
+ * Adds a jittered hexagonal lattice of interior vertices, one per `spacing` cell: hexagons pack the plane at
+ * one density with the most regular triangles, and the jitter keeps the mesh from lining up with straight
+ * edges of the piece. The band along the outline is left to the refinement so no seed competes with a
+ * boundary edge, and points that fall into a hole or off the piece are left out.
  */
 function seedInterior(points: number[], loops: number[][], spacing: number): void {
   for (const p of latticeCandidates(points, loops, spacing, Infinity)) points.push(p.x, p.y);
@@ -142,11 +138,10 @@ function hash01(a: number, b: number): number {
 }
 
 /**
- * Adds interior vertices by Poisson-disk sampling (Bridson's dart throwing): every new point keeps
- * at least `spacing * POISSON_RADIUS` from the existing ones, which leaves no lattice direction in
- * the mesh. Points that fall outside the piece or inside the outline margin are dropped, so the
- * band along the outline stays to the refinement. Runs from a fixed seed, so the result is
- * deterministic.
+ * Adds interior vertices by Poisson-disk sampling (Bridson's dart throwing): every new point keeps at least
+ * `spacing * POISSON_RADIUS` from the existing ones, which leaves no lattice direction in the mesh. Points
+ * that fall outside the piece or inside the outline margin are dropped, so the band along the outline stays
+ * to the refinement.
  */
 function seedPoisson(points: number[], loops: number[][], spacing: number): void {
   const radius = spacing * POISSON_RADIUS;
@@ -414,10 +409,9 @@ function edgeLengthSquared(p: number[], a: number, b: number): number {
 }
 
 /**
- * Splits the longest edge of every triangle that still has one above `limit`. One split per
- * triangle per round keeps the vertex count close to the area the piece needs, where subdividing
- * every long edge at once would quadruple the whole mesh. The set is built over the mesh, so both
- * triangles of a split edge split it and no T-junction is left behind.
+ * Splits the longest edge of every triangle that still has one above `limit`. One split per triangle per
+ * round keeps the vertex count close to the area the piece needs, where subdividing every long edge at once
+ * would quadruple the whole mesh.
  */
 function splitLongEdges(mesh: Remesh, limit: number): boolean {
   const { positions: p, triangles: t } = mesh;

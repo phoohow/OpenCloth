@@ -124,10 +124,10 @@ function pairedB(seam: Seam, end: SeamJointEnd): number {
 }
 
 /**
- * Corner where one seam end joins; both sides must stop on an outline corner. The angle is
- * between the two contour edges that continue away from the joint after panel B is laid into
- * panel A's frame with the seam closed: 180 degrees means the joined edge runs straight on,
- * anything smaller bends or doubles back at this corner.
+ * Corner where one seam end joins; both sides must stop on an outline corner. The angle is between the two
+ * contour edges that continue away from the joint after panel B is laid into panel A's frame with the seam
+ * closed: 180 degrees means the joined edge runs straight on, anything smaller bends or doubles back at this
+ * corner.
  */
 export function seamJoint(pattern: Pattern, seamId: string, end: SeamJointEnd): SeamJoint | null {
   const seam = pattern.seams[seamId];

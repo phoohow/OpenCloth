@@ -14,7 +14,7 @@ import { createMenuActions, shortcutActions } from '@/ui/menu/actions';
 import type { MenuActions } from '@/ui/menu/actions';
 import { useUIStore, isSplitLayout, leftPaneOf, isRightPanelShown, type PaneId } from '@/store';
 import type { GarmentEngine } from '@/runtime';
-import type { Renderer } from '@/render';
+import type { Viewport } from '@/runtime';
 import {
   isPaneShown, paneFlex, leftPanelWidthFromPointer, rightPanelWidthFromPointer, splitRatioFromPointer,
 } from '@/ui/viewportLayout';
@@ -26,7 +26,7 @@ import {
 interface ShellProps {
   actions: MenuActions;
   engineRef: MutableRefObject<GarmentEngine | null>;
-  onEngineReady: (engine: GarmentEngine, renderer: Renderer) => void;
+  onEngineReady: (engine: GarmentEngine, viewport: Viewport) => void;
   /** Whether the 3D viewport has finished creating its renderer. */
   ready: boolean;
 }
@@ -35,16 +35,16 @@ interface ShellProps {
 export function App() {
   const autoSaveSeconds = useUIStore(s => s.autoSaveSeconds);
   const engineRef = useRef<GarmentEngine | null>(null);
-  const rendererRef = useRef<Renderer | null>(null);
+  const rendererRef = useRef<Viewport | null>(null);
   const projectInputRef = useRef<HTMLInputElement | null>(null);
   const [ready, setReady] = useState(false);
 
   const actions = useMemo(() => createMenuActions({ engineRef, rendererRef, projectInputRef }), []);
   const runShortcut = useMemo(() => shortcutActions(actions), [actions]);
 
-  const handleEngineReady = (engine: GarmentEngine, renderer: Renderer) => {
+  const handleEngineReady = (engine: GarmentEngine, viewport: Viewport) => {
     engineRef.current = engine;
-    rendererRef.current = renderer;
+    rendererRef.current = viewport;
     setReady(true);
   };
 

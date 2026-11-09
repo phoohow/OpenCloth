@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import type { Pattern, Vec2 } from '@/model/types';
 import { samplePanelOutline } from '@/pattern/panel';
-import { computeBBox } from '@/common/geom';
+import { computeBBox } from '@/base/geom';
 import { useUIStore } from '@/store';
 import { fitView, toWorld, zoomAround, type ViewTransform } from '@/ui/viewport2D/viewMath';
 

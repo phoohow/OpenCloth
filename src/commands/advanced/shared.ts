@@ -1,4 +1,4 @@
-import { genId } from '@/common/id';
+import { genId } from '@/base/id';
 import type { Panel, Pattern, PatternEdge, Vec2 } from '@/model/types';
 import type { PatternTopology } from '@/model';
 import type { ProjectContext } from '@/commands/command';
@@ -6,9 +6,9 @@ import type { ProjectContext } from '@/commands/command';
 import { makePanel, newPoint } from '@/commands/patternCreateCommands';
 import { edgeLength } from '@/pattern/geom';
 import { sampleOutline } from '@/pattern/panel';
-import { add, distance, normalize, scale, sub } from '@/common/geom';
-import { hasSelfIntersection } from '@/common/geom/offset';
-import { distanceToPolyline } from '@/common/geom/polyCurve';
+import { add, distance, normalize, scale, sub } from '@/base/geom';
+import { hasSelfIntersection } from '@/base/geom/offset';
+import { distanceToPolyline } from '@/base/geom/polyCurve';
 import { insidePolygon } from '@/commands/patternStructureCommands';
 
 export const clamp01 = (v: number): number => Math.max(0, Math.min(1, v));

@@ -24,19 +24,19 @@ function specifiers(file: string): string[] {
 }
 
 describe('architecture', () => {
-  it('keeps common free of business and UI dependencies', () => {
-    const common = join(SRC, 'common');
-    expect(existsSync(common)).toBe(true);
+  it('keeps base free of business and UI dependencies', () => {
+    const baseDir = join(SRC, 'base');
+    expect(existsSync(baseDir)).toBe(true);
     const violations: string[] = [];
-    for (const file of collect(common)) {
+    for (const file of collect(baseDir)) {
       for (const spec of specifiers(file)) {
-        if (spec.startsWith('.') || spec.startsWith('@/common')) {
-          const base = spec.startsWith('@/common')
+        if (spec.startsWith('.') || spec.startsWith('@/base')) {
+          const base = spec.startsWith('@/base')
             ? join(SRC, spec.slice(2))
             : resolve(dirname(file), spec);
           const inside = [base, `${base}.ts`, `${base}.tsx`, `${base}/index.ts`]
             .map(c => c.replace(/\\/g, '/'))
-            .some(c => c.startsWith(common.replace(/\\/g, '/')) && existsSync(c));
+            .some(c => c.startsWith(baseDir.replace(/\\/g, '/')) && existsSync(c));
           if (!inside) violations.push(`${relative(SRC, file)} -> ${spec}`);
         } else if (FORBIDDEN_EXTERNAL.includes(spec)) {
           violations.push(`${relative(SRC, file)} -> ${spec}`);

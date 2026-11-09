@@ -1,5 +1,5 @@
 import type { Avatar, AvatarParams, SkinAppearance } from '@/model/types';
-import { genId } from '@/common/id';
+import { genId } from '@/base/id';
 
 /** Body mesh shipped in assets/models and served from the site root. */
 export interface BundledAvatar {

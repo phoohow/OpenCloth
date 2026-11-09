@@ -1,9 +1,9 @@
-import { genId } from '@/common/id';
+import { genId } from '@/base/id';
 import type { Pattern, PatternEdge, Vec2 } from '@/model/types';
-import { add, sub, dot, distance, lerp, normalize, scale } from '@/common/geom';
+import { add, sub, dot, distance, lerp, normalize, scale } from '@/base/geom';
 
 import { edgeCurve, splitEdgeCurve } from '@/pattern/geom/bezier';
-import { arcFromThreePoints, arcSpan } from '@/common/geom';
+import { arcFromThreePoints, arcSpan } from '@/base/geom';
 import { edgeLength, sampleEdge } from '@/pattern/geom/edgeSample';
 
 /** Edges and tangent points that replace one filleted corner. */
@@ -116,11 +116,9 @@ function trimEdge(
 }
 
 /**
- * Replaces a corner of a closed outline with a tangent arc of `radius`, registering the
- * new points and edges in the pattern and removing the two edges it replaces. Line-line
- * corners get exact tangent points; curve and arc neighbours are approximated from their
- * sampled tangents. Returns null when the radius does not fit the adjacent edge lengths
- * or the corner has no filletable wedge.
+ * Replaces a corner of a closed outline with a tangent arc of `radius`, registering the new points and edges
+ * in the pattern and removing the two edges it replaces. Line-line corners get exact tangent points; curve
+ * and arc neighbours are approximated from their sampled tangents.
  */
 export function filletCorner(
   pattern: Pattern,
@@ -188,10 +186,9 @@ export function filletCorner(
 }
 
 /**
- * Fillets every listed corner with the same radius, one at a time so adjacent corners see
- * the already-rounded edges; the result holds the final live edges of all touched corners.
- * Returns null at the first corner that fails, leaving earlier fillets registered in the
- * pattern.
+ * Fillets every listed corner with the same radius, one at a time so adjacent corners see the already-rounded
+ * edges; the result holds the final live edges of all touched corners. Returns null at the first corner that
+ * fails, leaving earlier fillets registered in the pattern.
  */
 export function filletCorners(
   pattern: Pattern,

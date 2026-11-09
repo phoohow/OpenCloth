@@ -3,17 +3,16 @@ import type { MeshCollider } from '@/avatar/collider';
 import type { ClothSimInput } from '@/sim';
 import { AvatarStage } from '@/runtime/avatarStage';
 import { AvatarMotion, type AvatarMotionInfo } from '@/runtime/avatarMotion';
-import { SoftBodyDeformer } from '@/runtime/softBody';
 import { DynamicFitSampler } from '@/runtime/dynamicFitSampler';
 import type { DynamicPressureFrame } from '@/analysis';
-import type { SceneSlot } from '@/render';
+import type { PresenterHost } from '@/runtime/presenters/host';
 
 /** Frames between two soft-body collision updates. */
 const SOFT_UPDATE_INTERVAL = 8;
 
 /** What the avatar view reads from the rest of the engine. */
 export interface AvatarViewDeps {
-  slot: SceneSlot;
+  host: PresenterHost;
   /** Latest pressure samples, kept while a heatmap is on. */
   contact: () => Float32Array | null;
   /** Merged input the dynamic sampler reads per-particle pressure from. */
@@ -22,6 +21,8 @@ export interface AvatarViewDeps {
   updateCollider: (vertices: Float32Array) => void;
   /** Reinstalls the solver's mesh collider for a new body pose. */
   installCollider: (mesh: MeshCollider) => void;
+  /** Runs after a pause or stop, where the engine rebinds soft deformation to the new pose. */
+  onPoseSettled?: () => void;
 }
 
 /**
@@ -31,10 +32,11 @@ export interface AvatarViewDeps {
 export class AvatarView {
   readonly stage = new AvatarStage();
   readonly motion: AvatarMotion;
-  private readonly softBody = new SoftBodyDeformer();
   private readonly dynamicFit: DynamicFitSampler;
   /** Frames left before the soft body pushes its next collision update. */
   private softCountdown = 0;
+  /** Whether the current body yields to cloth contact. */
+  private softEnabled = false;
   /** Whether the body is drawn highlighted as the selected scene object. */
   private highlighted = false;
 
@@ -47,15 +49,21 @@ export class AvatarView {
     });
     this.motion = new AvatarMotion(this.stage, {
       installCollider: deps.installCollider,
-      onPoseSettled: () => this.reattachSoftBody(),
+      onPoseSettled: () => {
+        this.softCountdown = 0;
+        deps.onPoseSettled?.();
+      },
     });
   }
 
   /** Collision capsules and mesh of the current body. */
   get collider() { return this.stage.collider; }
 
-  /** Root object of the body in the scene. */
-  get object() { return this.stage.object; }
+  /** Asset owning the body object, clips and soft deformation. */
+  get handle() { return this.stage.handle; }
+
+  /** Whether the body is drawn opaque in the scene. */
+  objectVisible(): boolean { return this.stage.objectVisible(); }
 
   get isAnimating(): boolean { return this.stage.isAnimating; }
 
@@ -66,21 +74,22 @@ export class AvatarView {
 
   /** Replaces the scene body and re-applies its display, transform and highlight. */
   async build(project: Project): Promise<void> {
-    await this.stage.build(project.avatar, this.deps.slot);
+    await this.stage.build(project.avatar, this.deps.host);
     this.stage.applyDisplay(project.avatar.display);
     this.stage.place(project.avatar.transform);
     this.stage.highlight(this.highlighted);
-    this.reattachSoftBody();
+    this.softCountdown = 0;
     this.motion.reset();
     this.dynamicFit.clear();
   }
 
   /** Enables or restores the compressible chest and abdomen for the current body. */
   applySoftness(project: Project): void {
-    this.reattachSoftBody();
-    const enabled = project.avatar.softBody === true;
-    this.softBody.setEnabled(enabled);
-    if (!enabled) this.uploadSoftBodyCollider();
+    this.softEnabled = project.avatar.softBody === true;
+    this.softCountdown = 0;
+    if (this.softEnabled) return;
+    this.handle?.restore?.();
+    this.uploadSoftBodyCollider();
   }
 
   /**
@@ -88,18 +97,18 @@ export class AvatarView {
    * pose, so this pauses while a clip plays.
    */
   updateSoftBody(positions: Float32Array, contact: Float32Array | null): void {
-    if (!contact || !this.softBody.active || this.stage.isAnimating) return;
+    if (!contact || !this.softEnabled || this.stage.isAnimating) return;
     if (this.softCountdown > 0) {
       this.softCountdown--;
       return;
     }
     this.softCountdown = SOFT_UPDATE_INTERVAL;
-    if (this.softBody.update(positions, contact)) this.uploadSoftBodyCollider();
+    if (this.handle?.deform?.(positions, contact)) this.uploadSoftBodyCollider();
   }
 
   /** Restores the undeformed body. */
   restoreSoftBody(): void {
-    this.softBody.restore();
+    this.handle?.restore?.();
     this.uploadSoftBodyCollider();
   }
 
@@ -145,15 +154,10 @@ export class AvatarView {
 
   /** Removes the body from the scene. */
   detach(): void {
-    this.stage.detach(this.deps.slot);
+    this.stage.detach(this.deps.host);
   }
 
-  /** Rebinds soft deformation to the collider the animation left behind. */
-  private reattachSoftBody(): void {
-    this.softBody.attach(this.stage.object, this.stage.collider?.mesh ?? null);
-    this.softCountdown = 0;
-  }
-
+  /** Pushes the current body triangles into the solver's collision buffer. */
   private uploadSoftBodyCollider(): void {
     const mesh = this.stage.collider?.mesh;
     if (mesh) this.deps.updateCollider(mesh.vertices);

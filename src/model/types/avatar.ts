@@ -4,7 +4,6 @@
 
 import type { ObjectTransform } from '@/model/types/geometry';
 
-// ============ Avatar ============
 
 /** Body mesh from the procedural capsules or from a model file. */
 export type AvatarSource = 'procedural' | 'glb';

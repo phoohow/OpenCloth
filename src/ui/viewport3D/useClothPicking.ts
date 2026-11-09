@@ -30,10 +30,9 @@ interface Modifiers {
 }
 
 /**
- * Pointer interaction on the 3D canvas. Hovering decides everything: over cloth during playback the
- * pointer pinches and drags it, over cloth with the PIN tool it becomes a pin, and over an existing
- * PIN with the unpin tool it becomes a cross that highlights that pin. Anywhere else the event
- * falls through to OrbitControls, so the camera behaves exactly as before.
+ * Pointer interaction on the 3D canvas. Hovering decides everything: over cloth during playback the pointer
+ * pinches and drags it, over cloth with the PIN tool it becomes a pin, and over an existing PIN with the
+ * unpin tool it becomes a cross that highlights that pin.
  */
 export function useClothPicking(
   canvasRef: RefObject<HTMLCanvasElement>,

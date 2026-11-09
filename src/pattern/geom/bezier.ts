@@ -1,8 +1,8 @@
 import type { Pattern, PatternEdge, Vec2 } from '@/model/types';
-import type { CubicBezier2 } from '@/common/geom/bezier';
-import { splitBezier, curveTForPoint } from '@/common/geom/bezier';
+import type { CubicBezier2 } from '@/base/geom/bezier';
+import { splitBezier, curveTForPoint } from '@/base/geom/bezier';
 
-export * from '@/common/geom/bezier';
+export * from '@/base/geom/bezier';
 
 const mirrorAround = (pos: Vec2, h: Vec2): Vec2 => ({ x: 2 * pos.x - h.x, y: 2 * pos.y - h.y });
 

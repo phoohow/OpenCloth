@@ -1,5 +1,5 @@
 import type { PanelDrape, Vec2 } from '@/model/types';
-import { computeBBox } from '@/common/geom';
+import { computeBBox } from '@/base/geom';
 
 /**
  * Guesses how a panel drapes from its Chinese name, falling back to a shape heuristic

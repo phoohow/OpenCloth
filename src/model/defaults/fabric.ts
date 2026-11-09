@@ -1,6 +1,6 @@
 import type { Fabric, FabricAppearance, FabricPhysics, FabricPresetKey } from '@/model/types';
 import { vec2 } from '@/model/types';
-import { genId } from '@/common/id';
+import { genId } from '@/base/id';
 
 /** Contact friction used when a fabric record does not set one. */
 export const DEFAULT_CONTACT_FRICTION = 0.5;

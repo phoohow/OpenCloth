@@ -1,31 +1,20 @@
-import * as THREE from 'three';
+/** Owner of the cloth decorative overlays and the two gesture overlays. */
+
+import type { Vec3 } from '@/base/geom';
 import type { Project } from '@/model/types';
-import type { ClothSimInput } from '@/sim';
-import type { SeamPair } from '@/runtime/seamPair';
+import { MeasureOverlay } from '@/runtime/measureOverlay';
+import type { PresenterHost } from '@/runtime/presenters/host';
 import { SeamThreads } from '@/runtime/seamThreads';
+import type { SeamPair } from '@/runtime/seamPair';
+import { SketchOverlay } from '@/runtime/sketchOverlay';
 import { TopstitchThreads, topstitchSegments } from '@/runtime/topstitchThreads';
 import { TrimInstances, trimInstances } from '@/runtime/trimInstances';
-import { SketchOverlay } from '@/runtime/sketchOverlay';
-import { MeasureOverlay } from '@/runtime/measureOverlay';
-import type { SceneSlot } from '@/render';
+import type { ClothSimInput } from '@/sim';
 
 /**
- * The four decorative overlays that live on top of the cloth: seam threads, topstitch rows,
- * trim instances, plus the two gesture overlays (sketch stroke and measurement).
- *
- * They share one lifecycle — attach when the merged layout changes, move with every readback,
- * detach when the cloth goes away — so they share one owner. Signatures are kept here as well:
- * a rebuild is needed exactly when the records or the merged layout behind them changed.
+ * The four decorative overlays that live on top of the cloth: seam threads, topstitch rows, trim instances,
+ * plus the two gesture overlays (sketch stroke and measurement).
  */
-/** Slots the overlays draw into. */
-export interface OverlaySlots {
-  seams: SceneSlot;
-  topstitch: SceneSlot;
-  trims: SceneSlot;
-  sketch: SceneSlot;
-  measure: SceneSlot;
-}
-
 export class OverlayKit {
   private readonly seams = new SeamThreads();
   private readonly topstitches = new TopstitchThreads();
@@ -39,15 +28,15 @@ export class OverlayKit {
   /** Signature of the trim records and merged layout the instances were built for. */
   private trimKey = '';
   /** World points of the pending 3D measurement, in placement order. */
-  private measurePoints: THREE.Vector3[] = [];
+  private measurePoints: Vec3[] = [];
 
-  constructor(private readonly slots: OverlaySlots) {}
+  constructor(private readonly host: PresenterHost) {}
 
   /** Drops the seam, topstitch and trim overlays, forcing a rebuild on the next apply. */
   reset(): void {
-    this.seams.detach(this.slots.seams);
-    this.topstitches.detach(this.slots.topstitch);
-    this.trims.detach(this.slots.trims);
+    this.seams.detach(this.host);
+    this.topstitches.detach(this.host);
+    this.trims.detach(this.host);
     this.pairCount = -1;
     this.topstitchKey = '';
     this.trimKey = '';
@@ -61,7 +50,7 @@ export class OverlayKit {
   applySeams(project: Project, pairs: SeamPair[], positions: Float32Array): void {
     if (pairs.length !== this.pairCount) {
       this.pairCount = pairs.length;
-      this.seams.attach(this.slots.seams, pairs, positions, project.pattern.seams);
+      this.seams.attach(this.host, pairs, positions, project.pattern.seams);
       return;
     }
     this.seams.setSeams(project.pattern.seams);
@@ -75,7 +64,9 @@ export class OverlayKit {
     const signature = topstitchSignature(project, input);
     if (signature !== this.topstitchKey) {
       this.topstitchKey = signature;
-      this.topstitches.attach(this.slots.topstitch, topstitchSegments(project, input.panels), positions, normals);
+      this.topstitches.attach(
+        this.host, topstitchSegments(project, input.panels), positions, normals,
+      );
       return;
     }
     this.topstitches.update(positions, normals);
@@ -88,7 +79,7 @@ export class OverlayKit {
     const signature = trimSignature(project, input);
     if (signature !== this.trimKey) {
       this.trimKey = signature;
-      this.trims.attach(this.slots.trims, trimInstances(project, input.panels), positions, normals);
+      this.trims.attach(this.host, trimInstances(project, input.panels), positions, normals);
       return;
     }
     this.trims.update(positions, normals);
@@ -115,35 +106,35 @@ export class OverlayKit {
   }
 
   /** Starts a sketch stroke at a picked surface point; the caller owns the stroke extent. */
-  beginSketch(world: THREE.Vector3): void {
-    this.sketch.begin(this.slots.sketch, world);
+  beginSketch(world: Vec3): void {
+    this.sketch.begin(this.host, world);
   }
 
   /** Extends the active sketch stroke by one picked surface point. */
-  extendSketch(world: THREE.Vector3): void {
+  extendSketch(world: Vec3): void {
     this.sketch.extend(world);
   }
 
   /** Drops the sketch stroke overlay. */
   endSketch(): void {
-    this.sketch.detach(this.slots.sketch);
+    this.sketch.detach(this.host);
   }
 
   /**
    * Adds one measurement point. A third call starts a new measurement. Returns the points kept
    * so far, so the caller can report a reading once two exist.
    */
-  addMeasurePoint(world: THREE.Vector3): readonly THREE.Vector3[] {
+  addMeasurePoint(world: Vec3): readonly Vec3[] {
     if (this.measurePoints.length >= 2) this.measurePoints = [];
-    this.measurePoints.push(world.clone());
-    this.measure.setPoints(this.slots.measure, this.measurePoints);
+    this.measurePoints.push({ x: world.x, y: world.y, z: world.z });
+    this.measure.setPoints(this.host, this.measurePoints);
     return this.measurePoints;
   }
 
   /** Drops the measurement overlay and its placed points. */
   clearMeasurement(): void {
     this.measurePoints = [];
-    this.measure.clear(this.slots.measure);
+    this.measure.clear(this.host);
   }
 }
 

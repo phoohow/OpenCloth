@@ -5,11 +5,11 @@ import { newEdge, newPoint } from '@/commands/patternCreateCommands';
 import { prunePattern } from '@/commands/patternStructureCommands';
 import { sampleEdge } from '@/pattern/geom';
 import { adaptiveSampleBezier, edgeCurve, evalBezier, type CubicBezier2 } from '@/pattern/geom';
-import { arcFromThreePoints } from '@/common/geom/arc';
+import { arcFromThreePoints } from '@/base/geom/arc';
 import {
   bezierFromFit, deviationFromArc, distanceToPolyline, fitBezierHandles, maxDistanceToPolyline,
-} from '@/common/geom/polyCurve';
-import { distance, dot, normalize, sub } from '@/common/geom';
+} from '@/base/geom/polyCurve';
+import { distance, dot, normalize, sub } from '@/base/geom';
 import {
   arrayContainsChain, chainFractions, dropUnusedHandles, edgeArrays, remapChainReferences, spliceSequence,
 } from '@/commands/advanced/shared';

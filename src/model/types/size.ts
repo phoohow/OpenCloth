@@ -3,7 +3,6 @@
  */
 
 
-// ============ Sizes ============
 
 /** One entry of the project size chart. */
 export interface SizeDef {
@@ -16,7 +15,6 @@ export interface SizeDef {
   isBase?: boolean;
 }
 
-// ============ POM ============
 
 /** Body dimension a body-anchored POM reads from the avatar instead of the pattern. */
 export type PomBodyKey = 'height' | 'chest' | 'waist' | 'hip';

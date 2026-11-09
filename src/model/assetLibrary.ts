@@ -1,4 +1,4 @@
-import { genId } from '@/common/id';
+import { genId } from '@/base/id';
 import type { Fabric, Project, TrimKind } from '@/model/types';
 import {
   createFabric, FABRIC_PRESET_KEYS, FABRIC_PRESET_LABELS, TRIM_KIND_LABELS, TRIM_KINDS,

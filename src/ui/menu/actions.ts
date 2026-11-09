@@ -3,7 +3,6 @@ import { isSplitLayout, useProjectStore, useSimStore, useUIStore } from '@/store
 import type { DisplayMode, PaneId, PropTab, ToolType, ViewLayout } from '@/store';
 import type { DisplayOptions } from '@/ui/viewport2D/render';
 import { downloadTextFile } from '@/io/serialization';
-import { exportGLB, exportOBJ, exportFBX, exportUSD, exportScreenshot } from '@/io/exporters';
 import { markerGerber, markerHpgl } from '@/io/exporters';
 import { recordCanvasToWebM } from '@/io/exporters';
 import { downloadBytes, sequenceArchive } from '@/io/exporters';
@@ -14,15 +13,15 @@ import { setPanelsVisible, commitClearReferences, commitEnvironmentReset } from 
 import { importAvatarViaPicker, importEnvironmentViaPicker, importReferenceViaPicker, openFilePicker } from '@/ui/modelImport';
 import { useMenuStore } from '@/ui/menu/menuStore';
 import type { GarmentEngine, CameraPreset } from '@/runtime';
-import type { Renderer } from '@/render';
+import type { Viewport } from '@/runtime';
 import type { CameraProjection, EditPreviewTier, Project } from '@/model/types';
 import { reportActionError } from '@/ui/widgets/toast';
 import { createProjectService } from '@/runtime';
 
 interface MenuActionContext {
   engineRef: MutableRefObject<GarmentEngine | null>;
-  rendererRef: MutableRefObject<Renderer | null>;
-  /** Hidden file input owned by the app; 打开… routes through it. */
+  rendererRef: MutableRefObject<Viewport | null>;
+  /** Hidden file input owned by the app; the Open action routes through it. */
   projectInputRef: MutableRefObject<HTMLInputElement | null>;
 }
 
@@ -145,12 +144,12 @@ const projectService = createProjectService({
   alert: message => window.alert(message),
 });
 
-/** Reads the stored list into the store that backs 文件 ▸ 最近. */
+/** Reads the stored list into the store that backs the File ▸ Recent submenu. */
 export function refreshRecentList(): void {
   projectService.refreshRecent();
 }
 
-/** Reads the stored snapshot list into the store that backs 文件 ▸ 自动保存. */
+/** Reads the stored snapshot list into the store that backs the File ▸ Autosave submenu. */
 export function refreshAutosaveList(): void {
   projectService.refreshAutosaveList();
 }
@@ -195,38 +194,21 @@ export function createMenuActions(refs: MenuActionContext): MenuActions {
     resetEnvironment: () => commitEnvironmentReset(),
     clearReferences: () => commitClearReferences(),
 
-    exportGlb: () => {
-      const ctx = refs.rendererRef.current;
-      if (!ctx) return;
-      void exportGLB(ctx.scene.exportables(), `${project().meta.name}.glb`, { includeAvatar: false, includeMaterial: true });
-    },
-    exportObj: () => {
-      const ctx = refs.rendererRef.current;
-      if (!ctx) return;
-      exportOBJ(ctx.scene.exportables(), `${project().meta.name}.obj`, { includeAvatar: false, includeMaterial: true });
-    },
-    exportFbx: () => {
-      const ctx = refs.rendererRef.current;
-      if (!ctx) return;
-      exportFBX(ctx.scene.exportables(), `${project().meta.name}.fbx`, { includeAvatar: false, includeMaterial: false });
-    },
-    exportUsd: () => {
-      const ctx = refs.rendererRef.current;
-      if (!ctx) return;
-      exportUSD(ctx.scene.exportables(), `${project().meta.name}.usda`, { includeAvatar: false, includeMaterial: false });
-    },
+    exportGlb: () => void exportScene(refs, 'glb', 'glb', 'model/gltf-binary'),
+    exportObj: () => void exportScene(refs, 'obj', 'obj', 'text/plain'),
+    exportFbx: () => void exportScene(refs, 'fbx', 'fbx', 'application/octet-stream'),
+    exportUsd: () => void exportScene(refs, 'usd', 'usda', 'text/plain'),
     screenshot: () => {
-      const ctx = refs.rendererRef.current;
-      if (!ctx) return;
-      ctx.render();
-      exportScreenshot(ctx.canvas, `${project().meta.name}.png`);
+      const viewport = refs.rendererRef.current;
+      if (!viewport) return;
+      exportScreenshot(viewport.canvas, `${project().meta.name}.png`);
     },
     exportAnimation: () => {
-      const ctx = refs.rendererRef.current;
-      if (!ctx) return;
+      const viewport = refs.rendererRef.current;
+      if (!viewport) return;
       alert('开始录制 5 秒动画…');
       // The viewport keeps drawing each frame, so a paused simulation records its current state.
-      void recordCanvasToWebM(ctx.canvas, `${project().meta.name}.webm`).then(result => {
+      void recordCanvasToWebM(viewport.canvas, `${project().meta.name}.webm`).then(result => {
         if (result === 'unsupported') alert('当前浏览器不支持画布录制');
       });
     },
@@ -390,4 +372,32 @@ export function shortcutActions(actions: MenuActions): ShortcutActions {
     cameraBackRight: () => actions.camera('backRight'),
     shortcuts: actions.showShortcuts,
   };
+}
+
+
+/** Exports the scene through the viewport and downloads the bytes. */
+async function exportScene(
+  refs: MenuActionContext,
+  format: 'glb' | 'obj' | 'fbx' | 'usd',
+  extension: string,
+  mime: string,
+): Promise<void> {
+  const viewport = refs.rendererRef.current;
+  if (!viewport) return;
+  const bytes = await viewport.exportScene(format, { includeAvatar: false });
+  const name = `${useProjectStore.getState().project.meta.name}.${extension}`;
+  downloadBytes(name, new Uint8Array(bytes), mime);
+}
+
+/** Saves the canvas as a PNG. */
+function exportScreenshot(canvas: HTMLCanvasElement, filename: string): void {
+  canvas.toBlob(blob => {
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  }, 'image/png');
 }

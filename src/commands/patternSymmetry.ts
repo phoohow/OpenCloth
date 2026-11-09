@@ -1,7 +1,7 @@
-import { genId } from '@/common/id';
+import { genId } from '@/base/id';
 import type { Panel, Pattern, Vec2 } from '@/model/types';
 
-import { arcFromThreePoints, evalArc } from '@/common/geom/arc';
+import { arcFromThreePoints, evalArc } from '@/base/geom/arc';
 import { prunePattern } from '@/commands/patternPrune';
 
 /** Mirror axis: an outline edge id, or the pattern 'x' / 'y' axis. */

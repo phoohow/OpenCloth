@@ -3,7 +3,7 @@ import type {
   SceneConfig, SceneLight, SeamType, TrimKind, Vec3, WireOptions,
 } from '@/model/types';
 import { vec3 } from '@/model/types';
-import { genId } from '@/common/id';
+import { genId } from '@/base/id';
 
 /** Wire overlay the viewport starts with. */
 export const DEFAULT_WIRE_OPTIONS: WireOptions = { color: 0x66ccff, depth: 'tested' };

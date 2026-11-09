@@ -9,9 +9,9 @@ import {
   SetArcParamsCommand, SetEdgeAngleCommand, SetEdgeLengthCommand, SimplifyCurveCommand,
 } from '@/commands/patternCommands';
 import { edgeLength, pointAtT, sampleEdge } from '@/pattern/geom/edgeSample';
-import { arcFromThreePoints, arcSpan } from '@/common/geom';
+import { arcFromThreePoints, arcSpan } from '@/base/geom';
 import { samplePanelOutline } from '@/pattern/panel/panelBuilder';
-import { distance } from '@/common/geom';
+import { distance } from '@/base/geom';
 import { ctxOf, addSquare } from './fixtures';
 
 /** Executes, checks topology, then undoes and compares against the pre-execute snapshot. */

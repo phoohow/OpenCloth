@@ -1,6 +1,6 @@
 import type { Panel, PanelDrape, Pattern, Vec2 } from '@/model/types';
 import { samplePanelOutline } from '@/pattern/panel/panelBuilder';
-import { computeBBox } from '@/common/geom';
+import { computeBBox } from '@/base/geom';
 import { inferDrape } from '@/pattern/drape/drapeInfer';
 import { layoutRows } from '@/pattern/template/patternLayout';
 

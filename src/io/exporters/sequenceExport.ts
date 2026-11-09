@@ -1,6 +1,6 @@
 import type { CachedFrame } from '@/sim';
 import { buildZip, type ZipEntry } from '@/io/zip';
-import { downloadBlob } from '@/common/platform';
+import { downloadBlob } from '@/base/platform';
 
 /** OBJ text of one cached frame: world-space vertices and the merged cloth triangles. */
 export function frameObjText(positions: Float32Array, indices: Uint32Array, label: string): string {

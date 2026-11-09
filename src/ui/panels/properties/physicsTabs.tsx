@@ -7,7 +7,6 @@ import { SliderRow, CheckRow, Section } from '@/ui/widgets/propertyRows';
 import { writeFabric } from '@/ui/panels/properties/materialTab';
 import { styles } from '@/ui/panels/properties/styles';
 
-// ===== Physics tabs ("物理") =====
 
 /** Fabric stiffness, mass and damping for the panel the object tab resolved to. */
 export function FabricPhysics({ fabric }: { fabric: Fabric }) {

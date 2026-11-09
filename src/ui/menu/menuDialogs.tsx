@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMenuStore } from '@/ui/menu/menuStore';
 import { SHORTCUTS, shortcutsByScope, type ShortcutScope } from '@/ui/menu/shortcuts';
-import { detectWebGPU } from '@/render';
+import { detectWebGPU } from '@/render/common';
 import { useProjectStore } from '@/store';
 import { downloadBytesFile, downloadTextFile } from '@/io/serialization';
 import { writeMarkerDxf, writePatternDxf } from '@/io/dxf';
@@ -18,7 +18,7 @@ import { IntegrationDialog } from '@/ui/menu/integrationDialog';
 
 const SCOPE_ORDER: ShortcutScope[] = ['全局', '3D 视口', '2D 制版', '菜单栏'];
 
-/** Modal host for 帮助 ▸ 快捷键总览, 关于 OpenCloth and the pattern export options. */
+/** Modal host for Help ▸ Shortcuts, About OpenCloth and the pattern export options. */
 export function MenuDialogs() {
   const dialog = useMenuStore(s => s.dialog);
   const dialogParam = useMenuStore(s => s.dialogParam);

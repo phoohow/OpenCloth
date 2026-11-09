@@ -1,10 +1,10 @@
 import type { Panel, Pattern, SizeDef, Vec2 } from '@/model/types';
 import { pointAtT } from '@/pattern/geom';
 import { edgeCurve, adaptiveSampleBezier } from '@/pattern/geom';
-import { adaptiveSampleArc } from '@/common/geom/arc';
+import { adaptiveSampleArc } from '@/base/geom/arc';
 import { panelGrainLine, panelOutlineWithAllowance } from '@/pattern/panel';
 import { topstitchRows } from '@/pattern/panel';
-import { computeBBox, ensureCCW, perp, normalize, sub, dot } from '@/common/geom';
+import { computeBBox, ensureCCW, perp, normalize, sub, dot } from '@/base/geom';
 import { resolveSize } from '@/pattern/grading';
 import {
   buildMarkerLayout, placePoint, placedLabel, placedOutline,
@@ -271,19 +271,9 @@ function finish(dxf: DxfWriter): string {
 }
 
 /**
- * Writes a pattern as an AutoCAD R12 ASCII DXF: one BLOCK per panel with the net
- * outline, optional seam allowance offset, grainline, notches, internal lines and
- * annotations. Pattern centimeters are written as millimeters, Y-up.
- *
- * `includeSeamAllowance` picks the rough (cutting) or net outline. `sizes.chart` resolves the
- * pattern to every chart size with `resolveSize` and writes one BLOCK per panel per size; each
- * block name ends with `-<size label>` and its INSERT carries an X offset of
- * `(widest group + gapCm) * 10` mm per index, so size groups never overlap and the reader
- * attributes every panel to its size from the block name alone.
- *
- * `encoding: 'ascii'` escapes every non-ASCII string value (panel names, annotations, block names)
- * as `\U+XXXX`; `parsePatternDxf` decodes it back. `'utf-8'` (default) writes values raw.
- * Output is byte-identical for identical input.
+ * Writes a pattern as an AutoCAD R12 ASCII DXF: one BLOCK per panel with the net outline, optional seam
+ * allowance offset, grainline, notches, internal lines and annotations. Pattern centimeters are written as
+ * millimeters, Y-up.
  */
 export function writePatternDxf(pattern: Pattern, opts: WriteDxfOptions): string {
   const convention: DxfConvention = opts.convention ?? 'AAMA';

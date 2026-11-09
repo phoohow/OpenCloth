@@ -5,7 +5,6 @@
 
 import type { ArcGeom, BezierHandle, ObjectTransform, Vec2, Vec3 } from '@/model/types/geometry';
 
-// ============ Pattern ============
 
 /** Named point of a panel outline or a construction guide. */
 export interface PatternPoint {
@@ -155,7 +154,6 @@ export interface Panel {
   locked: boolean;
 }
 
-// ============ Production markings ============
 
 /** V-notch or drill mark placed along an edge. */
 export interface Notch {
@@ -268,7 +266,6 @@ export interface Trim {
   visible: boolean;
 }
 
-// ============ Seams ============
 
 /** How the two edges of a seam are joined. */
 export type SeamType = 'normal' | 'gather' | 'free';
@@ -302,7 +299,6 @@ export interface Seam {
   stitchVisible: boolean;
 }
 
-// ============ Pattern aggregate ============
 
 /** Every pattern object, keyed by id. */
 export interface Pattern {

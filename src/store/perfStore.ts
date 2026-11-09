@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { PaneId } from '@/store/types';
-import type { RayTraceState, RayTracingCapability } from '@/render';
+import type { TraceStatus as RayTraceState, RayTracingCapability } from '@/render/common';
 
 /** Drawn frames are turned into a rate once this much time has passed. */
 export const FPS_SAMPLE_MS = 500;

@@ -2,7 +2,7 @@ import type { GarmentLayer, Panel, Project } from '@/model/types';
 import {
   DEFAULT_CLOTH_THICKNESS_CM, DEFAULT_LAYER_THICKNESS_CM, GARMENT_LAYER_COLLISION, GARMENT_LAYERS,
 } from '@/model/defaults';
-import { cmToM } from '@/common/units';
+import { cmToM } from '@/base/units';
 
 /** Largest layer clearance accepted, in centimetres. */
 const MAX_LAYER_THICKNESS_CM = 2;

@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { createEmptyPattern } from '@/model/defaults';
 import type { Pattern, SeamAllowanceCorner } from '@/model/types';
 import { panelOutlineWithAllowance } from '@/pattern/panel/panelBuilder';
-import { hasSelfIntersection } from '@/common/geom';
-import { computeBBox } from '@/common/geom';
+import { hasSelfIntersection } from '@/base/geom';
+import { computeBBox } from '@/base/geom';
 import { addSquare } from '../../core/command/fixtures';
 
 const box = (pattern: Pattern, panelId: string, allowanceCm: number): Pattern => {

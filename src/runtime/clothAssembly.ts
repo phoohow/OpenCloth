@@ -1,4 +1,4 @@
-import { distance3At as distance } from '@/common/math';
+import { distance3At as distance } from '@/base/math';
 import type { Dart, Pattern, Project, Seam } from '@/model/types';
 import type { PanelMesh } from '@/pattern/panel';
 import { edgeVertexRun, meshSpacingCm, panelCreaseEdges, toTriangleMesh } from '@/pattern/panel';
@@ -258,10 +258,9 @@ export class ClothAssembly {
   }
 
   /**
-   * Pairs two vertex runs at equal arc-length fractions and records one closing constraint per
-   * pair. Pairing by distance along the seam instead of by index keeps a shorter edge from
-   * bunching its vertices against the long edge's corners. Every vertex of both runs ends up
-   * paired, so a closed seam has no unstitched stretch left to open into a gap.
+   * Pairs two vertex runs at equal arc-length fractions and records one closing constraint per pair. Pairing
+   * by distance along the seam instead of by index keeps a shorter edge from bunching its vertices against
+   * the long edge's corners.
    */
   private stitchRun(
     vertsA: number[],

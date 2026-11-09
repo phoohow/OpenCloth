@@ -2,7 +2,7 @@ import type { Command, ProjectContext } from '@/commands/command';
 import type { Pattern, SizeDef, Vec2 } from '@/model/types';
 import { edgeLength } from '@/pattern/geom';
 import { samplePanelOutline } from '@/pattern/panel';
-import { hasSelfIntersection } from '@/common/geom/offset';
+import { hasSelfIntersection } from '@/base/geom/offset';
 import { SnapshotCommand } from '@/commands/patternSnapshot';
 import { resolveSize } from '@/pattern/grading';
 

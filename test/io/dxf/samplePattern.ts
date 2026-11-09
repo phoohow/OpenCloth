@@ -1,7 +1,7 @@
 import type { Pattern, PatternEdge, PatternPoint, Vec2 } from '@/model/types';
 import { adaptiveSampleBezier, edgeCurve } from '@/pattern/geom/bezier';
-import { adaptiveSampleArc } from '@/common/geom';
-import { ensureCCW } from '@/common/geom';
+import { adaptiveSampleArc } from '@/base/geom';
+import { ensureCCW } from '@/base/geom';
 import { sampleEdge } from '@/pattern/geom/edgeSample';
 
 /** Straight or bezier loop edge: [from, to] plus optional bezier control points. */

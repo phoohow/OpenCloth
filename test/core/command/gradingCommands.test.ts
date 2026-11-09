@@ -7,7 +7,7 @@ import {
 } from '@/commands/patternCommands';
 import { ctxOf, addSquare } from './fixtures';
 import { gradingPasteMap, gradingPasteTargets } from '@/pattern/grading/grading';
-import { arcFromThreePoints, evalArc } from '@/common/geom';
+import { arcFromThreePoints, evalArc } from '@/base/geom';
 import { vec2 } from '@/model/types';
 
 function squareCtx() {

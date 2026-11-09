@@ -1,135 +1,136 @@
-import * as THREE from 'three/webgpu';
-import type { ParticlePickHit } from '@/sim';
-import { isOrthographic, type Renderer } from '@/render';
-import {
-  CAMERA_VIEW_FRAMES, fitCameraToBox, type CameraPreset, type ViewFrame,
-} from '@/runtime/cameraFit';
-import { barycentricWeights3D } from '@/common/geom/panelSurface';
+/** Screen rays, cloth surface intersection and particle picking, without three. */
 
-export type { CameraPreset, ViewFrame } from '@/runtime/cameraFit';
+import type { Vec3 } from '@/base/geom';
+import type { Bounds, CameraHost, CameraState, Ray } from '@/render/common';
+import type { ClothSimInput, ParticlePickHit } from '@/sim';
+import { barycentricWeights3D } from '@/base/geom/panelSurface';
 
 /** Cloth surface hit: the triangle, its owning panel slot and the barycentric position on it. */
 export interface ClothSurfacePick {
-  /** Merged cloth triangle number. */
   triangle: number;
-  /** Panel slot in merged order, or -1 when the triangle belongs to no panel. */
   panelSlot: number;
-  /** Merged particle index of each triangle corner. */
   particles: [number, number, number];
-  /** Barycentric weight of each corner, summing to 1. */
   weights: [number, number, number];
-  /** Hit point in the cloth mesh's local space, in meters. */
-  local: THREE.Vector3;
-  /** Hit point in world space, in meters. */
-  world: THREE.Vector3;
+  local: Vec3;
+  world: Vec3;
 }
 
-/** Scene objects the camera framing is measured against, besides the cloth. */
+/** What the picker reads from the engine. */
 export interface PickTargets {
-  /** Merged cloth mesh, or null before the first build. */
-  mesh: () => THREE.Mesh | null;
+  /** Current merged cloth, positions and triangles. */
+  input: () => ClothSimInput | null;
   /** Owning panel of each merged triangle, indexed by triangle number. */
   trianglePanelIds: () => (string | null)[];
-  /** Particle indices of one merged triangle, or null when the triangle is unknown. */
-  triangleParticles: (triangleIndex: number) => readonly number[] | null;
-  /** Latest particle positions (flat xyz), or null before the cloth has any. */
-  particlePositions: () => Float32Array | null;
-  /** Panel ids in merged order, used to resolve a surface pick's panel slot. */
   panelIds: () => string[];
-  /** Particle index lookup on the live solver. */
-  pickNearestParticle: (origin: THREE.Vector3, dir: THREE.Vector3, radius: number) => ParticlePickHit | null;
-  /** Particle closest to a surface point; `panelSlot` of -1 searches every panel. */
-  pickParticleAtPoint: (point: THREE.Vector3, radius: number, panelSlot: number) => ParticlePickHit | null;
-  /** Body and reference models counted by the scene bounds. */
-  frameObjects: () => THREE.Object3D[];
+  particlePositions: () => Float32Array | null;
+  pickNearestParticle: (origin: Vec3, dir: Vec3, radius: number) => ParticlePickHit | null;
+  pickParticleAtPoint: (point: Vec3, radius: number, panelSlot: number) => ParticlePickHit | null;
+  /** Bounds of every framed object, in world space. */
+  bounds: () => Bounds;
+  /** Viewport height in CSS pixels, for a screen-stable pick radius. */
+  viewportHeight: () => number;
 }
 
-/** Default box used before any scene object exists. */
-const FALLBACK_BOX = new THREE.Box3(
-  new THREE.Vector3(-0.3, 0, -0.3),
-  new THREE.Vector3(0.3, 1.8, 0.3),
-);
-
-/** Screen↔world projection for the 3D viewport: rays, pick radius and camera framing. */
+/** Screen↔world projection and cloth picking of one viewport. */
 export class ClothPicker {
-  private raycaster = new THREE.Raycaster();
+  constructor(private readonly camera: CameraHost, private readonly targets: PickTargets) { }
 
-  constructor(private renderer: Renderer, private targets: PickTargets) { }
-
-  /** Ray through a normalized device coordinate point of the main camera. */
-  screenRay(ndcX: number, ndcY: number): THREE.Ray | null {
-    const camera = this.renderer.camera.camera;
-    const canvas = this.renderer.canvas;
-    if (!canvas.clientHeight) return null;
-    this.raycaster.setFromCamera({ x: ndcX, y: ndcY } as unknown as THREE.Vector2, camera);
-    return this.raycaster.ray.clone();
+  /** Ray through a normalized device coordinate point. */
+  screenRay(ndcX: number, ndcY: number): Ray {
+    return this.camera.ray(ndcX, ndcY);
   }
 
-  /** World units per screen pixel at the ray origin, for a screen-stable pick radius. */
-  private screenWorldScale(origin: THREE.Vector3): number {
-    const height = Math.max(this.renderer.canvas.clientHeight, 1);
-    const camera = this.renderer.camera.camera;
-    if (isOrthographic(camera)) {
-      return (camera.top - camera.bottom) / camera.zoom / height;
-    }
-    const distance = Math.max(0.001, origin.distanceTo(this.focusTarget()));
-    const fov = camera.fov * (Math.PI / 180);
-    return (2 * Math.tan(fov / 2) * distance) / height;
-  }
-
-  /** World box covering the cloth, the body and every visible reference model. */
-  sceneBounds(): THREE.Box3 {
-    const box = new THREE.Box3();
-    const cloth = this.clothBounds();
-    if (cloth) box.union(cloth);
-    for (const object of this.targets.frameObjects()) {
-      if (!object.visible) continue;
-      object.updateWorldMatrix(false, true);
-      const bounds = new THREE.Box3().setFromObject(object);
-      if (!bounds.isEmpty()) box.union(bounds);
-    }
-    return box.isEmpty() ? FALLBACK_BOX.clone() : box;
-  }
-
-  /** Centre the camera orbits around: the whole scene box. */
-  focusTarget(): THREE.Vector3 {
-    return this.sceneBounds().getCenter(new THREE.Vector3());
+  /** Distance along the screen ray to the nearest cloth triangle, or null when it misses. */
+  clothDistanceAtScreen(ndcX: number, ndcY: number): number | null {
+    const hit = this.surfaceHit(this.screenRay(ndcX, ndcY));
+    return hit ? hit.distance : null;
   }
 
   /** Nearest cloth particle to the ray through a screen point. */
   pickClothParticleAtScreen(ndcX: number, ndcY: number, radiusFactor: number): ParticlePickHit | null {
     const ray = this.screenRay(ndcX, ndcY);
-    const mesh = this.targets.mesh();
-    if (!ray || !mesh) return null;
-    mesh.updateWorldMatrix(false, false);
+    const input = this.targets.input();
+    if (!input) return null;
     const radius = radiusFactor * this.screenWorldScale(ray.origin) * 400;
 
-    // The drawn surface owns the pick, so a click cannot land on a particle hidden behind the cloth.
-    const surface = this.surfaceHit(ray, mesh);
+    const surface = this.surfaceHit(ray);
     if (surface) {
-      const particle = this.particleAtSurfaceHit(surface, mesh, radius);
+      const particle = this.particleAtSurfaceHit(surface, input, radius);
       if (particle) return particle;
     }
-    return this.nearestParticleOnRay(ray, mesh, radius);
+    return this.targets.pickNearestParticle(ray.origin, ray.direction, radius);
   }
 
-  /** First cloth triangle the ray crosses, or null when it misses the garment. */
-  private surfaceHit(ray: THREE.Ray, mesh: THREE.Mesh): THREE.Intersection | null {
-    this.raycaster.set(ray.origin, ray.direction);
-    for (const hit of this.raycaster.intersectObject(mesh, false)) {
-      if ((hit.faceIndex ?? -1) >= 0) return hit;
+  /** Raycasts the cloth surface and returns the owning panel of the first hit triangle. */
+  pickPanelAtScreen(ndcX: number, ndcY: number): string | null {
+    const hit = this.surfaceHit(this.screenRay(ndcX, ndcY));
+    return hit ? this.targets.trianglePanelIds()[hit.triangle] ?? null : null;
+  }
+
+  /** Cloth surface point under a screen position, with the panel and barycentric weights. */
+  pickSurfaceAtScreen(ndcX: number, ndcY: number): ClothSurfacePick | null {
+    const input = this.targets.input();
+    if (!input) return null;
+    const hit = this.surfaceHit(this.screenRay(ndcX, ndcY));
+    if (!hit) return null;
+    const panelId = this.targets.trianglePanelIds()[hit.triangle] ?? null;
+    return {
+      triangle: hit.triangle,
+      panelSlot: panelId ? this.targets.panelIds().indexOf(panelId) : -1,
+      particles: input.indices.subarray(hit.triangle * 3, hit.triangle * 3 + 3) as unknown as [number, number, number],
+      weights: [hit.weights[0], hit.weights[1], hit.weights[2]],
+      local: hit.point,
+      world: hit.point,
+    };
+  }
+
+  /** Scene box the camera frames. */
+  sceneBounds(): Bounds {
+    return this.targets.bounds();
+  }
+
+  /** World units per screen pixel at the ray origin. */
+  private screenWorldScale(origin: Vec3): number {
+    const height = Math.max(1, this.targets.viewportHeight());
+    const camera = this.camera.snapshot();
+    if (camera.projection === 'orthographic') return camera.viewHeightMeters / height;
+    const distance = Math.max(0.001, distanceTo(origin, camera.target));
+    const fov = camera.fovDeg * (Math.PI / 180);
+    return (2 * Math.tan(fov / 2) * distance) / height;
+  }
+
+  /** First cloth triangle the ray crosses, with its barycentric weights. */
+  private surfaceHit(ray: Ray): {
+    triangle: number; distance: number; point: Vec3; weights: [number, number, number];
+  } | null {
+    const input = this.targets.input();
+    if (!input) return null;
+    const positions = input.positions;
+    const indices = input.indices;
+    let best: { triangle: number; distance: number; point: Vec3; weights: [number, number, number] } | null = null;
+    for (let i = 0; i + 2 < indices.length; i += 3) {
+      const a = indices[i]! * 3;
+      const b = indices[i + 1]! * 3;
+      const c = indices[i + 2]! * 3;
+      const hit = intersectTriangle(
+        ray,
+        { x: positions[a]!, y: positions[a + 1]!, z: positions[a + 2]! },
+        { x: positions[b]!, y: positions[b + 1]!, z: positions[b + 2]! },
+        { x: positions[c]!, y: positions[c + 1]!, z: positions[c + 2]! },
+      );
+      if (!hit || (best && hit.distance >= best.distance)) continue;
+      best = {
+        triangle: i / 3,
+        distance: hit.distance,
+        point: {
+          x: ray.origin.x + ray.direction.x * hit.distance,
+          y: ray.origin.y + ray.direction.y * hit.distance,
+          z: ray.origin.z + ray.direction.z * hit.distance,
+        },
+        weights: hit.weights,
+      };
     }
-    return null;
-  }
-
-  /** Distance along the screen ray to the nearest cloth triangle, or null when it misses. */
-  clothDistanceAtScreen(ndcX: number, ndcY: number): number | null {
-    const mesh = this.targets.mesh();
-    const ray = this.screenRay(ndcX, ndcY);
-    if (!mesh || !ray) return null;
-    mesh.updateWorldMatrix(false, false);
-    const hit = this.surfaceHit(ray, mesh);
-    return hit ? hit.distance : null;
+    return best;
   }
 
   /**
@@ -137,142 +138,81 @@ export class ClothPicker {
    * Without a hit there, one of the triangle's own corners carries the PIN.
    */
   private particleAtSurfaceHit(
-    hit: THREE.Intersection, mesh: THREE.Mesh, radius: number,
+    hit: { triangle: number; point: Vec3 }, input: ClothSimInput, radius: number,
   ): ParticlePickHit | null {
-    const triangle = hit.faceIndex ?? -1;
-    const point = mesh.worldToLocal(hit.point.clone());
-    const panelId = this.targets.trianglePanelIds()[triangle] ?? null;
+    const panelId = this.targets.trianglePanelIds()[hit.triangle] ?? null;
     const panelSlot = panelId ? this.targets.panelIds().indexOf(panelId) : -1;
-
-    const picked = this.targets.pickParticleAtPoint(point, radius, panelSlot);
+    const picked = this.targets.pickParticleAtPoint(hit.point, radius, panelSlot);
     if (picked) return picked;
 
-    const corners = this.targets.triangleParticles(triangle);
     const positions = this.targets.particlePositions();
-    if (!corners || !positions) return null;
-
+    if (!positions) return null;
     let index = -1;
     let distance = Infinity;
-    for (const corner of corners) {
-      const d = distanceToParticle(positions, corner, point);
-      if (d < distance) { distance = d; index = corner; }
+    for (let corner = 0; corner < 3; corner++) {
+      const particle = input.indices[hit.triangle * 3 + corner]!;
+      const d = distanceToParticle(positions, particle, hit.point);
+      if (d < distance) { distance = d; index = particle; }
     }
-    if (index < 0) return null;
-    return { index, distance, panelIndex: panelSlot };
-  }
-
-  /** Nearest particle within the screen-scaled tolerance of the ray, ignoring what occludes it. */
-  private nearestParticleOnRay(ray: THREE.Ray, mesh: THREE.Mesh, radius: number): ParticlePickHit | null {
-    const origin = mesh.worldToLocal(ray.origin.clone());
-    const end = mesh.worldToLocal(ray.origin.clone().add(ray.direction));
-    const dir = end.sub(origin).normalize();
-    return this.targets.pickNearestParticle(origin, dir, radius);
-  }
-
-  /** Raycasts the cloth surface and returns the owning panel of the first hit triangle. */
-  pickPanelAtScreen(ndcX: number, ndcY: number): string | null {
-    const mesh = this.targets.mesh();
-    const ray = this.screenRay(ndcX, ndcY);
-    if (!mesh || !ray) return null;
-    mesh.updateWorldMatrix(false, false);
-    const hit = this.surfaceHit(ray, mesh);
-    if (!hit) return null;
-    return this.targets.trianglePanelIds()[hit.faceIndex ?? -1] ?? null;
-  }
-
-  /** Cloth surface point under a screen position, with the panel and barycentric weights it belongs to. */
-  pickSurfaceAtScreen(ndcX: number, ndcY: number): ClothSurfacePick | null {
-    const mesh = this.targets.mesh();
-    const ray = this.screenRay(ndcX, ndcY);
-    if (!mesh || !ray) return null;
-    mesh.updateWorldMatrix(false, false);
-    const hit = this.surfaceHit(ray, mesh);
-    const face = hit?.face;
-    const triangle = hit?.faceIndex ?? -1;
-    if (!hit || !face || triangle < 0) return null;
-
-    const positions = mesh.geometry.getAttribute('position');
-    if (!positions) return null;
-    const local = mesh.worldToLocal(hit.point.clone());
-    const a = cornerOf(positions, face.a);
-    const b = cornerOf(positions, face.b);
-    const c = cornerOf(positions, face.c);
-    const weights = barycentricWeights3D([local.x, local.y, local.z], a, b, c);
-    if (!weights) return null;
-
-    const panelId = this.targets.trianglePanelIds()[triangle] ?? null;
-    return {
-      triangle,
-      panelSlot: panelId ? this.targets.panelIds().indexOf(panelId) : -1,
-      particles: [face.a, face.b, face.c],
-      weights: [weights[0], weights[1], weights[2]],
-      local,
-      world: hit.point.clone(),
-    };
-  }
-
-  /** Moves the camera to a named preset view, framed on the whole scene box. */
-  applyPreset(preset: CameraPreset): void {
-    const frame = CAMERA_VIEW_FRAMES[preset];
-    this.frameScene(frame.direction, frame.up);
-  }
-
-  /** Frames the scene box from the current view direction; keeps orbit direction, resets distance. */
-  frameScene(direction?: THREE.Vector3, up?: THREE.Vector3): void {
-    const renderer = this.renderer;
-    const { camera, controls } = renderer.camera;
-    const box = this.sceneBounds();
-    const center = box.getCenter(new THREE.Vector3());
-    const dir = viewDirection(camera.position, controls.target, direction);
-    const frame = toViewFrame(dir, up ?? camera.up);
-    const aspect = renderer.aspect();
-    const fit = fitCameraToBox(box, frame, renderer.camera.perspectiveCamera.fov, aspect);
-
-    camera.up.copy(frame.up);
-    camera.position.copy(center).add(frame.direction.clone().multiplyScalar(fit.distance));
-    controls.target.copy(center);
-    renderer.camera.orthoViewHeight = fit.viewHeight;
-    renderer.camera.orthographicCamera.zoom = 1;
-    renderer.camera.syncFrustum(aspect);
-    controls.update();
-  }
-
-  private clothBounds(): THREE.Box3 | null {
-    const mesh = this.targets.mesh();
-    if (!mesh) return null;
-    const box = new THREE.Box3().setFromObject(mesh);
-    return box.isEmpty() ? null : box;
+    return index < 0 ? null : { index, distance, panelIndex: panelSlot };
   }
 }
 
-/** Position attribute value of one vertex, as a triple. */
-function cornerOf(
-  positions: THREE.BufferAttribute | THREE.InterleavedBufferAttribute, index: number,
-): [number, number, number] {
-  return [positions.getX(index), positions.getY(index), positions.getZ(index)];
+/** Moller-Trumbore intersection returning the distance and barycentric weights. */
+function intersectTriangle(
+  ray: Ray, p0: Vec3, p1: Vec3, p2: Vec3,
+): { distance: number; weights: [number, number, number] } | null {
+  const edge1 = sub(p1, p0);
+  const edge2 = sub(p2, p0);
+  const h = cross(ray.direction, edge2);
+  const det = dot(edge1, h);
+  if (Math.abs(det) < 1e-9) return null;
+  const invDet = 1 / det;
+  const s = sub(ray.origin, p0);
+  const u = dot(s, h) * invDet;
+  if (u < 0 || u > 1) return null;
+  const q = cross(s, edge1);
+  const v = dot(ray.direction, q) * invDet;
+  if (v < 0 || u + v > 1) return null;
+  const distance = dot(edge2, q) * invDet;
+  if (distance <= 1e-6) return null;
+  const weights = barycentricWeights3D(
+    [ray.origin.x + ray.direction.x * distance, ray.origin.y + ray.direction.y * distance, ray.origin.z + ray.direction.z * distance],
+    [p0.x, p0.y, p0.z], [p1.x, p1.y, p1.z], [p2.x, p2.y, p2.z],
+  );
+  return weights
+    ? { distance, weights: [weights[0], weights[1], weights[2]] }
+    : null;
 }
 
-/** Distance from a flat-xyz particle array entry to a point. */
-function distanceToParticle(positions: Float32Array, index: number, point: THREE.Vector3): number {
+function distanceToParticle(positions: Float32Array, index: number, point: Vec3): number {
   const offset = index * 3;
   if (offset + 2 >= positions.length) return Infinity;
-  return Math.hypot(positions[offset] - point.x, positions[offset + 1] - point.y, positions[offset + 2] - point.z);
+  return Math.hypot(
+    positions[offset]! - point.x,
+    positions[offset + 1]! - point.y,
+    positions[offset + 2]! - point.z,
+  );
 }
 
-/** Direction from the orbit target to the camera, or the supplied override. */
-function viewDirection(position: THREE.Vector3, target: THREE.Vector3, override?: THREE.Vector3): THREE.Vector3 {
-  const dir = (override ?? position.clone().sub(target)).clone().normalize();
-  if (!Number.isFinite(dir.x) || dir.lengthSq() < 1e-6) return CAMERA_VIEW_FRAMES.front.direction.clone();
-  return dir;
+function distanceTo(a: Vec3, b: Vec3): number {
+  return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
 }
 
-/** View frame for an arbitrary direction, substituting an up vector parallel to it. */
-function toViewFrame(direction: THREE.Vector3, up: THREE.Vector3): ViewFrame {
-  let safeUp = up.clone().normalize();
-  if (Math.abs(safeUp.dot(direction)) > 0.999) {
-    safeUp = Math.abs(direction.y) > 0.999
-      ? new THREE.Vector3(0, 0, -Math.sign(direction.y))
-      : new THREE.Vector3(0, 1, 0);
-  }
-  return { direction: direction.clone(), up: safeUp };
+function sub(a: Vec3, b: Vec3): Vec3 {
+  return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z };
 }
+
+function dot(a: Vec3, b: Vec3): number {
+  return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+function cross(a: Vec3, b: Vec3): Vec3 {
+  return {
+    x: a.y * b.z - a.z * b.y,
+    y: a.z * b.x - a.x * b.z,
+    z: a.x * b.y - a.y * b.x,
+  };
+}
+
+export type { CameraState, Ray };

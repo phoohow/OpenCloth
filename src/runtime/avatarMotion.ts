@@ -1,6 +1,5 @@
 import type { AvatarStage } from '@/runtime/avatarStage';
 import { reindexMeshCollider, type MeshCollider, type MeshGridSpec } from '@/avatar/collider';
-import { meshTrianglesFromObject } from '@/runtime/avatarMeshCollider';
 
 /** What the motion driver needs from the engine: one collider sink and one pose-settled hook. */
 export interface AvatarMotionHooks {
@@ -41,7 +40,7 @@ export class AvatarMotion {
 
   /** Names of the clips the current body carries; empty for a static body. */
   clipNames(): string[] {
-    return this.avatar.animationClips.map((clip, i) => clip.name || `动作 ${i + 1}`);
+    return this.avatar.animationClips().map((clip, i) => clip.name || `动作 ${i + 1}`);
   }
 
   /** Playback state, published to the panels. */
@@ -91,13 +90,14 @@ export class AvatarMotion {
 
   /** Re-buckets the posed body triangles into the grid the solver collides against. */
   private refreshCollider(): void {
-    const group = this.avatar.object;
     const spec = this.spec;
     const collider = this.avatar.collider;
-    if (!group || !spec || !collider) return;
-    const triangles = meshTrianglesFromObject(group);
-    if (triangles.length !== collider.mesh?.vertices.length) return;
-    const mesh = reindexMeshCollider(triangles, spec);
+    const handle = this.avatar.handle;
+    if (!spec || !collider || !handle) return;
+    const collision = handle.collision();
+    // A highlight clone adds triangles to the soup, so a changed count means the grid is stale.
+    if (!collision || collision.vertices.length !== collider.mesh?.vertices.length) return;
+    const mesh = reindexMeshCollider(collision.vertices, spec);
     if (!mesh) return;
     collider.mesh = mesh;
     this.hooks.installCollider(mesh);

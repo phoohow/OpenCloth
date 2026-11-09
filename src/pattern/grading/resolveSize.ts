@@ -1,5 +1,5 @@
 import type { Pattern, Vec2 } from '@/model/types';
-import { arcFromThreePoints, evalArc } from '@/common/geom/arc';
+import { arcFromThreePoints, evalArc } from '@/base/geom/arc';
 
 const ZERO: Vec2 = { x: 0, y: 0 };
 const addV = (a: Vec2, b: Vec2): Vec2 => ({ x: a.x + b.x, y: a.y + b.y });

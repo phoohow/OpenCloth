@@ -73,10 +73,8 @@ function bowFactor(pts: { x: number; y: number }[]): number {
 const clamp01 = (v: number): number => Math.max(0, Math.min(1, v));
 
 /**
- * Suggests seam pairings across the pattern: same-or-mirror semantics, similar sampled
- * length, matching chord orientation and curvature. Each edge appears at most once,
- * in the best-scoring candidate. Darts and internal lines never auto-match; the
- * `skipped` counts report what the scan left out.
+ * Suggests seam pairings across the pattern: same-or-mirror semantics, similar sampled length, matching chord
+ * orientation and curvature. Each edge appears at most once, in the best-scoring candidate.
  */
 export function seamCandidates(pattern: Pattern, opts: SeamCandidateOptions = {}): SeamScanResult {
   const minScore = opts.minScore ?? 0.55;

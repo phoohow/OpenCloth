@@ -1,5 +1,5 @@
 import type { Pattern, Print, Topstitch, Trim, Vec2 } from '@/model/types';
-import { computeBBox } from '@/common/geom';
+import { computeBBox } from '@/base/geom';
 import { sampleEdgeInterval, samplePanelOutline } from '@/pattern/panel/panelBuilder';
 
 /** Smallest drawn trim diameter, in cm. */

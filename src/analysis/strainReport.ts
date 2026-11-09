@@ -1,4 +1,4 @@
-import { csvTable } from '@/common/text';
+import { csvTable } from '@/base/text';
 import type { StrainStats } from '@/analysis/strain';
 
 /** Limits of one fabric written into a strain report. */

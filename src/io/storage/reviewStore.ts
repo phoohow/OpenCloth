@@ -1,4 +1,4 @@
-import { genId } from '@/common/id';
+import { genId } from '@/base/id';
 import { deleteRecord, putRecord, readAll, readByIndex, readOne, type IdbSpec } from '@/io/storage/idb';
 import type {
   CloudProjectRecord, ReviewCommentRecord, ReviewEventRecord, ReviewPackage, ReviewRole,

@@ -1,7 +1,7 @@
-import { genId } from '@/common/id';
+import { genId } from '@/base/id';
 import type { Panel, Pattern, Vec2 } from '@/model/types';
 import { createEmptyPattern, DEFAULT_MESH_RESOLUTION_CM } from '@/model';
-import { ensureCCW, polygonArea } from '@/common/geom';
+import { ensureCCW, polygonArea } from '@/base/geom';
 
 /** One imported drawing as point chains, in centimetres; open chains are welded into loops. */
 export interface ImportedGroup {

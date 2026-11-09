@@ -1,5 +1,5 @@
 import type { PomPoint, SizeDef } from '@/model/types';
-import { csvTable, type CsvRow } from '@/common/text';
+import { csvTable, type CsvRow } from '@/base/text';
 import { pomReportRows, type PomCsvUpdate, type PomTable } from '@/pattern/pom';
 
 /** Writes the size-chart matrix: one POM per row, one size per column. */

@@ -4,7 +4,7 @@ import type { EdgeSemantic, EdgeType, Pattern, PatternEdge, Project } from '@/mo
 import { SetArcParamsCommand, SetEdgeAngleCommand, SetEdgeLengthCommand } from '@/commands';
 import type { Command } from '@/commands';
 import { edgeLength } from '@/pattern/geom';
-import { arcSpan } from '@/common/geom/arc';
+import { arcSpan } from '@/base/geom/arc';
 import { patchValue } from '@/ui/sceneCommands';
 import { edgeLabel } from '@/ui/sceneTree';
 import {

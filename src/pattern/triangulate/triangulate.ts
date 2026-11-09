@@ -14,10 +14,10 @@ export interface TriangleMesh {
 const CORNER_ANGLE_RAD = (50 * Math.PI) / 180;
 
 /**
- * Resamples a closed outline to a uniform vertex spacing. Sharp corners keep their original
- * position, and each run between two corners is divided into equal segments, so a panel enters
- * triangulation with boundary vertices of one size instead of a dense curve next to a coarse
- * straight edge or a stub left over at the end of a run.
+ * Resamples a closed outline to a uniform vertex spacing. Sharp corners keep their original position, and
+ * each run between two corners is divided into equal segments, so a panel enters triangulation with boundary
+ * vertices of one size instead of a dense curve next to a coarse straight edge or a stub left over at the end
+ * of a run.
  */
 export function resampleClosedOutline(points: Vec2[], spacing: number): Vec2[] {
   const n = points.length;

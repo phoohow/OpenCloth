@@ -1,6 +1,6 @@
 import type { SimulationConfig, FabricPhysics } from '@/model/types';
 import { DEFAULT_CLOTH_THICKNESS_CM, DEFAULT_LAYER_SPACING_CM } from '@/model';
-import { cmToM } from '@/common/units';
+import { cmToM } from '@/base/units';
 
 /** Velocity clamp applied by the integrate and update passes, in meters per second. */
 const MAX_SPEED = 6;

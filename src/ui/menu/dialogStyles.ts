@@ -1,12 +1,9 @@
 import type { CSSProperties } from 'react';
 
 /**
- * Style atoms shared by the three dialog bodies in this folder (素材库 / 版本与审版 / 外部对接).
- * They all render into the same menu popover, so the frame, the tab strip and the button family
- * have to look identical; only paddings and column layouts differ per dialog and stay local.
- *
- * Colours are deliberately literal here: these panels sit on the menu popover surface, not on the
- * app background, so the design tokens for panels do not apply.
+ * Style atoms shared by the three dialog bodies in this folder (素材库 / 版本与审版 / 外部对接). They all render into the
+ * same menu popover, so the frame, the tab strip and the button family have to look identical; only paddings
+ * and column layouts differ per dialog and stay local.
  */
 
 /** Column frame filling the popover. */

@@ -1,5 +1,5 @@
 import type { AvatarParams, BodyLandmark } from '@/model/types';
-import { cmToM } from '@/common/units';
+import { cmToM } from '@/base/units';
 
 /** Half width and half depth of an elliptical body cross-section, in meters. */
 export interface BodyEllipse {

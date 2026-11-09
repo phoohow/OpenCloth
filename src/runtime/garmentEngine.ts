@@ -1,15 +1,18 @@
-import * as THREE from 'three/webgpu';
 import type { Project, SimulationConfig, FabricPhysics, ObjectTransform, Vec3, CameraProjection, ReferenceObjectRef, EditPreviewTier, SkinAppearance } from '@/model/types';
 import { fabricForPanel } from '@/model';
 import { particleThicknessMeters } from '@/model';
 import type { ParticlePickHit } from '@/sim';
-import type { Renderer } from '@/render';
+import type { Bounds } from '@/render/common';
+import type { DevicePort } from '@/render/common';
 import type { CachedFrame } from '@/sim';
-import type { CameraPreset } from '@/runtime/clothPicker';
+import type { CameraPreset } from '@/runtime/cameraFit';
 import { ClothAssembly } from '@/runtime/clothAssembly';
 import { BuildPipeline } from '@/runtime/buildPipeline';
 import { SolverHost } from '@/runtime/solverHost';
-import { ClothView } from '@/runtime/clothView';
+import { ClothPresenter } from '@/runtime/presenters/clothPresenter';
+import { StagePresenter } from '@/runtime/presenters/stagePresenter';
+import { AnalysisPresenter } from '@/runtime/presenters/analysisPresenter';
+import type { PresenterHost } from '@/runtime/presenters/host';
 import { AvatarView } from '@/runtime/avatarView';
 import { CameraRig, type CameraState } from '@/runtime/cameraRig';
 import { InteractionView } from '@/runtime/interactionView';
@@ -20,7 +23,6 @@ import { EnvironmentStage } from '@/runtime/environmentStage';
 import { ReferenceStage, type ReferenceObject } from '@/runtime/referenceStage';
 import { OverlayKit } from '@/runtime/overlayKit';
 import { DressingController } from '@/runtime/dressingController';
-import { AnalysisController } from '@/runtime/analysisController';
 import type { AvatarMotionInfo } from '@/runtime/avatarMotion';
 import { timeAsync } from '@/runtime/engineTiming';
 import { FALLBACK_PHYSICS } from '@/runtime/clothConstants';
@@ -50,21 +52,30 @@ export class GarmentEngine {
 
   /** Body, its motion clips and soft deformation. */
   private readonly avatarView: AvatarView;
-  /** Fit, strain and pressure channels, sharing one heatmap overlay. */
-  private readonly analysis: AnalysisController;
-  /** Drawn garment: mesh, materials, visibility groups and print textures. */
-  private readonly clothView: ClothView;
+  /** Fit, strain and pressure channels, sharing one scalar field. */
+  private readonly analysis: AnalysisPresenter;
+  /** Drawn garment: mesh, materials and the field stream. */
+  private readonly clothView: ClothPresenter;
+  /** Stage floor and reference grid. */
+  private readonly stage: StagePresenter;
   /** Picking, dragging, sketching, measuring, pins and the panel highlight. */
   private readonly interactionView: InteractionView;
   /** Viewport camera: presets, projection and the saved placement. */
   private readonly camera: CameraRig;
 
-  constructor(private rendererCtx: Renderer) {
+  constructor(
+    private readonly host: PresenterHost,
+    private readonly sceneBounds: () => Bounds,
+    private readonly gpuDevice: DevicePort,
+    private readonly viewportSize: () => { width: number; height: number },
+  ) {
+    this.stage = new StagePresenter(host);
+    this.stage.create();
     this.build = new BuildPipeline(this.assembly, {
       clear: () => this.clearCloth(),
       prepare: async project => {
         await this.avatarView.build(project);
-        await this.references.ensure(project.scene.referenceObjects ?? [], this.rendererCtx.scene.slot('references'));
+        await this.references.ensure(host, project.scene.referenceObjects ?? []);
       },
       unrepaint: () => this.removeClothSurface(),
       repaint: project => this.createRenderMesh(project),
@@ -77,7 +88,7 @@ export class GarmentEngine {
       previewMerged: (drawn, input, live) => this.solver.adoptPreview(drawn, input, live),
     });
     this.solver = new SolverHost({
-      device: () => this.rendererCtx.gpuProvider(),
+      device: () => this.gpuDevice,
       build: this.build,
       collider: () => this.avatarView.collider,
       carriedPins: count => this.interactionView.carriedPinIndices(count),
@@ -87,35 +98,29 @@ export class GarmentEngine {
       presentRest: positions => this.presentRest(positions),
     });
     this.avatarView = new AvatarView({
-      slot: rendererCtx.scene.slot('avatar'),
+      host,
       contact: () => this.solver.contact,
       clothInput: () => this.build.input,
       updateCollider: vertices => this.solver.updateColliderVertices(vertices),
       installCollider: mesh => this.solver.refreshCollider(mesh),
     });
-    this.analysis = new AnalysisController({
+    this.clothView = new ClothPresenter({
+      host,
+      input: () => this.build.input,
+      panelMeshes: () => this.build.panelMeshes,
+      refreshPhysics: project => this.refreshClothPhysics(project),
+    });
+    this.analysis = new AnalysisPresenter({
+      cloth: () => this.clothView,
       lastGoodPositions: () => this.solver.positions,
       initialPositions: () => this.build.positions,
       restPositions: () => this.build.restPositions,
       clothInput: () => this.build.input,
       collider: () => this.avatarView.collider,
       contact: () => this.solver.contact,
-      revealCloth: visible => this.revealCloth(visible),
     });
-    this.clothView = new ClothView({
-      slot: rendererCtx.scene.slot('cloth'),
-      input: () => this.build.input,
-      panelMeshes: () => this.build.panelMeshes,
-      refreshPhysics: project => this.refreshClothPhysics(project),
-    });
-    this.overlays = new OverlayKit({
-      seams: rendererCtx.scene.slot('seams'),
-      topstitch: rendererCtx.scene.slot('topstitch'),
-      trims: rendererCtx.scene.slot('trims'),
-      sketch: rendererCtx.scene.slot('sketch'),
-      measure: rendererCtx.scene.slot('measure'),
-    });
-    this.environment = new EnvironmentStage(rendererCtx);
+    this.overlays = new OverlayKit(host);
+    this.environment = new EnvironmentStage();
     this.dressing = new DressingController({
       simulator: () => this.solver.simulator,
       simReady: () => this.solver.isReady,
@@ -126,27 +131,23 @@ export class GarmentEngine {
       dressTargets: () => this.build.dressingTargets,
     });
     this.interactionView = new InteractionView({
-      slot: rendererCtx.scene.slot('selection'),
-      pinSlot: rendererCtx.scene.slot('pins'),
-      markerSlot: rendererCtx.scene.slot('dragMarker'),
-      renderer: rendererCtx,
+      host,
+      camera: host.camera,
       overlays: this.overlays,
-      avatar: this.avatarView.stage,
+      avatarVisible: () => this.avatarView.objectVisible(),
+      collider: () => this.avatarView.collider,
       input: () => this.build.input,
-      mesh: () => this.clothView.mesh,
       trianglePanelIds: () => this.assembly.trianglePanelIds,
-      simReady: () => this.solver.isReady,
       simulator: () => this.solver.simulator,
+      simReady: () => this.solver.isReady,
       positions: () => this.clothParticlePositions(),
-      geometry: () => this.clothView.geometry,
+      surface: () => this.clothView.surfaceData(),
       overlayTriangles: ids => this.assembly.overlayTriangles(ids),
       hasTriangles: id => (this.assembly.panelTriangles.get(id)?.length ?? 0) > 0,
-      frameObjects: () => this.frameObjects(),
+      bounds: this.sceneBounds,
+      viewport: this.viewportSize,
     });
-    this.camera = new CameraRig(rendererCtx, {
-      applyPreset: preset => this.interactionView.targets.applyPreset(preset),
-      frameScene: () => this.interactionView.targets.frameScene(),
-    });
+    this.camera = new CameraRig({ host: host.camera, bounds: this.sceneBounds });
   }
 
   /** Positions the solver last reported on the CPU, falling back to the initial layout. */
@@ -273,23 +274,22 @@ export class GarmentEngine {
   /** Builds the merged cloth render mesh, then the overlays that ride on it. */
   private createRenderMesh(project: Project): void {
     this.clothView.create(project);
-    const surface = this.clothView.clothSurface;
-    if (surface) {
-      this.analysis.attach(surface);
-      this.analysis.resetTimers();
-    } else {
-      this.analysis.detach();
-    }
+    this.analysis.resetTimers();
     this.overlays.reset();
     this.applySeamStitchVisibility(project);
     this.applyTopstitchThreads(project);
     this.applyTrimInstances(project);
   }
 
-  /** Drops the shared cloth surface and lets go of its heatmap layer. */
+  /** Drops the shared cloth surface and its field. */
   private removeClothSurface(): void {
     this.clothView.remove();
-    this.analysis.detach();
+    this.analysis.resetFlags();
+  }
+
+  /** Display override of the active analysis channel, or null while none is on. */
+  analysisOverride() {
+    return this.analysis.override();
   }
 
   /** Draws only the panels marked visible; hidden panels keep simulating. */
@@ -327,10 +327,9 @@ export class GarmentEngine {
     return this.analysis.refreshPressure(maxKpa, force);
   }
 
-  /** Hides the cloth, its threads and its trims while a heatmap stands in for them. */
-  private revealCloth(visible: boolean): void {
+  /** Hides the thread and trim overlays while a heatmap stands in for the cloth. */
+  revealCloth(visible: boolean): void {
     this.overlays.setVisible(visible);
-    this.clothView.setVisible(visible);
   }
 
   /**
@@ -602,15 +601,6 @@ export class GarmentEngine {
     this.camera.setState(state);
   }
 
-  /** Objects the camera framing counts: the body and every loaded reference model. */
-  private frameObjects(): THREE.Object3D[] {
-    const objects: THREE.Object3D[] = [];
-    const avatar = this.avatarView.object;
-    if (avatar) objects.push(avatar);
-    for (const reference of this.references.list()) objects.push(reference.group);
-    return objects;
-  }
-
   /** Places the avatar at its stored scene transform. */
   applyAvatarTransform(avatar: { transform?: ObjectTransform }): void {
     this.avatarView.applyTransform(avatar);
@@ -628,12 +618,12 @@ export class GarmentEngine {
 
   /** Keeps the scene's reference meshes in sync with the project's reference list. */
   async reconcileReferences(project: Project): Promise<void> {
-    await this.references.reconcile(project.scene.referenceObjects ?? [], this.rendererCtx.scene.slot('references'));
+    await this.references.reconcile(this.host, project.scene.referenceObjects ?? []);
   }
 
   /** Stores a model file and adds it to the scene; the returned record belongs in the project list. */
   async importReferenceObject(file: File, id: string): Promise<ReferenceObjectRef> {
-    return this.references.importFile(file, id, this.rendererCtx.scene.slot('references'));
+    return this.references.importFile(this.host, file, id);
   }
 
   /** Reference objects currently in the scene. */
@@ -656,7 +646,7 @@ export class GarmentEngine {
 
   /** Applies the project's environment image as the scene backdrop and lighting source. */
   async applyEnvironment(project: Project): Promise<void> {
-    await this.environment.apply(project.scene.lights);
+    await this.environment.apply(this.host, project.scene.lights);
   }
   /** Removes and disposes the cloth meshes, seam threads, simulator and dressing run. */
   private clearCloth(): void {
@@ -675,8 +665,9 @@ export class GarmentEngine {
     this.interactionView.dispose();
     this.avatarView.setHighlighted(false);
     this.clearCloth();
-    this.references.clear(this.rendererCtx.scene.slot('references'));
+    this.references.clear(this.host);
     this.avatarView.detach();
-    this.environment.release();
+    this.stage.dispose();
+    this.environment.release(this.host);
   }
 }

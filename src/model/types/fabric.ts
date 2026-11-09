@@ -5,7 +5,6 @@
 
 import type { Vec2 } from '@/model/types/geometry';
 
-// ============ Fabric ============
 
 /** Built-in fabric presets a new material starts from. */
 export type FabricPresetKey = 'cotton' | 'silk' | 'denim' | 'knit';

@@ -16,14 +16,13 @@ import {
   SelectRow, SliderRow, SlotRow, SmallButton, ValueButton,
 } from '@/ui/widgets/propertyRows';
 import { samplePanelOutline } from '@/pattern/panel';
-import { computeBBox } from '@/common/geom';
+import { computeBBox } from '@/base/geom';
 import {
   KNIT_STITCHES, KNIT_STITCH_LABELS, knitChartCsv, knitNeedleCount, knitOf, knitRowCount,
   type KnitStitch,
 } from '@/model';
-import { knitTextureDataUrl } from '@/render';
+import { knitTextureDataUrl } from '@/runtime';
 
-// ===== Material tab ("材质") =====
 
 /** Texture slots of the appearance block. */
 const MAP_SLOT_LABELS: Record<FabricMapSlot, string> = {
@@ -239,7 +238,6 @@ export function MaterialTab({ project, panelId, engineRef }: {
   );
 }
 
-// ===== Avatar material tab ("材质") =====
 
 /** Dropdown value standing for a colour that matches no preset. */
 const CUSTOM_TONE = 'custom';

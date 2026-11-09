@@ -1,4 +1,4 @@
-import { csvTable } from '@/common/text';
+import { csvTable } from '@/base/text';
 import type { PressureStats } from '@/analysis/pressure';
 
 /** Scale and wording of one pressure report. */

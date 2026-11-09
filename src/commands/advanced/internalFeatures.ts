@@ -1,4 +1,4 @@
-import { genId } from '@/common/id';
+import { genId } from '@/base/id';
 import type { ProjectContext } from '@/commands/command';
 import type { InternalLine, Pattern, Vec2 } from '@/model/types';
 import { PatternTopology } from '@/model';
@@ -7,8 +7,8 @@ import { SnapshotCommand } from '@/commands/patternSnapshot';
 import { addClosedLineOutline, makePanel, placeRight } from '@/commands/patternCreateCommands';
 import { samplePanelOutline } from '@/pattern/panel';
 import { sampleEdge } from '@/pattern/geom';
-import { add, computeBBox, ensureCCW } from '@/common/geom';
-import { hasSelfIntersection, offsetPolyline } from '@/common/geom/offset';
+import { add, computeBBox, ensureCCW } from '@/base/geom';
+import { hasSelfIntersection, offsetPolyline } from '@/base/geom/offset';
 import { insidePolygon } from '@/commands/patternStructureCommands';
 import { insideOrOnRing, loopRing } from '@/commands/advanced/shared';
 

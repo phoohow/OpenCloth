@@ -1,4 +1,4 @@
-import { timeAsync as measure } from '@/common/time';
+import { timeAsync as measure } from '@/base/time';
 
 /** True while serving unbuilt sources; timing logs stay behind this gate. */
 const DEV = import.meta.env.DEV;

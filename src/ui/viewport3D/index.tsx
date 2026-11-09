@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Renderer, detectWebGPU } from '@/render';
-import { GarmentEngine } from '@/runtime';
+import type { Viewport } from '@/runtime';
+import { useRenderHost, type RenderSession } from '@/ui/viewport3D/renderHost';
 import { useProjectStore, useSimStore, useUIStore, usePerfStore, isSplitLayout, type ViewLayout, type ToolType } from '@/store';
-import { EngineSync, liveRenderConfig, recoverWithRaster, syncSelectionOverlay } from '@/ui/viewport3D/engineSync';
+import { EngineSync, fallBackToRaster, syncSelectionOverlay } from '@/ui/viewport3D/engineSync';
 import { useClothPicking } from '@/ui/viewport3D/useClothPicking';
 import { ViewportHint } from '@/ui/widgets/viewportHint';
 import { rayTraceStateLabel } from '@/ui/optionTables';
@@ -12,7 +12,7 @@ import { MOBILE_VIEWPORT_HINT, isMobileUi } from '@/ui/mobile/mobileUi';
 const MOBILE_HINT_RIGHT = 72;
 
 interface Viewport3DProps {
-  onEngineReady?: (engine: GarmentEngine, renderer: Renderer) => void;
+  onEngineReady?: (engine: Viewport['engine'], viewport: Viewport) => void;
 }
 
 /** Gestures the current layout allows. */
@@ -39,10 +39,11 @@ const statusHint = (layout: ViewLayout, tool: ToolType): string => {
 export function Viewport3D({ onEngineReady }: Viewport3DProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const rendererRef = useRef<Renderer | null>(null);
-  const engineRef = useRef<GarmentEngine | null>(null);
+  const viewportRef = useRef<Viewport | null>(null);
+  const engineRef = useRef<Viewport['engine'] | null>(null);
   const errorRef = useRef<string | null>(null);
   const [renderError, setRenderError] = useState<string | null>(null);
+  const renderHost = useRenderHost();
 
   const backend = useUIStore(s => s.backend);
   const wire = useUIStore(s => s.wire);
@@ -56,50 +57,53 @@ export function Viewport3D({ onEngineReady }: Viewport3DProps) {
   useEffect(() => {
     let cancelled = false;
     let sync: EngineSync | null = null;
+    let resizeObserver: ResizeObserver | null = null;
+    let session: RenderSession | null = null;
 
     async function init() {
       const canvas = canvasRef.current;
       const container = containerRef.current;
       if (!canvas || !container) return;
 
-      const supported = await detectWebGPU();
-      if (!supported) {
+      canvas.width = Math.max(1, container.clientWidth);
+      canvas.height = Math.max(1, container.clientHeight);
+
+      const initial = useProjectStore.getState().project;
+      session = await renderHost(canvas, {
+        onDenoiseFailure: message => useUIStore.getState().showToast(message),
+        onDeviceLost: reason => setRenderError(`GPU 上下文丢失：${reason}`),
+        onTraceFailure: capability => fallBackToRaster(
+          { failure: capability.failure ?? 'setup-failed', detail: capability.detail },
+          setRenderError,
+        ),
+      });
+      if (!session) {
         errorRef.current = 'WebGPU 不支持';
         const errEl = document.getElementById('webgpu-error');
         if (errEl) errEl.style.display = 'block';
         return;
       }
-
-      canvas.width = Math.max(1, container.clientWidth);
-      canvas.height = Math.max(1, container.clientHeight);
-
-      const initial = useProjectStore.getState().project;
-      const renderConfig = liveRenderConfig(initial);
-      const renderer = await Renderer.create({
-        canvas,
-        config: renderConfig,
-        onDenoiseFailure: message => useUIStore.getState().showToast(message),
-      });
       if (cancelled) {
-        // StrictMode's second mount owns the canvas now; release the abandoned renderer.
-        renderer.dispose();
+        // StrictMode's second mount owns the canvas now; release the abandoned stack.
+        session.dispose();
+        session = null;
         return;
       }
-      rendererRef.current = renderer;
-      renderer.setToneMapping(initial.scene.render.toneMapping);
-      renderer.applyLights(initial.scene.lights);
-
-      const engine = new GarmentEngine(renderer);
+      const viewport = session.viewport;
+      viewportRef.current = viewport;
+      const engine = viewport.engine;
       engineRef.current = engine;
-      await engine.applyEnvironment(initial);
+      viewport.resize(Math.max(1, container.clientWidth), Math.max(1, container.clientHeight));
+      viewport.applyProject(initial);
+      await viewport.applyEnvironment(initial);
 
       await engine.buildFromProject(initial);
       await engine.initSimulator(initial);
       if (cancelled) {
         // The cleanup that cancelled this init ran before these refs existed.
-        engine.dispose();
-        renderer.dispose();
-        rendererRef.current = null;
+        session.dispose();
+        session = null;
+        viewportRef.current = null;
         engineRef.current = null;
         return;
       }
@@ -114,38 +118,31 @@ export function Viewport3D({ onEngineReady }: Viewport3DProps) {
       else engine.setCameraPreset('front');
       syncSelectionOverlay(engine, initial.pattern, useUIStore.getState().selection);
       useSimStore.getState().bumpPins();
-      try {
-        await renderer.applyRenderConfig(liveRenderConfig(initial));
-      } catch (error) {
-        if (!cancelled) recoverWithRaster(renderer, error, setRenderError);
-      }
-
-      onEngineReady?.(engine, renderer);
+      onEngineReady?.(engine, viewport);
 
       // Store sync and the frame loop live in the controller from here on.
-      sync = new EngineSync(engine, renderer, setRenderError, initial);
+      sync = new EngineSync(viewport, setRenderError, initial);
 
       // Resize handling
-      const ro = new ResizeObserver(() => {
-        if (!container || !rendererRef.current) return;
+      resizeObserver = new ResizeObserver(() => {
+        if (!container || !viewportRef.current) return;
         const w = container.clientWidth, h = container.clientHeight;
         if (w === 0 || h === 0) return;
-        canvas!.width = w; canvas!.height = h;
-        rendererRef.current.resize(w, h);
+        viewportRef.current.resize(w, h);
       });
-      ro.observe(container);
-      renderer.resizeObserver = ro;
+      resizeObserver.observe(container);
     }
 
     init();
 
     return () => {
       cancelled = true;
+      resizeObserver?.disconnect();
       sync?.dispose();
-      engineRef.current?.dispose();
-      rendererRef.current?.dispose();
+      session?.dispose();
+      session = null;
+      viewportRef.current = null;
       engineRef.current = null;
-      rendererRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

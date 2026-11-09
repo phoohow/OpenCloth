@@ -471,10 +471,10 @@ export function pickPlacementFeedback(
 }
 
 /**
- * Drag affordance of a press at `target` in the select tool, in the pick order of the click
- * handler: control handle, vertex, internal-line vertex, notch or annotation, print corner,
- * production symbol, edge, inner mark, panel. Only objects whose drag would really start report a
- * role, so a locked panel or a selectable-but-fixed mark reports none.
+ * Drag affordance of a press at `target` in the select tool, in the pick order of the click handler: control
+ * handle, vertex, internal-line vertex, notch or annotation, print corner, production symbol, edge, inner
+ * mark, panel. Only objects whose drag would really start report a role, so a locked panel or a
+ * selectable-but-fixed mark reports none.
  */
 export function pickPressRole(
   pattern: Pattern, outlines: ReadonlyMap<string, Vec2[]>, selection: readonly string[],

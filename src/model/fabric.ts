@@ -1,4 +1,4 @@
-import { genId } from '@/common/id';
+import { genId } from '@/base/id';
 import type { Fabric, Panel, Print, Project } from '@/model/types';
 
 /** Material record behind a panel; null when its reference dangles. */

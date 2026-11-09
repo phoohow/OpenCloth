@@ -1,4 +1,4 @@
-import { genId } from '@/common/id';
+import { genId } from '@/base/id';
 import type { ProjectContext } from '@/commands/command';
 import type { Pattern } from '@/model/types';
 import { PatternTopology } from '@/model';
@@ -6,7 +6,7 @@ import { PatternTopology } from '@/model';
 import { SnapshotCommand } from '@/commands/patternSnapshot';
 import { prunePattern } from '@/commands/patternStructureCommands';
 import { sampleOutline } from '@/pattern/panel';
-import { hasSelfIntersection } from '@/common/geom/offset';
+import { hasSelfIntersection } from '@/base/geom/offset';
 import { refitArcs } from '@/commands/patternMoveGeometry';
 import {
   assignClosedChains, closedChains, incidentOutlineEdges, outlineEdgesOfPoint, panelsOwningAny,

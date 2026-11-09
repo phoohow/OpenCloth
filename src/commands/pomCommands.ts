@@ -1,4 +1,4 @@
-import { genId } from '@/common/id';
+import { genId } from '@/base/id';
 import type { Command, ProjectContext } from '@/commands/command';
 import type { Pattern, PomPoint, PomRefs, PomKind } from '@/model/types';
 

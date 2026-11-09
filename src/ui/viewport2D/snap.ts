@@ -1,5 +1,5 @@
 import type { ArcGeom, Pattern, PatternEdge, Vec2 } from '@/model/types';
-import { arcSpan } from '@/common/geom/arc';
+import { arcSpan } from '@/base/geom/arc';
 import { sampleEdge } from '@/pattern/panel';
 
 /** Kinds of snap candidate, ordered by pick priority. */
@@ -16,10 +16,9 @@ export interface SnapCandidate {
 }
 
 /**
- * Head start each kind gets, as a fraction of the snap radius. A vertex pulled this far still wins
- * over the perpendicular foot under the cursor, which is what keeps corners, midpoints and
- * crossings pickable: by distance alone the foot always wins, since it is the nearest point of the
- * edge the cursor is next to.
+ * Head start each kind gets, as a fraction of the snap radius. A vertex pulled this far still wins over the
+ * perpendicular foot under the cursor, which is what keeps corners, midpoints and crossings pickable: by
+ * distance alone the foot always wins, since it is the nearest point of the edge the cursor is next to.
  */
 const KIND_PULL: Record<SnapKind, number> = {
   endpoint: 0.6, intersection: 0.5, midpoint: 0.35, tangent: 0.3,

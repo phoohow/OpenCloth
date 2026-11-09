@@ -1,4 +1,4 @@
-import { downloadBlob } from '@/common/platform';
+import { downloadBlob } from '@/base/platform';
 
 /** Recording targets tried in preference order. */
 const MIME_CANDIDATES = ['video/webm;codecs=vp9', 'video/webm', 'video/webm;codecs=vp8'];

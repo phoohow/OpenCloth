@@ -10,13 +10,7 @@ export interface RenderPreset {
   readonly backend: RenderBackend;
 }
 
-/**
- * Display modes, in picker order.
- *
- * Internally the viewport tracks fill and backend separately, and the wire overlay separately
- * again; the picker only ever shows these named combinations so the UI stays one control per
- * idea. Wire is not a display mode — it composes with any of them.
- */
+/** Display modes, in picker order. */
 export const RENDER_PRESETS: readonly RenderPreset[] = [
   { id: 'shaded', label: '实体', fill: 'physical', backend: 'raster' },
   { id: 'raytraced', label: '光线追踪', fill: 'physical', backend: 'pathtrace' },

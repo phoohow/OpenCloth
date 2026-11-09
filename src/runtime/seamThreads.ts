@@ -1,27 +1,57 @@
-import { distance3At as distance } from '@/common/math';
-import * as THREE from 'three/webgpu';
+/** Thread overlay drawn between paired seam edges; it dims as a seam closes. */
+
+import { distance3At as distance } from '@/base/math';
 import type { Seam } from '@/model/types';
+import { CHANNEL_RASTER } from '@/render/world';
+import type { EntityId, MaterialId, MeshId, WorldWriter } from '@/render/world';
+import type { PresenterHost } from '@/runtime/presenters/host';
 import type { SeamPair } from '@/runtime/seamPair';
-import type { SceneSlot } from '@/render';
+
+/** Linear rgb triplet of a thread color. */
+type Rgb = readonly [number, number, number];
 
 /** Thread overlay drawn between paired seam edges; it dims as a seam closes. */
 export class SeamThreads {
-  private lines: THREE.LineSegments | null = null;
+  private writer: WorldWriter | null = null;
+  private meshId: MeshId | null = null;
+  private materialId: MaterialId | null = null;
+  private entityId: EntityId | null = null;
+  private positions = new Float32Array(0);
+  private colors = new Float32Array(0);
   private seams: Record<string, Seam> = {};
-  /** Thread color of each seam, in the renderer's working color space. */
-  private colors = new Map<string, THREE.Color>();
+  /** Linear thread color of each seam. */
+  private palette = new Map<string, Rgb>();
 
-  /** Builds one line segment per seam pair and adds it to the scene. */
-  attach(scene: SceneSlot, pairs: SeamPair[], positions: Float32Array, seams: Record<string, Seam>): void {
-    this.detach(scene);
+  /** Builds one line segment per seam pair and writes the thread entity. */
+  attach(
+    host: PresenterHost, pairs: SeamPair[], positions: Float32Array, seams: Record<string, Seam>,
+  ): void {
+    this.detach(host);
     if (pairs.length === 0) return;
-    const material = new THREE.LineBasicMaterial({
-      vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+    const writer = host.writer;
+    this.writer = writer;
+    this.positions = new Float32Array(pairs.length * 6);
+    this.colors = new Float32Array(pairs.length * 6);
+    this.meshId = writer.createMesh({
+      topology: 'line',
+      streams: { position: this.positions, color: this.colors },
     });
-    this.lines = new THREE.LineSegments(threadGeometry(pairs.length), material);
-    this.lines.renderOrder = 3;
-    this.lines.name = 'seamThreads';
-    scene.add(this.lines);
+    this.materialId = writer.createMaterial({
+      kind: 'line',
+      name: 'seamThreads',
+      vertexColors: true,
+      blending: 'additive',
+      depthWrite: false,
+      side: 'double',
+    });
+    this.entityId = writer.createEntity({
+      layer: 'overlay',
+      tags: ['seamThreads'],
+      mesh: { kind: 'mesh', id: this.meshId },
+      materials: [{ kind: 'material', id: this.materialId }],
+      channels: CHANNEL_RASTER,
+    });
+    host.bind('seam', this.entityId);
     this.setSeams(seams);
     this.update(pairs, positions);
   }
@@ -29,64 +59,74 @@ export class SeamThreads {
   /** Sets the seam records whose thread color and visibility the overlay draws. */
   setSeams(seams: Record<string, Seam>): void {
     this.seams = seams;
-    this.colors = new Map(
-      Object.values(seams).map(seam => [seam.id, new THREE.Color(seam.threadColor)]),
+    this.palette = new Map(
+      Object.values(seams).map(seam => [seam.id, hexToLinear(seam.threadColor)]),
     );
   }
 
   /** Moves the threads to the given positions and dims each one as its seam closes. */
   update(pairs: SeamPair[], positions: Float32Array): void {
-    if (!this.lines) return;
-    // The pair set changes when a dart closes, so the buffers are rebuilt rather than overrun.
-    if (this.lines.geometry.getAttribute('position').count !== pairs.length * 2) {
-      this.lines.geometry.dispose();
-      this.lines.geometry = threadGeometry(pairs.length);
+    const writer = this.writer;
+    if (writer === null || this.meshId === null) return;
+    // The pair set changes when a dart closes, so the buffers are resized rather than overrun.
+    if (this.positions.length !== pairs.length * 6) {
+      this.positions = new Float32Array(pairs.length * 6);
+      this.colors = new Float32Array(pairs.length * 6);
     }
-    const pos = this.lines.geometry.getAttribute('position') as THREE.BufferAttribute;
-    const col = this.lines.geometry.getAttribute('color') as THREE.BufferAttribute;
-    const arr = pos.array as Float32Array;
-    const carr = col.array as Float32Array;
     for (let i = 0; i < pairs.length; i++) {
       const { p0, p1, open, seamId } = pairs[i];
-      const o = i * 6;
-      arr[o] = positions[p0 * 3]; arr[o + 1] = positions[p0 * 3 + 1]; arr[o + 2] = positions[p0 * 3 + 2];
-      arr[o + 3] = positions[p1 * 3]; arr[o + 4] = positions[p1 * 3 + 1]; arr[o + 5] = positions[p1 * 3 + 2];
+      const offset = i * 6;
+      this.positions[offset] = positions[p0 * 3];
+      this.positions[offset + 1] = positions[p0 * 3 + 1];
+      this.positions[offset + 2] = positions[p0 * 3 + 2];
+      this.positions[offset + 3] = positions[p1 * 3];
+      this.positions[offset + 4] = positions[p1 * 3 + 1];
+      this.positions[offset + 5] = positions[p1 * 3 + 2];
       const shown = this.seams[seamId]?.stitchVisible !== false;
       const level = shown ? fadeLevel(distance(positions, p0, p1), open) : 0;
-      const color = this.colors.get(seamId) ?? THREAD_FALLBACK;
+      const color = this.palette.get(seamId) ?? THREAD_FALLBACK;
       for (let vertex = 0; vertex < 2; vertex++) {
-        carr[o + vertex * 3] = color.r * level;
-        carr[o + vertex * 3 + 1] = color.g * level;
-        carr[o + vertex * 3 + 2] = color.b * level;
+        this.colors[offset + vertex * 3] = color[0] * level;
+        this.colors[offset + vertex * 3 + 1] = color[1] * level;
+        this.colors[offset + vertex * 3 + 2] = color[2] * level;
       }
     }
-    pos.needsUpdate = true;
-    col.needsUpdate = true;
+    writer.updateMesh(this.meshId, { streams: { position: this.positions, color: this.colors } });
   }
 
-  /** Removes the overlay from the scene and frees its buffers. */
-  detach(scene: SceneSlot): void {
-    if (!this.lines) return;
-    scene.remove(this.lines);
-    this.lines.geometry.dispose();
-    (this.lines.material as THREE.Material).dispose();
-    this.lines = null;
+  /** Removes the thread entity from the world and frees its buffers. */
+  detach(host: PresenterHost): void {
+    const writer = host.writer;
+    if (this.entityId !== null) {
+      host.unbind(this.entityId);
+      writer.destroyEntity(this.entityId);
+    }
+    if (this.meshId !== null) writer.destroyMesh(this.meshId);
+    if (this.materialId !== null) writer.destroyMaterial(this.materialId);
+    this.entityId = null;
+    this.meshId = null;
+    this.materialId = null;
+    this.writer = null;
+    this.positions = new Float32Array(0);
+    this.colors = new Float32Array(0);
   }
-}
-
-/** Position and color buffers sized for one segment per seam pair. */
-function threadGeometry(pairCount: number): THREE.BufferGeometry {
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pairCount * 6), 3));
-  geometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(pairCount * 6), 3));
-  return geometry;
 }
 
 /** Thread color used when a pair's seam record is gone. */
-const THREAD_FALLBACK = new THREE.Color('#5cd9ff');
+const THREAD_FALLBACK: Rgb = hexToLinear('#5cd9ff');
 
 /** Bright while open, fading to black (invisible under additive blending) near closure. */
 function fadeLevel(gap: number, open: number): number {
   return Math.min(1, gap / Math.max(open * 0.3, 0.01));
 }
 
+/** Linear rgb of a hex color, matching the color space vertex colors are read in. */
+function hexToLinear(hex: string): Rgb {
+  const value = Number.parseInt(hex.replace('#', ''), 16);
+  return [channel((value >> 16) & 0xff), channel((value >> 8) & 0xff), channel(value & 0xff)];
+}
+
+function channel(value: number): number {
+  const srgb = value / 255;
+  return srgb <= 0.04045 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4;
+}

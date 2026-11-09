@@ -1,6 +1,6 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { Icon } from '@/ui/icons';
-import { clamp as clampValue } from '@/common/math';
+import { clamp as clampValue } from '@/base/math';
 
 /** Collapsible titled group of property rows, like a Blender panel. */
 export function Section({ title, children, defaultOpen = true }: {

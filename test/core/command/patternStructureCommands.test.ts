@@ -10,7 +10,7 @@ import {
   AddPointOnEdgeCommand, DeleteElementsCommand,
 } from '@/commands/patternCommands';
 import { ctxOf, addSquare } from './fixtures';
-import { computeBBox } from '@/common/geom';
+import { computeBBox } from '@/base/geom';
 import { pointAtT, samplePanelOutline } from '@/pattern/panel/panelBuilder';
 import { elementNodeId } from '@/model/elementRef';
 

@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import type { Vec2, Vec3 } from '@/model/types';
-import { clamp as clampValue } from '@/common/math';
+import { clamp as clampValue } from '@/base/math';
 
 const AXIS_COLOR = { X: '#e06c5e', Y: '#78c860', Z: '#5f8fd3' } as const;
 

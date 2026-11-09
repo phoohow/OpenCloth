@@ -1,4 +1,4 @@
-import { genId } from '@/common/id';
+import { genId } from '@/base/id';
 import type { ProjectContext } from '@/commands/command';
 import type { Pattern, Vec2 } from '@/model/types';
 
@@ -7,8 +7,8 @@ import { newEdge, newPoint } from '@/commands/patternCreateCommands';
 import { prunePattern } from '@/commands/patternStructureCommands';
 import { edgeLength, pointAtT } from '@/pattern/geom';
 import { sampleOutline, samplePanelOutline } from '@/pattern/panel';
-import { computeBBox, add, normalize, scale, sub } from '@/common/geom';
-import { hasSelfIntersection } from '@/common/geom/offset';
+import { computeBBox, add, normalize, scale, sub } from '@/base/geom';
+import { hasSelfIntersection } from '@/base/geom/offset';
 import { jointCornerIds, seamJoint, type SeamJointEnd } from '@/pattern/seam';
 import { applyFillets } from '@/commands/patternEditCommands';
 import { inwardDepth, inwardDirection, splitLineEdge } from '@/commands/advanced/shared';

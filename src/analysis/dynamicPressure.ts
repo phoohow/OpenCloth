@@ -1,4 +1,4 @@
-import { csvTable, type CsvRow } from '@/common/text';
+import { csvTable, type CsvRow } from '@/base/text';
 import type { PressureStats } from '@/analysis/pressure';
 
 /** Samples kept per dynamic-fit run; older frames are dropped past this cap. */

@@ -1,6 +1,6 @@
 import type { Panel, Pattern, Project } from '@/model/types';
 import { TRIM_KIND_LABELS } from '@/model';
-import { csvTable, type CsvRow } from '@/common/text';
+import { csvTable, type CsvRow } from '@/base/text';
 import { panelOutlineWithAllowance, sampleOutline, samplePanelOutline } from '@/pattern/panel/panelBuilder';
 import { polygonArea } from '@/pattern/marker/markerReport';
 import { edgeIntervalLength } from '@/pattern/geom/edgeSample';

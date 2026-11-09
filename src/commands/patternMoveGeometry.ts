@@ -1,5 +1,5 @@
 import type { ArcGeom, EdgeType, Panel, Pattern, Vec2 } from '@/model/types';
-import { arcFromThreePoints, evalArc } from '@/common/geom/arc';
+import { arcFromThreePoints, evalArc } from '@/base/geom/arc';
 import { panelCutBounds } from '@/pattern/panel';
 
 /** Coincidence tolerance in cm for treating two positions as the same spot. */

@@ -1,7 +1,7 @@
 import type { MeshSampling, Pattern, Panel, SeamAllowanceCorner, Vec2 } from '@/model/types';
 import { DEFAULT_MESH_RESOLUTION_CM } from '@/model';
-import { hasSelfIntersection, offsetOutlinePerEdge, offsetPolygonStyled, safeOffsetPolygon } from '@/common/geom';
-import { computeBBox, ensureCCW } from '@/common/geom';
+import { hasSelfIntersection, offsetOutlinePerEdge, offsetPolygonStyled, safeOffsetPolygon } from '@/base/geom';
+import { computeBBox, ensureCCW } from '@/base/geom';
 import { extractBoundaryEdges, resampleClosedOutline, type TriangleMesh } from '@/pattern/triangulate/triangulate';
 import { remeshPolygon } from '@/pattern/triangulate/remesh';
 import { sampleEdge } from '@/pattern/geom/edgeSample';
@@ -143,10 +143,9 @@ export function buildPanelMesh(
 }
 
 /**
- * Cutting outline of a panel: the sampled outline offset by the seam allowance of each edge,
- * joined at every corner by that corner's style (miter / round / bevel). With no per-edge
- * override this is the plain miter offset; an offset that self-intersects falls back to
- * shifting each sample along its own normal.
+ * Cutting outline of a panel: the sampled outline offset by the seam allowance of each edge, joined at every
+ * corner by that corner's style (miter / round / bevel). With no per-edge override this is the plain miter
+ * offset; an offset that self-intersects falls back to shifting each sample along its own normal.
  */
 export function panelOutlineWithAllowance(pattern: Pattern, panel: Panel): Vec2[] {
   const ccw = samplePanelOutline(pattern, panel);

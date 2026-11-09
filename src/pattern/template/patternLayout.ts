@@ -1,7 +1,7 @@
 import type { Panel, Pattern, Vec2 } from '@/model/types';
 import { vec2 } from '@/model/types';
 import { samplePanelOutline } from '@/pattern/panel/panelBuilder';
-import { computeBBox } from '@/common/geom';
+import { computeBBox } from '@/base/geom';
 
 /** Shifts a panel's outline points, their curve handles and arc centers. */
 export function offsetPanel(pattern: Pattern, panel: Panel, dx: number, dy: number): void {

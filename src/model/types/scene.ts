@@ -8,7 +8,6 @@ import type { RenderConfig, SimulationConfig, CameraConfig } from '@/model/schem
 
 export * from '@/model/schema/sceneSettings';
 
-// ============ Scene ============
 
 /** Light kinds the viewport can render. */
 export type LightType = 'directional' | 'point' | 'spot' | 'area';

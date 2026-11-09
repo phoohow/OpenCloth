@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { detectFormat } from '@/io/importers/modelLoader';
+import { detectFormat } from '@/render/backend/assets/modelLoader';
 
 const bytes = (text: string) => new TextEncoder().encode(text);
 

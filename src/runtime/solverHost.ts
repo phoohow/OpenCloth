@@ -1,5 +1,5 @@
 import type { FabricPhysics, Project, SimulationConfig } from '@/model/types';
-import type { GpuDeviceProvider } from '@/common/ports';
+import type { DevicePort } from '@/render/common';
 import type { AvatarCollider } from '@/avatar/collider';
 import { ClothSimulator } from '@/sim';
 import type { ClothSimInput } from '@/sim';
@@ -12,7 +12,7 @@ import type { BuildPipeline } from '@/runtime/buildPipeline';
 /** What the solver announces to the rest of the runtime. */
 export interface SolverHostDeps {
   /** Device the solver is built on; read lazily so the renderer may come up first. */
-  device: () => GpuDeviceProvider;
+  device: () => DevicePort;
   /** Merged input and layout identity the solver follows. */
   build: BuildPipeline;
   /** Body collision surface the solver collides the cloth with. */
@@ -30,10 +30,9 @@ export interface SolverHostDeps {
 }
 
 /**
- * Owns the GPU solver and everything that is only meaningful next to one: the frames it
- * produced, the layout it was set up for and the body it collides with. It reads the merged
- * input from the build pipeline and tells the views what to draw; nothing calls back into it
- * except its owner.
+ * Owns the GPU solver and everything that is only meaningful next to one: the frames it produced, the layout
+ * it was set up for and the body it collides with. It reads the merged input from the build pipeline and
+ * tells the views what to draw; nothing calls back into it except its owner.
  */
 export class SolverHost {
   private live: ClothSimulator | null = null;

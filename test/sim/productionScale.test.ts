@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { genId } from '@/common/id';
+import { genId } from '@/base/id';
 import { createEmptyPattern, DEFAULT_MESH_RESOLUTION_CM } from '@/model/defaults';
 import type { Panel, Pattern, Vec2 } from '@/model/types';
 import { buildPanelMesh } from '@/pattern/panel/panelBuilder';

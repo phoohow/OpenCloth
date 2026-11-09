@@ -10,13 +10,9 @@ const OCCLUSION_STEPS = 12;
 const MIN_STEP_M = 0.002;
 
 /**
- * True when the body sits between the camera and a cloth point, so the cloth is hidden and must not
- * answer hover gestures. The walk stops just short of the cloth because cloth rests a few
- * millimetres off the skin; `signedDistance` is negative inside the body. `direction` must be unit
- * length.
- *
- * Each step advances by the clearance it reads, as a sphere trace does: a clear stretch is crossed
- * in one step, and a limb thinner than the step spacing cannot be skipped over.
+ * True when the body sits between the camera and a cloth point, so the cloth is hidden and must not answer
+ * hover gestures. The walk stops just short of the cloth because cloth rests a few millimetres off the skin;
+ * `signedDistance` is negative inside the body.
  */
 export function bodyOccludesSegment(
   signedDistance: (x: number, y: number, z: number) => number,

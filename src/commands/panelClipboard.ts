@@ -1,4 +1,4 @@
-import { genId } from '@/common/id';
+import { genId } from '@/base/id';
 import type { Command, ProjectContext } from '@/commands/command';
 import type {
   Annotation, Dart, InternalLine, Measurement, Notch, Panel, Pattern, PatternEdge, PatternPoint, Seam, Vec2,

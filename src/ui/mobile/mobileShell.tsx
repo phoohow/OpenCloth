@@ -9,13 +9,13 @@ import { rayTraceStateLabel } from '@/ui/optionTables';
 import { formatElapsed } from '@/ui/timeFormat';
 import type { MenuActions } from '@/ui/menu/actions';
 import type { GarmentEngine } from '@/runtime';
-import type { Renderer } from '@/render';
+import type { Viewport } from '@/runtime';
 
 /** Phone layout: one full-bleed 3D pane between a top bar and the action dock. */
 export function MobileShell({ actions, engineRef, onEngineReady, ready }: {
   actions: MenuActions;
   engineRef: MutableRefObject<GarmentEngine | null>;
-  onEngineReady: (engine: GarmentEngine, renderer: Renderer) => void;
+  onEngineReady: (engine: GarmentEngine, viewport: Viewport) => void;
   ready: boolean;
 }) {
   const [sheet, setSheet] = useState<MobileSheetId>(null);
@@ -49,7 +49,7 @@ export function MobileShell({ actions, engineRef, onEngineReady, ready }: {
   );
 }
 
-/** Project name, the simulation readouts and the 菜单 entry. */
+/** Project name, the simulation readouts and the menu entry. */
 function TopBar({ onOpenMenu, onOpenProps }: { onOpenMenu: () => void; onOpenProps: () => void }) {
   const projectName = useProjectStore(s => s.project.meta.name);
   const maxSamples = useProjectStore(s => normalizeRayTracing(s.project.scene.render.rayTracing).maxSamples);

@@ -1,6 +1,6 @@
 import type { Pattern, Vec2 } from '@/model/types';
 import { panelGrainLine, panelOutlineWithAllowance, sampleOutline, samplePanelOutline } from '@/pattern/panel';
-import { computeBBox } from '@/common/geom';
+import { computeBBox } from '@/base/geom';
 import { pointAtT, sampleEdge } from '@/pattern/geom';
 import {
   buildMarkerLayout, placePoint, placedLabel, placedOutline,

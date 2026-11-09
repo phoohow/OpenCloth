@@ -1,5 +1,5 @@
-import { csvTable } from '@/common/text';
-import { polygonArea } from '@/common/geom';
+import { csvTable } from '@/base/text';
+import { polygonArea } from '@/base/geom';
 import type { MarkerLayout, MarkerPlacement } from '@/pattern/marker/markerLayout';
 
 /** Cost input for a marker report; prices are per running metre of fabric. */

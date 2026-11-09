@@ -3,8 +3,8 @@ import type { Pattern, PatternEdge, PatternPoint } from '@/model/types';
 import { SnapshotCommand } from '@/commands/patternSnapshot';
 import { edgeLength } from '@/pattern/geom';
 import { prunePattern } from '@/commands/patternStructureCommands';
-import { dot, distance, normalize, sub } from '@/common/geom';
-import { arcSpan, evalArc } from '@/common/geom/arc';
+import { dot, distance, normalize, sub } from '@/base/geom';
+import { arcSpan, evalArc } from '@/base/geom/arc';
 import { refitArcs } from '@/commands/patternMoveGeometry';
 import {
   assertOwningPanelsSimple, chainFractions, dropUnusedHandles, edgeArrays, handleExclusive, interiorPointIds,

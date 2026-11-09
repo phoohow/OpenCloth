@@ -155,7 +155,6 @@ export class ClothSimulator {
     const pc = this.particleCount;
     const dev = this.device;
 
-    // ---- Per-panel material state ----
     this.simInput = input;
     this.constraintDt = config.dt;
     this.tornSeams.clear();
@@ -169,7 +168,6 @@ export class ClothSimulator {
     this.grabWeights = new Float32Array(pc);
     this.grabWeightBuf = createStorageBuffer(dev, this.grabWeights);
 
-    // ---- Particle buffers ----
     const posData = new Float32Array(pc * 4);
     for (let i = 0; i < pc; i++) {
       posData[i * 4] = input.positions[i * 3];
@@ -199,10 +197,8 @@ export class ClothSimulator {
 
     this.uploadIndices(input.indices);
 
-    // ---- Constraint build and coloring ----
     const built = buildPanelConstraints(input, this.panelPhysics, config.dt);
 
-    // ---- Body collider: mesh triangles when the model provides them, capsules otherwise ----
     this.meshBuffers = {
       triangle: createStorageBuffer(dev, new Float32Array(4)),
       cellStart: createStorageBuffer(dev, new Uint32Array(2)),
@@ -224,7 +220,6 @@ export class ClothSimulator {
       this.collideBody = { ...this.collideBody, capsuleCount: 0, triangleCount: 0 };
     }
 
-    // ---- Uniform buffers ----
     this.integrateParamsBuf = createUniformBuffer(dev, 80);
     this.collideParamsBuf = createUniformBuffer(dev, 64);
     this.updateParamsBuf = createUniformBuffer(dev, 32);
@@ -252,7 +247,6 @@ export class ClothSimulator {
     this.installGroup('seam', input.seamConstraints);
     this.seamOpenLengths = this.group('seam').batched.batches.map(batch => batch.map(c => c.restLength));
 
-    // ---- Readback buffers ----
     this.readbackBuf = dev.createBuffer({
       size: pc * 16, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
     });

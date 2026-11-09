@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { vec2 } from '@/model/types';
-import { adaptiveSampleArc, arcFromThreePoints, arcSpan, evalArc } from '@/common/geom';
+import { adaptiveSampleArc, arcFromThreePoints, arcSpan, evalArc } from '@/base/geom';
 
 describe('arcFromThreePoints', () => {
   it('marks a counter-clockwise sweep when the middle point runs that way', () => {

@@ -1,4 +1,4 @@
-import { genId } from '@/common/id';
+import { genId } from '@/base/id';
 import type { ProjectContext } from '@/commands/command';
 import type { Pattern, Seam, SeamEnd, SeamType } from '@/model/types';
 

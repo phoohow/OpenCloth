@@ -1,5 +1,5 @@
 /** Timestamps formatted for the recent-project rows and the autosave status text. */
-export { formatSavedAt, formatClockTime } from '@/common/text';
+export { formatSavedAt, formatClockTime } from '@/base/text';
 
 /** Elapsed time as seconds, switching to minutes and seconds past one minute. */
 export function formatElapsed(ms: number): string {

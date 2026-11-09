@@ -1,4 +1,4 @@
-import { csvTable } from '@/common/text';
+import { csvTable } from '@/base/text';
 import type { FitStats, FitThresholds } from '@/analysis/fit';
 
 /** Builds a two-column CSV summary of one fit check, ready for a spreadsheet. */

@@ -2,7 +2,7 @@ import type { Vec2 } from '@/model/types';
 import { panelOutlineWithAllowance, sampleEdge, type PanelMesh } from '@/pattern/panel';
 import { buildRegistry } from '@/pattern/panel';
 import { edgeCurve } from '@/pattern/geom';
-import { computeBBox } from '@/common/geom';
+import { computeBBox } from '@/base/geom';
 import { idsOfKind } from '@/model';
 import { NEAR, type DisplayOptions, type SceneState } from '@/ui/viewport2D/renderTypes';
 
