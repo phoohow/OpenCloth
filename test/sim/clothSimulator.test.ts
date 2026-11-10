@@ -90,6 +90,39 @@ describe('cloth simulator position cache', () => {
     expect(hit?.index).toBe(2);
   });
 
+  it('writes live positions into the merged input array', async () => {
+    const input = makeInput();
+    const { sim } = await setupSimulator(input);
+    // Picking, the render mesh and the overlays read the array the solver writes back into.
+    expect(sim.getReadbackPositions()).toBe(input.positions);
+    sim.setPositions(new Float32Array([
+      0.2, 0.3, 0.4,
+      0.5, 0.6, 0.7,
+      0.8, 0.9, 1.0,
+      1.1, 1.2, 1.3,
+    ]));
+    expect(input.positions[0]).toBeCloseTo(0.2);
+    expect(input.positions[1]).toBeCloseTo(0.3);
+    expect(input.positions[11]).toBeCloseTo(1.3);
+  });
+
+  it('follows a rebase onto a new input array', async () => {
+    const { sim } = await setupSimulator(makeInput());
+    const rebased = makeInput();
+    const live = new Float32Array([
+      2.0, 0, 0,
+      2.2, 0, 0,
+      2.4, 0, 0,
+      2.6, 0, 0,
+    ]);
+    sim.rebaseGeometry(rebased, rebased.positions, live);
+
+    // The rebased layout owns the array the mesh and picking now read.
+    expect(sim.getReadbackPositions()).toBe(rebased.positions);
+    expect(rebased.positions[0]).toBeCloseTo(2.0);
+    expect(rebased.positions[9]).toBeCloseTo(2.6);
+  });
+
   it('follows a reset to new initial positions', async () => {
     const { sim } = await setupSimulator(makeInput());
     sim.reset(new Float32Array([

@@ -26,7 +26,7 @@ export class ClothAssembly {
   input: ClothSimInput | null = null;
   /** Panels and their slices, in merge order. */
   layout: ParticleLayout = ParticleLayout.of([], 0);
-  /** Initial (unsewn) merged particle positions in meters, shared with the render mesh. */
+  /** Initial (unsewn) merged particle positions in meters; `input.positions` is the live copy. */
   positions: Float32Array = new Float32Array(0);
   /** Wrapped positions with every seam pair collapsed onto one point; the dressing glide aims here. */
   dressPositions: Float32Array = new Float32Array(0);
@@ -113,7 +113,8 @@ export class ClothAssembly {
     this.dressPositions = sewnTargets(wrapped, this.seamPairs);
 
     this.input = {
-      positions: initial,
+      // Separate array so the solver's live readback never overwrites the initial layout.
+      positions: initial.slice(),
       indices,
       panels,
       seamConstraints,

@@ -91,7 +91,7 @@ export class SolverHost {
   adoptPreview(drawn: ClothSimInput, input: ClothSimInput, live: Float32Array): void {
     if (!this.live || !this.ready) return;
     if (this.fingerprint(drawn) !== this.fingerprint(input)) return;
-    this.live.rebaseGeometry(input, input.positions, live);
+    this.live.rebaseGeometry(input, this.deps.build.positions, live);
     this.appliedLayout = this.fingerprint(input);
   }
 

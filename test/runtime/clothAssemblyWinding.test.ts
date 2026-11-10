@@ -53,6 +53,25 @@ describe('drapeReversesWinding', () => {
   });
 });
 
+describe('merged cloth positions', () => {
+  it('keeps the initial layout out of the solver live array', () => {
+    const project = createStarterProject();
+    const meshes = new Map<string, PanelMesh>();
+    for (const panelId of Object.keys(project.pattern.panels)) {
+      const mesh = buildPanelMesh(project.pattern, panelId);
+      if (mesh) meshes.set(panelId, mesh);
+    }
+    const assembly = new ClothAssembly();
+    const input = assembly.build(project, meshes, new BodyLandmarkCache())!;
+
+    // The solver writes into the input array; the initial layout has to stay restorable.
+    expect(input.positions).not.toBe(assembly.positions);
+    expect(input.positions).toEqual(assembly.positions);
+    input.positions[0] = 99;
+    expect(assembly.positions[0]).not.toBe(99);
+  });
+});
+
 describe('merged cloth winding', () => {
   it('turns every stitched side the same way in the sewn pose', () => {
     const project = createStarterProject();

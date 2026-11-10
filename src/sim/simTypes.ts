@@ -16,7 +16,11 @@ const FABRIC_DEFAULT_MASS_PER_AREA = 180;
 
 /** Merged geometry and constraints of all pattern pieces handed to the GPU solver. */
 export interface ClothSimInput {
-  /** Merged initial 3D positions across all pattern pieces, flat [x,y,z,...], in meters. */
+  /**
+   * Merged 3D particle positions across all pattern pieces, flat [x,y,z,...], in meters. Starts at
+   * the initial layout; the solver reads back into this array, so the render mesh, picking and
+   * highlights all see the live positions.
+   */
   positions: Float32Array;
   /** Merged triangle indices. */
   indices: Uint32Array;

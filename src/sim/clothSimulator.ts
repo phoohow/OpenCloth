@@ -33,8 +33,9 @@ export type { ClothSimInput } from '@/sim/simTypes';
 
 /**
  * GPU PBD cloth simulator running compute shaders on the viewport's GPUDevice and reading
- * positions back each frame to update the render mesh. Runtime particle pinning and CPU ray
- * picking work against the latest readback.
+ * positions back each frame into the merged input's live position array, which the render mesh,
+ * picking and highlights share. Runtime particle pinning and CPU ray picking work against the
+ * latest readback.
  */
 export class ClothSimulator {
   constructor(private device: GPUDevice) { }
@@ -105,6 +106,7 @@ export class ClothSimulator {
   private readbackBuf!: GPUBuffer;
   private readbackNormalsBuf!: GPUBuffer;
   private readbackContactBuf!: GPUBuffer;
+  /** Latest CPU positions; aliases the merged input's live position array. */
   private readPositions!: Float32Array;
   private readNormals!: Float32Array;
   private readContact!: Float32Array;
@@ -257,7 +259,7 @@ export class ClothSimulator {
     this.readbackContactBuf = dev.createBuffer({
       size: Math.max(pc * 4, 4), usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
     });
-    this.readPositions = new Float32Array(pc * 3);
+    this.readPositions = input.positions;
     this.readNormals = new Float32Array(pc * 3);
     this.readContact = new Float32Array(pc);
     this.cachePositions(input.positions);
@@ -330,9 +332,6 @@ export class ClothSimulator {
    * the solver from the first frame instead of waiting for a GPU readback.
    */
   private cachePositions(positions: Float32Array): void {
-    if (this.readPositions.length !== this.particleCount * 3) {
-      this.readPositions = new Float32Array(this.particleCount * 3);
-    }
     this.readPositions.set(positions.subarray(0, this.readPositions.length));
     this.positionsVersion++;
   }
@@ -764,6 +763,8 @@ export class ClothSimulator {
       xyz[i * 3 + 1] = data[i * 4 + 1]!;
       xyz[i * 3 + 2] = data[i * 4 + 2]!;
     }
+    // The rebased layout replaces the previous merged input, so the cache follows its array.
+    this.readPositions = input.positions;
     this.cachePositions(xyz);
     this.time = 0;
   }

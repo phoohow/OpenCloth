@@ -47,6 +47,8 @@ export class ClothPresenter {
   private pendingKeys = new Set<string>();
   /** Scalar heatmap stream, one value per merged particle. */
   private field: Float32Array | null = null;
+  /** Positions the mesh currently draws, shared with the overlays. */
+  private positions: Float32Array | null = null;
   private normals: Float32Array | null = null;
   private uvs: Float32Array | null = null;
 
@@ -67,6 +69,7 @@ export class ClothPresenter {
     this.remove();
     const writer = this.deps.host.writer;
     this.field = new Float32Array(input.particleCount);
+    this.positions = input.positions;
     this.normals = computeVertexNormals(input.positions, input.indices);
     this.uvs = mergedUVs(this.deps.panelMeshes(), input.particleCount);
     this.meshId = writer.createMesh({
@@ -108,6 +111,7 @@ export class ClothPresenter {
     this.slotKeys = [];
     this.groups = [];
     this.field = null;
+    this.positions = null;
     this.normals = null;
     this.uvs = null;
   }
@@ -115,6 +119,7 @@ export class ClothPresenter {
   /** Pushes simulated positions and normals into the mesh streams. */
   updateFromSim(positions: Float32Array, normals: Float32Array): void {
     if (this.meshId === null) return;
+    this.positions = positions;
     this.normals = normals;
     this.deps.host.writer.updateMesh(this.meshId, { streams: { position: positions, normal: normals } });
   }
@@ -123,6 +128,7 @@ export class ClothPresenter {
   resetTo(positions: Float32Array): void {
     const input = this.deps.input();
     if (this.meshId === null || !input) return;
+    this.positions = positions;
     this.normals = computeVertexNormals(positions, input.indices);
     this.deps.host.writer.updateMesh(this.meshId, {
       streams: { position: positions, normal: this.normals },
@@ -143,11 +149,10 @@ export class ClothPresenter {
     this.deps.host.writer.updateMesh(this.meshId, { streams: { field: this.field } });
   }
 
-  /** Normals and positions of the current mesh, for overlays that share its surface. */
+  /** Positions and normals of the surface the mesh currently draws, for overlays that share it. */
   surfaceData(): { positions: Float32Array; normals: Float32Array; uv: Float32Array } | null {
-    const input = this.deps.input();
-    if (!input || !this.normals || !this.uvs) return null;
-    return { positions: input.positions, normals: this.normals, uv: this.uvs };
+    if (!this.positions || !this.normals || !this.uvs) return null;
+    return { positions: this.positions, normals: this.normals, uv: this.uvs };
   }
 
   /** Re-applies the material records to the built mesh; never rebuilds geometry. */
