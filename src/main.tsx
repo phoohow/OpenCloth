@@ -4,15 +4,44 @@ import { App } from '@/ui/app';
 import { uiMode } from '@/ui/mobile/mobileUi';
 import { installPublicApi } from '@/api/openclothApi';
 import { detectWebGPU } from '@/render/common';
-import { createBackend } from '@/render/backend';
+import { createBackend, type Backend } from '@/render/backend';
+import { createPreviewer, createRenderer, type Previewer } from '@/render/renderer';
 import { createRenderWorld } from '@/render/world';
-import { createRenderer } from '@/render/renderer';
 import { createViewport } from '@/runtime';
 import { RenderHostContext, type RenderHostFactory } from '@/ui/viewport3D/renderHost';
+import { registerAssetPreviews } from '@/ui/assets/assetPreviews';
 import './index.css';
 
 // Published before the first paint so the CSS control metrics match the shell about to render.
 document.documentElement.dataset.uiMode = uiMode();
+
+// Catalogue previews run on their own backend and their own pipeline, built on first request.
+interface PreviewSession {
+  readonly pipeline: Previewer;
+  readonly backend: Backend;
+}
+
+let previews: Promise<PreviewSession | null> | null = null;
+function previewPipeline(): Promise<Previewer | null> {
+  previews ??= createBackend(document.createElement('canvas'))
+    .then(backend => ({ backend, pipeline: createPreviewer({ backend }) }))
+    .catch(() => null);
+  return previews.then(session => session?.pipeline ?? null);
+}
+
+registerAssetPreviews({
+  model: async url => (await previewPipeline())?.model(url) ?? null,
+  environment: async url => (await previewPipeline())?.environment(url) ?? null,
+});
+
+// The preview device lasts as long as the document; the entry holds it and releases it last.
+window.addEventListener('pagehide', () => {
+  void previews?.then(session => {
+    if (!session) return;
+    session.pipeline.dispose();
+    session.backend.dispose();
+  });
+});
 
 // Automation facade for PLM scripts; replaces any previous API object.
 installPublicApi();

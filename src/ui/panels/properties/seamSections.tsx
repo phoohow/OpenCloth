@@ -8,7 +8,6 @@ import { seamPanelNames } from '@/ui/sceneTree';
 import {
   CheckRow, ColorRow, Hint, Row, Section, SelectRow, SliderRow,
 } from '@/ui/widgets/propertyRows';
-import { styles } from '@/ui/panels/properties/styles';
 
 export function SeamData({ project, nodeId }: { project: Project; nodeId: string }) {
   const seamId = seamObjectId(nodeId);
@@ -70,12 +69,10 @@ export function SeamData({ project, nodeId }: { project: Project; nodeId: string
           </>
         )}
         <ColorRow label="线色" value={seam.threadColor} onChange={v => setSeam('修改线色', { threadColor: v })} />
-        <div style={styles.note}>区间、对位点与缝型改动都只重排约束，顶点布局不变时不重建布料、不重置模拟；缩缝比例改写该缝的静止长度。对位点需甲乙两侧同时给定才会参与配对。画布上每条缝按序号配色并标注同一个数字，改线色后改用所设颜色。</div>
       </Section>
       <Section title="接角">
         <JointRow project={project} seamId={seamId} end="start" />
         <JointRow project={project} seamId={seamId} end="end" />
-        <div style={styles.note}>数值是缝合后从接角伸出的两条轮廓边之间的夹角：180° 表示两片在这处顺直接过去，小于则这里折出一个角，两片互相压住时标「重叠」。显示层的「拼接预览」画出缝合后的形状，圆顺在「结构」菜单里做。</div>
       </Section>
     </>
   );

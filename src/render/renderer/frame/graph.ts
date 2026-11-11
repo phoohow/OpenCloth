@@ -1,46 +1,64 @@
-/** Fixed-order execution of the renderer's passes. */
+/** Fixed-order execution of passes, shared by the viewport frame and the preview still. */
 
 import { frameProfiler } from '@/base/perf';
-import type { FrameConditions, RenderPass, ResourceId } from '@/render/renderer/frame/pass';
+import type {
+  FrameConditions, GraphStep, PassSlot, RenderPass,
+} from '@/render/renderer/frame/pass';
 
-const SLOT_ORDER: readonly string[] = [
+const SLOT_ORDER: readonly PassSlot[] = [
   'raster', 'trace', 'denoise', 'composite', 'post', 'heatmap', 'wire', 'overlay', 'present',
 ];
 
-/** Runs every enabled pass in slot order, checking resource reads against what earlier passes wrote. */
-export class FrameGraph {
-  private readonly passes: RenderPass[];
+/** Runs steps in slot order, checking every read against what earlier steps wrote. */
+export class PassGraph<Slot extends string, Step extends GraphStep<Slot>> {
+  private readonly steps: Step[];
+  /** Buffers every frame starts with, such as the canvas and the accumulating radiance. */
+  private readonly resident: readonly string[];
 
-  constructor(passes: readonly RenderPass[]) {
-    this.passes = [...passes].sort(
-      (a, b) => SLOT_ORDER.indexOf(a.slot) - SLOT_ORDER.indexOf(b.slot),
-    );
+  constructor(steps: readonly Step[], slots: readonly Slot[], resident: readonly string[] = []) {
+    this.steps = [...steps].sort((a, b) => slots.indexOf(a.slot) - slots.indexOf(b.slot));
+    this.resident = resident;
   }
 
-  /** Executes the enabled passes and returns the ids that ran. */
-  execute(
-    conditions: FrameConditions,
-    run: (pass: RenderPass) => void,
-  ): readonly string[] {
-    // The canvas is the external input; radiance is a resident buffer kept across frames.
-    const available = new Set<ResourceId>(['surface', 'radiance']);
+  /** Executes the enabled steps in slot order and returns the ids that ran. */
+  execute(run: (step: Step) => void, enabled: (step: Step) => boolean = () => true): readonly string[] {
+    const available = new Set<string>(this.resident);
     const ran: string[] = [];
-    for (const pass of this.passes) {
-      if (!pass.enabled(conditions)) continue;
-      for (const resource of pass.reads) {
+    for (const step of this.steps) {
+      if (!enabled(step)) continue;
+      for (const resource of step.reads) {
         if (!available.has(resource)) {
-          throw new Error(`Pass "${pass.id}" reads "${resource}" before any pass writes it`);
+          throw new Error(`Pass "${step.id}" reads "${resource}" before any pass writes it`);
         }
       }
-      frameProfiler.span(`pass:${pass.id}`, () => run(pass));
-      for (const resource of pass.writes) available.add(resource);
-      ran.push(pass.id);
+      frameProfiler.span(`pass:${step.id}`, () => run(step));
+      for (const resource of step.writes) available.add(resource);
+      ran.push(step.id);
     }
     return ran;
   }
 
+  /** Frees resources the steps own. */
+  dispose(): void {
+    for (const step of this.steps) step.dispose?.();
+  }
+}
+
+/** The viewport's graph: the fixed slots of one rendered frame. */
+export class FrameGraph {
+  private readonly graph: PassGraph<PassSlot, RenderPass>;
+
+  constructor(passes: readonly RenderPass[]) {
+    this.graph = new PassGraph(passes, SLOT_ORDER, ['surface', 'radiance']);
+  }
+
+  /** Executes the enabled passes and returns the ids that ran. */
+  execute(conditions: FrameConditions, run: (pass: RenderPass) => void): readonly string[] {
+    return this.graph.execute(run, pass => pass.enabled(conditions));
+  }
+
   /** Frees resources the passes own. */
   dispose(): void {
-    for (const pass of this.passes) pass.dispose?.();
+    this.graph.dispose();
   }
 }

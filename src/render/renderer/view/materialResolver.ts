@@ -7,6 +7,7 @@ import { CHANNEL_RASTER, CHANNEL_TRACE } from '@/render/common';
 import type { DrawStage, MaterialVariant, RenderView } from '@/render/renderer/view/types';
 import { techniqueOf } from '@/render/renderer/view/types';
 import type { RenderEntity, WorldView } from '@/render/world';
+import { LAYERS } from '@/render/world';
 
 /** Base, trace and wire variants of one entity. */
 export interface ResolvedMaterials {
@@ -28,6 +29,7 @@ export function resolveMaterials(
   const subject = isSubjectSurface(entity);
   const raster = (entity.channels & CHANNEL_RASTER) !== 0;
   const traceable = (entity.channels & CHANNEL_TRACE) !== 0;
+  const builtIn = builtInAssetVariant(entity);
   const wireMode = view.settings.wire;
   const wire = raster && subject && wireMode !== 'off'
     ? wireVariant(view.settings, wireMode === 'only')
@@ -35,7 +37,7 @@ export function resolveMaterials(
   if (raster && subject && wireMode === 'only') {
     return {
       base: [],
-      trace: traceable ? traceVariants(entity, world) : [],
+      trace: traceable ? traceVariants(entity, world, builtIn) : [],
       wire,
       stage: stageOf(entity),
     };
@@ -43,7 +45,8 @@ export function resolveMaterials(
 
   const override = matchingOverride(entity, view);
   const base: MaterialVariant[] = [];
-  const trace = traceable ? traceVariants(entity, world) : [];
+  if (raster && builtIn) base.push(builtIn);
+  const trace = traceable ? traceVariants(entity, world, builtIn) : [];
   for (const ref of raster ? entity.materials : []) {
     const material = ref.kind === 'material' ? world.material(ref.id) : null;
     if (!material) {
@@ -82,15 +85,33 @@ export function resolveMaterials(
   };
 }
 
+/** Built-in material slot of an asset entity whose material refs are empty; null otherwise. */
+function builtInAssetVariant(entity: RenderEntity): MaterialVariant | null {
+  if (entity.mesh.kind !== 'asset') return null;
+  if (entity.materials.some(ref => ref.kind === 'asset')) return null;
+  return {
+    technique: 'asset',
+    data: { kind: 'surface' },
+    source: { kind: 'asset', key: entity.mesh.key, slot: 0 },
+  };
+}
+
 /** Surface variants the path tracer sees; display overrides never reach them. */
-function traceVariants(entity: RenderEntity, world: WorldView): readonly MaterialVariant[] {
+function traceVariants(
+  entity: RenderEntity, world: WorldView, builtIn: MaterialVariant | null,
+): readonly MaterialVariant[] {
   const out: MaterialVariant[] = [];
   for (const ref of entity.materials) {
-    if (ref.kind !== 'material') continue;
+    if (ref.kind === 'asset') {
+      // An asset carries its own materials; the slot travels on the ref.
+      out.push({ technique: 'asset', data: { kind: 'surface' }, source: ref });
+      continue;
+    }
     const material = world.material(ref.id);
     if (!material || material.kind !== 'surface') continue;
     out.push({ technique: 'surface', data: material, source: ref, revision: material.revision });
   }
+  if (builtIn) out.push(builtIn);
   return out;
 }
 
@@ -104,9 +125,7 @@ function matchingOverride(entity: RenderEntity, view: RenderView): DisplayOverri
 
 /** Stage the layer policy gives the entity. */
 function stageOf(entity: RenderEntity): DrawStage {
-  if (entity.layer === 'overlay') return 'postTone';
-  if (entity.layer === 'gizmo') return 'gizmo';
-  return 'scene';
+  return LAYERS[entity.layer].stage;
 }
 
 /** Wire material variant; `only` draws it without a filled surface. */

@@ -1,7 +1,8 @@
 /** Contract between the renderer's passes and its frame graph. */
 
 import type {
-  FrameSize, FrameStats, TraceDefer, TraceReadiness, TraceSettings, TraceStats, VersionStamp,
+  CameraState, FrameSize, FrameStats, TraceDefer, TraceReadiness, TraceSettings, TraceStats,
+  VersionStamp,
 } from '@/render/common';
 import type { Commands } from '@/render/backend/commands';
 import type { SceneStore } from '@/render/backend/scene/sceneStore';
@@ -38,7 +39,13 @@ export interface FrameResources {
   readonly radiance: TargetHandle;
   texture(target: TargetHandle): TextureHandle;
   ensure(size: FrameSize): void;
-  scratch(index: number): TargetHandle;
+}
+
+/** Overlay contents of the snapshot the frame draws, read before the passes run. */
+export interface FrameOverlays {
+  readonly postTone: boolean;
+  readonly gizmo: boolean;
+  readonly wire: boolean;
 }
 
 /** Conditions a pass may read before it runs. */
@@ -46,6 +53,7 @@ export interface FrameConditions {
   readonly view: RenderView;
   readonly traceState: TraceReadiness;
   readonly defer: TraceDefer | null;
+  readonly overlays: FrameOverlays;
 }
 
 /** Everything one pass reads. */
@@ -87,6 +95,40 @@ export function resetTrace(output: TraceOutput): void {
   output.radiance = null;
   output.restarted = false;
   output.accumulating = false;
+}
+
+/** One step of a graph: the slot it occupies and the resources it reads and writes. */
+export interface GraphStep<Slot extends string> {
+  readonly id: string;
+  readonly slot: Slot;
+  readonly reads: readonly string[];
+  readonly writes: readonly string[];
+  dispose?(): void;
+}
+
+/** Slots of a preview still, in the order they run. */
+export type PreviewSlot = 'scene' | 'tone';
+
+/** Targets a preview frame draws from and into. */
+export interface PreviewResources {
+  /** Scene image, linear and carrying depth. */
+  readonly color: TargetHandle;
+  /** 8-bit sRGB image a preview leaves the layer as. */
+  readonly display: TargetHandle;
+  texture(target: TargetHandle): TextureHandle;
+}
+
+/** Everything one preview pass reads. */
+export interface PreviewFrame {
+  readonly commands: Commands;
+  readonly scene: SceneStore;
+  readonly resources: PreviewResources;
+  readonly camera: CameraState;
+}
+
+/** One step of the preview graph. */
+export interface PreviewPass extends GraphStep<PreviewSlot> {
+  execute(frame: PreviewFrame): void;
 }
 
 export type { FrameStats, TraceStats, TraceSettings };

@@ -5,7 +5,9 @@ import { projectOnSegment2 } from '@/base/geom';
 import { sampleEdge, sampleEdgeInterval } from '@/pattern/panel';
 import { pointAtT } from '@/pattern/geom';
 import { elementNodeId, idsOfKind, parseElementNodeId, type PatternElementKind } from '@/model';
-import { NOTCH_MID_T, printFrame, topstitchRows, trimRadiusCm } from '@/ui/viewport2D/tools';
+import {
+  NOTCH_MID_T, printFrame, topstitchRows, trimRadiusCm,
+} from '@/ui/viewport2D/tools';
 
 /** Production symbols that sit inside a panel outline, so they are picked before the panel fill. */
 export const PRODUCTION_KINDS: PatternElementKind[] = ['trim', 'print', 'topstitch'];
@@ -59,7 +61,12 @@ export function isPlacementTool(tool: string): tool is PlacementTool {
 }
 
 /** Landing point of the mark a tool would place, drawn as a ghost before the press. */
-export interface MarkHint { kind: 'notch' | 'annotation'; pos: Vec2 }
+export interface MarkHint {
+  kind: 'notch' | 'annotation' | 'trim';
+  pos: Vec2;
+  /** Footprint radius of a trim ghost, in centimetres. */
+  radiusCm?: number;
+}
 
 /** Stable key of a mark hint, so pointer moves within one spot do not restart renders. */
 export function markHintKey(hint: MarkHint | null): string {
@@ -417,6 +424,7 @@ export function pickPlacementFeedback(
   tool: PlacementTool,
   pattern: Pattern, outlines: ReadonlyMap<string, Vec2[]>, points: readonly NamedPoint[],
   target: Vec2, radius: number, placed: Vec2 | null = null,
+  trimRadius = 0.6,
 ): { hover: HoverTarget | null; hint: MarkHint | null } {
   if (tool === 'notch' || tool === 'dart' || tool === 'topstitch') {
     const edge = nearestEdgeSegment(pattern, Object.keys(pattern.edges), target, radius);
@@ -429,7 +437,9 @@ export function pickPlacementFeedback(
   if (tool === 'annotation' || tool === 'trim') {
     const panelId = visiblePanelUnderPoint(pattern, outlines, target, radius);
     if (!panelId) return { hover: null, hint: null };
-    const hint: MarkHint | null = tool === 'annotation' ? { kind: 'annotation', pos: placed ?? target } : null;
+    const hint: MarkHint = tool === 'annotation'
+      ? { kind: 'annotation', pos: placed ?? target }
+      : { kind: 'trim', pos: target, radiusCm: trimRadius };
     return { hover: { kind: 'panel', id: panelId }, hint };
   }
   const pointId = nearestPointWithinRadius(points, target, radius);

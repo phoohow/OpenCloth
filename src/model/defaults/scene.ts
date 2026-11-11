@@ -1,6 +1,6 @@
 import type {
-  DenoiseModel, EdgeSemantic, GarmentLayer, LightConfig, LightType, MeshSampling, RayTracingConfig,
-  SceneConfig, SceneLight, SeamType, TrimKind, Vec3, WireOptions,
+  CameraAnimationConfig, CameraAnimationKind, DenoiseModel, EdgeSemantic, GarmentLayer, LightConfig,
+  LightType, MeshSampling, RayTracingConfig, SceneConfig, SceneLight, SeamType, TrimKind, Vec3, WireOptions,
 } from '@/model/types';
 import { vec3 } from '@/model/types';
 import { genId } from '@/base/id';
@@ -200,6 +200,47 @@ export function normalizeRayTracing(config: Partial<RayTracingConfig> | undefine
     filterGlossyFactor: number(config?.filterGlossyFactor, defaults.filterGlossyFactor, 0, 1),
     clampDirect: number(config?.clampDirect, defaults.clampDirect, 0, 10),
     clampIndirect: number(config?.clampIndirect, defaults.clampIndirect, 0, 20),
+  };
+}
+
+/** Camera move a project starts with: a slow orbit around the garment, off until enabled. */
+export const DEFAULT_CAMERA_ANIMATION: CameraAnimationConfig = {
+  kind: 'orbit',
+  enabled: false,
+  periodSec: 12,
+  amplitude: 60,
+};
+
+/** Every camera move, in the order the UI lists them. */
+export const CAMERA_ANIMATION_KINDS: CameraAnimationKind[] = ['orbit', 'dolly', 'pan', 'crane'];
+
+/** Display names of the camera moves. */
+export const CAMERA_ANIMATION_LABELS: Record<CameraAnimationKind, string> = {
+  orbit: '环绕旋转',
+  dolly: '推拉',
+  pan: '左右平移',
+  crane: '上下升降',
+};
+
+/** Longest period the UI offers, in seconds. */
+export const MAX_CAMERA_ANIMATION_PERIOD_SEC = 60;
+
+/** Resolves a stored or partial camera animation against the defaults. */
+export function normalizeCameraAnimation(
+  config: Partial<CameraAnimationConfig> | undefined,
+): CameraAnimationConfig {
+  const kind = config?.kind;
+  const period = config?.periodSec;
+  const amplitude = config?.amplitude;
+  return {
+    kind: kind && CAMERA_ANIMATION_KINDS.includes(kind) ? kind : DEFAULT_CAMERA_ANIMATION.kind,
+    enabled: typeof config?.enabled === 'boolean' ? config.enabled : DEFAULT_CAMERA_ANIMATION.enabled,
+    periodSec: typeof period === 'number' && Number.isFinite(period)
+      ? Math.min(MAX_CAMERA_ANIMATION_PERIOD_SEC, Math.max(1, period))
+      : DEFAULT_CAMERA_ANIMATION.periodSec,
+    amplitude: typeof amplitude === 'number' && Number.isFinite(amplitude)
+      ? Math.max(0, amplitude)
+      : DEFAULT_CAMERA_ANIMATION.amplitude,
   };
 }
 

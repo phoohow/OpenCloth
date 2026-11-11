@@ -5,7 +5,7 @@ import { iblStrength, normalizeLights, type LightConfig } from '@/model';
 import type { PresenterHost } from '@/runtime/presenters/host';
 
 /** Bundled equirectangular environment used when the project selects none. */
-const DEFAULT_ENV_URL = '/env/royal_esplanade_1k.hdr';
+export const BUNDLED_ENVIRONMENT_URL = '/env/royal_esplanade_1k.hdr';
 
 /** Flat backdrop while no environment image is loaded. */
 const FALLBACK_BACKGROUND = '#2a2a2e';
@@ -85,7 +85,7 @@ export class EnvironmentStage {
         this.objectUrl = null;
         this.objectKey = null;
       }
-      return { url: DEFAULT_ENV_URL };
+      return { url: BUNDLED_ENVIRONMENT_URL };
     }
     if (this.objectKey !== key || !this.objectUrl) {
       if (this.objectUrl) URL.revokeObjectURL(this.objectUrl);

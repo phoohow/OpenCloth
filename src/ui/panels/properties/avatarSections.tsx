@@ -85,7 +85,6 @@ export function AvatarData({ project, engineRef }: { project: Project; engineRef
             ))}
           </ButtonRow>
         </Row>
-        <div style={styles.note}>关节角度只作用于程序模特；导入模特请用动态合身的动画播放。体型与姿态改动都会重建模特、布料与模拟状态。</div>
       </Section>
     </>
   );

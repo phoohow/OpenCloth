@@ -92,20 +92,16 @@ const PROJECTION_ITEMS = CAMERA_PROJECTIONS.map(p => ({ key: p.value, label: p.l
 
 /** Handle sets of the selected panel's 3D transform gizmo. */
 const TRANSFORM_ITEMS = [
-  { key: 'translate', label: '平移 (W)', note: '拖动箭头沿轴移动，拖动方块在平面内移动，中心方块自由移动；松手后重建布料并重置模拟' },
-  { key: 'rotate', label: '旋转 (E)', note: '拖动彩色圆环绕对应轴旋转；松手后重建布料并重置模拟' },
-  { key: 'scale', label: '缩放 (S)', note: '拖动轴端方块单轴缩放，中心方块等比缩放；松手后重建布料并重置模拟' },
+  { key: 'translate', label: '平移 (W)' },
+  { key: 'rotate', label: '旋转 (E)' },
+  { key: 'scale', label: '缩放 (S)' },
 ];
 
 const DISPLAY_ITEMS = DISPLAY_MODES.map(m => ({ key: m.value, label: m.label }));
 const WIRE_ITEMS = WIRE_MODES.map(m => ({ key: m.value, label: m.label }));
 
 /** Edit-preview tiers; the coarse entry spells out the re-drape that follows the drag. */
-const EDIT_PREVIEW_ITEMS = EDIT_PREVIEW_TIERS.map(tier => ({
-  key: tier.value,
-  label: tier.label,
-  note: tier.value === 'low' ? '粗网格跟随拖动，松手后布料重新垂坠；全精度沿用当前垂坠状态。' : undefined,
-}));
+const EDIT_PREVIEW_ITEMS = EDIT_PREVIEW_TIERS.map(tier => ({ key: tier.value, label: tier.label }));
 
 /** Display modes, with the ray-traced entry locked once the probe has rejected this GPU. */
 function displayItems(unavailable: string | null) {
@@ -293,16 +289,13 @@ function AutoMenu() {
 
   return (
     <div ref={anchorRef} style={{ position: 'relative' }}>
-      <button style={styles.textBtn} title="单击展开自动排位与缝合建议" onClick={toggle}>
+      <button style={styles.textBtn} title="自动排位与缝合建议" onClick={toggle}>
         自动<Icon name="chevron-down" size={11} style={{ marginLeft: 4 }} />
       </button>
       <MenuPopup open={scan !== null} anchor={anchorRef} onClose={() => setScan(null)}>
         <div style={styles.menuItem} onClick={() => { autoPlacePanels(); setScan(null); }}>自动排位</div>
         {candidates?.length === 0 && <div style={styles.menuItem}>没有可匹配的缝合建议</div>}
         {candidates?.length === 0 && scan && <div style={styles.menuNote}>{seamEmptyHint(scan.skipped)}</div>}
-        {candidates !== null && candidates.length > 0 && (
-          <div style={styles.menuNote}>省道与内部线不参与自动缝合；过度分割的片、插肩袖和多层结构容易配错，候选需人工核对。</div>
-        )}
         {candidates !== null && candidates.length > 0 && skippedNote && (
           <div style={styles.menuNote}>{skippedNote}</div>
         )}
@@ -331,9 +324,9 @@ function seamSkippedNote(skipped: SeamScanSkipped): string | null {
 
 /** Explains an empty candidate list and points at the semantic control that fixes it. */
 function seamEmptyHint(skipped: SeamScanSkipped): string {
-  if (skipped.unlabeled > 0) return '多数边没有语义标注；选中边后在属性面板的「语义」下拉中设置，再试一次。';
-  if (skipped.alreadySeamed > 0) return '可匹配的边都已有缝口；请先删除旧缝口或检查边的语义标注。';
-  return '边已标注语义，但长度与方向差异过大，暂无可用建议。';
+  if (skipped.unlabeled > 0) return '多数边没有语义标注';
+  if (skipped.alreadySeamed > 0) return '可匹配的边都已有缝口';
+  return '长度与方向差异过大';
 }
 
 /** Tool row that sits above the 3D try-on pane. */
@@ -366,7 +359,7 @@ export function Toolbar3D({ engineRef }: { engineRef: MutableRefObject<GarmentEn
         icon="move"
         label="变换"
         title={`变换 · ${TRANSFORM_ITEMS.find(item => item.key === transformMode)?.label ?? ''}（选中版片后显示手柄）`}
-        options={TRANSFORM_ITEMS.map(item => ({ key: item.key, label: item.label, hint: item.note }))}
+        options={TRANSFORM_ITEMS.map(item => ({ key: item.key, label: item.label }))}
         current={transformMode}
         onPick={key => setTransformMode(key as typeof transformMode)}
       />

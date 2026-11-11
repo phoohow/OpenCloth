@@ -16,7 +16,6 @@ import {
 } from '@/ui/widgets/propertyRows';
 import { NumberField } from '@/ui/widgets/numberField';
 import { reportActionError } from '@/ui/widgets/toast';
-import { styles } from '@/ui/panels/properties/styles';
 import { panelOffsetCm } from '@/ui/viewport2D/panelHeight';
 import { useElement, useHeightOffsets } from '@/ui/panels/properties/elementData';
 
@@ -111,7 +110,6 @@ export function PrintData({ project, nodeId }: { project: Project; nodeId: strin
       <ButtonRow>
         <SmallButton onClick={() => run(new DeleteElementsCommand([elementNodeId('print', print.id)]))}>删除印花</SmallButton>
       </ButtonRow>
-      <div style={styles.note}>位置相对版片外接框中心；角度逆时针为正。2D 虚线框标出印花范围，3D 按版片 UV 把图案裁进面料底色。</div>
     </Section>
   );
 }
@@ -158,7 +156,6 @@ export function TopstitchData({ project, nodeId }: { project: Project; nodeId: s
       <ButtonRow>
         <SmallButton onClick={() => run(new DeleteElementsCommand([elementNodeId('topstitch', stitch.id)]))}>删除明线</SmallButton>
       </ButtonRow>
-      <div style={styles.note}>明线沿边向版片内侧偏移，2D 按针距与空距画虚线；同一条边可叠多行，线长按区间长度与行数计入物料清单。</div>
     </Section>
   );
 }
@@ -211,7 +208,6 @@ export function TrimData({ project, nodeId }: { project: Project; nodeId: string
       <ButtonRow>
         <SmallButton onClick={() => run(new DeleteElementsCommand([elementNodeId('trim', trim.id)]))}>删除辅料</SmallButton>
       </ButtonRow>
-      <div style={styles.note}>辅料只在 2D 与物料清单中出现，不生成 3D 实体；数量按这个标记的件数计入，填了单价才计算金额。</div>
     </Section>
   );
 }

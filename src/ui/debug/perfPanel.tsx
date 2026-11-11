@@ -128,7 +128,7 @@ export function PerfPanel() {
           </div>
         </>
       ) : (
-        <div style={styles.empty}>等待 3D 帧…</div>
+        <div style={styles.empty}>等待 3D 帧</div>
       )}
     </div>
   );

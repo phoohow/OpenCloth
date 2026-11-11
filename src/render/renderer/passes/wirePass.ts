@@ -10,11 +10,10 @@ export class WirePass implements RenderPass {
   readonly writes = ['color'] as const;
 
   enabled(frame: FrameConditions): boolean {
-    return frame.view.settings.wire !== 'off';
+    return frame.view.settings.wire !== 'off' && frame.overlays.wire;
   }
 
   execute(ctx: PassContext): void {
-    if (!ctx.scene.hasWire) return;
     // The colour target still holds the scene depth, so the wire keeps the occlusion it had while
     // it was drawn with the surfaces; clearing would drop that depth as well as the image.
     ctx.commands.setTarget(ctx.resources.color, false);

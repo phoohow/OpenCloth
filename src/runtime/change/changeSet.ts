@@ -23,13 +23,15 @@ export type Aspect =
   | 'scene.render'
   | 'scene.simulation'
   | 'scene.environment'
-  | 'scene.references';
+  | 'scene.references'
+  /** Looping camera move played in the viewport. */
+  | 'scene.camera';
 
 /** Every aspect, used when the previous state is unknown. */
 const ALL_ASPECTS: readonly Aspect[] = [
   'cloth.geometry', 'cloth.constraints', 'cloth.fabric', 'cloth.marking', 'cloth.visibility',
   'cloth.layer', 'avatar.body', 'avatar.look', 'scene.light', 'scene.render', 'scene.simulation',
-  'scene.environment', 'scene.references',
+  'scene.environment', 'scene.references', 'scene.camera',
 ];
 
 /** What one project revision changed, and which panels it touched. */

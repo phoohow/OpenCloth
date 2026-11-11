@@ -26,7 +26,7 @@ export interface MenuState {
   editPreview: EditPreviewTier;
   displayOptions: DisplayOptions;
   cameraProjection: CameraProjection;
-  showTemplatePanel: boolean;
+  showAssetPanel: boolean;
   showScenePanel: boolean;
   showPropertiesPanel: boolean;
   showTimeline: boolean;
@@ -106,9 +106,9 @@ export function buildMenus(state: MenuState, actions: MenuActions): TopMenu[] {
       mnemonic: 'F',
       entries: [
         leaf('newProject', '新建工程', actions.newProject, { accel: comboOf('newProject') }),
-        leaf('openProject', '打开…', actions.openProject, { accel: comboOf('openProject') }),
+        leaf('openProject', '打开', actions.openProject, { accel: comboOf('openProject') }),
         leaf('saveProject', '保存', actions.saveProject, { accel: comboOf('saveProject') }),
-        leaf('saveProjectAs', '另存为…', actions.saveProjectAs, { accel: comboOf('saveProjectAs') }),
+        leaf('saveProjectAs', '另存为', actions.saveProjectAs, { accel: comboOf('saveProjectAs') }),
         menuSep(),
         group('recent', '最近打开', [...recentEntries, menuSep(),
           leaf('clearRecent', '清除列表', actions.clearRecentList, { disabled: state.recent.length === 0 }),
@@ -128,38 +128,29 @@ export function buildMenus(state: MenuState, actions: MenuActions): TopMenu[] {
         menuSep(),
         // 版型在前、模型与环境在后：先有版型才谈试衣。
         group('import', '导入', [
-          leaf('importDxf', 'DXF 版型…', actions.importDxf),
-          leaf('importAstm', 'ASTM DXF 版型…', actions.importAstm),
-          leaf('importGerber', 'Gerber 版型…', actions.importGerber),
-          leaf('importHpgl', 'PLT 版型…', actions.importHpgl),
-          leaf('importPdf', 'PDF 版型…', actions.importPdf),
-          leaf('importPatternJson', 'JSON 版型…', actions.importPatternJson),
+          leaf('importDxf', 'DXF 版型', actions.importDxf),
+          leaf('importAstm', 'ASTM DXF 版型', actions.importAstm),
+          leaf('importGerber', 'Gerber 版型', actions.importGerber),
+          leaf('importHpgl', 'PLT 版型', actions.importHpgl),
+          leaf('importPdf', 'PDF 版型', actions.importPdf),
+          leaf('importPatternJson', 'JSON 版型', actions.importPatternJson),
           menuSep(),
-          leaf('importAvatar', '模特模型…', actions.importAvatar),
-          leaf('importReference', '参考物体…', actions.importReference),
-          leaf('importEnvironment', '环境贴图…', actions.importEnvironment),
+          leaf('importAvatar', '模特模型', actions.importAvatar),
+          leaf('importReference', '参考物体', actions.importReference),
+          leaf('importEnvironment', '环境贴图', actions.importEnvironment),
           menuSep(),
           leaf('resetEnvironment', '恢复内置环境', actions.resetEnvironment),
           leaf('clearReferences', '清除全部参考物体', actions.clearReferences, { disabled: state.referenceCount === 0 }),
         ]),
         group('export', '导出', [
-          leaf('exportCutGerber', '生产：裁床 Gerber…', actions.exportCutGerber),
-          leaf('exportCutHpgl', '生产：裁床 PLT…', actions.exportCutHpgl),
-          leaf('exportDxf', '生产：DXF 版型…', actions.exportDxf),
-          leaf('exportPatternSvg', '生产：SVG 平面图…', actions.exportPatternSvg),
-          leaf('exportPdf', '生产：PDF 图纸…', actions.exportPdf),
-          leaf('exportMarker', '生产：排料图…', actions.exportMarker),
-          leaf('exportTechPack', '生产：工艺单…', actions.exportTechPack),
-          leaf('exportBom', '生产：物料清单…', actions.exportBom),
-          menuSep(),
-          leaf('exportGlb', '模型：服装 GLB…', actions.exportGlb),
-          leaf('exportObj', '模型：服装 OBJ…', actions.exportObj),
-          leaf('exportFbx', '模型：服装 FBX…', actions.exportFbx),
-          leaf('exportUsd', '模型：服装 USD…', actions.exportUsd),
-          leaf('exportSequence', '模型：模拟序列 OBJ (ZIP)…', actions.exportSequence),
+          leaf('exportGlb', '模型：服装 GLB', actions.exportGlb),
+          leaf('exportObj', '模型：服装 OBJ', actions.exportObj),
+          leaf('exportFbx', '模型：服装 FBX', actions.exportFbx),
+          leaf('exportUsd', '模型：服装 USD', actions.exportUsd),
+          leaf('exportSequence', '模型：模拟序列 OBJ (ZIP)', actions.exportSequence),
           menuSep(),
           leaf('screenshot', '图像：截图 PNG', actions.screenshot),
-          leaf('exportAnimation', '图像：动画 WebM…', actions.exportAnimation),
+          leaf('exportAnimation', '图像：动画 WebM', actions.exportAnimation),
         ]),
       ],
     },
@@ -191,25 +182,22 @@ export function buildMenus(state: MenuState, actions: MenuActions): TopMenu[] {
       label: '版型',
       mnemonic: 'P',
       entries: [
-        leaf('templatePanel', '模板库', actions.toggleTemplatePanel, { checked: state.showTemplatePanel }),
+        leaf('openAssets', '素材库（版型）', () => actions.openAssets('pattern')),
         menuSep(),
         group('structure', '结构', STRUCTURE_ITEMS.map(item => leaf(
           `structure:${item.key}`,
           `${marked(item.key === 'split' || item.key === 'hole' ? state.activeTool === item.key : false)}${item.label}`,
           () => runStructure(item.key),
-          { note: item.hint },
         ))),
         group('mark', '标记', MARK_ITEMS.map(item => leaf(
           `mark:${item.key}`,
           `${marked(state.activeTool === item.key)}${item.label}`,
           () => actions.setTool(item.key),
-          { note: item.hint },
         ))),
         menuSep(),
-        leaf('patternData', '尺码表与 POM…', () => actions.openPropTab('pattern')),
+        leaf('patternData', '尺码表与 POM', () => actions.openPropTab('pattern')),
         menuSep(),
-        leaf('autoPlace', '自动排位', () => autoPlacePanels(),
-          { note: '按环绕区域分组，把版片排成互不重叠的几行' }),
+        leaf('autoPlace', '自动排位', () => autoPlacePanels()),
       ],
     },
     {
@@ -220,7 +208,7 @@ export function buildMenus(state: MenuState, actions: MenuActions): TopMenu[] {
         leaf('dress', '自动着装', actions.dress, { accel: comboOf('dress') }),
         menuSep(),
         leaf('pinTool', '打 PIN', () => actions.setTool('pin'),
-          { checked: state.activeTool === 'pin', note: '悬停布料出现圆圈时单击' }),
+          { checked: state.activeTool === 'pin' }),
         leaf('unpinTool', '拔 PIN', () => actions.setTool('unpin'), { checked: state.activeTool === 'unpin' }),
         leaf('clearPins', '清除全部 PIN', actions.clearPins),
         menuSep(),
@@ -229,7 +217,7 @@ export function buildMenus(state: MenuState, actions: MenuActions): TopMenu[] {
         leaf('resetSim', '重置模拟', actions.resetSim, { accel: comboOf('resetSim') }),
         menuSep(),
         leaf('seamTool', '缝合', () => actions.setTool('seam'),
-          { checked: state.activeTool === 'seam', note: '依次单击两条边，再各点一个端点定缝纫方向' }),
+          { checked: state.activeTool === 'seam' }),
         leaf('multiSeam', '多段缝合', () => runStructure('multi-seam')),
         leaf('rebuildCloth', '重建布料网格', actions.rebuildCloth),
         menuSep(),
@@ -241,7 +229,7 @@ export function buildMenus(state: MenuState, actions: MenuActions): TopMenu[] {
           leaf('pressureHeatmap', `${marked(state.displayMode === 'pressureHeatmap')}压力热图`,
             () => actions.setDisplayMode('pressureHeatmap')),
           menuSep(),
-          leaf('dynamicFit', '动态合身…', () => actions.openPropTab('project')),
+          leaf('dynamicFit', '动态合身', () => actions.openPropTab('project')),
         ]),
       ],
     },
@@ -287,7 +275,7 @@ export function buildMenus(state: MenuState, actions: MenuActions): TopMenu[] {
       label: '窗口',
       mnemonic: 'W',
       entries: [
-        leaf('templatePanelWindow', '模板库', actions.toggleTemplatePanel, { checked: state.showTemplatePanel }),
+        leaf('assetPanelWindow', '素材库', actions.toggleAssetPanel, { checked: state.showAssetPanel }),
         leaf('scenePanel', '场景树', actions.toggleScenePanel, { checked: state.showScenePanel }),
         leaf('propertiesPanel', '属性', actions.togglePropertiesPanel, { checked: state.showPropertiesPanel }),
         leaf('timeline', '时间轴', actions.toggleTimeline, { checked: state.showTimeline }),
@@ -305,26 +293,32 @@ export function buildMenus(state: MenuState, actions: MenuActions): TopMenu[] {
       label: '协作',
       mnemonic: 'C',
       entries: [
-        leaf('openReview', '版本与审版…', actions.openReview,
-          { note: '版本历史、评论批注、共享与四阶段审版' }),
+        leaf('openReview', '版本与审版', actions.openReview),
         menuSep(),
-        leaf('openAssets', '素材库…', actions.openAssets,
-          { note: '内置与收藏的面料、辅料、模特' }),
-        leaf('openIntegration', '外部对接…', actions.openIntegration,
-          { note: 'PLM 包、物料清单、POM 报告与 Webhook' }),
+        leaf('openIntegration', '外部对接', actions.openIntegration),
       ],
+    },
+    {
+      id: 'production',
+      label: '生产',
+      mnemonic: 'M',
+      entries: productionEntries(actions),
     },
     {
       id: 'help',
       label: '帮助',
       mnemonic: 'H',
       entries: [
-        leaf('shortcuts', '快捷键总览…', actions.showShortcuts, { accel: comboOf('shortcuts') }),
+        leaf('shortcuts', '快捷键总览', actions.showShortcuts, { accel: comboOf('shortcuts') }),
         leaf('about', '关于 OpenCloth', actions.showAbout),
         menuSep(),
-        leaf('perfPanel', '调试：一帧耗时…', actions.togglePerfPanel,
-          { checked: state.showPerfPanel, note: '显示 3D 帧内各阶段的 CPU 耗时' }),
+        leaf('perfPanel', '调试：一帧耗时', actions.togglePerfPanel, { checked: state.showPerfPanel }),
       ],
     },
   ];
+}
+
+/** Rows of the 生产 menu: one entry that opens the preview window, whose rail holds every output. */
+function productionEntries(actions: MenuActions): MenuEntry[] {
+  return [leaf('productionPreview', '生产输出', () => actions.openProduction())];
 }

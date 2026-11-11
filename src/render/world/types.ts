@@ -122,7 +122,7 @@ export interface WorldWriter {
   clearLights(): void;
   setEnvironment(desc: EnvironmentDesc): void;
   /** Bumps a version for opaque asset contents the world cannot see. */
-  touch(kind: 'topology' | 'geometry' | 'material' | 'transform' | 'visibility'): void;
+  touch(kind: keyof RenderVersions): void;
 }
 
 /** Read-only queries over one stable frame of the world. */

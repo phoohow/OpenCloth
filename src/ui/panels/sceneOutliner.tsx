@@ -32,9 +32,9 @@ export function SceneOutliner({ engineRef }: { engineRef: EngineRef }) {
   const project = useProjectStore(s => s.project);
   const selection = useUIStore(s => s.selection);
   const select = useUIStore(s => s.select);
-  const collapsed = useUIStore(s => s.collapsedOutliner);
+  const expanded = useUIStore(s => s.expandedOutliner);
   const toggleOutliner = useUIStore(s => s.toggleOutliner);
-  const setCollapsedOutliner = useUIStore(s => s.setCollapsedOutliner);
+  const setExpandedOutliner = useUIStore(s => s.setExpandedOutliner);
   const refVersion = useUIStore(s => s.refObjectsVersion);
   const [newLightType, setNewLightType] = useState<LightType>('directional');
   const [printPanelId, setPrintPanelId] = useState<string | null>(null);
@@ -104,12 +104,12 @@ export function SceneOutliner({ engineRef }: { engineRef: EngineRef }) {
   };
 
   const toggleCollapseAll = () => {
-    if (collapsed.length > 0) { setCollapsedOutliner([]); return; }
-    setCollapsedOutliner(tree.children.flatMap(collectExpandableIds));
+    if (expanded.length > 0) { setExpandedOutliner([]); return; }
+    setExpandedOutliner(tree.children.flatMap(collectExpandableIds));
   };
 
   const renderNode = (node: SceneNode, depth: number): React.ReactNode[] => {
-    const isExpanded = node.children.length === 0 || !collapsed.includes(node.id);
+    const isExpanded = node.children.length === 0 || expanded.includes(node.id);
     const rows: React.ReactNode[] = [
       <div
         key={node.id}
@@ -176,8 +176,8 @@ export function SceneOutliner({ engineRef }: { engineRef: EngineRef }) {
     <div style={styles.outliner}>
       <div style={styles.header}>
         <span style={styles.title}>场景树</span>
-        <button style={styles.miniBtn} title={collapsed.length > 0 ? '展开全部' : '折叠全部'} onClick={toggleCollapseAll}>
-          <Icon name={collapsed.length > 0 ? 'expand-all' : 'collapse-all'} size={12} />
+        <button style={styles.miniBtn} title={expanded.length > 0 ? '折叠全部' : '展开全部'} onClick={toggleCollapseAll}>
+          <Icon name={expanded.length > 0 ? 'collapse-all' : 'expand-all'} size={12} />
         </button>
       </div>
       <div style={styles.body} key={`tree${refVersion}`}>{tree.children.flatMap(child => renderNode(child, 0))}</div>

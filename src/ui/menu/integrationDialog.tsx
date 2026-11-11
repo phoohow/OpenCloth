@@ -1,17 +1,52 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
-import {
-  dialogButton, dialogLabel, dialogMessage, dialogNote, dialogRoot, dialogSectionTitle,
-  dialogTab, dialogTabActive, dialogTabs, dialogTitle,
-} from '@/ui/menu/dialogStyles';
+import { useMenuStore } from '@/ui/menu/menuStore';
 import { useProjectStore } from '@/store';
 import { downloadTextFile } from '@/io/serialization';
-import { buildTechPackData } from '@/io/exporters';
-import { buildPlmPackage, buildWebhookPayload, postWebhook } from '@/io/exporters';
-import { bomCsv } from '@/pattern';
+import {
+  buildPlmPackage, buildTechPackData, buildWebhookPayload, pomReportCsv, postWebhook,
+} from '@/io/exporters';
+import { bomCsv, buildBom } from '@/pattern';
 import { buildPomTable } from '@/pattern/pom';
-import { pomReportCsv } from '@/io/exporters';
+import { BomTable } from '@/ui/menu/bomTable';
+import { OutputRail } from '@/ui/menu/outputRail';
 
-type IntegrationTab = 'plm' | 'webhook' | 'api';
+/** Characters rendered before the preview stops; the download keeps the whole file. */
+const MAX_PREVIEW = 200_000;
+
+/** Byte size of the payload, printed as the last summary chip. */
+function payloadSize(content: string): string {
+  const bytes = new TextEncoder().encode(content).length;
+  return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(2)} MB` : `${(bytes / 1024).toFixed(1)} KB`;
+}
+
+type IntegrationKind = 'plm' | 'bom' | 'pom' | 'api' | 'webhook';
+
+const ITEMS: Array<{ kind: IntegrationKind; label: string; format: string }> = [
+  { kind: 'plm', label: 'PLM', format: 'JSON' },
+  { kind: 'bom', label: 'BOM', format: 'CSV' },
+  { kind: 'pom', label: 'POM', format: 'CSV' },
+  { kind: 'api', label: 'API', format: 'JSON' },
+  { kind: 'webhook', label: '推送', format: 'POST' },
+];
+
+const API_DOC = {
+  format: 'opencloth-api',
+  version: '1.0',
+  global: 'window.opencloth',
+  methods: [
+    { name: 'getProject', returns: 'Project', description: '当前工程的深拷贝' },
+    { name: 'getProjectJson', returns: 'string', description: '.ocproj.json 文本' },
+    { name: 'loadProjectJson', returns: 'void', description: '校验并载入工程 JSON' },
+    { name: 'getSummary', returns: 'OpenClothSummary', description: '片数、缝数、材质数与尺码数' },
+    { name: 'getPlmPackage', returns: 'PlmPackage', description: '与【导出 PLM 包】同一份数据' },
+  ],
+};
+
+const API_SNIPPET = [
+  'const project = window.opencloth.getProjectJson();',
+  'const summary = window.opencloth.getSummary();',
+  'const plm = window.opencloth.getPlmPackage();',
+].join('\n');
 
 const WEBHOOK_KEY = 'oc-integration-webhook';
 
@@ -34,10 +69,11 @@ function readWebhook(): WebhookConfig {
   return { endpoint: '', token: '' };
 }
 
-/** Industrial hand-off: PLM bundle, webhook delivery and the browser API reference. */
+/** Industrial hand-off: preview the PLM bundle, its CSVs, the API reference and the webhook body. */
 export function IntegrationDialog() {
   const project = useProjectStore(s => s.project);
-  const [tab, setTab] = useState<IntegrationTab>('plm');
+  const closeDialog = useMenuStore(s => s.closeDialog);
+  const [kind, setKind] = useState<IntegrationKind>('plm');
   const [endpoint, setEndpoint] = useState('');
   const [token, setToken] = useState('');
   const [status, setStatus] = useState<string | null>(null);
@@ -50,7 +86,51 @@ export function IntegrationDialog() {
   }, []);
 
   const techPack = useMemo(() => buildTechPackData(project), [project]);
+  const bomRows = useMemo(() => buildBom(project), [project]);
+  const pomTable = useMemo(() => buildPomTable(project), [project]);
+  const plm = useMemo(() => buildPlmPackage(project), [project]);
   const payload = useMemo(() => buildWebhookPayload(project), [project]);
+
+  const item = ITEMS.find(row => row.kind === kind) ?? ITEMS[0]!;
+
+  /** File name, mime and body of the selected output; the webhook row reuses the body as its request. */
+  const output = useMemo(() => {
+    const name = project.meta.name;
+    switch (kind) {
+      case 'plm':
+        return { filename: `${name}-PLM包.json`, mime: 'application/json', content: JSON.stringify(plm, null, 2) };
+      case 'bom':
+        return { filename: `${name}-物料清单.csv`, mime: 'text/csv;charset=utf-8', content: '\ufeff' + bomCsv(bomRows) };
+      case 'pom':
+        return { filename: `${name}-POM报告.csv`, mime: 'text/csv;charset=utf-8', content: '\ufeff' + pomReportCsv(name, pomTable) };
+      case 'api':
+        return { filename: `${name}-API说明.json`, mime: 'application/json', content: JSON.stringify(API_DOC, null, 2) };
+      default:
+        return { filename: `${name}-Webhook.json`, mime: 'application/json', content: JSON.stringify(payload, null, 2) };
+    }
+  }, [kind, project.meta.name, plm, bomRows, pomTable, payload]);
+
+  const stats = useMemo<Array<[string, string]>>(() => {
+    const rows: Array<[string, string]> = (() => {
+      switch (kind) {
+        case 'plm':
+          return [
+            ['版片', String(techPack.panels.length)],
+            ['缝合', String(techPack.seams.length)],
+            ['BOM', `${techPack.bom.length} 行`],
+            ['POM', `${techPack.pom.length} 行`],
+          ];
+        case 'bom': return [['物料行数', String(bomRows.length)]];
+        case 'pom': return [['POM 行数', String(pomTable.rows.length)]];
+        case 'api': return [['方法数', String(API_DOC.methods.length)]];
+        default: return [['发送方式', 'POST JSON'], ['字段数', String(Object.keys(payload).length)]];
+      }
+    })();
+    return [...rows, ['文件大小', payloadSize(output.content)]];
+  }, [kind, techPack, bomRows, pomTable, payload, output.content]);
+
+  const body = output.content;
+  const truncated = body.length > MAX_PREVIEW;
 
   const saveWebhook = () => {
     try {
@@ -64,158 +144,81 @@ export function IntegrationDialog() {
   const sendWebhook = () => {
     if (busy) return;
     setBusy(true);
-    setStatus('发送中…');
+    setStatus('发送中');
     void postWebhook(endpoint, payload, token).then(result => {
       setStatus(result.message);
       setBusy(false);
     });
   };
 
-  const exportPlm = () => {
-    const plm = buildPlmPackage(project);
-    downloadTextFile(`${project.meta.name}-PLM包.json`, JSON.stringify(plm, null, 2), 'application/json');
-    setStatus('PLM 包已下载');
-  };
-
-  const exportBom = () => {
-    downloadTextFile(`${project.meta.name}-物料清单.csv`, '\ufeff' + bomCsv(techPack.bom), 'text/csv;charset=utf-8');
-    setStatus('物料清单 CSV 已下载');
-  };
-
-  const exportPom = () => {
-    const csv = pomReportCsv(project.meta.name, buildPomTable(project));
-    downloadTextFile(`${project.meta.name}-POM报告.csv`, '\ufeff' + csv, 'text/csv;charset=utf-8');
-    setStatus('POM 报告 CSV 已下载');
+  const run = () => {
+    downloadTextFile(output.filename, output.content, output.mime);
+    setStatus(`${item.label}已下载`);
   };
 
   const copyApiSnippet = () => {
-    const snippet = [
-      'const project = window.opencloth.getProjectJson();',
-      'const summary = window.opencloth.getSummary();',
-      'const plm = window.opencloth.getPlmPackage();',
-    ].join('\n');
-    void navigator.clipboard.writeText(snippet).then(
+    void navigator.clipboard.writeText(API_SNIPPET).then(
       () => setStatus('API 示例已复制'),
-      () => setStatus(snippet),
+      () => setStatus(API_SNIPPET),
     );
-  };
-
-  const exportApiDoc = () => {
-    const doc = {
-      format: 'opencloth-api',
-      version: '1.0',
-      global: 'window.opencloth',
-      methods: [
-        { name: 'getProject', returns: 'Project', description: '当前工程的深拷贝' },
-        { name: 'getProjectJson', returns: 'string', description: '.ocproj.json 文本' },
-        { name: 'loadProjectJson', returns: 'void', description: '校验并载入工程 JSON' },
-        { name: 'getSummary', returns: 'OpenClothSummary', description: '片数、缝数、材质数与尺码数' },
-        { name: 'getPlmPackage', returns: 'PlmPackage', description: '与【导出 PLM 包】同一份数据' },
-      ],
-    };
-    downloadTextFile(`${project.meta.name}-API说明.json`, JSON.stringify(doc, null, 2), 'application/json');
-    setStatus('API 说明已下载');
   };
 
   return (
     <div style={styles.root}>
-      <div style={styles.title}>外部对接</div>
-      <div style={styles.tabs}>
-        {([
-          ['plm', 'PLM / ERP'],
-          ['webhook', 'Webhook'],
-          ['api', 'API'],
-        ] as const).map(([key, label]) => (
-          <button
-            key={key}
-            style={{ ...styles.tabBtn, ...(tab === key ? styles.tabBtnActive : null) }}
-            onClick={() => setTab(key)}
-          >{label}</button>
-        ))}
+      <div style={styles.header}>
+        <span style={styles.title}>外部对接</span>
+        <span style={styles.headerItem}>{item.label}</span>
+        <span style={styles.badge}>{item.format}</span>
       </div>
-      {status && <div style={styles.status}>{status}</div>}
 
       <div style={styles.body}>
-        {tab === 'plm' && (
-          <>
-            <div style={styles.summary}>
-              {project.meta.name} · 版片 {techPack.panels.length} · 缝合 {techPack.seams.length} ·
-              材质 {techPack.fabrics.length} · BOM {techPack.bom.length} 行 · POM {techPack.pom.length} 行
-            </div>
-            <div style={styles.actions}>
-              <button style={styles.primaryBtn} onClick={exportPlm}>导出 PLM 包 JSON</button>
-              <button style={styles.secondaryBtn} onClick={exportBom}>导出物料清单 CSV</button>
-              <button style={styles.secondaryBtn} onClick={exportPom}>导出 POM 报告 CSV</button>
-            </div>
-            <div style={styles.note}>
-              PLM 包与工艺单同源，包含样式信息、尺码、版片、材质、缝合、物料清单、POM 与排料摘要；不包含贴图与模型本体。
-            </div>
-            <div style={styles.sectionTitle}>字段预览</div>
-            <div style={styles.code}>
-              {JSON.stringify({
-                format: 'opencloth-plm',
-                style: { name: project.meta.name, baseSize: techPack.baseSizeLabel },
-                counts: {
-                  sizes: techPack.sizes.length,
-                  panels: techPack.panels.length,
-                  seams: techPack.seams.length,
-                  bom: techPack.bom.length,
-                  pom: techPack.pom.length,
-                },
-                marker: { laidOut: techPack.marker.laidOut, usedLengthM: techPack.marker.usedLengthM },
-              }, null, 2)}
-            </div>
-          </>
-        )}
+        <OutputRail
+          items={ITEMS.map(entry => ({ key: entry.kind, label: entry.label }))}
+          active={kind}
+          onSelect={key => { setKind(key as IntegrationKind); setStatus(null); }}
+        />
+        <section style={styles.previewPane}>
+          <div style={styles.canvas}>
+            {kind === 'bom' ? <BomTable rows={bomRows} /> : <pre style={styles.code}>{body.slice(0, MAX_PREVIEW)}</pre>}
+          </div>
+          <div style={styles.stats}>
+            {stats.map(([label, value]) => (
+              <div key={label} style={styles.stat}>
+                <span style={styles.statLabel}>{label}</span>
+                <span style={styles.statValue}>{value}</span>
+              </div>
+            ))}
+          </div>
+        </section>
 
-        {tab === 'webhook' && (
-          <>
-            <div style={styles.row}>
-              <span style={styles.label}>端点地址</span>
-              <input
-                style={styles.input} placeholder="https://example.com/hooks/opencloth"
-                value={endpoint} onChange={e => setEndpoint(e.target.value)}
-              />
-            </div>
-            <div style={styles.row}>
-              <span style={styles.label}>访问令牌</span>
-              <input
-                style={styles.input} type="password" placeholder="可选，作为 Bearer Token"
-                value={token} onChange={e => setToken(e.target.value)}
-              />
-            </div>
-            <div style={styles.actions}>
-              <button style={styles.secondaryBtn} onClick={saveWebhook}>保存设置</button>
-              <button style={styles.primaryBtn} disabled={busy} onClick={sendWebhook}>{busy ? '发送中…' : '发送当前工程摘要'}</button>
-            </div>
-            <div style={styles.note}>
-              发送的是项目名、更新时间与版片 / 缝合 / 材质 / 尺码数量，不含工程本体。浏览器直连受 CORS 限制，端点需允许跨域 POST。
-            </div>
-            <div style={styles.sectionTitle}>请求体预览</div>
-            <div style={styles.code}>{JSON.stringify(payload, null, 2)}</div>
-          </>
+        {kind === 'webhook' && (
+          <aside style={styles.options}>
+            <span style={styles.fieldLabel}>端点地址</span>
+            <input
+              style={styles.input} placeholder="https://example.com/hooks/opencloth"
+              value={endpoint} onChange={e => setEndpoint(e.target.value)}
+            />
+            <span style={styles.fieldLabel}>访问令牌</span>
+            <input
+              style={styles.input} type="password" placeholder="可选，作为 Bearer Token"
+              value={token} onChange={e => setToken(e.target.value)}
+            />
+            <button style={styles.secondaryBtn} onClick={saveWebhook}>保存设置</button>
+          </aside>
         )}
+      </div>
 
-        {tab === 'api' && (
-          <>
-            <div style={styles.summary}>浏览器全局对象 `window.opencloth`（v1.0）</div>
-            <div style={styles.code}>
-              {[
-                'window.opencloth.getProject()       // 当前工程深拷贝',
-                'window.opencloth.getProjectJson()   // .ocproj.json 文本',
-                'window.opencloth.loadProjectJson(j) // 校验并载入',
-                'window.opencloth.getSummary()       // 片数 / 缝数 / 材质 / 尺码',
-                'window.opencloth.getPlmPackage()    // 与 PLM 导出同源',
-              ].join('\n')}
-            </div>
-            <div style={styles.actions}>
-              <button style={styles.secondaryBtn} onClick={copyApiSnippet}>复制示例</button>
-              <button style={styles.secondaryBtn} onClick={exportApiDoc}>下载 API 说明 JSON</button>
-            </div>
-            <div style={styles.note}>
-              API 在页面加载后可用，供本地脚本、浏览器自动化或 PLM 连接器读取工程；写入只有 `loadProjectJson`，会替换当前工程并清空撤销历史。
-            </div>
-          </>
+      <div style={styles.actions}>
+        <span style={styles.hint}>{status ?? output.filename}</span>
+        {truncated && <span style={styles.truncated}>预览已截断</span>}
+        {kind === 'api' && <button style={styles.secondaryBtn} onClick={copyApiSnippet}>复制示例</button>}
+        <button style={styles.secondaryBtn} onClick={closeDialog}>取消</button>
+        {kind === 'webhook' ? (
+          <button style={styles.exportBtn} disabled={busy} onClick={sendWebhook}>
+            {busy ? '发送中' : '发送'}
+          </button>
+        ) : (
+          <button style={styles.exportBtn} onClick={run}>导出</button>
         )}
       </div>
     </div>
@@ -223,24 +226,50 @@ export function IntegrationDialog() {
 }
 
 const styles: Record<string, CSSProperties> = {
-  root: dialogRoot,
-  title: dialogTitle,
-  tabs: dialogTabs,
-  tabBtn: dialogTab(12),
-  tabBtnActive: dialogTabActive,
-  status: dialogMessage,
-  body: { flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 },
-  summary: { color: '#ccc', fontSize: 'var(--oc-fs-micro)', lineHeight: 1.6 },
-  actions: { display: 'flex', gap: 6, flexWrap: 'wrap' },
-  row: { display: 'flex', alignItems: 'center', gap: 8 },
-  label: { ...dialogLabel, width: 72 },
-  input: { flex: 1, padding: '4px 8px', background: '#1b1b1f', border: '1px solid #3a3a42', borderRadius: 3, color: '#eee', fontSize: 'var(--oc-fs-micro)' },
-  note: dialogNote(1.6),
-  sectionTitle: dialogSectionTitle,
-  code: {
-    whiteSpace: 'pre-wrap', fontFamily: 'ui-monospace, Consolas, monospace', fontSize: 'var(--oc-fs-note)', color: '#bcd',
-    background: '#1b1b1f', border: '1px solid #333', borderRadius: 4, padding: '8px 10px', lineHeight: 1.6,
+  root: { display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, gap: 10 },
+  header: { display: 'flex', alignItems: 'baseline', gap: 8, paddingBottom: 8, borderBottom: '1px solid #333' },
+  title: { fontSize: 'var(--oc-fs-dialog-title)', color: '#4da6ff', letterSpacing: 1 },
+  headerItem: { fontSize: 'var(--oc-fs-label)', color: '#ddd' },
+  badge: {
+    fontSize: 'var(--oc-fs-micro)', color: '#8fbfe0', background: '#1f2a33', border: '1px solid #33505e',
+    borderRadius: 3, padding: '1px 6px', letterSpacing: 0.5,
   },
-  primaryBtn: dialogButton('primary', 14),
-  secondaryBtn: dialogButton('secondary', 14),
+  body: { display: 'flex', gap: 10, flex: 1, minHeight: 0 },
+  previewPane: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 },
+  canvas: {
+    flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+    background: '#15151a', border: '1px solid #3a3a42', borderRadius: 4, overflow: 'auto', padding: 6,
+  },
+  code: {
+    width: '100%', height: '100%', margin: 0, overflow: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+    fontFamily: 'ui-monospace, Consolas, monospace', fontSize: 'var(--oc-fs-note)', color: '#bcd',
+    background: '#1b1b1f', borderRadius: 3, padding: '8px 10px', lineHeight: 1.6,
+  },
+  stats: { display: 'flex', flexWrap: 'wrap', gap: 14, padding: '2px 2px 0' },
+  stat: { display: 'flex', alignItems: 'baseline', gap: 6, fontSize: 'var(--oc-fs-micro)' },
+  statLabel: { color: '#7d7d88' },
+  statValue: { color: '#ddd' },
+  options: {
+    width: 246, flex: '0 0 auto', display: 'flex', flexDirection: 'column', gap: 6,
+    overflowY: 'auto', borderLeft: '1px solid #2c2c33', paddingLeft: 10,
+  },
+  fieldLabel: { fontSize: 'var(--oc-fs-micro)', color: '#ccc' },
+  input: {
+    width: '100%', padding: '4px 8px', background: '#1b1b1f', border: '1px solid #3a3a42', borderRadius: 3,
+    color: '#eee', fontSize: 'var(--oc-fs-micro)',
+  },
+  actions: { display: 'flex', alignItems: 'center', gap: 8, paddingTop: 10, borderTop: '1px solid #333' },
+  hint: {
+    flex: 1, fontSize: 'var(--oc-fs-micro)', color: '#7d7d88',
+    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+  },
+  truncated: { fontSize: 'var(--oc-fs-micro)', color: '#9a7d4a' },
+  exportBtn: {
+    padding: '5px 16px', background: '#2a6a3a', border: '1px solid #3f9e55', borderRadius: 3,
+    color: '#fff', cursor: 'pointer', fontSize: 'var(--oc-fs-micro)',
+  },
+  secondaryBtn: {
+    padding: '5px 12px', background: '#2a2a30', border: '1px solid #4a4a54', borderRadius: 3,
+    color: '#ddd', cursor: 'pointer', fontSize: 'var(--oc-fs-micro)',
+  },
 };

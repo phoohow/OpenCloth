@@ -4,9 +4,9 @@ import { pointAtT } from '@/pattern/geom';
 import { smoothSplineSegments } from '@/pattern/geom';
 import { parseElementNodeId } from '@/model';
 import { printFrame, shapeFrame, topstitchRows, trimRadiusCm } from '@/ui/viewport2D/tools';
-import { elementHoverPaths } from '@/ui/viewport2D/hitTest';
+import { elementHoverPaths, type ElementHoverKind } from '@/ui/viewport2D/hitTest';
 import type { SnapCandidate } from '@/ui/viewport2D/snap';
-import type { SceneState } from '@/ui/viewport2D/renderTypes';
+import type { DisplayOptions, SceneState } from '@/ui/viewport2D/renderTypes';
 import { drawSeam } from '@/ui/viewport2D/drawSeams';
 import {
   drawAnnotationFrame, drawInternalLine, drawMeasurement, drawPrintOutline,
@@ -14,23 +14,37 @@ import {
 
 export function drawElementSelection(
   ctx: CanvasRenderingContext2D, scene: SceneState, screen: (p: Vec2) => Vec2, scale: number,
+  display: DisplayOptions,
 ): void {
   const { pattern } = scene;
   for (const row of scene.selection) {
     const el = parseElementNodeId(row);
-    if (el?.kind === 'seam') {
-      const seam = pattern.seams[el.id];
-      if (seam && seam.stitchVisible !== false) drawSeam(ctx, pattern, seam, screen, '#ffd75e');
-    }
-    if (el?.kind === 'internal') drawInternalLine(ctx, pattern, el.id, screen, true);
-    if (el?.kind === 'print') {
-      const print = pattern.prints?.[el.id];
-      const frame = print?.visible ? printFrame(pattern, print) : null;
-      if (frame) drawPrintOutline(ctx, frame.map(screen), true);
-    }
-    if (el?.kind === 'topstitch') {
-      const stitch = pattern.topstitches?.[el.id];
-      if (stitch?.visible) {
+    if (!el) continue;
+    switch (el.kind) {
+      case 'internal':
+        if (display.internal) drawInternalLine(ctx, pattern, el.id, screen, true);
+        break;
+      case 'dart': {
+        const shape = display.darts ? elementHoverPaths(pattern, 'dart', el.id) : null;
+        if (shape) drawElementHover(ctx, shape, screen, scale, '#ffd75e');
+        break;
+      }
+      case 'seam': {
+        const seam = pattern.seams[el.id];
+        if (scene.showSeams && seam && seam.stitchVisible !== false) {
+          drawSeam(ctx, pattern, seam, screen, '#ffd75e');
+        }
+        break;
+      }
+      case 'print': {
+        const print = pattern.prints?.[el.id];
+        const frame = display.prints && print?.visible ? printFrame(pattern, print) : null;
+        if (frame) drawPrintOutline(ctx, frame.map(screen), true);
+        break;
+      }
+      case 'topstitch': {
+        const stitch = pattern.topstitches?.[el.id];
+        if (!display.topstitches || !stitch?.visible) break;
         for (const line of topstitchRows(pattern, stitch)) {
           const s = screen(line[Math.floor(line.length / 2)] ?? line[0]!);
           ctx.save();
@@ -41,11 +55,11 @@ export function drawElementSelection(
           ctx.stroke();
           ctx.restore();
         }
+        break;
       }
-    }
-    if (el?.kind === 'trim') {
-      const trim = pattern.trims?.[el.id];
-      if (trim?.visible) {
+      case 'trim': {
+        const trim = pattern.trims?.[el.id];
+        if (!display.trims || !trim?.visible) break;
         const s = screen(trim.pos);
         const r = Math.max(4, trimRadiusCm(trim) * scale) + 3;
         ctx.save();
@@ -55,27 +69,32 @@ export function drawElementSelection(
         ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
         ctx.stroke();
         ctx.restore();
+        break;
       }
-    }
-    if (el?.kind === 'notch') {
-      const notch = pattern.notches?.[el.id];
-      const p = notch ? pointAtT(pattern, notch.edgeId, notch.t) : null;
-      if (p) {
+      case 'notch': {
+        const notch = pattern.notches?.[el.id];
+        const p = notch && display.notches ? pointAtT(pattern, notch.edgeId, notch.t) : null;
+        if (!p) break;
         const s = screen(p);
         ctx.strokeStyle = '#ffd75e';
         ctx.lineWidth = 1.5;
         ctx.beginPath();
         ctx.arc(s.x, s.y, 6, 0, Math.PI * 2);
         ctx.stroke();
+        break;
       }
-    }
-    if (el?.kind === 'annotation') {
-      const note = pattern.annotations?.[el.id];
-      if (note) drawAnnotationFrame(ctx, screen(note.pos), '#ffd75e', 1.5);
-    }
-    if (el?.kind === 'measurement') {
-      const measurement = pattern.measurements?.[el.id];
-      if (measurement) drawMeasurement(ctx, pattern, measurement, screen);
+      case 'annotation': {
+        const note = pattern.annotations?.[el.id];
+        if (note && display.annotations) drawAnnotationFrame(ctx, screen(note.pos), '#ffd75e', 1.5);
+        break;
+      }
+      case 'measurement': {
+        const measurement = pattern.measurements?.[el.id];
+        if (measurement && display.measurements) drawMeasurement(ctx, pattern, measurement, screen);
+        break;
+      }
+      default:
+        break;
     }
   }
 }
@@ -209,6 +228,47 @@ export function drawDraft(
   ctx.restore();
 }
 
+/** Placement ring of a dragged trim: its real footprint plus a crosshair at the landing point. */
+export function drawDropHint(
+  ctx: CanvasRenderingContext2D, scene: SceneState, screen: (p: Vec2) => Vec2, scale: number,
+): void {
+  const hint = scene.dropHint;
+  if (hint) drawPlacementRing(ctx, screen(hint.pos), hint.radiusCm, scale);
+}
+
+/** Blue footprint ring with an outer guide and a crosshair, marking where a symbol will land. */
+function drawPlacementRing(
+  ctx: CanvasRenderingContext2D, s: Vec2, radiusCm: number, scale: number,
+): void {
+  const inner = Math.max(4, radiusCm * scale);
+  const outer = Math.max(inner + 6, 13);
+  const arm = 5;
+  ctx.save();
+  ctx.strokeStyle = '#4da6ff';
+  ctx.fillStyle = 'rgba(77,166,255,0.16)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(s.x, s.y, inner, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.globalAlpha = 0.55;
+  ctx.beginPath();
+  ctx.arc(s.x, s.y, outer, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+  ctx.beginPath();
+  ctx.moveTo(s.x - outer - arm, s.y); ctx.lineTo(s.x - outer + 1, s.y);
+  ctx.moveTo(s.x + outer - 1, s.y); ctx.lineTo(s.x + outer + arm, s.y);
+  ctx.moveTo(s.x, s.y - outer - arm); ctx.lineTo(s.x, s.y - outer + 1);
+  ctx.moveTo(s.x, s.y + outer - 1); ctx.lineTo(s.x, s.y + outer + arm);
+  ctx.stroke();
+  ctx.fillStyle = '#4da6ff';
+  ctx.beginPath();
+  ctx.arc(s.x, s.y, 1.8, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
 /** Marker where the point tool would insert a vertex: a dashed ring with a plus on the edge. */
 export function drawInsertHint(
   ctx: CanvasRenderingContext2D, scene: SceneState, screen: (p: Vec2) => Vec2,
@@ -267,11 +327,13 @@ export function drawSnapHint(
 /** Yellow preview of the element a press would pick; panels also get a faint tint. */
 export function drawHover(
   ctx: CanvasRenderingContext2D, scene: SceneState, screen: (p: Vec2) => Vec2,
+  display: DisplayOptions,
 ): void {
   const hover = scene.hover;
   if (!hover) return;
   const { pattern } = scene;
   if (hover.kind === 'element') {
+    if (!elementLayerVisible(hover.elementKind, scene, display)) return;
     if (hover.elementKind === 'annotation') {
       const note = pattern.annotations?.[hover.id];
       if (note) drawAnnotationFrame(ctx, screen(note.pos), 'rgba(255,215,94,0.7)', 2.5);
@@ -281,6 +343,7 @@ export function drawHover(
     if (shape) drawElementHover(ctx, shape, screen, scene.view.scale);
     return;
   }
+  if (hover.kind === 'internal' && !display.internal) return;
   const ring = hover.kind === 'point' ? pattern.points[hover.id]?.pos
     : hover.kind === 'internalVertex' ? pattern.internalLines[hover.lineId]?.points[hover.index]
       : null;
@@ -315,16 +378,30 @@ export function drawHover(
   ctx.restore();
 }
 
+/** Wheels a hovered element's own layer is switched on; a hidden element is never highlighted. */
+function elementLayerVisible(kind: ElementHoverKind, scene: SceneState, display: DisplayOptions): boolean {
+  switch (kind) {
+    case 'seam': return scene.showSeams;
+    case 'dart': return display.darts;
+    case 'notch': return display.notches;
+    case 'annotation': return display.annotations;
+    case 'measurement': return display.measurements;
+    case 'print': return display.prints;
+    case 'topstitch': return display.topstitches;
+    case 'trim': return display.trims;
+  }
+}
+
 /** Yellow pre-highlight of one production element's sampled strokes, rings and closed frames. */
 function drawElementHover(
   ctx: CanvasRenderingContext2D,
   shape: { paths: Vec2[][]; closed?: boolean; radius?: number },
-  screen: (p: Vec2) => Vec2, scale: number,
+  screen: (p: Vec2) => Vec2, scale: number, color = 'rgba(255,215,94,0.7)',
 ): void {
   const paths = shape.paths.filter(path => path.length > 0);
   if (paths.length === 0) return;
   ctx.save();
-  ctx.strokeStyle = 'rgba(255,215,94,0.7)';
+  ctx.strokeStyle = color;
   ctx.fillStyle = 'rgba(255,215,94,0.07)';
   ctx.lineWidth = 2.5;
   ctx.setLineDash([]);
@@ -352,10 +429,14 @@ function drawElementHover(
 
 /** Ghost of the production mark a mark-tool press would place at the landing point. */
 export function drawMarkHint(
-  ctx: CanvasRenderingContext2D, scene: SceneState, screen: (p: Vec2) => Vec2,
+  ctx: CanvasRenderingContext2D, scene: SceneState, screen: (p: Vec2) => Vec2, scale: number,
 ): void {
   const hint = scene.markHint;
   if (!hint) return;
+  if (hint.kind === 'trim') {
+    drawPlacementRing(ctx, screen(hint.pos), hint.radiusCm ?? 0.6, scale);
+    return;
+  }
   const s = screen(hint.pos);
   ctx.save();
   ctx.strokeStyle = 'rgba(255,215,94,0.9)';

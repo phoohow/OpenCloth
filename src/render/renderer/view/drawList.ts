@@ -1,6 +1,6 @@
 /** Builds the ordered draw list of one view from the world, without touching it. */
 
-import type { DrawBucket, DrawStage } from '@/render/common';
+import type { DrawBucket, DrawStage, MaterialData } from '@/render/common';
 import type { WorldView } from '@/render/world';
 import { resolveMaterials } from '@/render/renderer/view/materialResolver';
 import type { DrawItem, DrawList, RenderView } from '@/render/renderer/view/types';
@@ -16,7 +16,7 @@ export function buildDrawList(world: WorldView, view: RenderView): DrawList {
   for (const entity of world.entities({ layers: view.layers, channels: view.channels })) {
     const resolved = resolveMaterials(entity, world, view);
     const drawable = resolved.base.length > 0 || resolved.wire !== null
-      || resolved.trace.length > 0 || entity.mesh.kind === 'asset';
+      || resolved.trace.length > 0;
     if (!drawable) continue;
     const bucket: DrawBucket = resolved.stage === 'scene'
       ? sceneBucket(resolved.base)
@@ -31,7 +31,6 @@ export function buildDrawList(world: WorldView, view: RenderView): DrawList {
       bounds: entity.bounds,
       stage: resolved.stage,
       bucket,
-      materialSource: entity.materials[0] ?? null,
     });
   }
   items.sort((a, b) => STAGE_ORDER[a.stage] - STAGE_ORDER[b.stage]
@@ -46,7 +45,7 @@ export function itemsForStage(list: DrawList, stage: DrawStage): readonly DrawIt
 }
 
 /** Opaque unless any base variant blends. */
-function sceneBucket(materials: readonly { data: import('@/render/common').MaterialData }[]): DrawBucket {
+function sceneBucket(materials: readonly { data: MaterialData }[]): DrawBucket {
   for (const material of materials) {
     if (material.data.blending === 'alpha' || material.data.blending === 'additive') {
       return 'transparent';

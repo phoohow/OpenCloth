@@ -39,7 +39,6 @@ export function PomSection({ project }: { project: Project }) {
   const selection = useUIStore(state => state.selection);
   const [bodyKey, setBodyKey] = useState<PomBodyKey>('chest');
   const table = buildPomTable(project, poms);
-  const baseSize = table.sizes.find(size => size.id === table.baseSizeId) ?? null;
 
   const exec = (cmd: Command): boolean => {
     try {
@@ -195,7 +194,6 @@ export function PomSection({ project }: { project: Project }) {
       {table.issues.length > 0 && (
         <div style={styles.note}>POM 提示：{table.issues.slice(0, 2).join('；')}</div>
       )}
-      <div style={styles.note}>基码数值从版型或模特实测，锁定不可改；其它码先取手填值，没有手填时按「基码 + 档差 × 码序差」。公式按测量点名称计算，支持 + - * / 与括号。生成放码会重写全部尺码的逐点偏移，每个测量点把长度差平均分配到两端点。{baseSize ? ` 当前基码：${baseSize.label}。` : ''}</div>
     </Section>
   );
 }

@@ -34,7 +34,7 @@ export function MobileShell({ actions, engineRef, onEngineReady, ready }: {
         {!ready && (
           <div style={styles.loading}>
             <div style={styles.spinner} />
-            <div>正在初始化 WebGPU 渲染器…</div>
+            <div>正在初始化 WebGPU 渲染器</div>
           </div>
         )}
         <div style={styles.floatColumn}>

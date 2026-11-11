@@ -7,7 +7,7 @@ test('自动着装并导出截图', async ({ page }) => {
   page.on('pageerror', error => pageErrors.push(error.message));
 
   await page.goto('/');
-  await expect(page.getByText('正在初始化 WebGPU 渲染器…')).toBeHidden();
+  await expect(page.getByText('正在初始化 WebGPU 渲染器')).toBeHidden();
 
   const gpuMissing = await page.evaluate(() => {
     const banner = document.getElementById('webgpu-error');

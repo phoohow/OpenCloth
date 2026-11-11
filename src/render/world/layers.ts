@@ -6,9 +6,9 @@ import {
 
 /** One policy per layer, in draw order. */
 export const LAYERS: Record<LayerId, LayerPolicy> = {
-  underlay: { stage: 'scene', traceable: true, pickable: true, exportable: false },
+  underlay: { stage: 'scene', traceable: true, pickable: true, exportable: true },
   subject: { stage: 'scene', traceable: true, pickable: true, exportable: true },
-  overlay: { stage: 'postTone', traceable: false, pickable: true, exportable: false },
+  overlay: { stage: 'postTone', traceable: false, pickable: true, exportable: true },
   gizmo: { stage: 'gizmo', traceable: false, pickable: false, exportable: false },
 };
 

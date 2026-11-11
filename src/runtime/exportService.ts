@@ -2,7 +2,7 @@
 
 import type { AssetPort, ExportFormat, ExportPort } from '@/render/common';
 import type { Renderer } from '@/render/renderer';
-import type { WorldPorts } from '@/render/world';
+import { LAYERS, LAYER_ORDER, type LayerId, type WorldPorts } from '@/render/world';
 
 /** What one export keeps in the file. */
 export interface ExportOptions {
@@ -12,11 +12,13 @@ export interface ExportOptions {
   readonly includeAvatar?: boolean;
 }
 
-/** Layers the exportable scene consists of; gizmos never leave the viewport. */
-const EXPORTABLE_LAYERS = ['underlay', 'subject', 'overlay'] as const;
+/** Layers a file keeps, read from the layer policy; gizmos never leave the viewport. */
+const EXPORTABLE_LAYERS: readonly LayerId[] = LAYER_ORDER.filter(
+  layer => LAYERS[layer].exportable,
+);
 
 /** Layers kept when the stage is left out. */
-const BODY_LAYERS = ['subject', 'overlay'] as const;
+const BODY_LAYERS: readonly LayerId[] = EXPORTABLE_LAYERS.filter(layer => layer !== 'underlay');
 
 /** Builds the export snapshot and hands it to the export port; owns no GPU objects. */
 export class ExportService {

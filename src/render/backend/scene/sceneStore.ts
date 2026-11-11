@@ -4,8 +4,8 @@ import * as THREE from 'three/webgpu';
 import { degToRad } from '@/base/math';
 import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import type {
-  AssetKey, DrawStage, EntityId, MeshData, MeshId, ResolvedMaterial,
-  SceneItem, SceneMesh, SceneSnapshot,
+  AssetKey, DrawStage, EntityId, InstanceData, LightData, MeshData, MeshId, ResolvedMaterial,
+  SceneItem, SceneMesh, SceneSnapshot, Transform,
 } from '@/render/common';
 import type { SceneHandle } from '@/render/backend/types';
 import { GeometryCache } from '@/render/backend/scene/geometryCache';
@@ -122,7 +122,7 @@ export class SceneStore {
     for (const item of snapshot.items) {
       seenRaster.add(item.key);
       this.syncRaster(item);
-      if (item.traceMaterials.length > 0 || item.mesh.kind === 'asset') {
+      if (item.traceMaterials.length > 0) {
         seenTrace.add(item.key);
         this.syncTrace(item);
       }
@@ -196,7 +196,7 @@ export class SceneStore {
 
   private syncRaster(item: SceneItem): void {
     const existing = this.rasterEntries.get(item.key);
-    if (item.rasterMaterials.length === 0 && item.wire === null && item.mesh.kind !== 'asset') {
+    if (item.rasterMaterials.length === 0 && item.wire === null) {
       if (existing) {
         this.removeRaster(existing);
         this.rasterEntries.delete(item.key);
@@ -217,7 +217,7 @@ export class SceneStore {
         this.group(item.rasterStage).add(entry.root);
       }
       this.selectStage(entry, item.rasterStage);
-      entry.root.visible = true;
+      entry.root.visible = item.rasterMaterials.length > 0 || item.wire !== null;
       return;
     }
     const mesh = this.meshData(item.mesh.id);
@@ -247,7 +247,7 @@ export class SceneStore {
 
   private syncTrace(item: SceneItem): void {
     const existing = this.traceEntries.get(item.key);
-    if (item.traceMaterials.length === 0 && item.mesh.kind !== 'asset') {
+    if (item.traceMaterials.length === 0) {
       if (existing) {
         this.removeTrace(existing);
         this.traceEntries.delete(item.key);
@@ -393,9 +393,7 @@ function createObject(
 }
 
 /** Copies instance matrices and colours into the instanced object's own buffers. */
-function copyInstances(
-  mesh: THREE.InstancedMesh, instances: import('@/render/common').InstanceData,
-): void {
+function copyInstances(mesh: THREE.InstancedMesh, instances: InstanceData): void {
   (mesh.instanceMatrix.array as Float32Array).set(instances.matrices);
   mesh.instanceMatrix.needsUpdate = true;
   if (!instances.colors) return;
@@ -407,7 +405,7 @@ function copyInstances(
 }
 
 /** Applies the entity transform and tags the root for export and inspection. */
-function applyTransform(root: THREE.Object3D, transform: import('@/render/common').Transform, key: EntityId): void {
+function applyTransform(root: THREE.Object3D, transform: Transform, key: EntityId): void {
   root.position.set(transform.position.x, transform.position.y, transform.position.z);
   root.rotation.set(transform.rotationEuler.x, transform.rotationEuler.y, transform.rotationEuler.z);
   root.scale.set(transform.scale.x, transform.scale.y, transform.scale.z);
@@ -415,7 +413,7 @@ function applyTransform(root: THREE.Object3D, transform: import('@/render/common
 }
 
 /** Builds one three light from contract data. */
-function buildLight(light: import('@/render/common').LightData, group: THREE.Group): void {
+function buildLight(light: LightData, group: THREE.Group): void {
   const color = new THREE.Color(light.color);
   const position = new THREE.Vector3(light.position.x, light.position.y, light.position.z);
   const target = new THREE.Vector3(light.target.x, light.target.y, light.target.z);

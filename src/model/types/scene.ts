@@ -4,7 +4,9 @@
  */
 
 import type { ObjectTransform, Vec3 } from '@/model/types/geometry';
-import type { RenderConfig, SimulationConfig, CameraConfig } from '@/model/schema/sceneSettings';
+import type {
+  RenderConfig, SimulationConfig, CameraConfig, CameraAnimationConfig,
+} from '@/model/schema/sceneSettings';
 
 export * from '@/model/schema/sceneSettings';
 
@@ -77,6 +79,8 @@ export interface SceneConfig {
   referenceObjects?: ReferenceObjectRef[];
   /** Saved camera placement, restored when the project opens. */
   camera?: CameraConfig;
+  /** Looping camera move played in the viewport; absent leaves the camera still. */
+  cameraAnimation?: CameraAnimationConfig;
   /** Outliner display name of the viewport camera. */
   cameraName?: string;
 }

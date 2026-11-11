@@ -47,15 +47,15 @@ export type MeshTopology = 'triangle' | 'line' | 'point';
 
 export interface MeshStreams {
   /** Flat xyz triples. */
-  position: Float32Array;
+  readonly position: Float32Array;
   /** Flat xyz normals, optional. */
-  normal?: Float32Array;
+  readonly normal?: Float32Array;
   /** Flat uv pairs, optional. */
-  uv?: Float32Array;
+  readonly uv?: Float32Array;
   /** Flat rgb triples, optional. */
-  color?: Float32Array;
+  readonly color?: Float32Array;
   /** One scalar per vertex, sampled by heatmap materials. */
-  field?: Float32Array;
+  readonly field?: Float32Array;
 }
 
 export interface MeshGroup {
@@ -73,12 +73,12 @@ export interface InstanceData {
 }
 
 export interface MeshData {
-  topology: MeshTopology;
-  streams: MeshStreams;
-  index?: Uint32Array;
-  groups?: readonly MeshGroup[];
-  instances?: InstanceData;
-  bounds?: Bounds;
+  readonly topology: MeshTopology;
+  readonly streams: MeshStreams;
+  readonly index?: Uint32Array;
+  readonly groups?: readonly MeshGroup[];
+  readonly instances?: InstanceData;
+  readonly bounds?: Bounds;
 }
 
 export type MaterialKind = 'surface' | 'unlit' | 'line' | 'heatmap' | 'wire' | 'diagnostic';

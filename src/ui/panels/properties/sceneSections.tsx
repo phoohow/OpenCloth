@@ -1,14 +1,17 @@
 import { useState } from 'react';
 import { useUIStore } from '@/store';
-import type { LightType, Project, SceneLight } from '@/model/types';
-import { LIGHT_TYPES, LIGHT_TYPE_LABELS, normalizeLights } from '@/model';
+import type { CameraAnimationConfig, CameraAnimationKind, LightType, Project, SceneLight } from '@/model/types';
+import {
+  CAMERA_ANIMATION_KINDS, CAMERA_ANIMATION_LABELS, LIGHT_TYPES, LIGHT_TYPE_LABELS,
+  MAX_CAMERA_ANIMATION_PERIOD_SEC, normalizeCameraAnimation, normalizeLights,
+} from '@/model';
 import {
   commitEnvironmentReset, commitReferenceOpacity, patchLight, patchValue, removeLight, removeReference,
   type EngineRef,
 } from '@/ui/sceneCommands';
 import { importEnvironmentViaPicker } from '@/ui/modelImport';
 import {
-  ButtonRow, ColorRow, Hint, Row, Section, SelectRow, SliderRow, SmallButton,
+  ButtonRow, CheckRow, ColorRow, Hint, Row, Section, SelectRow, SliderRow, SmallButton,
 } from '@/ui/widgets/propertyRows';
 import { Vec3Field } from '@/ui/widgets/numberField';
 import { CAMERA_PROJECTIONS } from '@/ui/optionTables';
@@ -61,9 +64,6 @@ export function LightPlacementData({ project, nodeId }: { project: Project; node
         <Vec3Field label="目标" value={light.target} step={0.05} precision={2} unit="m"
           onCommit={v => patchLight(light.id, '修改光源目标', { target: v })} />
       )}
-      {light.type === 'directional' && (
-        <div style={styles.note}>方向光的位置只决定照射方向，光线平行射向目标点。</div>
-      )}
     </Section>
   );
 }
@@ -113,7 +113,7 @@ export function LightData({ project, nodeId }: { project: Project; nodeId: strin
             </>
           )}
           <div style={styles.note}>
-            {punctual ? '强度按平方反比衰减，距离 0 表示不限距离。' : '强度按平方反比衰减。'}
+            按平方反比衰减
           </div>
         </Section>
       )}
@@ -149,33 +149,65 @@ export function EnvironmentData({ project, engineRef }: { project: Project; engi
   );
 }
 
-export function CameraData({ engineRef }: { engineRef: EngineRef }) {
+/** Slider range and label of the amplitude, in the unit each move measures it. */
+const AMPLITUDE_RANGE: Record<CameraAnimationKind, {
+  label: string; min: number; max: number; step: number; unit: string;
+}> = {
+  orbit: { label: '旋转角度', min: 5, max: 180, step: 5, unit: '°' },
+  dolly: { label: '推拉距离', min: 0, max: 2, step: 0.05, unit: 'm' },
+  pan: { label: '平移幅度', min: 0, max: 2, step: 0.05, unit: 'm' },
+  crane: { label: '升降幅度', min: 0, max: 2, step: 0.05, unit: 'm' },
+};
+
+export function CameraData({ project, engineRef }: { project: Project; engineRef: EngineRef }) {
   const [, bump] = useState(0);
   const engine = engineRef.current;
   const camera = engine?.getCameraState() ?? null;
   const projection = useUIStore(s => s.cameraProjection);
   const setCameraProjection = useUIStore(s => s.setCameraProjection);
   const refresh = () => bump(n => n + 1);
+  const animation = normalizeCameraAnimation(project.scene.cameraAnimation);
+  const amplitude = AMPLITUDE_RANGE[animation.kind];
 
   if (!engine || !camera) return <Hint>3D 视图尚未就绪。</Hint>;
   const orthographic = projection === 'orthographic';
 
+  /** Writes one field of the camera move as an undoable step. */
+  const patchAnimation = (patch: Partial<CameraAnimationConfig>) => {
+    const next = normalizeCameraAnimation({ ...animation, ...patch });
+    patchValue('修改相机动画', p => p.scene.cameraAnimation, (ctx, value) => {
+      ctx.project.scene = { ...ctx.project.scene, cameraAnimation: value };
+    }, next);
+  };
+
   return (
-    <Section title="相机参数">
-      <SelectRow label="相机类型" value={projection} options={CAMERA_PROJECTIONS}
-        onChange={v => { setCameraProjection(v); refresh(); }} />
-      <Vec3Field label="位置" value={camera.position} step={0.05} precision={2} unit="m"
-        onCommit={v => { engine.setCameraState({ position: v }); refresh(); }} />
-      <Vec3Field label="目标" value={camera.target} step={0.05} precision={2} unit="m"
-        onCommit={v => { engine.setCameraState({ target: v }); refresh(); }} />
-      {orthographic ? (
-        <SliderRow label="视野高度" min={0.05} max={20} step={0.05} unit="m" value={camera.viewHeightMeters}
-          onChange={v => { engine.setCameraState({ viewHeightMeters: v }); }} commitOnRelease={false} />
-      ) : (
-        <SliderRow label="视野角" min={20} max={90} step={1} unit="°" value={camera.fovDeg}
-          onChange={v => { engine.setCameraState({ fovDeg: v }); }} commitOnRelease={false} />
-      )}
-      <div style={styles.note}>视角预设在 3D 窗格上方的「视角」下拉里；机位、目标、视野与相机类型随工程保存，打开工程时恢复。</div>
-    </Section>
+    <>
+      <Section title="相机参数">
+        <SelectRow label="相机类型" value={projection} options={CAMERA_PROJECTIONS}
+          onChange={v => { setCameraProjection(v); refresh(); }} />
+        <Vec3Field label="位置" value={camera.position} step={0.05} precision={2} unit="m"
+          onCommit={v => { engine.setCameraState({ position: v }); refresh(); }} />
+        <Vec3Field label="目标" value={camera.target} step={0.05} precision={2} unit="m"
+          onCommit={v => { engine.setCameraState({ target: v }); refresh(); }} />
+        {orthographic ? (
+          <SliderRow label="视野高度" min={0.05} max={20} step={0.05} unit="m" value={camera.viewHeightMeters}
+            onChange={v => { engine.setCameraState({ viewHeightMeters: v }); }} commitOnRelease={false} />
+        ) : (
+          <SliderRow label="视野角" min={20} max={90} step={1} unit="°" value={camera.fovDeg}
+            onChange={v => { engine.setCameraState({ fovDeg: v }); }} commitOnRelease={false} />
+        )}
+      </Section>
+      <Section title="相机动画">
+        <CheckRow label="播放" checked={animation.enabled} onChange={v => patchAnimation({ enabled: v })} />
+        <SelectRow label="运镜" value={animation.kind}
+          options={CAMERA_ANIMATION_KINDS.map(kind => ({ value: kind, label: CAMERA_ANIMATION_LABELS[kind] }))}
+          onChange={v => patchAnimation({ kind: v })} />
+        <SliderRow label="周期" min={2} max={MAX_CAMERA_ANIMATION_PERIOD_SEC} step={1} unit="s"
+          value={animation.periodSec} commitOnRelease onChange={v => patchAnimation({ periodSec: v })} />
+        <SliderRow label={amplitude.label} min={amplitude.min} max={amplitude.max} step={amplitude.step}
+          unit={amplitude.unit} value={Math.min(amplitude.max, animation.amplitude)} commitOnRelease
+          onChange={v => patchAnimation({ amplitude: v })} />
+      </Section>
+    </>
   );
 }

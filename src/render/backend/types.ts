@@ -5,7 +5,6 @@ import type { DrawStage } from '@/render/common';
 
 /** Options the application entry passes to the backend. */
 export interface BackendOptions {
-  readonly canvas: HTMLCanvasElement;
   readonly antialias?: boolean;
   /** Called when the GPU device is lost; the viewport rebuilds its GPU. */
   readonly onDeviceLost?: (reason: string) => void;

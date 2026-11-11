@@ -11,7 +11,7 @@ import type { CameraHost } from '@/render/renderer/view/types';
 import { CameraController } from '@/render/renderer/view/cameraController';
 import { FrameGraph } from '@/render/renderer/frame/graph';
 import {
-  idleTrace, resetTrace, type FrameConditions, type FrameSize, type TraceOutput,
+  idleTrace, resetTrace, type FrameConditions, type FrameOverlays, type FrameSize, type TraceOutput,
 } from '@/render/renderer/frame/pass';
 import { RendererFrameResources } from '@/render/renderer/frame/resources';
 import { RasterPass } from '@/render/renderer/passes/rasterPass';
@@ -79,7 +79,7 @@ class RenderPipeline implements Renderer {
   constructor(deps: RendererDeps) {
     this.backend = deps.backend;
     this.onTraceFailure = deps.onTraceFailure;
-    this.camera = new CameraController(this.backend.surface.canvas, this.backend.aspect());
+    this.camera = new CameraController(this.backend.surface.canvas, this.backend.surface.aspect);
     this.resources = new RendererFrameResources(this.backend.targets);
     this.graph = new FrameGraph([
       new RasterPass(),
@@ -124,6 +124,7 @@ class RenderPipeline implements Renderer {
       view,
       traceState,
       defer: traceState === 'ready' ? this.lastDefer : null,
+      overlays: this.overlays(),
     };
     const passes = this.graph.execute(conditions, pass => pass.execute({
       ...conditions,
@@ -219,6 +220,16 @@ class RenderPipeline implements Renderer {
     if (!wantsTrace) return 'inactive';
     if (this.traceFailure) return 'unsupported';
     return this.backend.trace.ready ? 'ready' : 'building';
+  }
+
+  /** Whether the applied snapshot has anything for the overlay slots to draw. */
+  private overlays(): FrameOverlays {
+    const scene = this.backend.scene;
+    return {
+      postTone: scene.hasStage('postTone'),
+      gizmo: scene.hasStage('gizmo'),
+      wire: scene.hasWire,
+    };
   }
 
   /** Target sizes of one frame: drawing buffer for raster, CSS scale for tracing. */

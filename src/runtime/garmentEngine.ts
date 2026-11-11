@@ -1,4 +1,4 @@
-import type { Project, SimulationConfig, FabricPhysics, ObjectTransform, Vec3, CameraProjection, ReferenceObjectRef, EditPreviewTier, SkinAppearance } from '@/model/types';
+import type { Project, SimulationConfig, FabricPhysics, ObjectTransform, Vec3, CameraProjection, CameraAnimationConfig, ReferenceObjectRef, EditPreviewTier, SkinAppearance } from '@/model/types';
 import { fabricForPanel } from '@/model';
 import { particleThicknessMeters } from '@/model';
 import type { ParticlePickHit } from '@/sim';
@@ -723,6 +723,21 @@ export class GarmentEngine {
     this.camera.setState(state);
   }
 
+  /** Starts, updates or stops the looping camera move. */
+  setCameraAnimation(config: CameraAnimationConfig | null | undefined): void {
+    this.camera.setAnimation(config);
+  }
+
+  /** Whether a looping move currently drives the viewport camera. */
+  isCameraAnimating(): boolean {
+    return this.camera.isAnimating();
+  }
+
+  /** Advances the looping camera move; true when it moved the camera. */
+  advanceCameraAnimation(dtMs: number): boolean {
+    return this.camera.advanceAnimation(dtMs);
+  }
+
   /** Places the avatar at its stored scene transform. */
   applyAvatarTransform(avatar: { transform?: ObjectTransform }): void {
     this.avatarView.applyTransform(avatar);
@@ -754,11 +769,11 @@ export class GarmentEngine {
   }
 
   setReferenceVisible(id: string, visible: boolean): void {
-    this.references.setVisible(id, visible);
+    this.references.setVisible(this.host, id, visible);
   }
 
   setReferenceOpacity(id: string, opacity: number): void {
-    this.references.setOpacity(id, opacity);
+    this.references.setOpacity(this.host, id, opacity);
   }
 
   /** Places a reference object at its stored scene transform. */
@@ -787,6 +802,7 @@ export class GarmentEngine {
 
   /** Takes the garment, body, references and environment out of the scene. */
   dispose(): void {
+    this.camera.dispose();
     this.interactionView.dispose();
     this.avatarView.setHighlighted(false);
     this.clearCloth();

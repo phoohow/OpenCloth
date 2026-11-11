@@ -9,7 +9,7 @@ import {
 } from '@/commands';
 import { bodyLandmarks } from '@/avatar';
 import {
-  panelHeightOffsets, panelOffsetCm, pointHeightOffsets, toHeightPattern, toPatternPoints,
+  panelHeightOffsets, panelOffsetCm, pointHeightOffsets, toHeightPattern, toPatternPoint, toPatternPoints,
 } from '@/ui/viewport2D/panelHeight';
 import { CreatePanelFromPointsCommand } from '@/commands';
 import { AddInternalLineCommand, OutlineHoleCommand, OutlineSplitCommand } from '@/commands';
@@ -34,6 +34,8 @@ import { useCanvasView } from '@/ui/viewport2D/useCanvasView';
 import { useNudgeSession } from '@/ui/viewport2D/useNudgeSession';
 import { ViewportHint } from '@/ui/widgets/viewportHint';
 import { reportActionError } from '@/ui/widgets/toast';
+import { isAssetDrag, currentAssetDrag, endAssetDrag, readAssetDrag } from '@/ui/assets/assetDrag';
+import { applyFabricToPanels, placeTrimOnPanel } from '@/ui/assets/applyAsset';
 
 /** 2D drafting canvas: draws the pattern and turns pointer and keyboard input into pattern edits. */
 export function Viewport2D() {
@@ -42,6 +44,8 @@ export function Viewport2D() {
   const [isPanning, setIsPanning] = useState(false);
   const [hoverTarget, setHoverTarget] = useState<HoverTarget | null>(null);
   const [markHint, setMarkHint] = useState<MarkHint | null>(null);
+  /** Landing point of a dragged catalogue trim, drawn as a ring at its real size. */
+  const [dropHint, setDropHint] = useState<{ pos: Vec2; radiusCm: number } | null>(null);
   const [hoverRole, setHoverRole] = useState<PressRole>(null);
   /** Edge under the cursor while the seam tool is armed, shown as the side about to be picked. */
   const [seamHover, setSeamHover] = useState<{ edgeId: string; t0: number; t1: number } | null>(null);
@@ -158,14 +162,14 @@ export function Viewport2D() {
       meshPattern: shown,
       offsets: shownOffsets,
       view, simulation: project.scene.simulation,
-      selection, hover: hoverTarget, markHint, preview: preview && { ...preview, pattern: toHeightPattern(shown, shownOffsets) }, rect: rectWorld,
+      selection, hover: hoverTarget, markHint, dropHint, preview: preview && { ...preview, pattern: toHeightPattern(shown, shownOffsets) }, rect: rectWorld,
       showSeams: activeTool === 'seam' || idsOfKind(selection, 'seam').length > 0,
       draft, snapHint, insertHint, seamHover, hoverDelete: activeTool === 'deletePoint', display: displayOptions as DisplayOptions,
       gradingOutlines,
       onPrintImageReady: () => useUIStore.getState().requestRepaint(),
     });
     noteDrawnFrame('2d', performance.now());
-  }, [pattern, heights, heightOffsets, body, view, project.scene.simulation, selection, hoverTarget, markHint, preview, rectWorld, activeTool, draft, snapHint, insertHint, seamHover, displayOptions, gradingOutlines]);
+  }, [pattern, heights, heightOffsets, body, view, project.scene.simulation, selection, hoverTarget, markHint, dropHint, preview, rectWorld, activeTool, draft, snapHint, insertHint, seamHover, displayOptions, gradingOutlines]);
 
   useEffect(() => { render(); }, [render, repaintToken]);
 
@@ -229,6 +233,49 @@ export function Viewport2D() {
     (world: Vec2): string | null => visiblePanelUnderPoint(heights, outlines, world, HIT_RADIUS_PX / view.scale),
     [heights, outlines, view.scale],
   );
+
+  /** Highlights the panel a catalogue drag would land on, plus the trim's footprint when placing one. */
+  const handleAssetDragOver = (e: React.DragEvent) => {
+    const payload = isAssetDrag(e) ? currentAssetDrag() : null;
+    if (!payload) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    const world = eventWorld(e);
+    const panelId = world ? pickPanel(world) : null;
+    setHoverTarget(panelId ? { kind: 'panel', id: panelId } : null);
+    setDropHint(world && panelId && payload.kind === 'trim'
+      ? { pos: world, radiusCm: payload.asset.sizeMm / 20 }
+      : null);
+  };
+
+  /** Clears the highlight; a drag moving onto a child of the pane has not left it. */
+  const handleAssetDragLeave = (e: React.DragEvent) => {
+    if (!isAssetDrag(e)) return;
+    if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+    setHoverTarget(null);
+    setDropHint(null);
+  };
+
+  /** Applies a dragged material to the panel under the drop, or places a trim at the exact point. */
+  const handleAssetDrop = (e: React.DragEvent) => {
+    const payload = readAssetDrag(e);
+    if (!payload) return;
+    e.preventDefault();
+    endAssetDrag();
+    setHoverTarget(null);
+    setDropHint(null);
+    const world = eventWorld(e);
+    const panelId = world ? pickPanel(world) : null;
+    if (!world || !panelId) {
+      useUIStore.getState().showToast('拖到版片上才能应用');
+      return;
+    }
+    if (payload.kind === 'fabric') {
+      applyFabricToPanels([panelId], payload.asset);
+      return;
+    }
+    placeTrimOnPanel(panelId, toPatternPoint(world, panelOffsetCm(heightOffsets, panelId)), payload.asset);
+  };
 
   const pickEdge = useCallback(
     (world: Vec2) => nearestEdgeSegment(heights, Object.keys(heights.edges), world, HIT_RADIUS_PX / view.scale),
@@ -474,7 +521,13 @@ export function Viewport2D() {
   const hint = statusHint(layout, view.scale, activeTool, seamStep);
 
   return (
-    <div ref={containerRef} style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
+    <div
+      ref={containerRef}
+      style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}
+      onDragOver={handleAssetDragOver}
+      onDragLeave={handleAssetDragLeave}
+      onDrop={handleAssetDrop}
+    >
       <canvas
         ref={canvasRef}
         data-testid="viewport-2d"

@@ -34,6 +34,9 @@ export function diffProject(prev: Project, next: Project): ChangeSet {
   if (!sameJson(prev.scene.referenceObjects ?? [], next.scene.referenceObjects ?? [])) {
     aspects.add('scene.references');
   }
+  if (!sameJson(prev.scene.cameraAnimation ?? null, next.scene.cameraAnimation ?? null)) {
+    aspects.add('scene.camera');
+  }
 
   collectPanelChanges(prev, next, aspects, panelIds);
   return ChangeSet.of(aspects, panelIds);

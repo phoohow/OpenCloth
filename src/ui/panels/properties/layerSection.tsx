@@ -4,7 +4,6 @@ import { GARMENT_LAYER_LABELS } from '@/ui/optionTables';
 import { layerThicknessCm } from '@/model';
 import { patchValue } from '@/ui/sceneCommands';
 import { Row, Section, SliderRow } from '@/ui/widgets/propertyRows';
-import { styles } from '@/ui/panels/properties/styles';
 
 /** Construction-layer clearances and how many panels each layer holds. */
 export function LayerSection({ project }: { project: Project }) {
@@ -32,9 +31,6 @@ export function LayerSection({ project }: { project: Project }) {
       <Row label="版片 里布 / 填充 / 外壳">
         {counts.lining} / {counts.padding} / {counts.shell}
       </Row>
-      <div style={styles.note}>
-        结构层在版片的模拟标签里设置。层厚度是布料与身体、地面及相邻层的碰撞间隙；里布、填充、外壳的默认碰撞层依次为 0 / 1 / 2，层间距再按层差推开。未指定结构层的片沿用全局「布料厚度」。
-      </div>
     </Section>
   );
 }

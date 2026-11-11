@@ -17,9 +17,9 @@ export interface MeasureReadout {
   distanceCm: number | null;
 }
 
-import type { PaneId, PropTab, ViewLayout } from '@/store/types';
+import type { AssetTab, PaneId, PropTab, ViewLayout } from '@/store/types';
 
-export type { PaneId, PropTab, ViewLayout } from '@/store/types';
+export type { AssetTab, PaneId, PropTab, ViewLayout } from '@/store/types';
 
 /** Display modes that colour the surface from simulation fields: raster-only, physical fill. */
 const HEATMAP_MODES: ReadonlySet<string> = new Set(['fitHeatmap', 'strainHeatmap', 'pressureHeatmap']);
@@ -93,12 +93,12 @@ interface UIStore {
   propTab: PropTab;
   /** Share of the right panel height given to the outliner. */
   sceneRatio: number;
-  /** Width of the template panel in pixels. */
+  /** Width of the asset panel in pixels. */
   leftPanelWidth: number;
   /** Width of the outliner and properties column in pixels. */
   rightPanelWidth: number;
-  /** Outliner rows whose children are hidden. */
-  collapsedOutliner: string[];
+  /** Outliner rows whose children are shown; empty keeps every collection folded. */
+  expandedOutliner: string[];
   fill: FillMode;
   wire: WireMode;
   backend: RenderBackend;
@@ -157,7 +157,9 @@ interface UIStore {
   editPreviewPattern: Pattern | null;
   /** Grading delta copied from one point, pasted onto the selected points. Session-only. */
   gradingClipboard: Vec2 | null;
-  showTemplatePanel: boolean;
+  /** Catalogue tab open in the asset panel; session-only. */
+  assetTab: AssetTab;
+  showAssetPanel: boolean;
   showScenePanel: boolean;
   showPropertiesPanel: boolean;
   showTimeline: boolean;
@@ -198,7 +200,7 @@ interface UIStore {
   setLeftPanelWidth: (w: number) => void;
   setRightPanelWidth: (w: number) => void;
   toggleOutliner: (id: string) => void;
-  setCollapsedOutliner: (ids: string[]) => void;
+  setExpandedOutliner: (ids: string[]) => void;
   setPropTab: (t: PropTab) => void;
   setDisplayMode: (m: DisplayMode) => void;
   setFill: (m: FillMode) => void;
@@ -210,7 +212,8 @@ interface UIStore {
   requestRepaint: () => void;
   setTrimKind: (k: TrimKind) => void;
   bumpRefObjects: () => void;
-  toggleTemplatePanel: () => void;
+  setAssetTab: (t: AssetTab) => void;
+  toggleAssetPanel: () => void;
   toggleScenePanel: () => void;
   togglePropertiesPanel: () => void;
   toggleTimeline: () => void;
@@ -240,7 +243,7 @@ export const useUIStore = create<UIStore>((set, get) => ({
   sceneRatio: prefs.sceneRatio,
   leftPanelWidth: prefs.leftPanelWidth,
   rightPanelWidth: prefs.rightPanelWidth,
-  collapsedOutliner: [],
+  expandedOutliner: [],
   fill: prefs.fill,
   wire: prefs.wire,
   backend: prefs.backend,
@@ -267,7 +270,8 @@ export const useUIStore = create<UIStore>((set, get) => ({
     internal: true, darts: true, seamAllowance: false, notches: true, grain: true, annotations: true, measurements: true, gradingOverlay: false, seamJoin: false,
     prints: true, topstitches: true, trims: true, wireframe: false,
   },
-  showTemplatePanel: prefs.showTemplatePanel,
+  assetTab: 'pattern',
+  showAssetPanel: prefs.showAssetPanel,
   showScenePanel: prefs.showScenePanel,
   showPropertiesPanel: prefs.showPropertiesPanel,
   showTimeline: prefs.showTimeline,
@@ -328,11 +332,11 @@ export const useUIStore = create<UIStore>((set, get) => ({
   setLeftPanelWidth: (w) => set({ leftPanelWidth: w }),
   setRightPanelWidth: (w) => set({ rightPanelWidth: w }),
   toggleOutliner: (id) => set(s => ({
-    collapsedOutliner: s.collapsedOutliner.includes(id)
-      ? s.collapsedOutliner.filter(x => x !== id)
-      : [...s.collapsedOutliner, id],
+    expandedOutliner: s.expandedOutliner.includes(id)
+      ? s.expandedOutliner.filter(x => x !== id)
+      : [...s.expandedOutliner, id],
   })),
-  setCollapsedOutliner: (ids) => set({ collapsedOutliner: ids }),
+  setExpandedOutliner: (ids) => set({ expandedOutliner: ids }),
   setPropTab: (t) => set({ propTab: t }),
   // A heatmap colours the simulated surface, so it is a raster diagnostic: entering one switches
   // the viewport to raster and to the physical fill, or the tracer would fade the colours out as it
@@ -358,7 +362,8 @@ export const useUIStore = create<UIStore>((set, get) => ({
   requestRepaint: () => set(s => ({ repaintToken: s.repaintToken + 1 })),
   setTrimKind: (k) => set({ trimKind: k }),
   bumpRefObjects: () => set(s => ({ refObjectsVersion: s.refObjectsVersion + 1 })),
-  toggleTemplatePanel: () => set(s => ({ showTemplatePanel: !s.showTemplatePanel })),
+  setAssetTab: (t) => set({ assetTab: t }),
+  toggleAssetPanel: () => set(s => ({ showAssetPanel: !s.showAssetPanel })),
   toggleScenePanel: () => set(s => ({ showScenePanel: !s.showScenePanel })),
   togglePropertiesPanel: () => set(s => ({ showPropertiesPanel: !s.showPropertiesPanel })),
   toggleTimeline: () => set(s => ({ showTimeline: !s.showTimeline })),

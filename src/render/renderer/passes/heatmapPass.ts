@@ -9,12 +9,11 @@ export class HeatmapPass implements RenderPass {
   readonly reads = ['color'] as const;
   readonly writes = ['color'] as const;
 
-  enabled(_frame: FrameConditions): boolean {
-    return true;
+  enabled(frame: FrameConditions): boolean {
+    return frame.overlays.postTone;
   }
 
   execute(ctx: PassContext): void {
-    if (!ctx.scene.hasStage('postTone')) return;
     // The colour target still holds the scene depth, so the heatmap keeps the occlusion of the
     // surfaces it describes while skipping the tone curve.
     ctx.commands.setTarget(ctx.resources.color, false);

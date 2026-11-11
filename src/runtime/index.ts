@@ -10,3 +10,4 @@ export {
 } from '@/runtime/viewport';
 export type { ExportOptions } from '@/runtime/exportService';
 export { knitTextureDataUrl } from '@/runtime/knitTexture';
+export { BUNDLED_ENVIRONMENT_URL } from '@/runtime/environmentStage';

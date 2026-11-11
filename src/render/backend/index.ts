@@ -3,7 +3,7 @@
 import { Backend } from '@/render/backend/backend';
 import type { BackendOptions } from '@/render/backend/types';
 
-export { Backend };
+export type { Backend } from '@/render/backend/backend';
 export type {
   BackendOptions, FrameSize, ProgramHandle, SceneHandle, TargetHandle, TextureHandle,
 } from '@/render/backend/types';
@@ -18,7 +18,7 @@ export type { DenoiseEngine } from '@/render/backend/denoise/denoiseEngine';
 /** Creates the backend behind the neutral facade. */
 export function createBackend(
   canvas: HTMLCanvasElement,
-  options: Omit<BackendOptions, 'canvas'> = {},
+  options: BackendOptions = {},
 ): Promise<Backend> {
-  return Backend.create({ canvas, ...options });
+  return Backend.create(canvas, options);
 }

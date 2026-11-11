@@ -2,13 +2,13 @@ import { create } from 'zustand';
 import { CLOSED_NAV, type MenuNavState } from '@/ui/menu/nav';
 
 /** Modal shown over the app from the menu. */
-export type MenuDialog = 'shortcuts' | 'about' | 'exportDxf' | 'exportSvg' | 'exportPdf' | 'exportTechPack' | 'exportMarker' | 'exportBom' | 'review' | 'assets' | 'integration' | null;
+export type MenuDialog = 'shortcuts' | 'about' | 'production' | 'review' | 'integration' | null;
 
 interface MenuStore {
   /** Which dropdown, submenu and row the menu bar currently highlights. */
   nav: MenuNavState;
   dialog: MenuDialog;
-  /** Optional payload of the open dialog; the review dialog uses it as the initial project. */
+  /** Optional payload of the open dialog; the review dialog reads a project id, production a kind. */
   dialogParam: string | null;
   setNav: (nav: MenuNavState) => void;
   closeMenus: () => void;

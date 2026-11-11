@@ -124,6 +124,34 @@ describe('draw list', () => {
     expect(item.materials[0]?.data.kind).toBe('surface');
   });
 
+  it('gives an asset entity without material refs its built-in slot', () => {
+    const world = makeWorld();
+    world.writer().createEntity({
+      layer: 'subject',
+      mesh: { kind: 'asset', key: 'avatar' },
+      bounds: { min: { x: -1, y: 0, z: -1 }, max: { x: 1, y: 2, z: 1 } },
+    });
+
+    const item = buildDrawList(world.view, view()).items[0]!;
+    expect(item.materials[0]?.technique).toBe('asset');
+    expect(item.traceMaterials[0]?.technique).toBe('asset');
+    expect(item.traceMaterials[0]?.source).toEqual({ kind: 'asset', key: 'avatar', slot: 0 });
+  });
+
+  it('keeps a raster-only asset out of the trace materials', () => {
+    const world = makeWorld();
+    world.writer().createEntity({
+      layer: 'subject',
+      mesh: { kind: 'asset', key: 'avatar' },
+      channels: CHANNEL_RASTER,
+      bounds: { min: { x: -1, y: 0, z: -1 }, max: { x: 1, y: 2, z: 1 } },
+    });
+
+    const item = buildDrawList(world.view, view()).items[0]!;
+    expect(item.materials).toHaveLength(1);
+    expect(item.traceMaterials).toHaveLength(0);
+  });
+
   it('orders scene before overlay before gizmo and filters channels', () => {
     const world = makeWorld();
     const mesh = meshId(world);

@@ -164,6 +164,62 @@ interface GltfJson {
   images?: { uri?: string }[];
 }
 
+/** Roughness of a surface whose source material carries no sheen value. */
+const DEFAULT_MODEL_ROUGHNESS = 0.62;
+
+/** GGX roughness equivalent of a phong specular exponent. */
+function roughnessFromShininess(shininess: number): number {
+  return THREE.MathUtils.clamp(Math.pow(2 / (shininess + 2), 0.25), 0.03, 1);
+}
+
+/** Standard material carrying over the surface a non-PBR loader assigned. */
+function toStandardMaterial(source: THREE.Material): THREE.MeshStandardMaterial {
+  const phong = source as Partial<THREE.MeshPhongMaterial>;
+  const basic = source as Partial<THREE.MeshBasicMaterial>;
+  return new THREE.MeshStandardMaterial({
+    name: source.name,
+    color: basic.color?.clone() ?? new THREE.Color(0xffffff),
+    map: basic.map ?? null,
+    normalMap: phong.normalMap ?? null,
+    emissive: phong.emissive?.clone() ?? new THREE.Color(0),
+    emissiveMap: phong.emissiveMap ?? null,
+    metalness: 0,
+    roughness: phong.shininess === undefined
+      ? DEFAULT_MODEL_ROUGHNESS : roughnessFromShininess(phong.shininess),
+    side: source.side,
+    transparent: source.transparent,
+    opacity: source.opacity,
+    alphaTest: source.alphaTest,
+    depthWrite: source.depthWrite,
+    depthTest: source.depthTest,
+    vertexColors: phong.vertexColors ?? false,
+    flatShading: phong.flatShading ?? false,
+  });
+}
+
+/**
+ * Replaces every material the path tracer cannot model with a standard one: phong (OBJ, FBX) and
+ * unlit (glTF) surfaces are otherwise hidden from traced frames while the raster keeps drawing
+ * them, so the two pipelines disagree on what the asset looks like.
+ */
+export function standardizeMaterials(root: THREE.Object3D): void {
+  const converted = new Map<THREE.Material, THREE.Material>();
+  root.traverse(child => {
+    const mesh = child as THREE.Mesh;
+    if (!mesh.isMesh || !mesh.material) return;
+    const list = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    const next = list.map(material => {
+      if (material instanceof THREE.MeshStandardMaterial) return material;
+      const known = converted.get(material);
+      if (known) return known;
+      const standard = toStandardMaterial(material);
+      converted.set(material, standard);
+      return standard;
+    });
+    mesh.material = Array.isArray(mesh.material) ? next : next[0]!;
+  });
+}
+
 /** Wraps a loader result in a named, normalized group carrying the file's motion clips. */
 function finishLoaded(
   root: THREE.Object3D,
@@ -174,6 +230,7 @@ function finishLoaded(
 ): LoadedModel {
   const group = new THREE.Group();
   group.name = opts.name ?? stripExtension(baseName(source));
+  standardizeMaterials(root);
   group.add(root);
   normalizeGroup(group, opts);
   group.animations = animations;

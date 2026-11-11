@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 
 /**
- * Style atoms shared by the three dialog bodies in this folder (素材库 / 版本与审版 / 外部对接). They all render into the
+ * Style atoms shared by the two dialog bodies in this folder (版本与审版 / 外部对接). They both render into the
  * same menu popover, so the frame, the tab strip and the button family have to look identical; only paddings
  * and column layouts differ per dialog and stay local.
  */

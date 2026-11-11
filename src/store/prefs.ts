@@ -22,14 +22,14 @@ export interface UiPrefs {
   cameraProjection: CameraProjection;
   /** Share of the right panel height given to the outliner. */
   sceneRatio: number;
-  /** Width of the template panel in pixels. */
+  /** Width of the asset panel in pixels. */
   leftPanelWidth: number;
   /** Width of the outliner and properties column in pixels. */
   rightPanelWidth: number;
   /** 3D fidelity the cloth follows an in-flight 2D edit with. */
   editPreview: EditPreviewTier;
   // Panel visibility.
-  showTemplatePanel: boolean;
+  showAssetPanel: boolean;
   showScenePanel: boolean;
   showPropertiesPanel: boolean;
   showTimeline: boolean;
@@ -50,7 +50,7 @@ export const DEFAULT_PREFS: UiPrefs = {
   leftPanelWidth: 220,
   rightPanelWidth: 280,
   editPreview: 'off',
-  showTemplatePanel: false,
+  showAssetPanel: false,
   showScenePanel: true,
   showPropertiesPanel: true,
   showTimeline: true,
@@ -122,7 +122,7 @@ export function readPrefs(storage: PreferencesStorage = browserStorage()): UiPre
     sceneRatio: clampTo(value.sceneRatio, SCENE_RATIO_RANGE, DEFAULT_PREFS.sceneRatio),
     leftPanelWidth: clampTo(value.leftPanelWidth, PANEL_WIDTH_RANGE, DEFAULT_PREFS.leftPanelWidth),
     rightPanelWidth: clampTo(value.rightPanelWidth, PANEL_WIDTH_RANGE, DEFAULT_PREFS.rightPanelWidth),
-    showTemplatePanel: flag('showTemplatePanel', DEFAULT_PREFS.showTemplatePanel),
+    showAssetPanel: flag('showAssetPanel', DEFAULT_PREFS.showAssetPanel),
     showScenePanel: flag('showScenePanel', DEFAULT_PREFS.showScenePanel),
     showPropertiesPanel: flag('showPropertiesPanel', DEFAULT_PREFS.showPropertiesPanel),
     showTimeline: flag('showTimeline', DEFAULT_PREFS.showTimeline),
@@ -162,7 +162,7 @@ export function pickPrefs(state: UiPrefs): UiPrefs {
     sceneRatio: state.sceneRatio,
     leftPanelWidth: state.leftPanelWidth,
     rightPanelWidth: state.rightPanelWidth,
-    showTemplatePanel: state.showTemplatePanel,
+    showAssetPanel: state.showAssetPanel,
     showScenePanel: state.showScenePanel,
     showPropertiesPanel: state.showPropertiesPanel,
     showTimeline: state.showTimeline,

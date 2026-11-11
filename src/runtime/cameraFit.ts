@@ -1,9 +1,8 @@
 /** Camera presets and pure box framing, independent of three. */
 
 import type { Vec3 } from '@/base/math';
-import { degToRad } from '@/base/math';
-import { cross3, dot3, normalize3 } from '@/base/math';
-import type { Bounds } from '@/render/common';
+import type { Bounds, CameraFit } from '@/render/common';
+import { orthoFitViewHeight, perspectiveFitDistance, projectBox } from '@/render/common';
 
 /** Named view the camera can jump to; the camera sits on the direction ray, looking at the scene. */
 export type CameraPreset =
@@ -33,76 +32,35 @@ export const CAMERA_VIEW_FRAMES: Record<CameraPreset, ViewFrame> = {
   backRight: { direction: { x: SQRT_HALF, y: 0, z: -SQRT_HALF }, up: UP },
 };
 
-/** Extra room left around the framed box, as a multiplier of the exact fit. */
-export const FIT_MARGIN = 1.08;
+/** Every preset direction, measured so one framing fits all of them. */
+const ORBIT_FRAMES: readonly ViewFrame[] = Object.values(CAMERA_VIEW_FRAMES);
 
-/** Half-extents of a box measured on the view axes; `depth` runs along the view direction. */
-export interface ProjectedExtents {
-  width: number;
-  height: number;
-  depth: number;
-}
-
-/** World-space placement that frames a box from one view direction. */
-export interface CameraFit {
-  distance: number;
-  viewHeight: number;
-}
-
-/** Right, up and backward axes of the view frame. */
-function viewAxes(frame: ViewFrame): { right: Vec3; up: Vec3; back: Vec3 } {
-  const back = normalize3(frame.direction) ?? { x: 0, y: 0, z: 1 };
-  const right = normalize3(cross3(frame.up, back)) ?? { x: 1, y: 0, z: 0 };
-  const up = normalize3(cross3(back, right)) ?? { x: 0, y: 1, z: 0 };
-  return { right, up, back };
-}
-
-/** Measures a box along the view axes, so the framing only needs the projected extents. */
-export function projectBox(box: Bounds, frame: ViewFrame): ProjectedExtents {
-  const half = {
-    x: (box.max.x - box.min.x) / 2,
-    y: (box.max.y - box.min.y) / 2,
-    z: (box.max.z - box.min.z) / 2,
-  };
-  const { right, up, back } = viewAxes(frame);
-  let width = 0;
-  let height = 0;
-  let depth = 0;
-  for (let i = 0; i < 8; i++) {
-    const corner = {
-      x: i & 1 ? half.x : -half.x,
-      y: i & 2 ? half.y : -half.y,
-      z: i & 4 ? half.z : -half.z,
-    };
-    width = Math.max(width, Math.abs(dot3(corner, right)));
-    height = Math.max(height, Math.abs(dot3(corner, up)));
-    depth = Math.max(depth, Math.abs(dot3(corner, back)));
-  }
-  return { width, height, depth };
-}
-
-/** Camera distance where the nearest box corner still fits the vertical and horizontal field. */
-export function perspectiveFitDistance(
-  extents: ProjectedExtents, fovDeg: number, aspect: number, margin = FIT_MARGIN,
-): number {
-  const vertical = Math.tan(degToRad(fovDeg) / 2);
-  const horizontal = vertical * Math.max(0.01, aspect);
-  const fitted = Math.max(extents.height / vertical, extents.width / horizontal);
-  return Math.max(0.1, (fitted + extents.depth) * margin);
-}
-
-/** Orthographic frustum height covering the box, widened when the aspect makes it too narrow. */
-export function orthoFitViewHeight(extents: ProjectedExtents, aspect: number, margin = FIT_MARGIN): number {
-  const width = extents.width * 2;
-  const height = extents.height * 2;
-  return Math.max(0.1, Math.max(height, width / Math.max(0.01, aspect)) * margin);
-}
-
-/** Distance and orthographic height that frame the box for the viewport's current aspect. */
-export function fitCameraToBox(box: Bounds, frame: ViewFrame, fovDeg: number, aspect: number): CameraFit {
-  const extents = projectBox(box, frame);
+/**
+ * Distance and orthographic height that frame the box for the viewport's current aspect.
+ * Only presets are named here; the framing math itself lives in `render/common/viewMath`.
+ */
+export function fitCameraToBox(box: Bounds, fovDeg: number, aspect: number): CameraFit {
   return {
-    distance: perspectiveFitDistance(extents, fovDeg, aspect),
-    viewHeight: orthoFitViewHeight(extents, aspect),
+    distance: orbitDistance(box, fovDeg, aspect),
+    viewHeight: orbitViewHeight(box, aspect),
   };
+}
+
+/** Orbit distance that frames the box from every preset, keeping the camera on one radius. */
+function orbitDistance(box: Bounds, fovDeg: number, aspect: number): number {
+  let distance = 0;
+  for (const frame of ORBIT_FRAMES) {
+    const extents = projectBox(box, frame.direction, frame.up);
+    distance = Math.max(distance, perspectiveFitDistance(extents, fovDeg, aspect));
+  }
+  return distance;
+}
+
+/** Orthographic height that fits the box from every preset, keeping one apparent scale. */
+function orbitViewHeight(box: Bounds, aspect: number): number {
+  let viewHeight = 0;
+  for (const frame of ORBIT_FRAMES) {
+    viewHeight = Math.max(viewHeight, orthoFitViewHeight(projectBox(box, frame.direction, frame.up), aspect));
+  }
+  return viewHeight;
 }

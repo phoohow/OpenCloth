@@ -105,3 +105,16 @@ export interface CameraConfig {
   /** World height the orthographic frustum spans in meters; meaningful while orthographic. */
   viewHeightMeters: number;
 }
+
+/** Camera moves a project can loop around its still placement. */
+export type CameraAnimationKind = 'orbit' | 'dolly' | 'pan' | 'crane';
+
+/** Looping move played on top of the saved placement, leaving the stored pose untouched. */
+export interface CameraAnimationConfig {
+  kind: CameraAnimationKind;
+  enabled: boolean;
+  /** Seconds one back-and-forth cycle takes. */
+  periodSec: number;
+  /** Yaw sweep in degrees for orbit; travel in meters for dolly, pan and crane. */
+  amplitude: number;
+}

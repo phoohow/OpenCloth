@@ -104,7 +104,7 @@ export function Timeline() {
 
         <div
           style={styles.frameInfo}
-          title={`已模拟 ${currentFrame} 帧；计时是从开始播放起累计的墙钟时间，暂停不计、重置清零，当前约 ${simRate} 步/秒。`}
+          title={`第 ${currentFrame} 帧，约 ${simRate} 步/秒`}
         >
           帧 <span style={{ color: '#4da6ff', fontWeight: 600 }}>{currentFrame}</span>
           <span style={styles.simTime}> · 计时 {formatElapsed(playedMs)}</span>

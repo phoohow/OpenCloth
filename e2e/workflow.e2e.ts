@@ -25,7 +25,7 @@ async function summary(page: Page): Promise<OpenClothSummary> {
 /** Boots the app and waits for the starter project to render. */
 async function boot(page: Page): Promise<void> {
   await page.goto('/');
-  await expect(page.getByText('正在初始化 WebGPU 渲染器…')).toBeHidden();
+  await expect(page.getByText('正在初始化 WebGPU 渲染器')).toBeHidden();
 }
 
 /** Draws a rectangle with the shape tool and checks undo and redo move the panel count. */
@@ -54,12 +54,17 @@ test('绘制矩形后可撤销与重做', async ({ page }) => {
   await expect.poll(async () => (await summary(page)).panels).toBe(before.panels + 1);
 });
 
-/** Exports the DXF pattern through the file menu and verifies the downloaded bytes. */
-test('导出 DXF 版型下载', async ({ page }) => {
+/** Opens the production preview window, switches to the DXF tab and verifies the download. */
+test('预览并导出 DXF 版型下载', async ({ page }) => {
   await boot(page);
-  await page.getByText('文件', { exact: true }).first().click();
-  await page.getByText('导出', { exact: true }).first().hover();
-  await page.getByText('生产：DXF 版型…', { exact: true }).click();
+  await page.getByText('生产', { exact: true }).first().click();
+  await page.getByText('生产输出', { exact: true }).click();
+
+  // The window opens on 排料图; the rail of tabs switches the previewed output.
+  await expect(page.getByText('生产预览')).toBeVisible();
+  await expect(page.locator('img[src^="data:image/svg+xml"]')).toBeVisible();
+  await page.getByRole('button', { name: 'DXF', exact: true }).click();
+  await expect(page.getByText('文本编码', { exact: true })).toBeVisible();
 
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: '导出', exact: true }).click();
@@ -69,6 +74,28 @@ test('导出 DXF 版型下载', async ({ page }) => {
   expect(await download.failure()).toBeNull();
   const path = await download.path();
   expect(path, 'DXF 下载未落盘').toBeTruthy();
+});
+
+/** Previews the PLM bundle in the integration dialog before saving it. */
+test('协作内容先预览再导出', async ({ page }) => {
+  await boot(page);
+  await page.getByText('协作', { exact: true }).first().click();
+  await page.getByText('外部对接', { exact: true }).click();
+
+  // The rail opens on the PLM bundle, whose body is drawn before anything is downloaded.
+  await expect(page.locator('pre')).toContainText('"format": "opencloth-plm"');
+  await expect(page.getByText('文件大小', { exact: true })).toBeVisible();
+
+  await page.getByRole('button', { name: 'BOM', exact: true }).click();
+  await expect(page.getByText('物料行数', { exact: true })).toBeVisible();
+
+  await page.getByRole('button', { name: 'PLM', exact: true }).click();
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: '导出', exact: true }).click();
+  const download = await downloadPromise;
+
+  expect(download.suggestedFilename()).toMatch(/PLM包\.json$/);
+  expect(await download.failure()).toBeNull();
 });
 
 /** Loads a saved project through the hidden file input and checks the name reaches the store. */

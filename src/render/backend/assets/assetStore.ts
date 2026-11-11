@@ -8,12 +8,14 @@ import type {
   AssetPlayback, AssetPort, AssetSource, Bounds, ExportFormat, Ray, Transform,
 } from '@/render/common';
 import { meshTrianglesFromObject } from '@/render/backend/assets/avatarMeshCollider';
-import { applyBodySkin } from '@/render/backend/assets/bodyMaterial';
+import {
+  applyBodySkin, isSurfaceMesh, SELECTION_OVERLAY_NAME as SELECTION_OVERLAY,
+} from '@/render/backend/assets/bodyMaterial';
 import { SoftBodyDeformer } from '@/render/backend/assets/softBody';
 import { loadModelFromFile, loadModelFromUrl } from '@/render/backend/assets/modelLoader';
 
-/** Name of the clone meshes marking a selected asset. */
-const SELECTION_OVERLAY = 'avatarSelectionOverlay';
+/** Opacity a translucent asset blends to, so the scene behind it stays readable. */
+const TRANSLUCENT_OPACITY = 0.35;
 
 /** Translucent material of the selection clone. */
 const SELECTION_MATERIAL = new THREE.MeshBasicMaterial({
@@ -33,6 +35,9 @@ class ModelHandle implements AssetHandle {
   private playing = false;
   private highlighted = false;
   private disposed = false;
+  /** Look the owner asked for; the display state only overrides its opacity. */
+  private appearance: AssetAppearance = {};
+  private display: AssetDisplay = 'visible';
 
   constructor(
     readonly key: string,
@@ -60,23 +65,21 @@ class ModelHandle implements AssetHandle {
   }
 
   setAppearance(appearance: AssetAppearance): void {
-    applyBodySkin(this.root, appearance);
+    this.appearance = appearance;
+    applyBodySkin(this.root, this.appearanceFor(this.display));
     this.revision += 1;
   }
 
   setDisplay(display: AssetDisplay): void {
+    this.display = display;
     this.root.visible = display !== 'hidden';
-    this.root.traverse(object => {
-      const mesh = object as THREE.Mesh;
-      if (!mesh.isMesh || mesh.name === SELECTION_OVERLAY) return;
-      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-      for (const material of materials) {
-        const standard = material as THREE.MeshStandardMaterial;
-        standard.transparent = display === 'translucent';
-        standard.opacity = display === 'translucent' ? 0.35 : 1;
-      }
-    });
+    applyBodySkin(this.root, this.appearanceFor(display));
     this.revision += 1;
+  }
+
+  /** The stored look, faded while the display asks for a translucent body. */
+  private appearanceFor(display: AssetDisplay): AssetAppearance {
+    return display === 'translucent' ? { ...this.appearance, opacity: TRANSLUCENT_OPACITY } : this.appearance;
   }
 
   setHighlighted(on: boolean): void {
@@ -86,12 +89,10 @@ class ModelHandle implements AssetHandle {
     this.overlays.length = 0;
     if (!on) return;
     this.root.traverse(object => {
-      const mesh = object as THREE.Mesh;
-      if (!mesh.isMesh || mesh.name === SELECTION_OVERLAY) return;
-      const overlay = new THREE.Mesh(mesh.geometry, SELECTION_MATERIAL);
+      if (!isSurfaceMesh(object)) return;
+      const overlay = new THREE.Mesh(object.geometry, SELECTION_MATERIAL);
       overlay.name = SELECTION_OVERLAY;
-      overlay.renderOrder = 2;
-      mesh.add(overlay);
+      object.add(overlay);
       this.overlays.push(overlay);
     });
     this.revision += 1;

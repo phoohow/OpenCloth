@@ -228,11 +228,10 @@ export function MaterialTab({ project, panelId, engineRef }: {
               <SmallButton onClick={makeKnitTexture} title="按组织与密度生成灰度针织贴图并写入基础色贴图槽">生成针织贴图</SmallButton>
               <SmallButton onClick={exportKnitChart} title="按本片尺寸与密度导出组织图 CSV">导出组织图 CSV</SmallButton>
             </Row>
-            <Hint>针织贴图是灰度组织，乘以基础色显示；组织图按当前片净轮廓的宽高与密度换算针数与行数。</Hint>
           </Section>
         </>
       ) : (
-        <Hint>这个版片还没有材质，点右侧下拉换用一个，或用「＋」建一个。</Hint>
+        <Hint>还没有材质</Hint>
       )}
     </>
   );
@@ -269,7 +268,6 @@ export function AvatarMaterialTab({ project }: { project: Project }) {
         onChange={v => write('修改皮肤粗糙度', { roughness: v })} />
       <SliderRow label="高光" min={0} max={1} step={0.01} value={skin.clearcoat} commitOnRelease
         onChange={v => write('修改皮肤高光', { clearcoat: v })} />
-      <Hint>肤色只作用于无贴图的人体表面，眼睛与自带贴图的模型保持原样。</Hint>
     </Section>
   );
 }

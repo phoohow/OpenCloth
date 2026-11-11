@@ -89,18 +89,21 @@ export class ReferenceStage {
     return object;
   }
 
-  setVisible(id: string, visible: boolean): void {
+  setVisible(host: PresenterHost, id: string, visible: boolean): void {
     const object = this.objects.get(id);
     if (!object) return;
     object.visible = visible;
-    this.handles.get(id)?.setDisplay(visible ? 'visible' : 'hidden');
+    const handle = this.handles.get(id);
+    handle?.setDisplay(visible ? 'visible' : 'hidden');
+    host.writer.touch('visibility');
   }
 
-  setOpacity(id: string, opacity: number): void {
+  setOpacity(host: PresenterHost, id: string, opacity: number): void {
     const object = this.objects.get(id);
     if (!object) return;
     object.opacity = opacity;
     this.handles.get(id)?.setAppearance({ opacity });
+    host.writer.touch('material');
   }
 
   /** Places a reference object at its stored scene transform. */
@@ -126,6 +129,7 @@ export class ReferenceStage {
   clear(host: PresenterHost): void {
     for (const id of Array.from(this.objects.keys())) this.remove(host, id);
   }
+
 
   /** Loads one reference object from the local blob store; null when the key no longer resolves. */
   private async loadStored(host: PresenterHost, ref: ReferenceObjectRef): Promise<AssetHandle | null> {

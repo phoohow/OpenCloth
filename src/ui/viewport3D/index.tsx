@@ -11,6 +11,8 @@ import { AxisIndicator } from '@/ui/viewport3D/axisIndicator';
 import { ViewportHint } from '@/ui/widgets/viewportHint';
 import { rayTraceStateLabel } from '@/ui/optionTables';
 import { MOBILE_VIEWPORT_HINT, isMobileUi } from '@/ui/mobile/mobileUi';
+import { isAssetDrag, endAssetDrag, readAssetDrag } from '@/ui/assets/assetDrag';
+import { applyFabricToPanels, panelCentre, placeTrimOnPanel } from '@/ui/assets/applyAsset';
 
 /** Width the phone shell's floating buttons reserve at the right of the pane. */
 const MOBILE_HINT_RIGHT = 72;
@@ -48,6 +50,9 @@ export function Viewport3D({ onEngineReady }: Viewport3DProps) {
   const engineRef = useRef<Viewport['engine'] | null>(null);
   const errorRef = useRef<string | null>(null);
   const [renderError, setRenderError] = useState<string | null>(null);
+  const [dropActive, setDropActive] = useState(false);
+  /** Pointer position of a catalogue drag inside the pane, for the landing marker. */
+  const [dropPoint, setDropPoint] = useState<{ x: number; y: number } | null>(null);
   const [sessionReady, setSessionReady] = useState(false);
   const renderHost = useRenderHost();
 
@@ -159,8 +164,71 @@ export function Viewport3D({ onEngineReady }: Viewport3DProps) {
   const gizmo = useTransformGizmo(canvasRef, containerRef, engineRef, viewportRef);
   useClothPicking(canvasRef, containerRef, engineRef);
 
+  /** Screen point of a drag as normalized device coordinates. */
+  const dragNdc = (e: React.DragEvent): { x: number; y: number } | null => {
+    const container = containerRef.current;
+    if (!container) return null;
+    const rect = container.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return null;
+    return {
+      x: ((e.clientX - rect.left) / rect.width) * 2 - 1,
+      y: -(((e.clientY - rect.top) / rect.height) * 2 - 1),
+    };
+  };
+
+  /** Shows where the pointer of a catalogue drag sits, and clears the marker on leaving. */
+  const handleAssetDragOver = (e: React.DragEvent) => {
+    if (!isAssetDrag(e)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    setDropActive(true);
+    const container = containerRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    setDropPoint({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+  };
+
+  const handleAssetDragLeave = (e: React.DragEvent) => {
+    if (!isAssetDrag(e)) return;
+    if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+    setDropActive(false);
+    setDropPoint(null);
+  };
+
+  /** Applies a dragged material to the panel under the drop, or places a trim on the hit point. */
+  const handleAssetDrop = (e: React.DragEvent) => {
+    const payload = readAssetDrag(e);
+    if (!payload) return;
+    e.preventDefault();
+    endAssetDrag();
+    setDropActive(false);
+    setDropPoint(null);
+    const engine = engineRef.current;
+    const ndc = dragNdc(e);
+    const panelId = engine && ndc ? engine.pickPanelAtScreen(ndc.x, ndc.y) : null;
+    if (!engine || !ndc || !panelId) {
+      useUIStore.getState().showToast('拖到布料上才能应用');
+      return;
+    }
+    if (payload.kind === 'fabric') {
+      applyFabricToPanels([panelId], payload.asset);
+      return;
+    }
+    const surface = engine.pickClothSurface2D(ndc.x, ndc.y);
+    placeTrimOnPanel(panelId, surface?.point ?? panelCentre(panelId), payload.asset);
+  };
+
   return (
-    <div ref={containerRef} style={{ width: '100%', height: '100%', position: 'relative' }}>
+    <div
+      ref={containerRef}
+      style={{
+        width: '100%', height: '100%', position: 'relative',
+        boxShadow: dropActive ? 'inset 0 0 0 2px #4da6ff' : 'none',
+      }}
+      onDragOver={handleAssetDragOver}
+      onDragLeave={handleAssetDragLeave}
+      onDrop={handleAssetDrop}
+    >
       {/* The pointer cursor is owned by useClothPicking: it depends on what is under it. */}
       <canvas
         ref={canvasRef}
@@ -168,6 +236,7 @@ export function Viewport3D({ onEngineReady }: Viewport3DProps) {
         style={{ display: 'block', width: '100%', height: '100%', cursor: 'default' }}
       />
       <TransformGizmoOverlay state={gizmo} />
+      {dropActive && dropPoint && <DropMarker point={dropPoint} />}
       {isMobileUi() && gizmo.layout && <TransformModeSwitch />}
       {sessionReady && <AxisIndicator viewportRef={viewportRef} engineRef={engineRef} />}
       <ViewportHint right={isMobileUi() ? MOBILE_HINT_RIGHT : 8}>{statusHint(layout, activeTool)}</ViewportHint>
@@ -195,6 +264,22 @@ export function Viewport3D({ onEngineReady }: Viewport3DProps) {
           borderRadius: 4, fontSize: 'var(--oc-fs-body)', pointerEvents: 'none',
         }}>{renderError}</div>
       )}
+    </div>
+  );
+}
+
+/** Ring marking where a dragged catalogue asset would land on the cloth. */
+function DropMarker({ point }: { point: { x: number; y: number } }) {
+  return (
+    <div style={{
+      position: 'absolute', left: point.x, top: point.y, width: 24, height: 24,
+      transform: 'translate(-50%, -50%)', borderRadius: '50%', border: '2px solid #4da6ff',
+      background: 'rgba(77,166,255,0.18)', pointerEvents: 'none',
+    }}>
+      <span style={{
+        position: 'absolute', left: '50%', top: '50%', width: 4, height: 4,
+        marginLeft: -2, marginTop: -2, borderRadius: '50%', background: '#4da6ff',
+      }} />
     </div>
   );
 }

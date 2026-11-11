@@ -128,7 +128,7 @@ function ViewSheet({ actions, engineRef, onClose }: {
       <SheetGroup title="构图">
         <SheetButton label="适应当前视角" onClick={pick(() => engineRef.current?.frameScene())} />
       </SheetGroup>
-      <SheetNote>单指拖拽旋转，双指捏合缩放，双指同时拖动平移。</SheetNote>
+      <SheetNote>单指旋转，双指缩放与平移</SheetNote>
     </>
   );
 }
@@ -321,7 +321,6 @@ function DisplaySheet({ onClose }: { onClose: () => void }) {
           )}
         </>
       )}
-      <SheetNote>着色为常规预览；光线追踪按渐进采样出图，手机上建议先暂停模拟再看收敛结果。三种热图（合身 / 应变 / 压力）按各自阈值或色标上限着色，切回其它显示模式即恢复面料材质。</SheetNote>
     </>
   );
 }
@@ -407,6 +406,13 @@ function MenuSheet({ actions, onClose }: { actions: MenuActions; onClose: () => 
         <SheetButton label="取消选择" disabled={selection.length === 0} onClick={actions.clearSelection} />
         <SheetButton label="删除选中" disabled={selection.length === 0} onClick={actions.deleteSelection} />
       </SheetGroup>
+      <SheetGroup title="生产">
+        <SheetButton label="排料图" onClick={() => { actions.openProduction('exportMarker'); onClose(); }} />
+        <SheetButton label="DXF 版型" onClick={() => { actions.openProduction('exportDxf'); onClose(); }} />
+        <SheetButton label="PDF 图纸" onClick={() => { actions.openProduction('exportPdf'); onClose(); }} />
+        <SheetButton label="工艺单" onClick={() => { actions.openProduction('exportTechPack'); onClose(); }} />
+        <SheetButton label="物料清单" onClick={() => { actions.openProduction('exportBom'); onClose(); }} />
+      </SheetGroup>
       <SheetGroup title="导出">
         <SheetButton label="服装 GLB" onClick={actions.exportGlb} />
         <SheetButton label="服装 OBJ" onClick={actions.exportObj} />
@@ -416,7 +422,7 @@ function MenuSheet({ actions, onClose }: { actions: MenuActions; onClose: () => 
       <SheetGroup title="帮助">
         <SheetButton label="关于" onClick={() => { actions.showAbout(); onClose(); }} />
       </SheetGroup>
-      <SheetNote>手机专注试衣调参；改版、打 PIN 与工程管理请用电脑端打开同一个 .ocproj.json 工程。</SheetNote>
+      <SheetNote>改版与工程管理请用电脑端</SheetNote>
     </>
   );
 }

@@ -15,7 +15,6 @@ import {
 import { ButtonRow, CheckRow, Hint, Row, Section, SelectRow, SmallButton, TextRow } from '@/ui/widgets/propertyRows';
 import { Vec3Field } from '@/ui/widgets/numberField';
 import { degVec, radVec } from '@/ui/panels/properties/constants';
-import { styles } from '@/ui/panels/properties/styles';
 import { AvatarMaterialTab, MaterialTab, panelFabric } from '@/ui/panels/properties/materialTab';
 import { LightPlacementData, ObjectData, PanelDrapeData, PanelManageRows, PanelMeshData } from '@/ui/panels/properties/objectDataSections';
 import { AvatarPhysics, FabricPhysics } from '@/ui/panels/properties/physicsTabs';
@@ -168,7 +167,6 @@ function TransformTab({ project, nodeId, kind, engineRef }: {
               position: { x: 0, y: 0, z: 0 }, rotationEuler: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 },
             }, engineRef, '复位变换')}>复位变换</SmallButton>
           </ButtonRow>
-          {!live && <div style={styles.note}>版片变换在松手后重建布料并重置模拟。</div>}
         </Section>
       )}
       {kind === 'light' && <LightPlacementData project={project} nodeId={nodeId} />}

@@ -222,6 +222,7 @@ export class EngineSync {
       this.rebuildCloth(project);
     }
     if (change.has('scene.simulation')) this.engine.applyTimeStep(project);
+    if (change.has('scene.camera')) this.engine.setCameraAnimation(project.scene.cameraAnimation);
     if (change.has('avatar.look')) this.engine.applyAvatarDisplay(project.avatar.display);
     if (change.has('scene.environment') || change.has('scene.light')) void this.viewport.applyEnvironment(project);
     if (change.has('scene.references')) {
@@ -265,6 +266,7 @@ export class EngineSync {
         useUIStore.getState().setCameraProjection(camera.projection);
       }
       this.engine.setCameraState(camera);
+      this.engine.setCameraAnimation(project.scene.cameraAnimation);
     } finally {
       this.applyingCamera = false;
     }
@@ -272,13 +274,14 @@ export class EngineSync {
 
   /** Queues one camera write after the view settles, so orbiting does not write every frame. */
   private scheduleCameraPersist(): void {
-    if (this.applyingCamera) return;
+    if (this.applyingCamera || this.engine.isCameraAnimating()) return;
     window.clearTimeout(this.cameraTimer);
     this.cameraTimer = window.setTimeout(() => this.persistCamera(), 300);
   }
 
   /** Stores the settled camera in the project unless it already matches. */
   private persistCamera(): void {
+    if (this.engine.isCameraAnimating()) return;
     const camera = this.engine.getCameraState();
     if (sameCamera(useProjectStore.getState().project.scene.camera, camera)) return;
     useProjectStore.getState().setCamera(camera);
@@ -316,6 +319,7 @@ export class EngineSync {
     try {
       if (frameDelta > 0) {
         frameProfiler.span('loop.animation', () => this.engine.advanceAvatarAnimation(frameDelta));
+        frameProfiler.span('loop.camera', () => this.engine.advanceCameraAnimation(frameDelta));
       }
       frameProfiler.span('loop.sync', () => this.syncAvatarAnimation(simState));
       frameProfiler.span('loop.preview', () => this.applyEditPreview());
@@ -337,22 +341,20 @@ export class EngineSync {
       if (simState.isDressed !== this.engine.isDressed) simState.setDressed(this.engine.isDressed);
       if (useUIStore.getState().fitCheck) {
         const fit = useUIStore.getState();
-        const stats = frameProfiler.span('analysis.fit', () => this.engine.refreshFit(fit.fitTightCm, fit.fitLooseCm));
+        const stats = frameProfiler.span('analysis.fit',
+          () => this.engine.refreshFit(fit.fitTightCm, fit.fitLooseCm));
         if (stats) simState.setFitStats(stats);
       }
       if (useUIStore.getState().strainCheck) {
         const strain = useUIStore.getState();
-        const stats = frameProfiler.span(
-          'analysis.strain',
-          () => this.engine.refreshStrain(strain.strainMin, strain.strainMax, strain.strainByFabric),
-        );
+        const stats = frameProfiler.span('analysis.strain',
+          () => this.engine.refreshStrain(strain.strainMin, strain.strainMax, strain.strainByFabric));
         if (stats) simState.setStrainStats(stats);
       }
       if (useUIStore.getState().pressureCheck) {
-        const stats = frameProfiler.span(
-          'analysis.pressure',
-          () => this.engine.refreshPressure(useUIStore.getState().pressureMaxKpa),
-        );
+        const pressure = useUIStore.getState();
+        const stats = frameProfiler.span('analysis.pressure',
+          () => this.engine.refreshPressure(pressure.pressureMaxKpa));
         if (stats) simState.setPressureStats(stats);
       }
 

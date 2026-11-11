@@ -34,7 +34,7 @@ describe('DRAW_LAYERS', () => {
       'background', 'grading', 'panels', 'prints', 'internalLines', 'darts',
       'notches', 'grain', 'topstitches', 'trims', 'annotations', 'measurements',
       'seams', 'seamJoints', 'selection', 'draft', 'seamDraft', 'insertHint',
-      'snapHint', 'hover', 'markHint', 'ghost', 'rubberBand', 'ruler',
+      'snapHint', 'hover', 'dropHint', 'markHint', 'ghost', 'rubberBand', 'ruler',
     ]);
   });
 

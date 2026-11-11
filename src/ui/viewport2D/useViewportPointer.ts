@@ -12,7 +12,7 @@ import { CreateFreeSeamCommand } from '@/commands';
 import { SetPointHandleCommand } from '@/commands';
 import { CreateAnnotationCommand, CreateMeasurementCommand, CreateNotchCommand, MoveNotchCommand } from '@/commands';
 import { panelOffsetCm, panelMoveOffsets, toPatternPoint } from '@/ui/viewport2D/panelHeight';
-import { elementNodeId, idsOfKind, parseElementNodeId } from '@/model';
+import { elementNodeId, idsOfKind, parseElementNodeId, TRIM_ASSET_DEFAULTS } from '@/model';
 import {
   elementsInRect, isPlacementTool, markHintKey, hoverTargetKey, nearestEdgeSegment, nearestPointWithinRadius,
   panelIdOfEdge, pickElements, pickHoverTarget, pickInternalLineVertex, pickPlacementFeedback, pickPointHandle,
@@ -538,7 +538,10 @@ export function useViewportPointer(options: ViewportPointerOptions) {
       } else if (isPlacementTool(activeTool)) {
         // Pre-highlight the placement tool's target and ghost its landing point.
         const placed = activeTool === 'annotation' ? resolvePlacedPoint(world, e.altKey).pos : null;
-        const feedback = pickPlacementFeedback(activeTool, heights, outlines, pointCandidates, world, radius, placed);
+        const feedback = pickPlacementFeedback(
+          activeTool, heights, outlines, pointCandidates, world, radius, placed,
+          TRIM_ASSET_DEFAULTS[trimKind].sizeMm / 20,
+        );
         setHoverTarget(prev => (hoverTargetKey(prev) === hoverTargetKey(feedback.hover) ? prev : feedback.hover));
         setMarkHint(prev => (markHintKey(prev) === markHintKey(feedback.hint) ? prev : feedback.hint));
       } else {

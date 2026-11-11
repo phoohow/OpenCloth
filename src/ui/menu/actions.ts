@@ -1,9 +1,7 @@
 import type { MutableRefObject } from 'react';
 import { isSplitLayout, useProjectStore, useSimStore, useUIStore } from '@/store';
-import type { DisplayMode, PaneId, PropTab, ToolType, ViewLayout } from '@/store';
+import type { AssetTab, DisplayMode, PaneId, PropTab, ToolType, ViewLayout } from '@/store';
 import type { DisplayOptions } from '@/ui/viewport2D/render';
-import { downloadTextFile } from '@/io/serialization';
-import { markerGerber, markerHpgl } from '@/io/exporters';
 import { recordCanvasToWebM } from '@/io/exporters';
 import { downloadBytes, sequenceArchive } from '@/io/exporters';
 import { capturePanels, PastePanelsCommand } from '@/commands';
@@ -12,6 +10,7 @@ import type { Command } from '@/commands';
 import { setPanelsVisible, commitClearReferences, commitEnvironmentReset } from '@/ui/sceneCommands';
 import { importAvatarViaPicker, importEnvironmentViaPicker, importReferenceViaPicker, openFilePicker } from '@/ui/modelImport';
 import { useMenuStore } from '@/ui/menu/menuStore';
+import type { ProductionKind } from '@/ui/menu/production';
 import type { GarmentEngine, CameraPreset } from '@/runtime';
 import type { Viewport } from '@/runtime';
 import type { CameraProjection, EditPreviewTier, Project } from '@/model/types';
@@ -48,7 +47,7 @@ export interface MenuActions {
   importPdf: () => void;
   importPatternJson: () => void;
   openReview: () => void;
-  openAssets: () => void;
+  openAssets: (tab: AssetTab) => void;
   openIntegration: () => void;
   resetEnvironment: () => void;
   clearReferences: () => void;
@@ -59,14 +58,7 @@ export interface MenuActions {
   screenshot: () => void;
   exportAnimation: () => void;
   exportSequence: () => void;
-  exportDxf: () => void;
-  exportPatternSvg: () => void;
-  exportPdf: () => void;
-  exportTechPack: () => void;
-  exportMarker: () => void;
-  exportCutGerber: () => void;
-  exportCutHpgl: () => void;
-  exportBom: () => void;
+  openProduction: (kind?: ProductionKind) => void;
   undo: () => void;
   redo: () => void;
   copySelection: () => void;
@@ -95,7 +87,7 @@ export interface MenuActions {
   playPause: () => void;
   stepFrame: () => void;
   resetSim: () => void;
-  toggleTemplatePanel: () => void;
+  toggleAssetPanel: () => void;
   toggleScenePanel: () => void;
   togglePropertiesPanel: () => void;
   toggleTimeline: () => void;
@@ -190,7 +182,11 @@ export function createMenuActions(refs: MenuActionContext): MenuActions {
     importPdf: projectService.importPdf,
     importPatternJson: projectService.importPatternJson,
     openReview: () => useMenuStore.getState().openDialog('review'),
-    openAssets: () => useMenuStore.getState().openDialog('assets'),
+    openAssets: (tab) => {
+      const ui = useUIStore.getState();
+      ui.setAssetTab(tab);
+      if (!ui.showAssetPanel) ui.toggleAssetPanel();
+    },
     openIntegration: () => useMenuStore.getState().openDialog('integration'),
     resetEnvironment: () => commitEnvironmentReset(),
     clearReferences: () => commitClearReferences(),
@@ -207,7 +203,7 @@ export function createMenuActions(refs: MenuActionContext): MenuActions {
     exportAnimation: () => {
       const viewport = refs.rendererRef.current;
       if (!viewport) return;
-      alert('开始录制 5 秒动画…');
+      alert('开始录制 5 秒动画');
       // The viewport keeps drawing each frame, so a paused simulation records its current state.
       void recordCanvasToWebM(viewport.canvas, `${project().meta.name}.webm`).then(result => {
         if (result === 'unsupported') alert('当前浏览器不支持画布录制');
@@ -222,28 +218,7 @@ export function createMenuActions(refs: MenuActionContext): MenuActions {
       if (!indices) return;
       downloadBytes(`${project().meta.name}-模拟序列.zip`, sequenceArchive(frames, indices), 'application/zip');
     },
-    exportDxf: () => useMenuStore.getState().openDialog('exportDxf'),
-    exportPatternSvg: () => useMenuStore.getState().openDialog('exportSvg'),
-    exportPdf: () => useMenuStore.getState().openDialog('exportPdf'),
-    exportTechPack: () => useMenuStore.getState().openDialog('exportTechPack'),
-    exportMarker: () => useMenuStore.getState().openDialog('exportMarker'),
-    exportCutGerber: () => {
-      const current = project();
-      downloadTextFile(
-        `${current.meta.name}-裁床.gbr`,
-        markerGerber(current.pattern, { fabricWidthCm: 150, gapCm: 0.5 }),
-        'text/plain',
-      );
-    },
-    exportCutHpgl: () => {
-      const current = project();
-      downloadTextFile(
-        `${current.meta.name}-裁床.plt`,
-        markerHpgl(current.pattern, { fabricWidthCm: 150, gapCm: 0.5 }),
-        'text/plain',
-      );
-    },
-    exportBom: () => useMenuStore.getState().openDialog('exportBom'),
+    openProduction: kind => useMenuStore.getState().openDialog('production', kind),
 
     undo: () => useProjectStore.getState().undo(),
     redo: () => useProjectStore.getState().redo(),
@@ -327,7 +302,7 @@ export function createMenuActions(refs: MenuActionContext): MenuActions {
       refs.engineRef.current?.resetSimulation();
     },
 
-    toggleTemplatePanel: () => useUIStore.getState().toggleTemplatePanel(),
+    toggleAssetPanel: () => useUIStore.getState().toggleAssetPanel(),
     toggleScenePanel: () => useUIStore.getState().toggleScenePanel(),
     togglePropertiesPanel: () => useUIStore.getState().togglePropertiesPanel(),
     toggleTimeline: () => useUIStore.getState().toggleTimeline(),

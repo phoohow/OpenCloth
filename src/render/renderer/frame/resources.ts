@@ -27,8 +27,4 @@ export class RendererFrameResources implements FrameResources {
   ensure(size: FrameSize): void {
     this.targets.ensure(size);
   }
-
-  scratch(index: number): TargetHandle {
-    return this.targets.scratchAt(index, this.targets.radiance.width, this.targets.radiance.height);
-  }
 }

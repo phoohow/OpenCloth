@@ -10,7 +10,7 @@ import {
   drawTopstitch, drawTrim,
 } from '@/ui/viewport2D/drawMarks';
 import {
-  drawDraft, drawElementSelection, drawGhost, drawHover, drawInsertHint, drawMarkHint,
+  drawDraft, drawDropHint, drawElementSelection, drawGhost, drawHover, drawInsertHint, drawMarkHint,
   drawRubberBand, drawSnapHint,
 } from '@/ui/viewport2D/drawInteraction';
 import { type DisplayOptions, type DrawLayer, type SceneState } from '@/ui/viewport2D/renderTypes';
@@ -187,7 +187,7 @@ export const DRAW_LAYERS: readonly DrawLayer[] = [
   },
   {
     id: 'selection',
-    draw: (pen, state) => drawElementSelection(pen.ctx, state, pen.screen, pen.scale),
+    draw: (pen, state, display) => drawElementSelection(pen.ctx, state, pen.screen, pen.scale, display),
   },
   {
     id: 'draft',
@@ -207,11 +207,15 @@ export const DRAW_LAYERS: readonly DrawLayer[] = [
   },
   {
     id: 'hover',
-    draw: (pen, state) => drawHover(pen.ctx, state, pen.screen),
+    draw: (pen, state, display) => drawHover(pen.ctx, state, pen.screen, display),
+  },
+  {
+    id: 'dropHint',
+    draw: (pen, state) => drawDropHint(pen.ctx, state, pen.screen, pen.scale),
   },
   {
     id: 'markHint',
-    draw: (pen, state) => drawMarkHint(pen.ctx, state, pen.screen),
+    draw: (pen, state) => drawMarkHint(pen.ctx, state, pen.screen, pen.scale),
   },
   {
     id: 'ghost',

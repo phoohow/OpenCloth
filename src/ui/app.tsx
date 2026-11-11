@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import { Menubar } from '@/ui/menubar';
-import { LeftPanel, TemplateRail } from '@/ui/panels/leftPanel';
+import { AssetPanel, AssetRail } from '@/ui/panels/assetPanel';
 import { RightPanel } from '@/ui/panels/rightPanel';
 import { Timeline } from '@/ui/panels/timeline';
 import { Viewport3D } from '@/ui/viewport3D';
@@ -83,7 +83,7 @@ function DesktopShell({ actions, engineRef, onEngineReady, ready }: ShellProps) 
   const layout = useUIStore(s => s.layout);
   const focus = useUIStore(s => s.focus);
   const splitRatio = useUIStore(s => s.splitRatio);
-  const showTemplatePanel = useUIStore(s => s.showTemplatePanel);
+  const showAssetPanel = useUIStore(s => s.showAssetPanel);
   const showScenePanel = useUIStore(s => s.showScenePanel);
   const showPropertiesPanel = useUIStore(s => s.showPropertiesPanel);
   const showTimeline = useUIStore(s => s.showTimeline);
@@ -144,8 +144,8 @@ function DesktopShell({ actions, engineRef, onEngineReady, ready }: ShellProps) 
     <div style={styles.root}>
       <Menubar actions={actions} />
       <div style={styles.body} ref={bodyRef}>
-        {showTemplatePanel ? <LeftPanel /> : <TemplateRail />}
-        {showTemplatePanel && <PaneDivider axis="x" onDrag={applyLeftPanelDrag} />}
+        {showAssetPanel ? <AssetPanel /> : <AssetRail />}
+        {showAssetPanel && <PaneDivider axis="x" onDrag={applyLeftPanelDrag} />}
         {/* Reversing the row swaps the panes without remounting either viewport. */}
         <div
           style={{ ...styles.viewportContainer, flexDirection: leftPaneOf(layout) === '2d' ? 'row-reverse' : 'row' }}
@@ -158,7 +158,7 @@ function DesktopShell({ actions, engineRef, onEngineReady, ready }: ShellProps) 
               {!ready && (
                 <div style={styles.loading}>
                   <div style={styles.spinner} />
-                  <div>正在初始化 WebGPU 渲染器…</div>
+                  <div>正在初始化 WebGPU 渲染器</div>
                 </div>
               )}
             </div>

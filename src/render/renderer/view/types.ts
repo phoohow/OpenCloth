@@ -2,7 +2,7 @@
 
 import type {
   Bounds, CameraState, ChannelMask, DisplayOverride, MaterialKind,
-  DrawBucket, DrawStage, EntityId, LayerId, MaterialRef, MaterialTechnique, MeshRef,
+  DrawBucket, DrawStage, EntityId, LayerId, MaterialTechnique, MeshRef,
   ResolvedMaterial, Transform, ViewSettings,
 } from '@/render/common';
 
@@ -39,7 +39,6 @@ export interface DrawItem {
   readonly bounds: Bounds;
   readonly stage: DrawStage;
   readonly bucket: DrawBucket;
-  readonly materialSource: MaterialRef | null;
 }
 
 /** Every entity one frame draws, before the backend turns it into scene objects. */

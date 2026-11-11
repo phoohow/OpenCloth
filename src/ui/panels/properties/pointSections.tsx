@@ -6,7 +6,6 @@ import { idsOfKind } from '@/model';
 import { patchValue } from '@/ui/sceneCommands';
 import { Hint, Row, Section, SelectRow, SmallButton } from '@/ui/widgets/propertyRows';
 import { NumberField } from '@/ui/widgets/numberField';
-import { styles } from '@/ui/panels/properties/styles';
 import { useElement, useHeightOffsets } from '@/ui/panels/properties/elementData';
 import { pointHeightOffsetCm } from '@/ui/viewport2D/panelHeight';
 
@@ -87,7 +86,6 @@ function GradingRows({ project, point }: { project: Project; point: PatternPoint
           </Row>
         );
       })}
-      <div style={styles.note}>复制取的是这一行当前的 X/Y 放缩量；粘贴一次写给全部选中点，撤销一步全退。</div>
     </>
   );
 }

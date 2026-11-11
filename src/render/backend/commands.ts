@@ -67,6 +67,12 @@ export class Commands {
     this.renderer.copyTextureToTexture(source, target.texture);
   }
 
+  /** Reads an 8-bit target back as RGBA bytes; the target must not be bound any more. */
+  async readTarget(target: TargetHandle, width: number, height: number): Promise<Uint8Array> {
+    const pixels = await this.renderer.readRenderTargetPixelsAsync(target, 0, 0, width, height);
+    return pixels as Uint8Array;
+  }
+
   /** Leaves no target bound; called at the end of every frame. */
   restore(): void {
     this.renderer.setRenderTarget(null);

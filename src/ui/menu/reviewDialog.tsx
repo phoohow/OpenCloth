@@ -11,7 +11,7 @@ import {
   canPerform, isReviewPackage, nextReviewStatus, reviewShareLink, type ReviewAction,
 } from '@/model';
 import { parseElementNodeId, type PatternElementKind } from '@/model';
-import { downloadTextFile, projectCodec, readFileAsText } from '@/io/serialization';
+import { projectCodec, readFileAsText } from '@/io/serialization';
 import {
   addComment, addCommentReply, appendVersion, createCloudProject, deleteCloudProject,
   deleteComment, exportReviewPackage, getCloudProject, importReviewPackage, listCloudProjects,
@@ -20,6 +20,7 @@ import {
 } from '@/io/storage';
 import { useProjectStore, useUIStore } from '@/store';
 import { openFilePicker } from '@/ui/modelImport';
+import { ExportPreviewModal, type PreviewDownload } from '@/ui/menu/exportPreview';
 
 /** Chinese labels for the element kinds a comment can anchor to. */
 const ANCHOR_KIND_LABELS: Record<PatternElementKind, string> = {
@@ -68,6 +69,7 @@ export function ReviewDialog({ initialProjectId }: { initialProjectId: string | 
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [download, setDownload] = useState<PreviewDownload | null>(null);
 
   const role: ReviewRole = active ? roleForProject(active, user) : 'viewer';
 
@@ -191,7 +193,7 @@ export function ReviewDialog({ initialProjectId }: { initialProjectId: string | 
     const link = reviewShareLink(location.origin, location.pathname, active.id);
     try {
       await navigator.clipboard.writeText(link);
-      setMessage('共享链接已复制（仅本机浏览器可打开，跨设备请导出审版包）');
+      setMessage('链接已复制');
     } catch {
       window.prompt('复制共享链接', link);
     }
@@ -201,8 +203,24 @@ export function ReviewDialog({ initialProjectId }: { initialProjectId: string | 
     if (!active) return;
     const pkg = await exportReviewPackage(active.id, localReviewUser());
     if (!pkg) throw new Error('审版项目还没有版本');
-    downloadTextFile(`${active.name}-审版包.json`, JSON.stringify(pkg, null, 2), 'application/json');
-    setMessage('审版包已下载');
+    const snapshotKb = Math.max(1, Math.round(new TextEncoder().encode(pkg.snapshot).length / 1024));
+    setDownload({
+      title: '审版包',
+      format: 'JSON',
+      filename: `${active.name}-审版包.json`,
+      mime: 'application/json',
+      content: JSON.stringify(pkg, null, 2),
+      preview: JSON.stringify({
+        ...pkg,
+        snapshot: `⟨当前工程快照 ${snapshotKb} KB，随包导出⟩`,
+      }, null, 2),
+      stats: [
+        ['版本', String(versions.length)],
+        ['评论', String(pkg.comments.length)],
+        ['状态记录', String(pkg.events.length)],
+      ],
+      onDownloaded: () => setMessage('审版包已下载'),
+    });
   });
 
   const importPackage = () => run(async () => {
@@ -270,7 +288,6 @@ export function ReviewDialog({ initialProjectId }: { initialProjectId: string | 
           onChange={e => { setUser(e.target.value); setLocalReviewUser(e.target.value); }}
           title="用于版本作者与评论署名；只保存在本机"
         />
-        <span style={styles.topNote}>本地优先：数据保存在本浏览器，跨设备用共享链接或审版包。</span>
         {message && <span style={styles.message}>{message}</span>}
       </div>
 
@@ -288,7 +305,7 @@ export function ReviewDialog({ initialProjectId }: { initialProjectId: string | 
             <button style={styles.primaryBtn} disabled={busy} onClick={createProject}>保存当前工程</button>
           </div>
           <div style={styles.projectList}>
-            {projects.length === 0 && <div style={styles.hint}>还没有审版项目；先把当前工程保存为一个。</div>}
+            {projects.length === 0 && <div style={styles.hint}>还没有审版项目</div>}
             {projects.map(project => (
               <div
                 key={project.id}
@@ -303,12 +320,12 @@ export function ReviewDialog({ initialProjectId }: { initialProjectId: string | 
               </div>
             ))}
           </div>
-          <button style={styles.secondaryBtn} disabled={busy} onClick={importPackage}>导入审版包…</button>
+          <button style={styles.secondaryBtn} disabled={busy} onClick={importPackage}>导入审版包</button>
         </div>
 
         <div style={styles.detailPane}>
           {!active ? (
-            <div style={styles.hint}>选择左侧项目，或把当前工程保存为新的审版项目。</div>
+            <div style={styles.hint}>选择左侧项目</div>
           ) : (
             <>
               <div style={styles.activeHeader}>
@@ -367,7 +384,7 @@ export function ReviewDialog({ initialProjectId }: { initialProjectId: string | 
 
               {tab === 'versions' && (
                 <div style={styles.list}>
-                  {versions.length === 0 && <div style={styles.hint}>还没有版本。</div>}
+                  {versions.length === 0 && <div style={styles.hint}>还没有版本</div>}
                   {versions.map(version => (
                     <div key={version.id} style={styles.card}>
                       <div style={styles.cardHeader}>
@@ -395,7 +412,7 @@ export function ReviewDialog({ initialProjectId }: { initialProjectId: string | 
                     </div>
                     <textarea
                       style={styles.textarea}
-                      placeholder="写下修改意见…"
+                      placeholder="写下修改意见"
                       value={commentBody}
                       onChange={e => setCommentBody(e.target.value)}
                       disabled={!canComment(role)}
@@ -404,7 +421,7 @@ export function ReviewDialog({ initialProjectId }: { initialProjectId: string | 
                       添加评论
                     </button>
                   </div>
-                  {comments.length === 0 && <div style={styles.hint}>还没有评论。</div>}
+                  {comments.length === 0 && <div style={styles.hint}>还没有评论</div>}
                   {comments.map(comment => (
                     <div key={comment.id} style={{ ...styles.card, ...(comment.resolved ? styles.cardResolved : null) }}>
                       <div style={styles.cardHeader}>
@@ -437,7 +454,7 @@ export function ReviewDialog({ initialProjectId }: { initialProjectId: string | 
                         <div style={styles.replyRow}>
                           <input
                             style={styles.input}
-                            placeholder="回复…"
+                            placeholder="回复"
                             value={replyDrafts[comment.id] ?? ''}
                             onChange={e => setReplyDrafts(drafts => ({ ...drafts, [comment.id]: e.target.value }))}
                           />
@@ -477,7 +494,7 @@ export function ReviewDialog({ initialProjectId }: { initialProjectId: string | 
                       })}
                     </div>
                   </div>
-                  {events.length === 0 && <div style={styles.hint}>还没有审版记录。</div>}
+                  {events.length === 0 && <div style={styles.hint}>还没有审版记录</div>}
                   {events.map(event => (
                     <div key={event.id} style={styles.card}>
                       <div style={styles.cardHeader}>
@@ -495,6 +512,7 @@ export function ReviewDialog({ initialProjectId }: { initialProjectId: string | 
           )}
         </div>
       </div>
+      <ExportPreviewModal download={download} onClose={() => setDownload(null)} />
     </div>
   );
 }

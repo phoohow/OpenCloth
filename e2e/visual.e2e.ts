@@ -10,7 +10,7 @@ test('显示模式视觉清单', async ({ page }) => {
   page.on('pageerror', e => errors.push(`pageerror: ${e.message}`));
 
   await page.goto('/');
-  await expect(page.getByText('正在初始化 WebGPU 渲染器…')).toBeHidden();
+  await expect(page.getByText('正在初始化 WebGPU 渲染器')).toBeHidden();
   await page.keyboard.press('Control+d');
   await page.waitForTimeout(7000);
   // A settled cloth lets the tracer accumulate instead of deferring every frame.
@@ -53,7 +53,7 @@ test('热图诊断与拾取导出视觉清单', async ({ page }) => {
   page.on('pageerror', e => errors.push(`pageerror: ${e.message}`));
 
   await page.goto('/');
-  await expect(page.getByText('正在初始化 WebGPU 渲染器…')).toBeHidden();
+  await expect(page.getByText('正在初始化 WebGPU 渲染器')).toBeHidden();
   await page.keyboard.press('Control+d');
   await page.waitForTimeout(7000);
   const paused = await page.getByText('已暂停', { exact: true }).isVisible();
@@ -100,7 +100,7 @@ test('热图诊断与拾取导出视觉清单', async ({ page }) => {
   await page.getByText('文件', { exact: true }).first().click();
   await page.getByText('导出', { exact: true }).first().hover();
   const downloadPromise = page.waitForEvent('download');
-  await page.getByText('模型：服装 GLB…', { exact: true }).click();
+  await page.getByText('模型：服装 GLB', { exact: true }).click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toMatch(/\.glb$/);
   expect(await download.failure()).toBeNull();

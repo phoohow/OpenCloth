@@ -5,7 +5,6 @@ import {
 import { patchValue, setSimulationConfig } from '@/ui/sceneCommands';
 import { SliderRow, CheckRow, Section } from '@/ui/widgets/propertyRows';
 import { writeFabric } from '@/ui/panels/properties/materialTab';
-import { styles } from '@/ui/panels/properties/styles';
 
 
 /** Fabric stiffness, mass and damping for the panel the object tab resolved to. */
@@ -37,7 +36,6 @@ export function FabricPhysics({ fabric }: { fabric: Fabric }) {
       <SliderRow label="压缩上限(%)" min={1} max={100} step={1}
         value={(fabric.physics.compressionLimit ?? DEFAULT_COMPRESSION_LIMIT) * 100} commitOnRelease
         onChange={v => setPhysics('修改压缩上限', { compressionLimit: v / 100 })} />
-      <div style={styles.note}>刚度、克重与阻尼按材质所属的版片生效；接触摩擦取第一份面料的取值。拉伸与压缩上限只用于应变热图的按面料判定，不改变求解刚度。</div>
     </Section>
   );
 }
@@ -56,7 +54,6 @@ export function AvatarPhysics({ project }: { project: Project }) {
           (ctx, value) => { ctx.project.avatar = { ...ctx.project.avatar, softBody: value }; },
           v,
         )} />
-      <div style={styles.note}>碰撞体随模特尺寸自动重建。软体胸腹开启后，布料压到的胸部与腹部会向体内让开，布料与合身热图都读取形变后的碰撞体。</div>
     </Section>
   );
 }

@@ -68,7 +68,6 @@ export function ProjectTab({ project, engineRef }: { project: Project; engineRef
         <SliderRow label="网格边长" min={0.5} max={10} step={0.5} unit="cm"
           value={sim.meshResolutionCm ?? DEFAULT_MESH_RESOLUTION_CM} commitOnRelease
           onChange={v => setGlobalMeshResolution(v)} />
-        <div style={styles.note}>生成方式决定版片内部撒点的分布：六边形晶格是规则的三角结构，蓝噪声（泊松盘）没有固定方向，三角形更接近正三角。两种方式都在松手后把全部版片的网格边长设为该值并重建布料；之后可在单片的「布料网格」区块单独调整。</div>
       </Section>
       <Section title="全局模拟">
         <SliderRow label="重力" min={-20} max={0} step={0.1} unit="m/s²" value={sim.gravity.y}
@@ -90,7 +89,6 @@ export function ProjectTab({ project, engineRef }: { project: Project; engineRef
         <ButtonRow>
           <SmallButton onClick={autoAssignLayers} title="按缝合连通性与平均松量推断每片的碰撞层">自动识别碰撞层</SmallButton>
         </ButtonRow>
-        <div style={styles.note}>布料厚度同时抬高模特与地面的碰撞距离；层间距按相邻版片的「碰撞层」差值加大分离距离，0 为最内层。缝合断裂开启后，拉伸超过缝合强度阈值的缝合对会解除约束。</div>
       </Section>
       <LayerSection project={project} />
       <DynamicFitSection project={project} engineRef={engineRef} />
@@ -167,7 +165,6 @@ export function RenderTab({ project }: { project: Project }) {
               >导出合身报告 CSV</button>
             </>
           )}
-          <div style={styles.note}>合身热图按布料顶点到模特碰撞体的间隙着色：红色穿透、橙色贴近、绿色合适、蓝色宽松；切回其他显示模式即恢复面料材质。</div>
         </Section>
       )}
       {strainCheck && (
@@ -207,7 +204,6 @@ export function RenderTab({ project }: { project: Project }) {
               >导出应变报告 CSV</button>
             </>
           )}
-          <div style={styles.note}>应变热图按每个顶点相邻边的长度变化着色：蓝色受压缩、白色无变形、红色被拉伸。通用模式用上下限作色标；按面料模式取每片面料自身的拉伸与压缩上限，并统计超限顶点。</div>
         </Section>
       )}
       {pressureCheck && (
@@ -236,7 +232,6 @@ export function RenderTab({ project }: { project: Project }) {
               >导出压力报告 CSV</button>
             </>
           )}
-          <div style={styles.note}>压力热图把碰撞阶段施加的法向接触修正量按每毫米 1 kPa 折算成估算压力，不是接触力求解结果；蓝色为轻接触，红色为高压。只有贴住模特或地面的顶点参与统计。</div>
         </Section>
       )}
       {backend === 'pathtrace' && (
@@ -251,7 +246,6 @@ export function RenderTab({ project }: { project: Project }) {
               onChange={v => setRayTracingConfig('修改光追最大采样数', { maxSamples: v })} />
             <SliderRow label="渲染比例" min={0.5} max={1} step={0.05} value={ray.renderScale}
               onChange={v => setRayTracingConfig('修改光追渲染比例', { renderScale: v })} />
-            <div style={styles.note}>移动相机或播放模拟时显示光栅画面，停下后立即重新开始累积，前 32 个样本从光栅过渡到光追；累积分辨率取窗格的 CSS 尺寸，调「渲染比例」可换取收敛速度。</div>
           </Section>
           <Section title="降噪">
             <CheckRow label="OIDN 降噪" checked={ray.denoise}
@@ -261,7 +255,6 @@ export function RenderTab({ project }: { project: Project }) {
                 options={DENOISE_MODELS.map(m => ({ value: m.value, label: m.label }))}
                 onChange={v => setRayTracingConfig('修改降噪模型', { denoiseModel: v })} />
             )}
-            <div style={styles.note}>降噪权重随安装包提供，无需联网；达到最大采样数后自动降噪并停止累积。</div>
           </Section>
           <Section title="画质调节">
             <SliderRow label="光泽滤波" min={0} max={1} step={0.05} value={ray.filterGlossyFactor}

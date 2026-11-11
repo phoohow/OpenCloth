@@ -63,14 +63,17 @@ export class Backend {
   }
 
   /** Initializes WebGPU and builds the shared resources one viewport owns. */
-  static async create(options: BackendOptions): Promise<Backend> {
-    const renderer = await createThreeRenderer(options.canvas, options.antialias ?? false);
+  static async create(
+    canvas: HTMLCanvasElement,
+    options: BackendOptions = {},
+  ): Promise<Backend> {
+    const renderer = await createThreeRenderer(canvas, options.antialias ?? false);
     const device = (renderer.backend as unknown as { device?: GPUDevice }).device;
     if (!device) {
       renderer.dispose();
       throw new Error('WebGPU renderer device unavailable after init');
     }
-    const backend = new Backend(renderer, device, options.canvas, options.onDenoiseFailure);
+    const backend = new Backend(renderer, device, canvas, options.onDenoiseFailure);
     void device.lost.then(info => {
       // Ignore loss notifications that arrive after an intentional dispose.
       if (backend.disposed) return;
@@ -82,11 +85,6 @@ export class Backend {
   /** Whether the GPU resources were released. */
   get disposed(): boolean {
     return this.disposedValue;
-  }
-
-  /** Drawing surface aspect. */
-  aspect(): number {
-    return this.surface.aspect;
   }
 
   /** Matches the drawing buffer to a new viewport size. */

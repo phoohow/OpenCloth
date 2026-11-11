@@ -64,6 +64,7 @@ export const SHORTCUTS: ShortcutDef[] = [
   { id: 'menuView', label: '打开视图菜单', combo: 'Alt+V', scope: '菜单栏' },
   { id: 'menuWindow', label: '打开窗口菜单', combo: 'Alt+W', scope: '菜单栏' },
   { id: 'menuCollab', label: '打开协作菜单', combo: 'Alt+C', scope: '菜单栏' },
+  { id: 'menuProduction', label: '打开生产菜单', combo: 'Alt+M', scope: '菜单栏' },
   { id: 'menuHelp', label: '打开帮助菜单', combo: 'Alt+H', scope: '菜单栏' },
 ];
 

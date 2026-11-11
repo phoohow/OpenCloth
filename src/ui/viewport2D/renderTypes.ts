@@ -50,6 +50,8 @@ export interface InteractionState {
   hover?: HoverTarget | null;
   /** Landing point of the mark about to be placed, drawn as a ghost. */
   markHint?: MarkHint | null;
+  /** Landing point of a dragged catalogue trim, drawn as a ring at the trim's real size. */
+  dropHint?: { pos: Vec2; radiusCm: number } | null;
   /** The hovered vertex is about to be deleted, so its ring turns red. */
   hoverDelete?: boolean;
   preview: PreviewDrag | null;

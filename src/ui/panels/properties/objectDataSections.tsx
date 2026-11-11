@@ -47,7 +47,7 @@ export function ObjectData({ project, nodeId, kind, engineRef }: {
     case 'light': return <LightData project={project} nodeId={nodeId} />;
     case 'seam': return <SeamData project={project} nodeId={nodeId} />;
     case 'environment': return <EnvironmentData project={project} engineRef={engineRef} />;
-    case 'camera': return <CameraData engineRef={engineRef} />;
+    case 'camera': return <CameraData project={project} engineRef={engineRef} />;
     case 'point': return <PointData project={project} nodeId={nodeId} />;
     case 'edge': return <EdgeData project={project} nodeId={nodeId} />;
     case 'internal': return <InternalLineData project={project} nodeId={nodeId} />;
@@ -139,7 +139,6 @@ function PanelData({ project, panelId }: { project: Project; panelId: string }) 
           </span>
         </Row>
         <CheckRow label="等比缩放" checked={keepRatio} onChange={setKeepRatio} />
-        <div style={styles.note}>尺寸按包围盒等比或拉伸缩放，控制柄、圆弧圆心与半径、内部线、省尖和注释一起跟随。圆弧边只能等比缩放；与其它片共用顶点的片需先断开。</div>
       </Section>
       <Section title="倒圆角">
         <Row label="半径(cm)">
@@ -149,7 +148,6 @@ function PanelData({ project, panelId }: { project: Project; panelId: string }) 
             <SmallButton onClick={roundCorners} title="给该片当前所有尖角倒成切弧">倒圆角</SmallButton>
           </span>
         </Row>
-        <div style={styles.note}>倒圆角把当前所有尖角切成圆弧；之后再点只处理剩下的尖角。</div>
       </Section>
       <Section title="生产">
         <SliderRow label="布纹线角度" min={-180} max={180} step={1} unit="°" value={panel.grainAngleDeg ?? 0} commitOnRelease
@@ -234,7 +232,6 @@ export function PanelMeshData({ project, panelId }: { project: Project; panelId:
           <NumberField value={panelCollisionLayer(panel)} step={1} precision={0} min={0} max={9} title="0 为最内层；层差越大，自碰撞把外层推得越远"
             onCommit={v => setPanel('修改碰撞层', { collisionLayer: Math.round(v) })} />
         </Row>
-        <div style={styles.note}>结构层决定默认碰撞层（里布 0 / 填充 1 / 外壳 2）与碰撞间隙；手动填写的碰撞层优先。未指定结构层的片沿用工程里的「布料厚度」。</div>
       </Section>
     </>
   );
@@ -311,7 +308,6 @@ export function SizeChart({ project, engineRef }: { project: Project; engineRef:
         </>
       )}
       <ButtonRow><SmallButton onClick={addSize}>添加尺码</SmallButton></ButtonRow>
-      <div style={styles.note}>顺序决定档差方向：基码之上的码按 ↑ 排列，改名与调序都不动几何，只有切换「当前码」会解析轮廓并重启模拟。</div>
     </Section>
   );
 }

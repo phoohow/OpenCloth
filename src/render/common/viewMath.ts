@@ -1,8 +1,8 @@
 /** Pure camera-space projection shared by picking, overlays and viewport widgets. */
 
 import type { Vec3 } from '@/base/math';
-import { cross3, dot3, normalize3, scale3, sub3 } from '@/base/math';
-import type { CameraState } from '@/render/common/types';
+import { cross3, degToRad, dot3, normalize3, scale3, sub3 } from '@/base/math';
+import type { Bounds, CameraState } from '@/render/common/types';
 
 /** Orthonormal axes of a camera view, in world space. */
 export interface ViewBasis {
@@ -79,4 +79,65 @@ export function worldUnitsPerPixel(camera: CameraState, point: Vec3, height: num
   }
   const tanHalf = Math.tan(camera.fovDeg * Math.PI / 360);
   return Math.max(1e-5, 2 * tanHalf * depth / Math.max(1, height));
+}
+
+/** World-space placement that frames a box. */
+export interface CameraFit {
+  distance: number;
+  viewHeight: number;
+}
+
+/** Extra room left around the framed box, as a multiplier of the exact fit; the only framing margin. */
+export const FIT_MARGIN = 0.95;
+
+/** Half-extents of a box measured on the view axes; `depth` runs along the view direction. */
+export interface ProjectedExtents {
+  width: number;
+  height: number;
+  depth: number;
+}
+
+/** Measures a box along the view axes, so framing only needs the projected extents. */
+export function projectBox(box: Bounds, direction: Vec3, up: Vec3): ProjectedExtents {
+  const half = {
+    x: (box.max.x - box.min.x) / 2,
+    y: (box.max.y - box.min.y) / 2,
+    z: (box.max.z - box.min.z) / 2,
+  };
+  const back = normalize3(direction) ?? { x: 0, y: 0, z: 1 };
+  const right = normalize3(cross3(up, back)) ?? { x: 1, y: 0, z: 0 };
+  const screenUp = normalize3(cross3(back, right)) ?? { x: 0, y: 1, z: 0 };
+  let width = 0;
+  let height = 0;
+  let depth = 0;
+  for (let i = 0; i < 8; i++) {
+    const corner = {
+      x: i & 1 ? half.x : -half.x,
+      y: i & 2 ? half.y : -half.y,
+      z: i & 4 ? half.z : -half.z,
+    };
+    width = Math.max(width, Math.abs(dot3(corner, right)));
+    height = Math.max(height, Math.abs(dot3(corner, screenUp)));
+    depth = Math.max(depth, Math.abs(dot3(corner, back)));
+  }
+  return { width, height, depth };
+}
+
+/** Camera distance where the nearest box corner still fits the vertical and horizontal field. */
+export function perspectiveFitDistance(
+  extents: ProjectedExtents, fovDeg: number, aspect: number, margin = FIT_MARGIN,
+): number {
+  const vertical = Math.tan(degToRad(fovDeg) / 2);
+  const horizontal = vertical * Math.max(0.01, aspect);
+  const fitted = Math.max(extents.height / vertical, extents.width / horizontal);
+  return Math.max(0.1, (fitted + extents.depth) * margin);
+}
+
+/** Orthographic frustum height covering the box, widened when the aspect makes it too narrow. */
+export function orthoFitViewHeight(
+  extents: ProjectedExtents, aspect: number, margin = FIT_MARGIN,
+): number {
+  const width = extents.width * 2;
+  const height = extents.height * 2;
+  return Math.max(0.1, Math.max(height, width / Math.max(0.01, aspect)) * margin);
 }

@@ -3,7 +3,7 @@ import type {
   CameraProjection, DenoiseModel, EditPreviewTier, GarmentLayer, MeshSampling, ToneMappingMode, WireMode,
 } from '@/model/types';
 import { DEFAULT_SKIN_APPEARANCE } from '@/model';
-import type { PropTab, DisplayMode } from '@/store';
+import type { PropTab, DisplayMode, AssetTab } from '@/store';
 import type { IconName } from '@/ui/icons';
 import type { DisplayOptions } from '@/ui/viewport2D/render';
 import type { RayTraceFailure, TraceStatus as RayTraceState, RayTracingCapability } from '@/render/common';
@@ -24,6 +24,22 @@ export const PROP_TAB_OPTIONS: PropTabOption[] = [
   { key: 'render', icon: 'image', label: '渲染' },
   { key: 'pattern', icon: 'ruler', label: '版型' },
   { key: 'project', icon: 'briefcase', label: '工程' },
+];
+
+/** One asset-panel tab: rail icon plus the Chinese label, matching the properties rail. */
+export interface AssetTabOption {
+  key: AssetTab;
+  icon: IconName;
+  label: string;
+}
+
+/** Asset-panel tabs in rail order: patterns, models, fabrics, trims, environments. */
+export const ASSET_TAB_OPTIONS: AssetTabOption[] = [
+  { key: 'pattern', icon: 't-shirt', label: '版型' },
+  { key: 'model', icon: 'avatar', label: '模特' },
+  { key: 'fabric', icon: 'swatch', label: '面料' },
+  { key: 'trim', icon: 'trim', label: '辅料' },
+  { key: 'environment', icon: 'environment', label: '环境' },
 ];
 
 /** 2D display switches, shared by the View ▸ 2D Display menu and the 2D toolbar dropdown. */

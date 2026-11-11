@@ -50,9 +50,7 @@ export function DynamicFitSection({ project, engineRef }: { project: Project; en
         <SelectRow label="动画片段" value={String(clipIndex)}
           options={animation.clips.map((name, index) => ({ value: String(index), label: name }))}
           onChange={chooseClip} />
-      ) : (
-        <div style={styles.note}>当前模特没有动画片段。导入带动画的 FBX / GLB 模特后，可在这里播放动作并逐帧采样压力。</div>
-      )}
+      ) : null}
       <ButtonRow>
         <SmallButton disabled={playbackIdle} onClick={togglePlay}>{animation.playing ? '暂停' : '播放'}</SmallButton>
         <SmallButton disabled={playbackIdle} onClick={() => engine?.stopAvatarAnimation()}>停止</SmallButton>
@@ -73,7 +71,6 @@ export function DynamicFitSection({ project, engineRef }: { project: Project; en
           {samples > 0 && (
             <button style={styles.action} onClick={exportCsv}>导出动态压力 CSV</button>
           )}
-          <div style={styles.note}>播放在时间轴上进行；采样只在模拟步进时记录，先开启时间轴播放再播放动画。压力沿用接触法向修正量的估算口径，CSV 按动画时间逐帧列出最小 / 平均 / 最大压力。</div>
         </>
       )}
     </Section>
