@@ -14,6 +14,8 @@ export interface CanvasSize {
 /** State and refs the 2D pane hands to its view hook. */
 export interface CanvasViewInput {
   pattern: Pattern;
+  /** Extra world points the fit frames alongside the pattern, such as the body reference. */
+  fitBounds?: readonly Vec2[];
   view: ViewTransform;
   setView: React.Dispatch<React.SetStateAction<ViewTransform>>;
   /** Draws the current state; called after a resize that leaves the framing alone. */
@@ -30,7 +32,7 @@ export function useCanvasView(
   eventWorld: (e: { clientX: number; clientY: number }) => Vec2 | null;
   fitToPattern: () => void;
 } {
-  const { pattern, view, setView, render, canvasRef, containerRef } = input;
+  const { pattern, fitBounds, view, setView, render, canvasRef, containerRef } = input;
   const hiddenRef = useRef(true);
   const fitToken = useUIStore(s => s.fitToken);
 
@@ -51,7 +53,7 @@ export function useCanvasView(
   const fitToPattern = useCallback(() => {
     const size = getCanvasSize();
     if (!size) return;
-    const pts: Vec2[] = [];
+    const pts: Vec2[] = [...(fitBounds ?? [])];
     for (const panel of Object.values(pattern.panels)) {
       if (!panel.visible) continue;
       pts.push(...samplePanelOutline(pattern, panel));
@@ -59,7 +61,7 @@ export function useCanvasView(
     if (pts.length === 0) { setView({ offsetX: 0, offsetY: 0, scale: 4 }); return; }
     setView(fitView(computeBBox(pts), size.w, size.h));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pattern]);
+  }, [pattern, fitBounds]);
 
   // Redraw on size changes, and frame the pattern whenever the pane becomes visible.
   useEffect(() => {

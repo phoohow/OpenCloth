@@ -5,6 +5,7 @@ import type { DraftState } from '@/ui/viewport2D/tools';
 import type { SnapCandidate } from '@/ui/viewport2D/snap';
 import type { HoverTarget, MarkHint } from '@/ui/viewport2D/hitTest';
 import type { Pen } from '@/ui/viewport2D/pen';
+import type { BodyGuideGeometry } from '@/ui/viewport2D/drawBodyGuide';
 
 /** Tolerance for treating two pattern points as the same position. */
 export const NEAR = 1e-6;
@@ -24,6 +25,8 @@ export interface PreviewDrag {
 
 /** Layer switches for drafting-only visuals; toggles never rebuild geometry. */
 export interface DisplayOptions {
+  /** Front-view body silhouette drawn behind the pattern as a non-selectable reference. */
+  bodyGuide: boolean;
   internal: boolean;
   darts: boolean;
   seamAllowance: boolean;
@@ -86,6 +89,8 @@ export interface SceneState extends InteractionState {
   display?: DisplayOptions;
   /** Extra size-chart patterns drawn faintly behind the active one. */
   gradingOutlines?: Array<{ label: string; polygons: Vec2[][] }>;
+  /** Body reference outlines; absent leaves the layer empty even when its switch is on. */
+  bodyGuide?: BodyGuideGeometry;
   /** Called once a print image finishes decoding; the pane repaints to drop the placeholder. */
   onPrintImageReady?: () => void;
 }

@@ -112,6 +112,7 @@ interface UIStore {
   trimKind: TrimKind;
   /** Layer switches for drafting-only visuals; toggles stay out of the undo history. */
   displayOptions: {
+    bodyGuide: boolean;
     internal: boolean;
     darts: boolean;
     seamAllowance: boolean;
@@ -267,6 +268,7 @@ export const useUIStore = create<UIStore>((set, get) => ({
   editPreviewPattern: null,
   gradingClipboard: null,
   displayOptions: {
+    bodyGuide: true,
     internal: true, darts: true, seamAllowance: false, notches: true, grain: true, annotations: true, measurements: true, gradingOverlay: false, seamJoin: false,
     prints: true, topstitches: true, trims: true, wireframe: false,
   },

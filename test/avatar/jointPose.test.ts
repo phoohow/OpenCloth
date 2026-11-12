@@ -13,9 +13,11 @@ describe('joint chains', () => {
   it('falls back to the straight relaxed pose without joints', () => {
     const body = bodyLandmarks(BASE);
     const arm = armChain(body, 1, appliedLimbPose(undefined, 1));
-    expect(arm.mid[0]).toBeCloseTo(arm.root[0] + Math.sin(body.armRakeRad) * body.armH * 0.5, 6);
+    expect(arm.mid[0]).toBeCloseTo(arm.root[0] + Math.sin(body.armRakeRad) * body.upperArmLen, 6);
     expect(arm.end[1]).toBeCloseTo(arm.root[1] - Math.cos(body.armRakeRad) * body.armH, 6);
-    expect(arm.end[2]).toBeCloseTo(0, 6);
+    expect(body.shoulderY - body.armH).toBeCloseTo(body.height * 0.484, 6);
+    // The arm hangs from the shoulder joint, which the spine curve carries back a little.
+    expect(arm.end[2]).toBeCloseTo(body.torsoCenterZAt(body.shoulderY), 6);
 
     const leg = legChain(body, 1, appliedLimbPose(undefined, 1));
     expect(leg.mid[1]).toBeCloseTo(body.kneeY, 6);
@@ -26,7 +28,7 @@ describe('joint chains', () => {
     const body = bodyLandmarks(BASE);
     const arm = armChain(body, 1, appliedLimbPose({ right: { shoulderFlexRad: 70 * RAD } }, 1));
     expect(arm.mid[2]).toBeGreaterThan(0);
-    expect(arm.mid[1]).toBeGreaterThan(body.shoulderY - body.armH * 0.5);
+    expect(arm.mid[1]).toBeGreaterThan(body.shoulderY - body.upperArmLen);
   });
 
   it('bends the elbow forward without moving the shoulder', () => {

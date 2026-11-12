@@ -61,16 +61,21 @@ export function generateAvatarCollider(params: AvatarParams): AvatarCollider {
   ];
   for (const [y0, y1] of torsoSpans) {
     const e = widestEllipse(body, y0, y1);
-    cap(body.torsoCenterXAt(y0), y0, 0, body.torsoCenterXAt(y1), y1, 0, e.rx * 0.98, e.rz * 0.98);
+    cap(
+      body.torsoCenterXAt(y0), y0, body.torsoCenterZAt(y0),
+      body.torsoCenterXAt(y1), y1, body.torsoCenterZAt(y1),
+      e.rx * 0.98, e.rz * 0.98,
+    );
   }
 
   // Neck
-  cap(body.torsoCenterXAt(body.torsoTop), body.torsoTop, 0,
-    body.torsoCenterXAt(body.neckTopY), body.neckTopY, 0, body.neckR);
+  cap(body.torsoCenterXAt(body.torsoTop), body.torsoTop, body.torsoCenterZAt(body.torsoTop),
+    body.torsoCenterXAt(body.neckTopY), body.neckTopY, body.torsoCenterZAt(body.neckTopY), body.neckR);
   // Head
   const headC = body.headCenterY;
   const headX = body.torsoCenterXAt(headC);
-  cap(headX, headC - body.headH * 0.3, 0, headX, headC + body.headH * 0.3, 0, body.headH * 0.42);
+  const headZ = body.torsoCenterZAt(headC);
+  cap(headX, headC - body.headH * 0.3, headZ, headX, headC + body.headH * 0.3, headZ, body.headH * 0.42);
 
   // Legs: thigh and calf follow the hip and knee joints.
   for (const side of [-1, 1] as const) {
@@ -78,30 +83,29 @@ export function generateAvatarCollider(params: AvatarParams): AvatarCollider {
     cap(
       chain.root[0], chain.root[1], chain.root[2],
       chain.mid[0], chain.mid[1], chain.mid[2],
-      body.legR, body.legR * 0.85,
+      body.legR, body.legR * 0.9,
     );
     cap(
       chain.mid[0], chain.mid[1], chain.mid[2],
       chain.end[0], chain.end[1], chain.end[2],
-      body.legR * 0.7, body.legR * 0.6,
+      body.calfR, body.ankleR * 1.2,
     );
   }
 
   // Arms: shoulder ball plus upper arm and forearm along the joint chain.
-  const armR = body.armR;
   for (const side of [-1, 1] as const) {
     const chain = armChain(body, side, appliedLimbPose(params.joints, side));
     cap(chain.root[0], chain.root[1], chain.root[2],
-      chain.root[0], chain.root[1], chain.root[2], armR * 1.15, armR * 1.15);
+      chain.root[0], chain.root[1], chain.root[2], body.deltoidR * 1.1, body.deltoidR * 1.1);
     cap(
       chain.root[0], chain.root[1], chain.root[2],
       chain.mid[0], chain.mid[1], chain.mid[2],
-      armR, armR * 0.9,
+      body.armR, body.armR * 0.95,
     );
     cap(
       chain.mid[0], chain.mid[1], chain.mid[2],
       chain.end[0], chain.end[1], chain.end[2],
-      armR * 0.7, armR * 0.65,
+      body.forearmR, body.wristR,
     );
   }
 

@@ -22,6 +22,7 @@ import {
 import { snapToGrid, type ViewTransform } from '@/ui/viewport2D/viewMath';
 import { collectSnapCandidates, findSnapAtPattern, type SnapCandidate } from '@/ui/viewport2D/snap';
 import { drawScene, type PreviewDrag, type DisplayOptions } from '@/ui/viewport2D/render';
+import { bodyGuideGeometry, type BodyGuideGeometry } from '@/ui/viewport2D/drawBodyGuide';
 import { viewport2DCursor } from '@/ui/viewport2D/cursor';
 import {
   cleanDraftLoop, printFrame, type DraftState, type SeamSide,
@@ -72,6 +73,14 @@ export function Viewport2D() {
 
   const pattern = project.pattern;
   const body = useMemo(() => bodyLandmarks(project.avatar.params), [project.avatar.params]);
+  const bodyGuide = useMemo<BodyGuideGeometry | undefined>(
+    () => displayOptions.bodyGuide
+      ? bodyGuideGeometry({ body, joints: project.avatar.params.joints })
+      : undefined,
+    [displayOptions.bodyGuide, body, project.avatar.params],
+  );
+  /** Fit frames the reference together with the pattern while it is shown. */
+  const fitBounds = useMemo(() => bodyGuide?.outlines.flat() ?? [], [bodyGuide]);
   // Centimetres each panel is raised so its pattern y reads as height above the ground, and the
   // pattern itself shifted by them: the pane draws and picks on the height view, commands still edit
   // the model, which differs only by these offsets.
@@ -166,10 +175,11 @@ export function Viewport2D() {
       showSeams: activeTool === 'seam' || idsOfKind(selection, 'seam').length > 0,
       draft, snapHint, insertHint, seamHover, hoverDelete: activeTool === 'deletePoint', display: displayOptions as DisplayOptions,
       gradingOutlines,
+      bodyGuide,
       onPrintImageReady: () => useUIStore.getState().requestRepaint(),
     });
     noteDrawnFrame('2d', performance.now());
-  }, [pattern, heights, heightOffsets, body, view, project.scene.simulation, selection, hoverTarget, markHint, dropHint, preview, rectWorld, activeTool, draft, snapHint, insertHint, seamHover, displayOptions, gradingOutlines]);
+  }, [pattern, heights, heightOffsets, body, bodyGuide, view, project.scene.simulation, selection, hoverTarget, markHint, dropHint, preview, rectWorld, activeTool, draft, snapHint, insertHint, seamHover, displayOptions, gradingOutlines]);
 
   useEffect(() => { render(); }, [render, repaintToken]);
 
@@ -180,7 +190,7 @@ export function Viewport2D() {
   }, [activeTool]);
 
   const { getCanvasSize, eventWorld, fitToPattern } =
-    useCanvasView({ pattern: heights, view, setView, render, canvasRef, containerRef });
+    useCanvasView({ pattern: heights, fitBounds, view, setView, render, canvasRef, containerRef });
   const { commitNudge, spaceDown } = useNudgeSession(pattern, setPreview);
 
   // Hands the in-flight drag pattern to the 3D pane while a preview tier is on; the drag end,

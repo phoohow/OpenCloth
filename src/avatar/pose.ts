@@ -74,9 +74,13 @@ export function armChain(body: BodyLandmarks, side: PoseSide, pose: AppliedLimbP
   const abduct = side * body.armRakeRad;
   const dir1 = limbDirection(abduct, pose.shoulderFlex);
   const dir2 = rotateAxis3Tuple(dir1, bendAxis(abduct), -pose.elbowBend);
-  const root: Point3 = [body.torsoCenterXAt(body.shoulderY) + side * body.shoulderX, body.shoulderY, 0];
-  const mid = advance(root, dir1, body.armH * 0.5);
-  return { root, mid, end: advance(mid, dir2, body.armH * 0.5), dir1, dir2 };
+  const root: Point3 = [
+    body.torsoCenterXAt(body.shoulderY) + side * body.shoulderX,
+    body.shoulderY,
+    body.torsoCenterZAt(body.shoulderY),
+  ];
+  const mid = advance(root, dir1, body.upperArmLen);
+  return { root, mid, end: advance(mid, dir2, body.forearmLen), dir1, dir2 };
 }
 
 /** Thigh and calf of one side, hinged at the hip and knee. */
@@ -85,9 +89,8 @@ export function legChain(body: BodyLandmarks, side: PoseSide, pose: AppliedLimbP
   const dir1 = limbDirection(abduct, pose.hipFlex);
   const dir2 = rotateAxis3Tuple(dir1, bendAxis(abduct), pose.kneeBend);
   const root: Point3 = [side * body.hipX, body.legH, 0];
-  const mid = advance(root, dir1, body.legH - body.kneeY);
-  const calfLength = body.legH * 0.98 - body.kneeY;
-  return { root, mid, end: advance(mid, dir2, calfLength), dir1, dir2 };
+  const mid = advance(root, dir1, body.thighLen);
+  return { root, mid, end: advance(mid, dir2, body.shinLen), dir1, dir2 };
 }
 
 

@@ -4,8 +4,8 @@ import * as THREE from 'three/webgpu';
 import { degToRad } from '@/base/math';
 import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import type {
-  AssetKey, DrawStage, EntityId, InstanceData, LightData, MeshData, MeshId, ResolvedMaterial,
-  SceneItem, SceneMesh, SceneSnapshot, Transform,
+  AssetKey, DrawStage, EntityId, InstanceData, LightData, MeshData, MeshGroup, MeshId,
+  ResolvedMaterial, SceneItem, SceneMesh, SceneSnapshot, Transform,
 } from '@/render/common';
 import type { SceneHandle } from '@/render/backend/types';
 import { GeometryCache } from '@/render/backend/scene/geometryCache';
@@ -222,6 +222,14 @@ export class SceneStore {
     }
     const mesh = this.meshData(item.mesh.id);
     if (!mesh) return;
+    // A grouped mesh whose groups are all gone draws nothing; the cloth uses this to hide panels.
+    if (mesh.groups?.length === 0) {
+      if (existing) {
+        this.removeRaster(existing);
+        this.rasterEntries.delete(item.key);
+      }
+      return;
+    }
     const geometry = this.geometries.get(mesh);
     const instanceCount = mesh.instances?.count ?? 0;
     let entry = existing;
@@ -237,10 +245,10 @@ export class SceneStore {
     const root = entry.root as THREE.Mesh;
     root.geometry = geometry;
     if (root instanceof THREE.InstancedMesh && mesh.instances) copyInstances(root, mesh.instances);
-    root.material = this.materialList(item.rasterMaterials);
+    root.material = this.materialList(item.rasterMaterials, mesh.groups);
     // Wire-only frames leave the shaded root in place but not drawn.
     root.visible = item.rasterMaterials.length > 0 || item.wire === null;
-    this.syncWire(entry, item);
+    this.syncWire(entry, item, mesh.groups);
     this.selectStage(entry, item.rasterStage);
     applyTransform(root, item.transform, item.key);
   }
@@ -273,6 +281,13 @@ export class SceneStore {
     }
     const mesh = this.meshData(item.mesh.id);
     if (!mesh) return;
+    if (mesh.groups?.length === 0) {
+      if (existing) {
+        this.removeTrace(existing);
+        this.traceEntries.delete(item.key);
+      }
+      return;
+    }
     const geometry = this.geometries.get(mesh);
     const instanceCount = mesh.instances?.count ?? 0;
     let entry = existing;
@@ -288,23 +303,35 @@ export class SceneStore {
     const root = entry.root as THREE.Mesh;
     root.geometry = geometry;
     if (root instanceof THREE.InstancedMesh && mesh.instances) copyInstances(root, mesh.instances);
-    root.material = this.materialList(item.traceMaterials);
+    root.material = this.materialList(item.traceMaterials, mesh.groups);
     applyTransform(root, item.transform, item.key);
   }
 
-  private materialList(variants: readonly ResolvedMaterial[]): THREE.Material | THREE.Material[] {
+  /**
+   * Material list of one draw item. Three walks geometry groups only when the material is a list,
+   * so a mesh that draws by group keeps a list even when every group shares one material.
+   */
+  private materialList(
+    variants: readonly ResolvedMaterial[], groups?: readonly MeshGroup[],
+  ): THREE.Material | THREE.Material[] {
     const materials = variants
       .filter(variant => variant.technique !== 'asset')
       .map(variant => this.materials.get(variant, this.textures));
     const list = materials.length > 0 ? materials : [this.materials.defaultMaterial()];
-    return list.length === 1 ? list[0]! : list;
+    if (!groups) return list.length === 1 ? list[0]! : list;
+    const slots = groupSlots(groups);
+    while (list.length < slots) list.push(list[list.length - 1]!);
+    return list;
   }
 
-  private syncWire(entry: RasterEntry, item: SceneItem): void {
+  private syncWire(entry: RasterEntry, item: SceneItem, groups?: readonly MeshGroup[]): void {
     if (item.wire) {
       const wire = entry.wire ?? new THREE.Mesh((entry.root as THREE.Mesh).geometry);
       wire.geometry = (entry.root as THREE.Mesh).geometry;
-      wire.material = this.materials.get(item.wire, this.textures);
+      const material = this.materials.get(item.wire, this.textures);
+      // Every group draws in the one wire colour, so the list repeats it once per material slot.
+      const slots = groups ? groupSlots(groups) : 0;
+      wire.material = slots > 0 ? Array.from({ length: slots }, () => material) : material;
       wire.renderOrder = 1;
       wire.frustumCulled = false;
       // The wire stands beside the root in the overlay group, so it carries its own pose.
@@ -377,6 +404,13 @@ export class SceneStore {
   private removeTrace(entry: TraceEntry): void {
     this.traceGroup.remove(entry.root);
   }
+}
+
+/** Number of material slots the group ranges address; 0 when the mesh has no groups. */
+function groupSlots(groups: readonly MeshGroup[]): number {
+  let slots = 0;
+  for (const group of groups) slots = Math.max(slots, group.materialSlot + 1);
+  return slots;
 }
 
 /** Three object matching a topology and an instance count. */

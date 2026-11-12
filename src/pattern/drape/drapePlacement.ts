@@ -167,6 +167,7 @@ function wrapTorso(mesh: PanelMesh, drape: ResolvedDrape, body: BodyLandmarks, b
   const depth = Math.max((bounds.maxY - bounds.minY) * 0.01, 1e-3);
   const ring = widestRing(body, topY, topY - depth);
   const centerX = body.torsoCenterXAt(topY);
+  const centerZ = body.torsoCenterZAt(topY);
   const ease = drape.easeCm * 0.01;
   const meanR = Math.max((ring.rx + ring.rz) / 2, 1e-3);
   const sweepRad = Math.max(degToRad(Math.abs(drape.sweepDeg)), degToRad(1));
@@ -178,7 +179,7 @@ function wrapTorso(mesh: PanelMesh, drape: ResolvedDrape, body: BodyLandmarks, b
     const scale = (topR + (hemR - topR) * (topY - wy) / depth) / meanR;
     out[i * 3] = centerX + ring.rx * scale * Math.sin(theta);
     out[i * 3 + 1] = wy;
-    out[i * 3 + 2] = ring.rz * scale * Math.cos(theta);
+    out[i * 3 + 2] = centerZ + ring.rz * scale * Math.cos(theta);
   }
   return out;
 }

@@ -3,6 +3,7 @@ import { seamNumbers } from '@/pattern/seam';
 import { gridStepCm } from '@/ui/viewport2D/viewMath';
 import { createPen } from '@/ui/viewport2D/pen';
 import { drawGrid, drawRuler } from '@/ui/viewport2D/drawPrimitives';
+import { drawBodyGuide } from '@/ui/viewport2D/drawBodyGuide';
 import { drawPanel } from '@/ui/viewport2D/drawPanels';
 import { drawSeam, drawSeamDraft, drawSeamJoints } from '@/ui/viewport2D/drawSeams';
 import {
@@ -21,6 +22,7 @@ export type {
 
 /** Display switches used when the pane does not name any. */
 const DEFAULT_DISPLAY: DisplayOptions = {
+  bodyGuide: true,
   internal: true, darts: true, seamAllowance: false, notches: true, grain: true,
   annotations: true, measurements: true, gradingOverlay: false, seamJoin: false,
   prints: true, topstitches: true, trims: true, wireframe: false,
@@ -55,6 +57,13 @@ export const DRAW_LAYERS: readonly DrawLayer[] = [
       pen.ctx.fillStyle = '#252528';
       pen.ctx.fillRect(0, 0, pen.width, pen.height);
       drawGrid(pen.ctx, pen.width, pen.height, pen.view, gridStepCm(pen.scale));
+    },
+  },
+  {
+    id: 'bodyGuide',
+    when: (_state, display) => display.bodyGuide,
+    draw: (pen, state) => {
+      if (state.bodyGuide) drawBodyGuide(pen, state.bodyGuide);
     },
   },
   {

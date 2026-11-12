@@ -3,6 +3,7 @@ import { createPen } from '@/ui/viewport2D/pen';
 import { DRAW_LAYERS, type DisplayOptions, type SceneState } from '@/ui/viewport2D/render';
 
 const display = (patch: Partial<DisplayOptions> = {}): DisplayOptions => ({
+  bodyGuide: true,
   internal: true, darts: true, seamAllowance: false, notches: true, grain: true,
   annotations: true, measurements: true, gradingOverlay: false, seamJoin: false,
   prints: true, topstitches: true, trims: true, wireframe: false,
@@ -31,7 +32,7 @@ describe('createPen', () => {
 describe('DRAW_LAYERS', () => {
   it('keeps the back-to-front paint order explicit', () => {
     expect(DRAW_LAYERS.map(layer => layer.id)).toEqual([
-      'background', 'grading', 'panels', 'prints', 'internalLines', 'darts',
+      'background', 'bodyGuide', 'grading', 'panels', 'prints', 'internalLines', 'darts',
       'notches', 'grain', 'topstitches', 'trims', 'annotations', 'measurements',
       'seams', 'seamJoints', 'selection', 'draft', 'seamDraft', 'insertHint',
       'snapHint', 'hover', 'dropHint', 'markHint', 'ghost', 'rubberBand', 'ruler',
@@ -39,7 +40,7 @@ describe('DRAW_LAYERS', () => {
   });
 
   it('gates the optional layers on display switches and interaction state', () => {
-    const off = display({ gradingOverlay: false, prints: false, internal: false, darts: false,
+    const off = display({ bodyGuide: false, gradingOverlay: false, prints: false, internal: false, darts: false,
       notches: false, grain: false, topstitches: false, trims: false, annotations: false,
       measurements: false, seamJoin: false });
     const on = display({ gradingOverlay: true, seamJoin: true });

@@ -2,32 +2,23 @@
 
 import type { AssetMesh, MaterialData, MeshData } from '@/render/common';
 import type { AvatarParams } from '@/model/types';
-import { bodyLandmarks, type BodyLandmarks } from '@/avatar';
-import { appliedLimbPose, armChain, legChain, type Point3 } from '@/avatar';
-import { quaternionFromUnitVectors, rotateEuler3, rotateQuaternion3, type Quaternion } from '@/base/math';
+import {
+  appliedLimbPose, armChain, bodyLandmarks, legChain, type BodyLandmarks, type Point3,
+} from '@/avatar';
+import { clamp, quaternionFromUnitVectors, rotateQuaternion3, type Quaternion } from '@/base/math';
 import { computeVertexNormals } from '@/base/geom';
+import {
+  ellipsoid, loftLimb, loftRings, orientOutward,
+  type ProfileAnchor, type RawMesh, type Ring,
+} from '@/runtime/bodyGeometry';
 
 /** Downward local axis the limb lathes run along. */
 const DOWN: Point3 = [0, -1, 0];
 
-/** Indexed triangle mesh in part-local metres. */
-interface RawMesh {
-  positions: Float32Array;
-  indices: Uint32Array;
-}
-
-/** Elliptical cross-section at one height of a lofted body part. */
-interface Station { y: number; rx: number; rz: number; }
-
-/** Placement of one part: translation, rotation and local depth scale. */
+/** Placement of one part: translation and the rotation taking the downward axis onto the limb. */
 interface Placement {
   position: Point3;
-  /** Rotation taking the downward axis onto the limb direction. */
   rotation?: Quaternion;
-  /** Euler angles in radians, XYZ order; replaces `rotation` when present. */
-  euler?: Point3;
-  /** Local z scale applied before the rotation. */
-  depth?: number;
 }
 
 /** Skin surface shared by every body part. */
@@ -41,152 +32,6 @@ const SKIN: MaterialData = {
   side: 'double',
 };
 
-/**
- * Monotone cubic interpolation (Fritsch-Carlson): smooth between anchors without
- * overshooting past neighboring values.
- */
-function monotoneInterp(xs: number[], ys: number[], x: number): number {
-  const n = xs.length;
-  // Fritsch-Carlson assumes increasing knots; reverse decreasing inputs.
-  if (xs[n - 1] < xs[0]) {
-    return monotoneInterp([...xs].reverse(), [...ys].reverse(), x);
-  }
-  if (x <= xs[0]) return ys[0];
-  if (x >= xs[n - 1]) return ys[n - 1];
-  const d: number[] = [];
-  for (let k = 0; k < n - 1; k++) d.push((ys[k + 1] - ys[k]) / (xs[k + 1] - xs[k]));
-  const m: number[] = [d[0]];
-  for (let k = 1; k < n - 1; k++) {
-    if (d[k - 1] * d[k] <= 0) { m.push(0); continue; }
-    const w1 = 2 * (xs[k + 1] - xs[k]) + (xs[k] - xs[k - 1]);
-    const w2 = (xs[k + 1] - xs[k]) + 2 * (xs[k] - xs[k - 1]);
-    m.push((w1 * d[k - 1] + w2 * d[k]) / (w1 + w2));
-  }
-  m.push(d[n - 2]);
-  let i = 1;
-  while (xs[i] < x) i++;
-  const h = xs[i] - xs[i - 1];
-  const t = (x - xs[i - 1]) / h;
-  const t2 = t * t, t3 = t2 * t;
-  return ys[i - 1] * (2 * t3 - 3 * t2 + 1) + h * m[i - 1] * (t3 - 2 * t2 + t)
-    + ys[i] * (-2 * t3 + 3 * t2) + h * m[i] * (t3 - t2);
-}
-
-/** Resamples station anchors (indexed 0..1) into `count` smooth stations. */
-function sampleStations(anchors: Station[], count: number): Station[] {
-  const ts = anchors.map((_, k) => k / (anchors.length - 1));
-  const ys = anchors.map(a => a.y);
-  const rxs = anchors.map(a => a.rx);
-  const rzs = anchors.map(a => a.rz);
-  const out: Station[] = [];
-  for (let s = 0; s < count; s++) {
-    const t = s / (count - 1);
-    out.push({
-      y: monotoneInterp(ts, ys, t),
-      rx: Math.max(monotoneInterp(ts, rxs, t), 0.004),
-      rz: Math.max(monotoneInterp(ts, rzs, t), 0.004),
-    });
-  }
-  return out;
-}
-
-/** Closed lofted tube through ascending elliptical stations, capped at both ends. */
-function loftStations(stations: Station[], radial: number, centerX: (y: number) => number): RawMesh {
-  const rings = stations.length;
-  const pos: number[] = [];
-  const idx: number[] = [];
-  for (const st of stations) {
-    for (let j = 0; j < radial; j++) {
-      const a = (j / radial) * Math.PI * 2;
-      pos.push(centerX(st.y) + st.rx * Math.cos(a), st.y, st.rz * Math.sin(a));
-    }
-  }
-  for (let k = 0; k < rings - 1; k++) {
-    for (let j = 0; j < radial; j++) {
-      const j2 = (j + 1) % radial;
-      const a = k * radial + j, b = k * radial + j2;
-      const c = (k + 1) * radial + j, e = (k + 1) * radial + j2;
-      idx.push(a, c, b, b, c, e);
-    }
-  }
-  // End caps as center vertices, wound outward.
-  const first = stations[0], last = stations[rings - 1];
-  const c0 = pos.length / 3;
-  pos.push(centerX(first.y), first.y, 0);
-  for (let j = 0; j < radial; j++) idx.push(c0, j, (j + 1) % radial);
-  const c1 = pos.length / 3;
-  pos.push(centerX(last.y), last.y, 0);
-  const base = (rings - 1) * radial;
-  for (let j = 0; j < radial; j++) idx.push(c1, base + (j + 1) % radial, base + j);
-  return { positions: new Float32Array(pos), indices: new Uint32Array(idx) };
-}
-
-/** Lathes a smooth radius profile through (y, r) anchors, top to bottom. */
-function latheProfile(anchors: Array<[number, number]>, samples: number, radial: number): RawMesh {
-  const ys = anchors.map(a => a[0]);
-  const rs = anchors.map(a => a[1]);
-  const top = ys[0], bottom = ys[ys.length - 1];
-  const pos: number[] = [];
-  const idx: number[] = [];
-  for (let s = 0; s <= samples; s++) {
-    const y = top + (bottom - top) * (s / samples);
-    const r = Math.max(monotoneInterp(ys, rs, y), 0.004);
-    for (let j = 0; j < radial; j++) {
-      const a = (j / radial) * Math.PI * 2;
-      pos.push(r * Math.sin(a), y, r * Math.cos(a));
-    }
-  }
-  for (let k = 0; k < samples; k++) {
-    for (let j = 0; j < radial; j++) {
-      const j2 = (j + 1) % radial;
-      const a = k * radial + j, b = (k + 1) * radial + j;
-      const c = k * radial + j2, e = (k + 1) * radial + j2;
-      idx.push(a, b, c, b, e, c);
-    }
-  }
-  return { positions: new Float32Array(pos), indices: new Uint32Array(idx) };
-}
-
-/** UV sphere around the origin, wound outward. */
-function sphere(radius: number, widthSegments: number, heightSegments: number): RawMesh {
-  const pos: number[] = [];
-  const idx: number[] = [];
-  for (let iy = 0; iy <= heightSegments; iy++) {
-    const theta = (iy / heightSegments) * Math.PI;
-    const sinTheta = Math.sin(theta), cosTheta = Math.cos(theta);
-    for (let ix = 0; ix <= widthSegments; ix++) {
-      const phi = (ix / widthSegments) * Math.PI * 2;
-      pos.push(
-        -radius * Math.cos(phi) * sinTheta,
-        radius * cosTheta,
-        radius * Math.sin(phi) * sinTheta,
-      );
-    }
-  }
-  for (let iy = 0; iy < heightSegments; iy++) {
-    for (let ix = 0; ix < widthSegments; ix++) {
-      const a = iy * (widthSegments + 1) + ix + 1;
-      const b = iy * (widthSegments + 1) + ix;
-      const c = (iy + 1) * (widthSegments + 1) + ix;
-      const d = (iy + 1) * (widthSegments + 1) + ix + 1;
-      if (iy !== 0) idx.push(a, b, d);
-      if (iy !== heightSegments - 1) idx.push(b, c, d);
-    }
-  }
-  return { positions: new Float32Array(pos), indices: new Uint32Array(idx) };
-}
-
-/** Sphere with per-axis radii, matching a scaled unit sphere. */
-function scaledSphere(radius: number, widthSegments: number, heightSegments: number, sx: number, sy: number, sz: number): RawMesh {
-  const raw = sphere(radius, widthSegments, heightSegments);
-  for (let i = 0; i < raw.positions.length; i += 3) {
-    raw.positions[i] *= sx;
-    raw.positions[i + 1] *= sy;
-    raw.positions[i + 2] *= sz;
-  }
-  return raw;
-}
-
 /** Quaternion turning the downward axis onto `dir`. */
 function downTo(dir: Point3): Quaternion {
   const length = Math.hypot(dir[0], dir[1], dir[2]) || 1;
@@ -196,11 +41,9 @@ function downTo(dir: Point3): Quaternion {
 /** Bakes a part placement into its vertex positions. */
 function bakeMesh(raw: RawMesh, placement: Placement): RawMesh {
   const positions = new Float32Array(raw.positions.length);
-  const depth = placement.depth ?? 1;
   for (let i = 0; i < raw.positions.length; i += 3) {
-    let v: Point3 = [raw.positions[i], raw.positions[i + 1], raw.positions[i + 2] * depth];
+    let v: Point3 = [raw.positions[i], raw.positions[i + 1], raw.positions[i + 2]];
     if (placement.rotation) v = rotateQuaternion3(v, placement.rotation);
-    else if (placement.euler) v = rotateEuler3(v, placement.euler);
     positions[i] = v[0] + placement.position[0];
     positions[i + 1] = v[1] + placement.position[1];
     positions[i + 2] = v[2] + placement.position[2];
@@ -208,35 +51,244 @@ function bakeMesh(raw: RawMesh, placement: Placement): RawMesh {
   return { positions, indices: raw.indices };
 }
 
-/** Torso stations: groin dome, hip, waist, bust, shoulders and the neck stump. */
-function torsoAnchors(body: BodyLandmarks): Station[] {
-  const ring = (y: number): Station => ({ y, ...body.torsoEllipseAt(y) });
-  const top = body.torsoEllipseAt(body.torsoTop);
+/** Offsets a point along a unit direction. */
+function advance(from: Point3, dir: Point3, distance: number): Point3 {
+  return [from[0] + dir[0] * distance, from[1] + dir[1] * distance, from[2] + dir[2] * distance];
+}
+
+/** Torso and neck as one lofted surface, from the groin to under the jaw. */
+function buildTorso(body: BodyLandmarks, steps = 84): RawMesh {
+  const rings: Ring[] = [];
+  const cleftLo = body.crotchY;
+  const cleftPeak = body.hipY - body.torsoH * 0.03;
+  const cleftHi = body.waistY;
+  const smooth = (t: number) => t * t * (3 - 2 * t);
+  /** Depth tuck at the centre of the back, so the seat reads as two cheeks. */
+  const buttockCleft = (y: number): number => {
+    if (y <= cleftLo || y >= cleftHi) return 0;
+    const amount = y <= cleftPeak
+      ? smooth((y - cleftLo) / (cleftPeak - cleftLo))
+      : smooth((cleftHi - y) / (cleftHi - cleftPeak));
+    return 0.22 * amount;
+  };
+
+  // Breast mounds: two swellings either side of the sternum, shaped so they swell out of the chest
+  // wall rather than sitting on it. Their height and depth both fade to nothing at the edges.
+  // How much the torso reads as female: a small waist against wide hips, which is the clearest
+  // signal the measurements carry. It scales the bust volume, its width and the sternum valley,
+  // so the same geometry gives breasts on a 88/70/98 figure and broad flat pecs on a 94/80/96 one.
+  const bustiness = clamp((1 - body.waistR / body.hipR - 0.10) / 0.16, 0, 1);
+  const bustAmount = clamp(0.004 + 0.034 * bustiness, 0.004, 0.038);
+  // The breast root reaches up toward the second rib and tucks under at the inframammary fold:
+  // a long gradual slope above the apex, a short one below it, so the underside folds in.
+  const bustTop = body.bustY + body.height * 0.066;
+  const bustBottom = body.bustY - body.height * 0.032;
+  const bustPeak = body.bustY;
+  const bustFactor = (y: number): number => {
+    if (y <= bustBottom || y >= bustTop) return 0;
+    if (y <= bustPeak) {
+      return Math.cos((Math.PI / 2) * ((bustPeak - y) / (bustPeak - bustBottom))) ** 2;
+    }
+    return Math.cos((Math.PI / 2) * ((y - bustPeak) / (bustTop - bustPeak))) ** 2;
+  };
+  const FRONT = Math.PI / 2;
+  const BUST_SPREAD = 0.50 + 0.12 * (1 - bustiness);
+  const BUST_WIDTH = 0.62 + 0.34 * (1 - bustiness);
+  const moundAt = (y: number): Ring['bulges'] => {
+    const k = bustFactor(y);
+    if (k <= 1e-4) return undefined;
+    const amount = bustAmount * k;
+    return [
+      { angle: FRONT - BUST_SPREAD, width: BUST_WIDTH, amount },
+      { angle: FRONT + BUST_SPREAD, width: BUST_WIDTH, amount },
+      // Sternum: a shallow valley between the two mounds, never a dent of its own.
+      { angle: FRONT, width: 0.30, amount: -amount * 0.45 * bustiness },
+    ];
+  };
+
+  for (let i = 0; i <= steps; i++) {
+    const y = body.crotchY + (body.neckTopY - body.crotchY) * (i / steps);
+    const section = body.torsoSectionAt(y);
+    const squareness = 2.3 - 0.3 * Math.exp(-(((y - body.bustY) / (body.height * 0.085)) ** 2));
+    // The landmarks give the outer envelope the cloth and the collider wrap around, so the chest
+    // wall is pulled back by exactly what the mounds add at the bust point.
+    const amount = bustAmount * bustFactor(y);
+    const apex = Math.sin(FRONT - BUST_SPREAD) ** (2 / squareness);
+    rings.push({
+      y,
+      rx: section.rx,
+      // Take the smaller of the two, so an absent mound never inflates the chest wall.
+      rz: Math.max(Math.min(section.front, (section.front - amount) / apex), section.front * 0.55),
+      rzBack: section.back,
+      squareness,
+      cx: body.torsoCenterXAt(y),
+      cz: body.torsoCenterZAt(y),
+      cleft: buttockCleft(y),
+      bulges: moundAt(y),
+    });
+  }
+  // Groin: the pelvis tapers into the perineum and ends tucked between the thighs, so the
+  // bottom of the torso is never visible as a hem under the seat.
+  const first = rings[0];
+  const groin: Ring[] = [
+    {
+      ...first,
+      y: first.y - body.height * 0.006,
+      rx: first.rx * 0.74, rz: first.rz * 0.82, rzBack: (first.rzBack ?? first.rz) * 0.88,
+    },
+    {
+      ...first,
+      y: first.y - body.height * 0.015,
+      rx: first.rx * 0.46, rz: first.rz * 0.56, rzBack: (first.rzBack ?? first.rz) * 0.62,
+    },
+    {
+      ...first,
+      y: first.y - body.height * 0.026,
+      rx: first.rx * 0.24, rz: first.rz * 0.32, rzBack: (first.rzBack ?? first.rz) * 0.38,
+    },
+  ];
+  const all = [...groin, ...rings];
+  return loftRings(all, 48, { bottom: body.height * 0.006, top: body.neckR * 0.6 });
+}
+
+/** Head as a lofted skull: narrow chin, wide cheekbones and a domed crown. */
+function buildHead(body: BodyLandmarks): RawMesh {
+  const halfW = body.headHalfW;
+  const halfD = body.headHalfD;
+  // t runs from the chin to the top of the skull; f and b are the face and occiput depths.
+  const shape: Array<{ t: number; rx: number; f: number; b: number }> = [
+    { t: 0.00, rx: 0.60, f: 0.60, b: 0.70 },
+    { t: 0.10, rx: 0.74, f: 0.76, b: 0.78 },
+    { t: 0.22, rx: 0.84, f: 0.90, b: 0.76 },
+    { t: 0.36, rx: 0.90, f: 0.97, b: 0.87 },
+    { t: 0.50, rx: 0.98, f: 1.00, b: 0.96 },
+    { t: 0.64, rx: 1.00, f: 0.95, b: 1.00 },
+    { t: 0.76, rx: 0.97, f: 0.88, b: 1.00 },
+    { t: 0.86, rx: 0.88, f: 0.78, b: 0.93 },
+  ];
+  const section = (t: number) => {
+    let k = 1;
+    while (k < shape.length - 1 && shape[k].t < t) k++;
+    const a = shape[k - 1];
+    const b = shape[k];
+    const u = Math.min(Math.max((t - a.t) / (b.t - a.t), 0), 1);
+    return {
+      rx: a.rx + (b.rx - a.rx) * u,
+      f: a.f + (b.f - a.f) * u,
+      b: a.b + (b.b - a.b) * u,
+    };
+  };
+
+  const cx = body.torsoCenterXAt(body.headCenterY);
+  const headCz = body.torsoCenterZAt(body.headCenterY);
+  const rings: Ring[] = [];
+  const steps = 18;
+  const crownStart = 0.86;
+  for (let i = 0; i <= steps; i++) {
+    const t = (i / steps) * crownStart;
+    const s = section(t);
+    rings.push({
+      y: body.neckTopY + body.headH * t,
+      rx: s.rx * halfW, rz: s.f * halfD, rzBack: s.b * halfD, squareness: 2.15, cx,
+      cz: body.torsoCenterZAt(body.neckTopY + body.headH * t),
+    });
+  }
+  // Crown: a dome over the last part of the skull, sampled by angle so the top stays round.
+  const base = section(crownStart);
+  const crownH = body.headH * (1 - crownStart);
+  const crownSteps = 6;
+  for (let k = 1; k < crownSteps; k++) {
+    const theta = (k / crownSteps) * (Math.PI / 2);
+    const scale = Math.cos(theta);
+    rings.push({
+      y: body.neckTopY + body.headH * crownStart + crownH * Math.sin(theta),
+      rx: base.rx * halfW * scale,
+      rz: base.f * halfD * scale,
+      rzBack: base.b * halfD * scale,
+      squareness: 2.15,
+      cx,
+      cz: headCz,
+    });
+  }
+  const lastTheta = ((crownSteps - 1) / crownSteps) * (Math.PI / 2);
+  return loftRings(rings, 28, {
+    bottom: body.headH * 0.02,
+    top: crownH * (1 - Math.sin(lastTheta)),
+  });
+}
+
+/** Palm, fingers and thumb of one hand, hanging along `dir`. */
+function buildHand(body: BodyLandmarks, wrist: Point3, dir: Point3, side: -1 | 1): Array<{ name: string; mesh: RawMesh; placement: Placement }> {
+  const rotation = downTo(dir);
+  const palmLen = body.handLen * 0.52;
+  const fingerLen = body.handLen * 0.48;
+  const thickness = body.handHalfT;
+  const width = body.handHalfW;
+
+  const palm: ProfileAnchor[] = [
+    { t: 0, rx: thickness * 0.82, rz: width * 0.66 },
+    { t: 0.45, rx: thickness, rz: width * 0.94 },
+    { t: 1, rx: thickness * 0.9, rz: width },
+  ];
+  const fingers: ProfileAnchor[] = [
+    { t: 0, rx: thickness * 0.9, rz: width * 0.98 },
+    { t: 0.45, rx: thickness * 0.82, rz: width * 0.92 },
+    { t: 0.82, rx: thickness * 0.64, rz: width * 0.74 },
+    { t: 1, rx: thickness * 0.52, rz: width * 0.62 },
+  ];
+  const thumbDir: Point3 = [-side * 0.22, -0.78, 0.58];
+  const thumbRoot = advance(advance(wrist, dir, palmLen * 0.35), [0, 0, 1], width * 0.62);
+  const thumb: ProfileAnchor[] = [
+    { t: 0, rx: thickness * 1.15 },
+    { t: 0.5, rx: thickness * 0.95 },
+    { t: 1, rx: thickness * 0.8 },
+  ];
+
   return [
-    { ...ring(body.crotchY), rx: body.hipR * 0.42, rz: body.hipR * 0.38 },
-    ring(body.hipY),
-    ring(body.hipY + body.torsoH * 0.18),
-    ring(body.waistY),
-    ring(body.hipY + body.torsoH * 0.58),
-    ring(body.bustY),
-    ring(body.torsoTop),
-    { y: body.torsoTop + body.neckH * 0.55, rx: top.rx * 0.85, rz: top.rz * 0.8 },
-    { y: body.neckTopY, rx: body.headH * 0.2, rz: body.headH * 0.2 },
-    { y: body.neckTopY + 0.015, rx: 0.004, rz: 0.004 },
+    { name: 'palm', mesh: loftLimb(palm, palmLen, 16, 6, 0.7), placement: { position: wrist, rotation } },
+    {
+      name: 'fingers',
+      mesh: loftLimb(fingers, fingerLen, 16, 8, 0.9),
+      placement: { position: advance(wrist, dir, palmLen), rotation },
+    },
+    {
+      name: 'thumb',
+      mesh: loftLimb(thumb, body.handLen * 0.34, 12, 6, 0.9),
+      placement: { position: thumbRoot, rotation: downTo(thumbDir) },
+    },
   ];
 }
 
+/** One foot, built around the ankle with the sole on the floor. */
+function buildFoot(body: BodyLandmarks): RawMesh {
+  const ankle = body.ankleY;
+  const width = body.footHalfW;
+  const length = body.footLen;
+  // Rings rise from the sole to the ankle joint; the foot loses length as it rises, so the
+  // instep clears the toes instead of leaving a boot-shaped block.
+  const rings: Ring[] = [
+    { y: -ankle, rx: width * 0.86, rz: length * 0.66, rzBack: length * 0.3, squareness: 3.4 },
+    { y: -ankle * 0.82, rx: width * 0.92, rz: length * 0.64, rzBack: length * 0.31, squareness: 3.2 },
+    { y: -ankle * 0.66, rx: width * 0.96, rz: length * 0.56, rzBack: length * 0.31, squareness: 3 },
+    { y: -ankle * 0.5, rx: width * 0.9, rz: length * 0.44, rzBack: length * 0.3, squareness: 2.8 },
+    { y: -ankle * 0.34, rx: width * 0.8, rz: length * 0.32, rzBack: length * 0.28, squareness: 2.5 },
+    { y: -ankle * 0.18, rx: width * 0.68, rz: length * 0.22, rzBack: length * 0.26, squareness: 2.3 },
+    { y: 0, rx: body.ankleR * 1.35, rz: body.ankleR * 1.5, rzBack: body.ankleR * 1.45 },
+    { y: body.ankleR * 1.4, rx: body.ankleR * 1.15, rz: body.ankleR * 1.2, rzBack: body.ankleR * 1.15 },
+  ];
+  return loftRings(rings, 22, { bottom: 0, top: body.ankleR * 0.8 });
+}
+
 /**
- * Builds the stylized dress-form mannequin from bodyLandmarks measurements so the figure,
- * collision capsules and cloth wrap share one silhouette. All meshes are in metres.
+ * Builds the stylized mannequin from bodyLandmarks measurements so the figure, collision
+ * capsules and cloth wrap share one silhouette. All meshes are in metres.
  */
 export function proceduralAvatarMeshes(params: AvatarParams): AssetMesh[] {
   const body = bodyLandmarks(params);
-  const { legR, armR, legH, armH, headH, kneeY, shoulderX, shoulderY, hipR } = body;
   const meshes: AssetMesh[] = [];
 
   const add = (name: string, raw: RawMesh, placement: Placement): void => {
-    const baked = bakeMesh(raw, placement);
+    const baked = bakeMesh(orientOutward(raw), placement);
     const mesh: MeshData = {
       topology: 'triangle',
       streams: { position: baked.positions, normal: computeVertexNormals(baked.positions, baked.indices) },
@@ -245,84 +297,66 @@ export function proceduralAvatarMeshes(params: AvatarParams): AssetMesh[] {
     meshes.push({ name, mesh, material: SKIN });
   };
 
-  add('torso', loftStations(sampleStations(torsoAnchors(body), 28), 30, y => body.torsoCenterXAt(y)), {
-    position: [0, 0, 0],
-  });
+  add('torso', buildTorso(body), { position: [0, 0, 0] });
+  add('head', buildHead(body), { position: [0, 0, 0] });
 
-  const thighAnchors: Array<[number, number]> = [
-    [hipR * 0.15, legR * 0.98],
-    [-legH * 0.38, legR * 0.9],
-    [-(legH - kneeY), legR * 0.8],
+  const shoulderCap = ellipsoid(body.deltoidR * 1.06, body.deltoidR * 1.3, body.deltoidR * 1.04, 20, 14);
+  const elbowBall = ellipsoid(body.elbowR * 1.05, body.elbowR * 1.05, body.elbowR * 1.05, 16, 10);
+  const kneeBall = ellipsoid(body.kneeR * 1.02, body.kneeR * 1.08, body.kneeR * 1.22, 18, 10);
+
+  const upperArm: ProfileAnchor[] = [
+    { t: 0, rx: body.deltoidR * 0.98 },
+    { t: 0.28, rx: body.armR },
+    { t: 0.62, rx: body.armR * 0.92 },
+    { t: 0.88, rx: body.armR * 0.78 },
+    { t: 1, rx: body.elbowR },
   ];
-  const calfAnchors: Array<[number, number]> = [
-    [0, legR * 0.8],
-    [-(legH - kneeY) * 0.4, legR * 0.68],
-    [-(legH - kneeY) * 0.82, legR * 0.5],
-    [-(legH - kneeY) * 0.96, legR * 0.46],
-    [-(legH - kneeY) * 0.96 - 0.001, 0.004],
+  const forearm: ProfileAnchor[] = [
+    { t: 0, rx: body.forearmR },
+    { t: 0.3, rx: body.forearmR * 0.94 },
+    { t: 0.7, rx: body.forearmR * 0.74 },
+    { t: 1, rx: body.wristR },
   ];
-  const thigh = latheProfile(thighAnchors, 12, 16);
-  const calf = latheProfile(calfAnchors, 12, 16);
-  const knee = sphere(legR * 0.82, 16, 12);
-  const foot = scaledSphere(legR * 1.1, 18, 12, 0.7, 0.4, 1.5);
+  const upperArmMesh = loftLimb(upperArm, body.upperArmLen, 20, 16);
+  const forearmMesh = loftLimb(forearm, body.forearmLen, 20, 16);
+
+  const thigh: ProfileAnchor[] = [
+    { t: 0, rx: body.thighTopR },
+    { t: 0.3, rx: body.legR },
+    { t: 0.7, rx: body.legR * 0.82 },
+    { t: 1, rx: body.kneeR },
+  ];
+  const calf: ProfileAnchor[] = [
+    { t: 0, rx: body.kneeR * 0.98, rz: body.kneeR * 1.15 },
+    { t: 0.22, rx: body.calfR, rz: body.calfR * 1.12 },
+    { t: 0.6, rx: body.calfR * 0.78, rz: body.calfR * 0.92 },
+    { t: 0.9, rx: body.ankleR * 1.12, rz: body.ankleR * 1.25 },
+    { t: 1, rx: body.ankleR, rz: body.ankleR * 1.2 },
+  ];
+  const thighMesh = loftLimb(thigh, body.thighLen, 22, 16);
+  const calfMesh = loftLimb(calf, body.shinLen, 22, 18);
+  const footMesh = buildFoot(body);
 
   for (const side of [-1, 1] as const) {
-    const joints = appliedLimbPose(params.joints, side);
-    const chain = legChain(body, side, joints);
     const label = side < 0 ? 'left' : 'right';
-    add(`thigh-${label}`, thigh, { position: chain.root, rotation: downTo(chain.dir1), depth: 0.85 });
-    add(`calf-${label}`, calf, { position: chain.mid, rotation: downTo(chain.dir2), depth: 0.85 });
-    add(`knee-${label}`, knee, { position: chain.mid });
-    add(`foot-${label}`, foot, {
-      position: [chain.end[0], chain.end[1], chain.end[2] + legR * 0.35],
-      euler: [-joints.hipFlex + joints.kneeBend, 0, side * body.legRakeRad],
-    });
-  }
-
-  const shoulderCenter = body.torsoCenterXAt(shoulderY);
-  const shoulderBall = sphere(armR * 1.15, 16, 12);
-  add('shoulder-left', shoulderBall, { position: [shoulderCenter - (shoulderX - armR * 0.35), shoulderY, 0] });
-  add('shoulder-right', shoulderBall, { position: [shoulderCenter + shoulderX - armR * 0.35, shoulderY, 0] });
-
-  const upperAnchors: Array<[number, number]> = [
-    [0, armR * 0.95],
-    [-armH * 0.15, armR * 0.9],
-    [-armH * 0.5, armR * 0.78],
-  ];
-  const forearmAnchors: Array<[number, number]> = [
-    [0, armR * 0.78],
-    [-armH * 0.3, armR * 0.64],
-    [-armH * 0.5, armR * 0.55],
-    [-armH * 0.5 - 0.001, 0.004],
-  ];
-  const upperArm = latheProfile(upperAnchors, 10, 14);
-  const forearm = latheProfile(forearmAnchors, 10, 14);
-  const elbow = sphere(armR * 0.8, 14, 10);
-  const hand = scaledSphere(armR * 0.8, 12, 8, 0.75, 1.5, 0.5);
-
-  for (const side of [-1, 1] as const) {
     const joints = appliedLimbPose(params.joints, side);
-    const chain = armChain(body, side, joints);
-    const label = side < 0 ? 'left' : 'right';
-    add(`upper-arm-${label}`, upperArm, {
-      position: chain.root, rotation: downTo(chain.dir1), depth: 0.9,
-    });
-    add(`forearm-${label}`, forearm, {
-      position: chain.mid, rotation: downTo(chain.dir2), depth: 0.9,
-    });
-    add(`elbow-${label}`, elbow, { position: chain.mid });
-    add(`hand-${label}`, hand, {
-      position: [
-        chain.end[0] + chain.dir2[0] * armR * 0.6,
-        chain.end[1] + chain.dir2[1] * armR * 0.6,
-        chain.end[2] + chain.dir2[2] * armR * 0.6,
-      ],
-      rotation: downTo(chain.dir2),
-    });
-  }
 
-  const head = scaledSphere(headH * 0.45, 24, 18, 0.86, 1.0, 0.92);
-  add('head', head, { position: [body.torsoCenterXAt(body.headCenterY), body.headCenterY, 0] });
+    const arm = armChain(body, side, joints);
+    const shoulderTop = advance(arm.root, arm.dir1, body.deltoidR * 0.62);
+    add(`shoulder-${label}`, shoulderCap, { position: shoulderTop });
+    add(`upper-arm-${label}`, upperArmMesh, { position: arm.root, rotation: downTo(arm.dir1) });
+    add(`elbow-${label}`, elbowBall, { position: arm.mid });
+    add(`forearm-${label}`, forearmMesh, { position: arm.mid, rotation: downTo(arm.dir2) });
+    for (const part of buildHand(body, arm.end, arm.dir2, side)) {
+      add(`${part.name}-${label}`, part.mesh, part.placement);
+    }
+
+    const leg = legChain(body, side, joints);
+    add(`thigh-${label}`, thighMesh, { position: leg.root, rotation: downTo(leg.dir1) });
+    add(`knee-${label}`, kneeBall, { position: leg.mid });
+    add(`calf-${label}`, calfMesh, { position: leg.mid, rotation: downTo(leg.dir2) });
+    add(`foot-${label}`, footMesh, { position: leg.end, rotation: downTo(leg.dir2) });
+  }
 
   return meshes;
 }

@@ -9,8 +9,10 @@ export interface BundledAvatar {
   params: AvatarParams;
 }
 
-const MALE_PARAMS: AvatarParams = { heightCm: 170, chestCm: 92, waistCm: 74, hipCm: 96, poseArmAngleRad: 0.12 };
-const FEMALE_PARAMS: AvatarParams = { heightCm: 175, chestCm: 92, waistCm: 70, hipCm: 110, poseArmAngleRad: 0.12 };
+/** Measurements of an adult woman of 175 cm: bust 88, waist 70, hip 98. */
+const FEMALE_PARAMS: AvatarParams = { heightCm: 175, chestCm: 88, waistCm: 70, hipCm: 98, poseArmAngleRad: 0.12 };
+/** Measurements of an adult man of 170 cm: chest 94, waist 80, hip 96. */
+const MALE_PARAMS: AvatarParams = { heightCm: 170, chestCm: 94, waistCm: 80, hipCm: 96, poseArmAngleRad: 0.12 };
 
 /** Bundled body meshes, first entry is the default. */
 export const BUNDLED_AVATARS: BundledAvatar[] = [

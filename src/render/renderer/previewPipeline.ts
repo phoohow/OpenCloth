@@ -3,6 +3,7 @@
  * preview graph and read back as a PNG data url. Sits beside `Renderer`, over its own backend.
  */
 
+import { degToRad } from '@/base/math';
 import { pixelsToPngDataUrl, waitForChange, whenImagesReady } from '@/base/platform';
 import type {
   Bounds, CameraState, LightData, SceneItem, SceneSnapshot, Transform, VersionStamp,
@@ -19,10 +20,8 @@ const PREVIEW_SIZE = 128;
 /** Backdrop of a preview, matching the asset-panel row. */
 const BACKGROUND = '#1f1f24';
 
-/** Framing of the model portrait: the height it aims at and how far back it stands, in model heights. */
-const FOCUS_HEIGHT = 0.88;
-const CAMERA_HEIGHT = 0.9;
-const CAMERA_DISTANCE = 0.74;
+/** Framing of the model portrait: share of the frame the body fills, in model heights. */
+const BODY_FILL = 0.92;
 
 /** Field of view of the model camera, in degrees. */
 const MODEL_FOV = 30;
@@ -149,7 +148,12 @@ function assetScene(key: string): SceneSnapshot {
     transform: IDENTITY,
     rasterStage: 'scene',
     bucket: 'opaque',
-    rasterMaterials: [],
+    // One variant marks the asset slot as drawn; the asset object keeps its own materials.
+    rasterMaterials: [{
+      technique: 'asset',
+      data: { kind: 'surface' },
+      source: { kind: 'asset', key, slot: 0 },
+    }],
     traceMaterials: [],
     wire: null,
   };
@@ -199,13 +203,20 @@ function portraitLights(): LightData[] {
   ];
 }
 
-/** Camera framing the body from its feet to just above the head. */
+/** Camera facing the body from the front, framing it from the feet to just above the head. */
 function portraitCamera(bounds: Bounds): CameraState {
   const height = Math.max(bounds.max.y - bounds.min.y, 1e-3);
+  const center = {
+    x: (bounds.min.x + bounds.max.x) / 2,
+    y: bounds.min.y + height / 2,
+    z: (bounds.min.z + bounds.max.z) / 2,
+  };
+  // Distance that makes the body span BODY_FILL of the frame at the model field of view.
+  const distance = height / BODY_FILL / (2 * Math.tan(degToRad(MODEL_FOV) / 2));
   return {
     projection: 'perspective',
-    position: { x: 0, y: bounds.min.y + height * CAMERA_HEIGHT, z: height * CAMERA_DISTANCE },
-    target: { x: 0, y: bounds.min.y + height * FOCUS_HEIGHT, z: 0 },
+    position: { x: center.x, y: center.y, z: center.z + distance },
+    target: center,
     up: { x: 0, y: 1, z: 0 },
     fovDeg: MODEL_FOV,
     viewHeightMeters: height,

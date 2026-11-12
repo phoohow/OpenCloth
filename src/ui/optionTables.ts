@@ -44,6 +44,7 @@ export const ASSET_TAB_OPTIONS: AssetTabOption[] = [
 
 /** 2D display switches, shared by the View ▸ 2D Display menu and the 2D toolbar dropdown. */
 export const DISPLAY_LAYER_OPTIONS: Array<{ key: keyof DisplayOptions; label: string }> = [
+  { key: 'bodyGuide', label: '人体参考' },
   { key: 'internal', label: '内部线' },
   { key: 'darts', label: '省道' },
   { key: 'seamAllowance', label: '缝份线' },
