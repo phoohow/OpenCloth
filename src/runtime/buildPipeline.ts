@@ -111,7 +111,7 @@ export class BuildPipeline {
    * and, when the particle layout is stable, their live simulated positions.
    */
   async sync(project: Project): Promise<void> {
-    // A measurement or pose edit changes the body, its capsules and the drape wrap.
+    // A measurement or build edit changes the body, its collision mesh and the drape wrap.
     if (avatarBodySignature(project.avatar) !== this.appliedAvatar) {
       await this.build(project);
       return;

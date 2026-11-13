@@ -1,49 +1,49 @@
 /**
- * The body the garment dresses: source, measurements, pose and surface appearance.
+ * The body the garment dresses: measurements, build and surface appearance.
  */
 
 import type { ObjectTransform } from '@/model/types/geometry';
 
-
-/** Body mesh from the procedural capsules or from a model file. */
-export type AvatarSource = 'procedural' | 'glb';
+/** How the body is produced: the built-in parametric mannequin, or an imported model file. */
+export type AvatarSource = 'makehuman' | 'glb';
 
 /** How the avatar shows behind the garment. */
 export type AvatarDisplay = 'visible' | 'hidden' | 'translucent';
 
-/** Rotations at the joints of one limb chain, in radians. */
-export interface LimbPose {
-  /** Forward swing of the arm about the shoulder. */
-  shoulderFlexRad?: number;
-  /** Forward bend of the forearm about the elbow. */
-  elbowBendRad?: number;
-  /** Forward swing of the thigh about the hip. */
-  hipFlexRad?: number;
-  /** Backward bend of the calf about the knee. */
-  kneeBendRad?: number;
-}
-
-/** Joint rotations of the left and right limbs. */
-export interface JointPose {
-  left?: LimbPose;
-  right?: LimbPose;
-}
-
-/** Body measurements in centimeters. */
+/**
+ * Build and measurements the MakeHuman body is made from.
+ *
+ * The measurements are the numbers the size chart and the points of measure read, so the body
+ * always matches the garment it is dressed in. They feed MakeHuman's own measurement modifiers:
+ * the bust, waist and hip girths are solved on the mesh by cutting cross-sections, exactly the
+ * quantities `measure-bust`, `measure-waist` and `measure-hips` stand for.
+ *
+ * The build fields are MakeHuman's macrodetails sliders, which decide the base figure the
+ * measurements are solved on. Only the four the body build reads are kept: gender, age, muscle
+ * and weight.
+ */
 export interface AvatarParams {
   heightCm: number;
+  /** Bust girth, at the fullest part of the chest. MakeHuman `measure-bust`. */
   chestCm: number;
+  /** Natural waist girth, at the narrowest section above the hip. MakeHuman `measure-waist`. */
   waistCm: number;
+  /** Hip girth, at the widest point of the seat. MakeHuman `measure-hips`. */
   hipCm: number;
-  /** Outward arm rake from vertical, in radians; default 0.12. */
-  poseArmAngleRad?: number;
-  /** Outward leg splay from vertical, in radians; default 0. */
-  poseLegSpreadRad?: number;
-  /** Lateral torso lean from vertical, in radians; default 0. */
-  poseTorsoLeanRad?: number;
-  /** Per-side shoulder, elbow, hip and knee rotations; absent means a straight relaxed pose. */
-  joints?: JointPose;
+  /** Build from 0 (female) to 1 (male); absent means female. MakeHuman `macrodetails/Gender`. */
+  gender?: number;
+  /** Age in years, 1 to 90. MakeHuman `macrodetails/Age`. */
+  ageYears?: number;
+  /** Muscle tone from 0 (slight) to 1 (athletic), 0.5 average. MakeHuman `MacroMuscle`. */
+  muscle?: number;
+  /** Body weight from 0 (slight) to 1 (heavy), 0.5 average. MakeHuman `MacroWeight`. */
+  weight?: number;
+  /** Arm pose the body is built in: the rest A-pose, or arms out horizontally. */
+  pose?: AvatarPose;
 }
+
+/** Arm pose of the body, which decides where the sleeves are wrapped. */
+export type AvatarPose = 'a' | 't';
 
 /** Surface appearance of the avatar body. */
 export interface SkinAppearance {
@@ -58,16 +58,14 @@ export interface SkinAppearance {
 /** The body the garment dresses. */
 export interface Avatar {
   id: string;
-  /** Display name of the body in the outliner; absent means the model name. */
+  /** Display name of the body in the outliner; absent means the source's own label. */
   name?: string;
   source: AvatarSource;
   params: AvatarParams;
-  /** Bundled model key or url of the avatar mesh. */
-  glbUrl?: string;
   /** Blob key of an imported avatar model in the local object store. */
   glbObjectKey?: string;
-  /** Target height in meters for an imported model; defaults to params.heightCm. */
-  heightCm?: number;
+  /** Embedded data URL of an imported model, carried by projects that travel between machines. */
+  glbUrl?: string;
   /** Display name of an imported glb model. */
   modelName?: string;
   /** Scene placement; absent means the identity transform. */

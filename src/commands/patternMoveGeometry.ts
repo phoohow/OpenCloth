@@ -1,7 +1,7 @@
 import type { ArcGeom, EdgeType, Panel, Pattern, Vec2 } from '@/model/types';
 import { arcFromThreePoints, evalArc } from '@/base/geom/arc';
 import { add2, nearlyEqual2 } from '@/base/math';
-import { panelCutBounds } from '@/pattern/panel';
+import { panelMeshBounds } from '@/pattern/panel';
 
 /** One translated value plus the key needed to restore it. */
 export type MoveRecord =
@@ -127,7 +127,7 @@ function drapedTopsOf(pattern: Pattern, pointIds: readonly string[]): Map<string
   for (const pointId of pointIds) {
     for (const panel of panelsOfPoint(pattern, pointId)) {
       if (!panel.drape || tops.has(panel.id)) continue;
-      tops.set(panel.id, panelCutBounds(pattern, panel).max.y);
+      tops.set(panel.id, panelMeshBounds(pattern, panel).max.y);
     }
   }
   return tops;
@@ -183,7 +183,7 @@ export function translateGeometry(
     for (const [panelId, top] of pinned) {
       const drape = pattern.panels[panelId]?.drape;
       if (!drape) continue;
-      const shift = panelCutBounds(pattern, pattern.panels[panelId]!).max.y - top;
+      const shift = panelMeshBounds(pattern, pattern.panels[panelId]!).max.y - top;
       if (Math.abs(shift) < 1e-6) continue;
       records.push({ kind: 'drape', panelId, old: { anchorOffsetCm: drape.anchorOffsetCm } });
       drape.anchorOffsetCm = (drape.anchorOffsetCm ?? 0) + shift;

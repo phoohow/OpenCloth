@@ -63,6 +63,9 @@ export default defineConfig(({ mode }) => {
       port: 5173,
       open: true,
     },
+    test: {
+      setupFiles: ['./test/setup.ts'],
+    },
     build: {
       target: 'es2022',
       outDir: storageAssets ? 'dist/site' : 'dist',

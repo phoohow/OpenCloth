@@ -15,10 +15,12 @@ describe('2D height view', () => {
   const offsets = panelHeightOffsets(project.pattern, body);
   const heights = toHeightPattern(project.pattern, offsets);
 
-  it('raises every draped panel to the height the 3D wrap puts it at', () => {
+  // A sleeve turns around the arm's own axis, so its ring of vertices spans a range of heights
+  // instead of following one; only the panels wrapped around a vertical axis share one height.
+  it('raises every torso panel to the height the 3D wrap puts it at', () => {
     for (const panel of Object.values(project.pattern.panels)) {
       const mesh = buildPanelMesh(project.pattern, panel.id);
-      if (!mesh || !panel.drape) continue;
+      if (!mesh || !panel.drape || panel.drape.region === 'arm' || panel.drape.region === 'leg') continue;
       const wrapped = drapePositions(mesh, panel, body);
       const offset = offsets.get(panel.id) ?? 0;
       for (let i = 0; i < mesh.vertexCount; i += 7) {

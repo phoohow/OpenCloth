@@ -7,11 +7,12 @@ import type {
 } from '@/render/common';
 import { CHANNEL_ALL, type EntityId } from '@/render/world';
 import {
-  buildMeshCollider, generateAvatarCollider, type AvatarCollider,
+  buildMeshCollider, type AvatarCollider,
 } from '@/avatar/collider';
 import { getModelBlob } from '@/io/storage';
+import { makehumanBody } from '@/avatar';
 import type { PresenterHost } from '@/runtime/presenters/host';
-import { proceduralAvatarMeshes } from '@/runtime/proceduralAvatar';
+import { makehumanAvatarMeshes } from '@/runtime/makehumanAvatar';
 
 /** Key the body asset is loaded under and released by. */
 const AVATAR_ASSET_KEY = 'avatar';
@@ -51,9 +52,9 @@ export class AvatarStage {
     const collision = asset.collision();
     // Animated bodies need slack around the rest grid for limbs that move outside it.
     const margin = asset.animations().length > 0 ? ANIMATION_COLLIDER_MARGIN_M : 0;
-    // The capsules remain the fallback and the fit-analysis proxy; the triangle grid drives collision.
-    const collider = generateAvatarCollider(avatar.params);
-    collider.mesh = collision ? buildMeshCollider(collision.vertices, undefined, margin) : null;
+    const mesh = collision ? buildMeshCollider(collision.vertices, undefined, margin) : null;
+    const collider = mesh ? { mesh } : null;
+    if (!collision) console.warn('Avatar has no collision mesh; cloth will not collide with the body');
 
     this.host = host;
     this.asset = asset;
@@ -177,42 +178,40 @@ export class AvatarStage {
     if (this.host) this.detach(this.host);
   }
 
-  /** Loads the body source, falling back to the procedural mannequin when a model fails. */
+  /** Loads the body source; an imported model that fails falls back to the built-in body. */
   private async load(avatar: Avatar, host: PresenterHost): Promise<AssetHandle> {
     const source = await this.sourceOf(avatar);
-    if (source.kind === 'meshes') return host.assets.load(AVATAR_ASSET_KEY, source);
     try {
       return await host.assets.load(AVATAR_ASSET_KEY, source);
     } catch (err) {
-      console.warn('Avatar model unavailable, falling back to the procedural mannequin:', err);
+      console.warn('Avatar model unavailable, falling back to the MakeHuman body:', err);
       return host.assets.load(AVATAR_ASSET_KEY, {
-        kind: 'meshes', meshes: proceduralAvatarMeshes(avatar.params),
+        kind: 'meshes', meshes: makehumanAvatarMeshes(makehumanBody(avatar.params)),
       });
     }
   }
 
-  /** Model source of an imported body, or the generated meshes of a procedural one. */
+  /** Imported model file of the body, or the MakeHuman mesh built from its measurements. */
   private async sourceOf(avatar: Avatar): Promise<AssetSource> {
-    if (avatar.source !== 'procedural') {
-      const targetHeight = (avatar.heightCm ?? avatar.params.heightCm) / 100;
+    if (avatar.source === 'glb' && avatar.glbUrl) {
+      return { kind: 'model', url: avatar.glbUrl, targetHeight: avatar.params.heightCm / 100 };
+    }
+    if (avatar.source === 'glb' && avatar.glbObjectKey) {
       try {
-        if (avatar.glbUrl) return { kind: 'model', url: avatar.glbUrl, targetHeight };
-        if (avatar.glbObjectKey) {
-          const blob = await getModelBlob(avatar.glbObjectKey);
-          if (blob) {
-            return {
-              kind: 'model',
-              data: await blob.arrayBuffer(),
-              fileName: avatar.modelName ?? 'avatar.glb',
-              targetHeight,
-            };
-          }
+        const blob = await getModelBlob(avatar.glbObjectKey);
+        if (blob) {
+          return {
+            kind: 'model',
+            data: await blob.arrayBuffer(),
+            fileName: avatar.modelName ?? 'avatar.glb',
+            targetHeight: avatar.params.heightCm / 100,
+          };
         }
       } catch (err) {
-        console.warn('Avatar model unavailable, falling back to the procedural mannequin:', err);
+        console.warn('Avatar model unavailable, falling back to the MakeHuman body:', err);
       }
     }
-    return { kind: 'meshes', meshes: proceduralAvatarMeshes(avatar.params) };
+    return { kind: 'meshes', meshes: makehumanAvatarMeshes(makehumanBody(avatar.params)) };
   }
 
   /** Writes the appearance onto the current asset and records what was applied. */

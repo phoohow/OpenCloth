@@ -40,7 +40,7 @@ export interface FitFieldOptions {
 }
 
 /**
- * Measures signed clearance from `positions` (flat xyz in metres) to the body capsules.
+ * Measures signed clearance from `positions` (flat xyz in metres) to the body surface.
  * Results are centimetres, matching the property panel; vertices skipped by `stride` carry `NaN`.
  */
 export function computeFitField(

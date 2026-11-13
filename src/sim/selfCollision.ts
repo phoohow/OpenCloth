@@ -18,6 +18,12 @@ const MAX_SEARCH_RADIUS = 2;
 /** Cell coordinate stored for particles that cannot enter the hash. */
 const INVALID_CELL = 0x7fffffff;
 
+/** One particle pair that a stitch has sewn together. */
+export interface StitchedPair {
+  p0: number;
+  p1: number;
+}
+
 /** Tunables of one self-collision pass, lengths in meters. */
 export interface SelfCollisionParams {
   /** Minimum separation of two particles on the same layer. */
@@ -26,6 +32,11 @@ export interface SelfCollisionParams {
   thicknesses?: Float32Array;
   /** Extra separation added per step of collision-layer difference. */
   layerSpacing: number;
+  /**
+   * Particle pairs that meet at a stitched seam. The two particles are one point of the garment,
+   * so the pass leaves them together instead of pushing them a fabric thickness apart.
+   */
+  stitched?: readonly StitchedPair[];
   /** Candidate pairs visited per call; pairs beyond it are skipped. */
   maxPairs?: number;
   /** Projection iterations. */
@@ -59,6 +70,10 @@ export class SelfCollisionSolver {
   private readonly delta: Float32Array;
   private warnedTruncated = false;
   private warnedNonFinite = false;
+  /** Stitch list the keys below were built from; identity tells the list has changed. */
+  private stitchedSource: readonly StitchedPair[] | null = null;
+  /** Pair keys of the stitches, `min(i, j) * count + max(i, j)`. */
+  private stitchedKeys = new Set<number>();
 
   constructor(particleCount: number) {
     this.count = particleCount;
@@ -94,6 +109,8 @@ export class SelfCollisionSolver {
     const layerSpacing = Math.max(0, params.layerSpacing);
     if (!Number.isFinite(thickness) || !Number.isFinite(layerSpacing)) return empty;
     const thicknesses = params.thicknesses?.length === count ? params.thicknesses : null;
+    this.syncStitched(params.stitched);
+    const stitched = this.stitchedKeys;
     const maxPairs = Math.max(1, params.maxPairs ?? DEFAULT_MAX_PAIRS);
     const iterations = Math.max(1, Math.round(params.iterations ?? DEFAULT_ITERATIONS));
 
@@ -173,6 +190,8 @@ export class SelfCollisionSolver {
                   : thickness;
                 const spacing = Math.min(pairThickness + layerDiff * layerSpacing, reach);
                 if (dist2 >= spacing * spacing) continue;
+                // Two particles stitched into one seam point are already on top of each other.
+                if (stitched.has(i * count + j)) continue;
 
                 const dist = Math.sqrt(dist2);
                 let sx = 0;
@@ -226,6 +245,16 @@ export class SelfCollisionSolver {
       console.warn('Self collision dropped a non-finite correction.');
     }
     return { pairs, truncated, nonFinite, moved };
+  }
+
+  /** Rebuilds the stitch pair keys when the stitch list changed. */
+  private syncStitched(list: readonly StitchedPair[] | undefined): void {
+    if (list === this.stitchedSource) return;
+    this.stitchedSource = list ?? null;
+    this.stitchedKeys.clear();
+    for (const { p0, p1 } of list ?? []) {
+      if (p0 !== p1) this.stitchedKeys.add(Math.min(p0, p1) * this.count + Math.max(p0, p1));
+    }
   }
 
   /** Fills the cell grid over the current positions. */

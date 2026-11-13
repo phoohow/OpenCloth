@@ -257,7 +257,7 @@ export function createSceneService(ports: SceneServicePorts): SceneService {
       (ctx, v) => { ctx.project.avatar = { ...v }; },
       {
         ...current.avatar, source: 'glb', glbObjectKey: objectKey, modelName, display: 'visible',
-        glbUrl: undefined, heightCm: current.avatar.params.heightCm,
+        glbUrl: undefined,
       },
     );
   };

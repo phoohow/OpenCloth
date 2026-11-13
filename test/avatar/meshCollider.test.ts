@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
-  buildMeshCollider, closestPointOnTriangle, nearestMeshPoint, reindexMeshCollider, sampleMeshCollider,
+  buildMeshCollider, closestPointOnTriangle, nearestMeshPoint, nearestMeshPointWithin,
+  pushOutOfBody, reindexMeshCollider, sampleMeshCollider,
 } from '@/avatar/collider/meshCollider';
+import { liftBuriedPositions } from '@/sim/bodyRecovery';
 
 /** Axis-aligned cube of edge `size` centred on the origin, wound outward. */
 function cubeTriangles(size: number): Float32Array {
@@ -88,6 +90,61 @@ describe('nearestMeshPoint', () => {
 
   it('misses when no triangle is within the searched cells', () => {
     expect(nearestMeshPoint(collider, 2, 2, 2)).toBeNull();
+  });
+});
+
+describe('nearestMeshPointWithin', () => {
+  const collider = buildMeshCollider(cubeTriangles(0.2))!;
+
+  it('finds a face buried deeper than one cell', () => {
+    // Two cells from every face: the single-ring search sees nothing, the widening one does.
+    expect(nearestMeshPoint(collider, 0, 0, 0, 1)).toBeNull();
+    const hit = nearestMeshPointWithin(collider, 0, 0, 0);
+    expect(hit).not.toBeNull();
+    expect(hit!.distance).toBeCloseTo(0.1, 4);
+    expect(hit!.side).toBe(-1);
+  });
+
+  it('keeps the plain hit for a point outside', () => {
+    const hit = nearestMeshPointWithin(collider, 0.15, 0, 0);
+    expect(hit!.distance).toBeCloseTo(0.05, 4);
+    expect(hit!.side).toBe(1);
+  });
+});
+
+describe('pushOutOfBody', () => {
+  const collider = buildMeshCollider(cubeTriangles(0.2))!;
+
+  it('lifts a buried point onto the surface plus the clearance', () => {
+    const pushed = pushOutOfBody(collider, 0, 0, 0, 0.006)!;
+    expect(pushed).not.toBeNull();
+    const distance = Math.hypot(pushed[0], pushed[1], pushed[2]);
+    expect(distance).toBeCloseTo(0.106, 3);
+  });
+
+  it('leaves a point that already clears the surface alone', () => {
+    expect(pushOutOfBody(collider, 0.15, 0, 0, 0.006)).toBeNull();
+  });
+
+  it('lifts every buried position of a grid in one pass', () => {
+    const positions = new Float32Array(27 * 3);
+    let slot = 0;
+    for (const y of [-0.04, 0, 0.04]) {
+      for (const x of [-0.04, 0, 0.04]) {
+        for (const z of [-0.04, 0, 0.04]) {
+          positions[slot * 3] = x;
+          positions[slot * 3 + 1] = y;
+          positions[slot * 3 + 2] = z;
+          slot++;
+        }
+      }
+    }
+    const moved = liftBuriedPositions(collider, positions, () => 0.006);
+    expect(moved).toBe(27);
+    for (let i = 0; i < 27; i++) {
+      expect(sampleMeshCollider(collider, positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]))
+        .toBeGreaterThan(0);
+    }
   });
 });
 

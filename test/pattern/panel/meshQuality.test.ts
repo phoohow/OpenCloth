@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_TSHIRT_PARAMS, generateTShirt } from '@/pattern/template/tShirtTemplate';
-import { buildPanelMesh, panelOutlineWithAllowance, type PanelMesh } from '@/pattern/panel/panelBuilder';
+import { buildPanelMesh, samplePanelOutline, type PanelMesh } from '@/pattern/panel/panelBuilder';
 import type { Vec2 } from '@/model/types';
 
 const pointOf = (mesh: PanelMesh, i: number): Vec2 => ({
@@ -71,8 +71,8 @@ describe('版片网格质量', () => {
         expect(smallestAngle(mesh)).toBeGreaterThanOrEqual(20);
       });
 
-      it('轮廓顶点留在缝份外扩轮廓上', () => {
-        const outline = panelOutlineWithAllowance(pattern, panel);
+      it('轮廓顶点留在缝线上', () => {
+        const outline = samplePanelOutline(pattern, panel);
         for (const p of mesh.boundaryEdges.flatMap(([a]) => [a])) {
           expect(distanceToOutline(pointOf(mesh, p), outline)).toBeLessThan(1e-3);
         }

@@ -2,8 +2,8 @@ import type { Avatar, Project } from '@/model/types';
 import { panelGeometrySignature } from '@/pattern/panel';
 
 /**
- * Everything the visible body, its collision capsules and the drape wrap read: measurements,
- * pose and source. Display, name and scene transform only affect drawing.
+ * Everything the visible body, its collision mesh and the drape wrap read: measurements, build
+ * and source. Display, name and scene transform only affect drawing.
  */
 export function avatarBodySignature(avatar: Avatar): string {
   return JSON.stringify({

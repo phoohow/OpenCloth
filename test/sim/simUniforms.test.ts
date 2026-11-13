@@ -36,7 +36,6 @@ describe('integrate params', () => {
 
 describe('collide params', () => {
   const body = {
-    capsuleCount: 0,
     triangleCount: 1,
     gridOrigin: [0, 0, 0] as [number, number, number],
     gridCell: 0.1,
@@ -45,13 +44,13 @@ describe('collide params', () => {
 
   it('writes the fabric contact friction and clamps it to 0..1', () => {
     const config = createDefaultProject().scene.simulation;
-    expect(packCollideParams(config, 32, body, 0, 0.7)[4]).toBeCloseTo(0.7, 6);
-    expect(packCollideParams(config, 32, body, 0, -1)[4]).toBe(0);
-    expect(packCollideParams(config, 32, body, 0, 2)[4]).toBe(1);
+    expect(packCollideParams(config, 32, body, 0, 0.7)[3]).toBeCloseTo(0.7, 6);
+    expect(packCollideParams(config, 32, body, 0, -1)[3]).toBe(0);
+    expect(packCollideParams(config, 32, body, 0, 2)[3]).toBe(1);
   });
 
   it('falls back to the default friction when the value is missing', () => {
     const config = createDefaultProject().scene.simulation;
-    expect(packCollideParams(config, 32, body, 0)[4]).toBeCloseTo(0.5, 6);
+    expect(packCollideParams(config, 32, body, 0)[3]).toBeCloseTo(0.5, 6);
   });
 });

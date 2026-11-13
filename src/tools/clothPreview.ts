@@ -4,15 +4,14 @@ import { resolve } from 'node:path';
 import type { AvatarParams, Pattern, Seam } from '@/model/types';
 import { createDefaultAvatar } from '@/model';
 import { buildPanelMesh, sampleEdge, type PanelMesh } from '@/pattern/panel';
-import { bodyLandmarks } from '@/avatar';
-import { generateAvatarCollider } from '@/avatar/collider';
+import { bodyLandmarks, makehumanBody } from '@/avatar';
 import { drapePositions } from '@/pattern/drape';
 import { flatLayout } from '@/tools/flatLayout';
 import { explodeOffBody } from '@/pattern/drape';
 import { collapseSeamPairs, type SeamPairRef } from '@/pattern/drape';
 import { GARMENT_TEMPLATES } from '@/pattern/template';
 import { polylineLength } from '@/base/geom';
-import { SoftCanvas, capsuleTriangles, type Camera, type RGB, type XYZ } from '@/tools/softwareRender';
+import { SoftCanvas, type Camera, type RGB, type XYZ } from '@/tools/softwareRender';
 import { writePng } from '@/tools/pngOut';
 
 const AVATAR: AvatarParams = createDefaultAvatar().params;
@@ -185,10 +184,19 @@ function drawFloor(canvas: SoftCanvas, cam: Camera): void {
 }
 
 function drawBody(canvas: SoftCanvas, cam: Camera): void {
-  const collider = generateAvatarCollider(AVATAR);
-  for (const c of collider.capsules) {
-    const tris = capsuleTriangles([c.ax, c.ay, c.az], [c.bx, c.by, c.bz], c.radius, 10, 14, c.radiusZ);
-    for (const [a, b, cc] of tris) canvas.triangle(cam, a, b, cc, BODY);
+  const body = makehumanBody(AVATAR);
+  const p = body.positions;
+  for (let t = 0; t < body.bodyIndices.length; t += 3) {
+    const i0 = body.bodyIndices[t] * 3;
+    const i1 = body.bodyIndices[t + 1] * 3;
+    const i2 = body.bodyIndices[t + 2] * 3;
+    canvas.triangle(
+      cam,
+      [p[i0], p[i0 + 1], p[i0 + 2]],
+      [p[i1], p[i1 + 1], p[i1 + 2]],
+      [p[i2], p[i2 + 1], p[i2 + 2]],
+      BODY,
+    );
   }
 }
 

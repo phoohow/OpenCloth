@@ -10,6 +10,7 @@ import { createRenderWorld } from '@/render/world';
 import { createViewport } from '@/runtime';
 import { RenderHostContext, type RenderHostFactory } from '@/ui/viewport3D/renderHost';
 import { registerAssetPreviews } from '@/ui/assets/assetPreviews';
+import { loadMakehumanBody } from '@/avatar/makehuman/data';
 import './index.css';
 
 // Published before the first paint so the CSS control metrics match the shell about to render.
@@ -81,10 +82,26 @@ const createRenderSession: RenderHostFactory = async (canvas, callbacks) => {
   };
 };
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <RenderHostContext.Provider value={createRenderSession}>
-      <App />
-    </RenderHostContext.Provider>
-  </StrictMode>,
-);
+/**
+ * Loads the MakeHuman body mesh before the first render: every body measurement reads it
+ * synchronously, from the 2D body guide to the cloth drape.
+ */
+async function start(): Promise<void> {
+  const root = createRoot(document.getElementById('root')!);
+  try {
+    await loadMakehumanBody();
+  } catch (err) {
+    console.error('MakeHuman body data failed to load:', err);
+    root.render(<p style={{ padding: 24, font: '14px system-ui' }}>模特数据加载失败，请刷新页面重试。</p>);
+    return;
+  }
+  root.render(
+    <StrictMode>
+      <RenderHostContext.Provider value={createRenderSession}>
+        <App />
+      </RenderHostContext.Provider>
+    </StrictMode>,
+  );
+}
+
+void start();

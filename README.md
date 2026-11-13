@@ -77,13 +77,20 @@ src/
 scripts/     架构守卫、基线与工程脚本
 test/        单元测试（test/architecture 为架构约束）
 e2e/         Playwright 用例
-assets/      内置模特、环境贴图、图标与降噪权重
+assets/      环境贴图、图标、降噪权重与 MakeHuman 人体数据
 ```
 
 系统架构见 [docs/系统架构.md](docs/系统架构.md)，代码规范见 [docs/代码规范.md](docs/代码规范.md)，注释约定见 [AGENTS.md](AGENTS.md)。
 
+## 模特
+
+模特由 MakeHuman 基础网格实时生成：性别、年龄（1–90 岁）、肌肉、体重决定体型，身高做整体缩放，
+胸围/腰围/臀围再按截面实测求解，衣身环绕、2D 参考与碰撞都读取同一次实测结果。基础网格与目标
+数据来自 [makehuman-data](https://www.npmjs.com/package/makehuman-data)（MakeHuman 1.1 basemesh，
+CC0），由 `npm run data:makehuman` 抽取为 `assets/makehuman/` 下的二进制资源（由 Vite 的 publicDir
+提供，站点构建改由 Storage 分发）：年龄形态
+8 行（男女 × 四个年龄段，三种族平均）、肌肉与体重增量 72 行、围度目标 6 行，每行按字节量化。
+
 ## 素材署名
 
-内置模特、环境贴图与 OIDN 降噪权重的来源与许可证各不相同，逐项见 [assets/models/ATTRIBUTION.md](assets/models/ATTRIBUTION.md)、[assets/env/ATTRIBUTION.md](assets/env/ATTRIBUTION.md)、[assets/weights/ATTRIBUTION.md](assets/weights/ATTRIBUTION.md)。
-
-> `human-body-pro.glb` 的再分发授权未确认，公开分发前需替换。
+环境贴图与 OIDN 降噪权重的来源与许可证各不相同，逐项见 [assets/env/ATTRIBUTION.md](assets/env/ATTRIBUTION.md)、[assets/weights/ATTRIBUTION.md](assets/weights/ATTRIBUTION.md)。`assets/makehuman/` 下的网格与形变数据由 [makehuman-data](https://www.npmjs.com/package/makehuman-data) 抽取；MakeHuman 官方将 1.1 basemesh 以 CC0 发布，但该 npm 包的 readme 声明继承 AGPLv3 衍生许可，两处口径不一致，商用前请自行核实。

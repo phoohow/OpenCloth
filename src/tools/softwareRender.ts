@@ -1,5 +1,5 @@
 import {
-  cross3t as cross, degToRad, distance3t as dist, dot3t as dot, normalize3t as normalize, sub3t as sub,
+  cross3t as cross, degToRad, dot3t as dot, normalize3t as normalize, sub3t as sub,
 } from '@/base/math';
 /// <reference types="node" />
 
@@ -133,38 +133,6 @@ export class SoftCanvas {
   }
 }
 
-/** Tessellates one capsule into triangles; `radiusZ` makes the cross-section elliptical in world z. */
-export function capsuleTriangles(
-  a: XYZ, b: XYZ, radius: number, rings = 10, segments = 14, radiusZ = radius,
-): Array<[XYZ, XYZ, XYZ]> {
-  const axis = normalize(sub(b, a));
-  const u = Math.abs(axis[1]) < 0.9 ? normalize(cross(axis, [0, 1, 0])) : normalize(cross(axis, [1, 0, 0]));
-  const v = cross(axis, u);
-  const squash = radius > 0 ? radiusZ / radius : 1;
-  const length = dist(a, b);
-  const tris: Array<[XYZ, XYZ, XYZ]> = [];
-  const ringAt = (s: number, i: number): XYZ => {
-    const along = Math.min(Math.max(s, 0), length);
-    const cap = s < 0 ? s : s > length ? s - length : 0;
-    const rr = Math.sqrt(Math.max(radius * radius - cap * cap, 0));
-    const theta = (i / segments) * Math.PI * 2;
-    const cx = a[0] + axis[0] * along, cy = a[1] + axis[1] * along, cz = a[2] + axis[2] * along;
-    const ox = (u[0] * Math.cos(theta) + v[0] * Math.sin(theta)) * rr;
-    const oy = (u[1] * Math.cos(theta) + v[1] * Math.sin(theta)) * rr;
-    const oz = (u[2] * Math.cos(theta) + v[2] * Math.sin(theta)) * rr * squash;
-    return [cx + ox, cy + oy, cz + oz];
-  };
-  const span = length + radius * 2;
-  for (let r = 0; r < rings; r++) {
-    const s0 = -radius + (span * r) / rings;
-    const s1 = -radius + (span * (r + 1)) / rings;
-    for (let i = 0; i < segments; i++) {
-      const p0 = ringAt(s0, i), p1 = ringAt(s0, i + 1), p2 = ringAt(s1, i + 1), p3 = ringAt(s1, i);
-      tris.push([p0, p1, p2], [p0, p2, p3]);
-    }
-  }
-  return tris;
-}
 
 /** Unit-length normal of a triangle. */
 export function triangleNormal(a: XYZ, b: XYZ, c: XYZ): XYZ {

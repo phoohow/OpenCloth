@@ -1,5 +1,5 @@
 /** Site path prefixes of the assets bundled from `assets/`. */
-const BUNDLED_PREFIXES = ['/models/', '/weights/', '/env/'];
+const BUNDLED_PREFIXES = ['/weights/', '/env/', '/makehuman/'];
 
 /** Revision carried by Storage-backed asset URLs; bump when a bundled file changes. */
 const BUNDLED_ASSET_REVISION = '1';

@@ -1,16 +1,33 @@
 import { describe, expect, it } from 'vitest';
 import { computeFitField, DEFAULT_FIT_THRESHOLDS, fitColor, fitStats } from '@/analysis/fit';
-import type { AvatarCollider } from '@/avatar/collider/avatarCollider';
+import type { AvatarCollider } from '@/avatar/collider';
+import { buildMeshCollider } from '@/avatar/collider';
 
-/** Vertical capsule of radius 0.1 m centred on the Y axis. */
+/** Triangles of an axis-aligned box, wound outward. */
+function boxTriangles(hx: number, hy: number, hz: number): Float32Array {
+  const corner = (i: number): [number, number, number] => [
+    i & 1 ? hx : -hx, i & 2 ? hy : -hy, i & 4 ? hz : -hz,
+  ];
+  const faces = [
+    [0, 2, 3, 1], [4, 5, 7, 6], [0, 1, 5, 4], [2, 6, 7, 3], [0, 4, 6, 2], [1, 3, 7, 5],
+  ];
+  const out: number[] = [];
+  for (const [a, b, c, d] of faces) {
+    for (const tri of [[a, b, c], [a, c, d]]) {
+      for (const index of tri) out.push(...corner(index));
+    }
+  }
+  return new Float32Array(out);
+}
+
+/** Box collider of half size 0.1 m standing on the ground. */
 const collider: AvatarCollider = {
-  capsules: [{ ax: 0, ay: 0, az: 0, bx: 0, by: 0.2, bz: 0, radius: 0.1 }],
-  bounds: { min: [-0.1, 0, -0.1], max: [0.1, 0.2, 0.1] },
+  mesh: buildMeshCollider(boxTriangles(0.1, 0.1, 0.1))!,
 };
 
 describe('computeFitField', () => {
-  it('measures signed clearance to the capsule surface in centimetres', () => {
-    const field = computeFitField([0.1, 0.1, 0, 0.11, 0.1, 0, 0.09, 0.1, 0], collider);
+  it('measures signed clearance to the body surface in centimetres', () => {
+    const field = computeFitField([0, 0, 0.1, 0, 0, 0.11, 0, 0, 0.09], collider);
     expect(field.clearanceCm[0]).toBeCloseTo(0, 5);
     expect(field.clearanceCm[1]).toBeCloseTo(1, 5);
     expect(field.clearanceCm[2]).toBeCloseTo(-1, 5);

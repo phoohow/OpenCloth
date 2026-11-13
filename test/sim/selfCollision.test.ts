@@ -149,6 +149,23 @@ describe('self collision projection', () => {
     expect(distance(positions, 0, 1)).toBeCloseTo(0.008, 6);
   });
 
+  it('keeps a stitched pair together while separating its neighbours', () => {
+    // Particles 0 and 1 are sewn into one seam point; particle 2 touches particle 0.
+    const solver = new SelfCollisionSolver(3);
+    const positions = new Float32Array([
+      0, 0, 0,
+      0.0002, 0, 0,
+      0.0004, 0.001, 0,
+    ]);
+    const params = {
+      thickness: 0.002, layerSpacing: 0, stitched: [{ p0: 1, p1: 0 }],
+    };
+    solver.resolve(positions, new Float32Array([1, 1, 1]), new Uint8Array(3), params);
+    // The sewn pair stays at its own separation instead of being opened to the cloth thickness.
+    expect(distance(positions, 0, 1)).toBeLessThan(0.001);
+    expect(distance(positions, 0, 2)).toBeGreaterThanOrEqual(0.002);
+  });
+
   it('ignores a particle thickness array of the wrong length', () => {
     const solver = new SelfCollisionSolver(2);
     const positions = new Float32Array([0, 0, 0, 0.001, 0, 0]);

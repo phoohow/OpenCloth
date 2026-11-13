@@ -3,7 +3,7 @@ import { PATTERN_ELEMENT_KINDS } from '@/model';
 import { elementNodeId } from '@/model';
 import { seamNumbers } from '@/pattern/seam';
 import {
-  BUNDLED_AVATARS, EDGE_SEMANTIC_LABELS, LIGHT_TYPE_LABELS, SEAM_TYPE_LABELS,
+  EDGE_SEMANTIC_LABELS, LIGHT_TYPE_LABELS, SEAM_TYPE_LABELS,
   TRIM_KIND_LABELS, normalizeLights,
 } from '@/model';
 import {
@@ -366,8 +366,8 @@ export function seamLabel(project: Project, seam: Seam): string {
 export function avatarLabel(project: Project): string {
   const { avatar } = project;
   if (avatar.name) return avatar.name;
-  if (avatar.source === 'procedural') return '程序模特';
-  return avatar.modelName ?? BUNDLED_AVATARS.find(b => b.url === avatar.glbUrl)?.label ?? '外部模型';
+  if (avatar.source === 'glb') return avatar.modelName ?? '导入模型';
+  return '基础模特';
 }
 
 /** Rows with a placement: a scene transform, or the position and target of a light. */

@@ -1,4 +1,4 @@
-/** Shape curves shared by the body landmarks and the procedural geometry. */
+/** Shape curves shared by the body landmarks and the MakeHuman mesh. */
 
 /**
  * Monotone cubic interpolation (Fritsch-Carlson): smooth between the knots without overshooting

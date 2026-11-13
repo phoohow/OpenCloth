@@ -8,9 +8,6 @@ interface BundledAsset {
 
 /** Site paths of the bundled assets, mirrored as Storage object keys. */
 const BUNDLED_ASSETS: Record<string, BundledAsset> = {
-  'models/human-body-f.glb': { objectPath: 'models/human-body-f.glb', contentType: 'model/gltf-binary' },
-  'models/human-body-pro.glb': { objectPath: 'models/human-body-pro.glb', contentType: 'model/gltf-binary' },
-  'models/human-body.glb': { objectPath: 'models/human-body.glb', contentType: 'model/gltf-binary' },
   'weights/rt_hdr.tza': { objectPath: 'weights/rt_hdr.tza', contentType: 'application/octet-stream' },
   'weights/rt_hdr_alb_nrm.tza': { objectPath: 'weights/rt_hdr_alb_nrm.tza', contentType: 'application/octet-stream' },
   'weights/rt_hdr_alb_nrm_small.tza': {
@@ -18,11 +15,16 @@ const BUNDLED_ASSETS: Record<string, BundledAsset> = {
     contentType: 'application/octet-stream',
   },
   'env/royal_esplanade_1k.hdr': { objectPath: 'env/royal_esplanade_1k.hdr', contentType: 'application/octet-stream' },
+  'makehuman/body.bin': { objectPath: 'makehuman/body.bin', contentType: 'application/octet-stream' },
+  'makehuman/targets.bin': { objectPath: 'makehuman/targets.bin', contentType: 'application/octet-stream' },
+  'makehuman/manifest.json': {
+    objectPath: 'makehuman/manifest.json',
+    contentType: 'application/json; charset=utf-8',
+  },
 };
 
 /** Attribution notes served next to the assets they describe. */
 const BUNDLED_NOTES: Record<string, BundledAsset> = {
-  'models/ATTRIBUTION.md': { objectPath: 'models/ATTRIBUTION.md', contentType: 'text/markdown; charset=utf-8' },
   'weights/ATTRIBUTION.md': { objectPath: 'weights/ATTRIBUTION.md', contentType: 'text/markdown; charset=utf-8' },
   'env/ATTRIBUTION.md': { objectPath: 'env/ATTRIBUTION.md', contentType: 'text/markdown; charset=utf-8' },
 };

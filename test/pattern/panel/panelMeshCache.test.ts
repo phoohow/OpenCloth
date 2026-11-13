@@ -42,15 +42,14 @@ describe('BuildRegistry 共享网格缓存', () => {
     expect(Array.from(blueNoise.indices)).not.toEqual(Array.from(lattice.indices));
   });
 
-  it('缝份变化时重建', () => {
+  it('缝份变化沿用同一网格', () => {
+    // The simulated piece is the seam line; the allowance only offsets the cutting outline.
     const before = buildRegistry.meshOf(pattern, panel.id, undefined, simulation)!;
     const wider: Pattern = {
       ...pattern,
       panels: { ...pattern.panels, [panel.id]: { ...panel, seamAllowanceCm: panel.seamAllowanceCm + 1 } },
     };
-    const after = buildRegistry.meshOf(wider, panel.id, undefined, simulation)!;
-    expect(after).not.toBe(before);
-    expect(Array.from(after.positions2D)).not.toEqual(Array.from(before.positions2D));
+    expect(buildRegistry.meshOf(wider, panel.id, undefined, simulation)).toBe(before);
   });
 
   it('轮廓采样点全部进入网格边界', () => {

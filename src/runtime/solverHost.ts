@@ -51,7 +51,7 @@ export class SolverHost {
   private frameTimeSeconds = 0;
   /** Fingerprint of the merged layout the live solver was set up for. */
   private appliedLayout = '';
-  /** Body signature the live solver's collision capsules were built for. */
+  /** Body signature the live solver's collision mesh was built for. */
   private appliedAvatar = '';
 
   constructor(private readonly deps: SolverHostDeps) { }

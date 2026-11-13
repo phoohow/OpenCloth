@@ -7,7 +7,7 @@ import {
   CompositeCommand, UpdatePrintCommand,
   MoveGeometryCommand, panelMoveCommand, panelMoveGeometry, pointMoveCommand, pointMoveGeometry,
 } from '@/commands';
-import { bodyLandmarks } from '@/avatar';
+import { bodyLandmarks, makehumanBody } from '@/avatar';
 import {
   panelHeightOffsets, panelOffsetCm, pointHeightOffsets, toHeightPattern, toPatternPoint, toPatternPoints,
 } from '@/ui/viewport2D/panelHeight';
@@ -73,11 +73,15 @@ export function Viewport2D() {
 
   const pattern = project.pattern;
   const body = useMemo(() => bodyLandmarks(project.avatar.params), [project.avatar.params]);
+  const bodyMesh = useMemo(() => {
+    const built = makehumanBody(project.avatar.params);
+    return { positions: built.positions, indices: built.bodyIndices };
+  }, [project.avatar.params]);
   const bodyGuide = useMemo<BodyGuideGeometry | undefined>(
     () => displayOptions.bodyGuide
-      ? bodyGuideGeometry({ body, joints: project.avatar.params.joints })
+      ? bodyGuideGeometry({ body, mesh: bodyMesh })
       : undefined,
-    [displayOptions.bodyGuide, body, project.avatar.params],
+    [displayOptions.bodyGuide, body, bodyMesh],
   );
   /** Fit frames the reference together with the pattern while it is shown. */
   const fitBounds = useMemo(() => bodyGuide?.outlines.flat() ?? [], [bodyGuide]);

@@ -1,8 +1,10 @@
 import { Vector3 } from 'three/webgpu';
+import { SELECTION_OVERLAY_NAME } from '@/render/backend/assets/bodyMaterial';
 import type { BufferAttribute, Matrix4, Object3D } from 'three/webgpu';
 
 /** Structural view of a mesh; skinned meshes additionally expose a bone transform. */
 interface MeshLike {
+  name?: string;
   isMesh?: boolean;
   isSkinnedMesh?: boolean;
   applyBoneTransform?: (index: number, target: Vector3) => Vector3;
@@ -23,7 +25,11 @@ interface MeshEntry {
 /** Skinned vertex scratch, reused across every triangle. */
 const skinnedVertex = new Vector3();
 
-/** World-space triangles of every mesh under `root`, nine floats per triangle. */
+/**
+ * World-space triangles of every mesh under `root`, nine floats per triangle. The selection
+ * overlay clones a body mesh with the same geometry, so it is skipped: as a collider it would only
+ * double the triangle count and change it whenever the body is highlighted.
+ */
 export function meshTrianglesFromObject(root: Object3D): Float32Array {
   root.updateMatrixWorld(true);
   const meshes: MeshEntry[] = [];
@@ -31,6 +37,7 @@ export function meshTrianglesFromObject(root: Object3D): Float32Array {
   root.traverse((obj) => {
     const mesh = obj as unknown as MeshLike;
     if (!mesh.isMesh || !mesh.geometry?.attributes?.position) return;
+    if (mesh.name === SELECTION_OVERLAY_NAME) return;
     const position = mesh.geometry.attributes.position;
     const index = mesh.geometry.index;
     const triangles = Math.floor((index ? index.count : position.count) / 3);

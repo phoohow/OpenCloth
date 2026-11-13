@@ -1,7 +1,7 @@
 import type { AvatarParams, Panel } from '@/model/types';
 import type { PanelMesh } from '@/pattern/panel';
 import { IDENTITY_TRANSFORM } from '@/model';
-import { bodyLandmarks, type BodyLandmarks } from '@/avatar';
+import { bodyLandmarks, bodyKey, type BodyLandmarks } from '@/avatar';
 import { drapePositions } from '@/pattern/drape';
 import { explodeOffBody } from '@/pattern/drape';
 import { applyObjectTransform } from '@/runtime/objectTransforms';
@@ -54,17 +54,14 @@ function flatPanelPositions(mesh: PanelMesh, placement: { position: { x: number;
   return positions3D;
 }
 
-/** Body landmarks memoized by measurement set, reused by every panel wrap. */
+/** Body landmarks memoized by body settings, reused by every panel wrap. */
 export class BodyLandmarkCache {
   private key = '';
   private cached: BodyLandmarks | null = null;
 
-  /** Landmarks for these measurements, rebuilt only when they change. */
+  /** Landmarks for these body settings, rebuilt only when they change. */
   resolve(avatar: AvatarParams): BodyLandmarks {
-    const key = [
-      avatar.heightCm, avatar.chestCm, avatar.waistCm, avatar.hipCm,
-      avatar.poseArmAngleRad ?? 0.12, avatar.poseLegSpreadRad ?? 0, avatar.poseTorsoLeanRad ?? 0,
-    ].join('/');
+    const key = bodyKey(avatar);
     if (this.key !== key || !this.cached) {
       this.cached = bodyLandmarks(avatar);
       this.key = key;

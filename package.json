@@ -15,6 +15,7 @@
     "test:coverage": "vitest run --coverage",
     "lint": "eslint src --ext .ts,.tsx",
     "typecheck": "tsc --noEmit",
+    "data:makehuman": "node scripts/makehuman-data.mjs",
     "perf:baseline": "node scripts/self-collision-baseline.mjs",
     "perf:gate": "vitest run test/sim/productionScale.test.ts",
     "arch:report": "node scripts/check-architecture.mjs",
@@ -43,6 +44,7 @@
     "eslint": "^9.16.0",
     "eslint-plugin-react": "^7.37.2",
     "eslint-plugin-react-hooks": "^5.1.0",
+    "makehuman-data": "^0.0.2",
     "typescript": "^5.6.3",
     "vite": "^6.0.3",
     "vitest": "^3.2.4"

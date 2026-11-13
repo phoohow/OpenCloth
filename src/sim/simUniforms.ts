@@ -4,8 +4,12 @@ import { cmToM } from '@/base/units';
 
 /** Velocity clamp applied by the integrate and update passes, in meters per second. */
 const MAX_SPEED = 6;
-/** Distance a particle is kept outside capsule and floor surfaces, in meters. */
-const SURFACE_OFFSET = 0.005;
+/**
+ * Distance a particle is kept outside the floor and body mesh surfaces, in meters. It also covers
+ * the cloth's own chord: a panel mesh coarser than the body's detail would otherwise let the
+ * surface between two particles cross the skin.
+ */
+export const SURFACE_OFFSET = 0.008;
 /** Tangential pull toward the previous frame position on contact, used when a fabric sets none. */
 const DEFAULT_CONTACT_FRICTION = 0.5;
 
@@ -54,19 +58,15 @@ export function layerSpacingMeters(config: SimulationConfig): number {
   return cmToM(Math.min(2, Math.max(0, value)));
 }
 
-/** Body collider handed to the COLLIDE pass: the triangle grid, plus capsules for the fallback. */
+/** Body collider handed to the COLLIDE pass: the triangle grid of the body surface. */
 export interface CollideBody {
-  capsuleCount: number;
   triangleCount: number;
   gridOrigin: [number, number, number];
   gridCell: number;
   gridDims: [number, number, number];
 }
 
-/**
- * COLLIDE SimParams block: 64 bytes. The mesh collider replaces the capsules, so
- * `capsuleCount` is 0 whenever triangles are present; both are 0 without body collision.
- */
+/** COLLIDE SimParams block: 64 bytes. `triangleCount` is 0 without body collision. */
 export function packCollideParams(
   config: SimulationConfig,
   particleCount: number,
@@ -80,13 +80,12 @@ export function packCollideParams(
   const triangles = on ? body.triangleCount : 0;
   data[0] = config.dt;
   u32[1] = particleCount;
-  u32[2] = triangles > 0 || !on ? 0 : body.capsuleCount;
-  data[3] = SURFACE_OFFSET;
-  data[4] = Number.isFinite(friction) ? Math.min(1, Math.max(0, friction)) : DEFAULT_CONTACT_FRICTION;
-  data[5] = floorY;
+  data[2] = SURFACE_OFFSET;
+  data[3] = Number.isFinite(friction) ? Math.min(1, Math.max(0, friction)) : DEFAULT_CONTACT_FRICTION;
+  data[4] = floorY;
   // Global value kept for the uniform layout; COLLIDE reads the per-particle thickness buffer.
-  data[6] = clothThicknessMeters(config);
-  u32[7] = triangles;
+  data[5] = clothThicknessMeters(config);
+  u32[6] = triangles;
   data[8] = body.gridOrigin[0];
   data[9] = body.gridOrigin[1];
   data[10] = body.gridOrigin[2];

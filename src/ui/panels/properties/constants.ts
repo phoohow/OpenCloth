@@ -4,8 +4,6 @@ import type { PropTab } from '@/store';
 import { supportsMaterial, supportsSimulator, supportsTransform, type SceneNodeKind } from '@/ui/sceneTree';
 import { PROP_TAB_OPTIONS } from '@/ui/optionTables';
 
-/** Avatar kinds the model select lists when the project has no bundled url. */
-export const PROCEDURAL_MODEL = 'procedural';
 /** Model select value for a user-imported body mesh. */
 export const CUSTOM_MODEL = 'custom';
 

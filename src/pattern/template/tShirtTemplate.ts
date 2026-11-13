@@ -42,8 +42,9 @@ export function generateTShirt(params: TShirtParams = DEFAULT_TSHIRT_PARAMS, fab
   // Armhole depth is a share of the chest, measured down from the shoulder tip.
   const armholeDepth = Math.min(chestCm * 0.205, lengthCm * 0.38);
   const underarmAt = (lengthCm - SHOULDER_SLOPE_CM - armholeDepth) / lengthCm;
-  // A sleeve is cut as a tube, so its flat width is the arm girth plus ease.
-  const sleeveWidth = chestCm * 0.32;
+  // A sleeve is cut as a tube: its flat width is the arm's girth plus a little ease, so the piece
+  // wraps the arm without being stretched over it.
+  const sleeveWidth = chestCm * 0.36;
 
   const front = addBodice(builder, {
     name: '前片',
@@ -80,8 +81,10 @@ export function generateTShirt(params: TShirtParams = DEFAULT_TSHIRT_PARAMS, fab
     // The cap crown joins the shoulder tip, which sits one slope below the neck seam.
     anchor: 'shoulderTop',
     anchorOffsetCm: -SHOULDER_SLOPE_CM,
-    // Centre the full turn on the outer side of the arm, away from the body.
-    startDeg: side === 'left' ? 0 : -180,
+    // Centre the full turn on the underarm: the panel's edges meet under the arm and its cap
+    // crown rides over the top of the shoulder, the way the flat cap sits above the panel. The
+    // limb's own axis mirrors with the side, so both sleeves use the same angle.
+    startDeg: 180,
     sweepDeg: 360,
   });
 
@@ -111,11 +114,12 @@ export function generateTShirt(params: TShirtParams = DEFAULT_TSHIRT_PARAMS, fab
   builder.seam(front.sideRight, back.sideRight);
   builder.seam(front.sideLeft, back.sideLeft);
 
-  // The armhole runs underarm to shoulder, the cap left half runs crown to underarm.
+  // Each cap half pairs its underarm end with the armhole's underarm end. The right armhole is
+  // authored underarm first, the left one shoulder first, so the left seams flip their bodice side.
   builder.seam(sleeveR.capRight, front.armholeRight);
   builder.seam(sleeveR.capLeft, back.armholeRight, { flipB: true });
-  builder.seam(sleeveL.capRight, front.armholeLeft);
-  builder.seam(sleeveL.capLeft, back.armholeLeft, { flipB: true });
+  builder.seam(sleeveL.capRight, front.armholeLeft, { flipB: true });
+  builder.seam(sleeveL.capLeft, back.armholeLeft);
   builder.seam(sleeveR.seamRight, sleeveR.seamLeft, { flipB: true });
   builder.seam(sleeveL.seamRight, sleeveL.seamLeft, { flipB: true });
 

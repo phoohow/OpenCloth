@@ -5,6 +5,7 @@ import { drapeReversesWinding } from '@/pattern/drape';
 import { createStarterProject } from '@/pattern/template/starterProject';
 import { ClothAssembly } from '@/runtime/clothAssembly';
 import { BodyLandmarkCache } from '@/runtime/initialPose';
+import type { SeamPair } from '@/runtime/seamPair';
 
 /** Panels of the starter pattern, keyed by their Chinese name. */
 function starterPanels(): Record<string, Panel> {
@@ -31,14 +32,22 @@ describe('drapeReversesWinding', () => {
     expect(drapeReversesWinding(withDrape(panels['后片']!, { region: 'torso', startDeg: 90, sweepDeg: 180 }))).toBe(false);
   });
 
-  it('mirrors limb tubes wrapped in the positive direction', () => {
+  it('turns a limb tube over once and its mirror image back', () => {
     const panels = starterPanels();
-    expect(drapeReversesWinding(panels['左袖']!)).toBe(true);
     expect(drapeReversesWinding(panels['右袖']!)).toBe(true);
-    for (const region of ['arm', 'leg', 'neck'] as const) {
-      expect(drapeReversesWinding(withDrape(panels['左袖']!, { region, sweepDeg: 90 }))).toBe(true);
-      expect(drapeReversesWinding(withDrape(panels['左袖']!, { region, sweepDeg: -90 }))).toBe(false);
+    expect(drapeReversesWinding(panels['左袖']!)).toBe(false);
+    for (const region of ['arm', 'leg'] as const) {
+      expect(drapeReversesWinding(withDrape(panels['左袖']!, { region, side: 'left', sweepDeg: 90 }))).toBe(false);
+      expect(drapeReversesWinding(withDrape(panels['左袖']!, { region, side: 'left', sweepDeg: -90 }))).toBe(true);
+      expect(drapeReversesWinding(withDrape(panels['右袖']!, { region, side: 'right', sweepDeg: 90 }))).toBe(true);
+      expect(drapeReversesWinding(withDrape(panels['右袖']!, { region, side: 'right', sweepDeg: -90 }))).toBe(false);
     }
+  });
+
+  it('turns a neck tube over on every positive wrap', () => {
+    const panel = starterPanels()['左袖']!;
+    expect(drapeReversesWinding(withDrape(panel, { region: 'neck', sweepDeg: 90 }))).toBe(true);
+    expect(drapeReversesWinding(withDrape(panel, { region: 'neck', sweepDeg: -90 }))).toBe(false);
   });
 
   it('leaves flat panels alone and follows a mirroring transform scale', () => {
@@ -104,6 +113,105 @@ describe('merged cloth winding', () => {
     expect(agreed / assembly.seamPairs.length).toBeGreaterThan(0.9);
   });
 });
+
+describe('sleeve cap seams', () => {
+  // A cap's underarm end has to land on the armhole's underarm end and its crown on the shoulder;
+  // a reversed pairing crosses the threads and twists the sleeve as the seam closes.
+  it('pairs every cap end with the same end of its armhole', () => {
+    const project = createStarterProject();
+    const meshes = new Map<string, PanelMesh>();
+    for (const panelId of Object.keys(project.pattern.panels)) {
+      const mesh = buildPanelMesh(project.pattern, panelId);
+      if (mesh) meshes.set(panelId, mesh);
+    }
+    const assembly = new ClothAssembly();
+    assembly.build(project, meshes, new BodyLandmarkCache());
+    const positions = assembly.positions;
+    const bySeam = new Map<string, SeamPair[]>();
+    for (const pair of assembly.seamPairs) {
+      const list = bySeam.get(pair.seamId) ?? [];
+      list.push(pair);
+      bySeam.set(pair.seamId, list);
+    }
+
+    let checked = 0;
+    for (const [seamId, pairs] of bySeam) {
+      const seam = project.pattern.seams[seamId];
+      const caps = project.pattern.edges[seam?.a.edgeId ?? '']?.semantic;
+      const armholes = project.pattern.edges[seam?.b.edgeId ?? '']?.semantic;
+      if (caps !== 'sleeveCap' || armholes !== 'armhole') continue;
+      const capY = pairs.map(pair => positions[pair.p0 * 3 + 1]!);
+      const armholeY = pairs.map(pair => positions[pair.p1 * 3 + 1]!);
+      expect(correlation(capY, armholeY), seamId).toBeGreaterThan(0.9);
+      checked++;
+    }
+    expect(checked).toBe(4);
+  });
+});
+
+describe('body pose', () => {
+  it('re-reads the landmarks when the body settings change', () => {
+    const cache = new BodyLandmarkCache();
+    const params = createStarterProject().avatar.params;
+    const a = cache.resolve({ ...params, pose: 'a' });
+    const t = cache.resolve({ ...params, pose: 't' });
+    expect(t).not.toBe(a);
+    // T-pose lays the upper arm on the horizontal axis; the A-pose hangs it.
+    expect(Math.abs(a.armChain(1).dir1[1])).toBeGreaterThan(0.5);
+    expect(Math.abs(t.armChain(1).dir1[1])).toBeLessThan(0.05);
+  });
+
+  it('lays the sleeves along the arm in either pose', () => {
+    const project = createStarterProject();
+    const meshes = new Map<string, PanelMesh>();
+    for (const panelId of Object.keys(project.pattern.panels)) {
+      const mesh = buildPanelMesh(project.pattern, panelId);
+      if (mesh) meshes.set(panelId, mesh);
+    }
+    const sleeveId = Object.values(project.pattern.panels).find(panel => panel.name === '右袖')!.id;
+    const assembly = new ClothAssembly();
+    const cache = new BodyLandmarkCache();
+    assembly.build(project, meshes, cache);
+    const a = panelSpan(assembly, sleeveId);
+
+    project.avatar.params = { ...project.avatar.params, pose: 't' };
+    assembly.build(project, meshes, cache);
+    const t = panelSpan(assembly, sleeveId);
+
+    // A horizontal arm turns the tube sideways: its height span shrinks and its reach grows.
+    expect(t.y).toBeLessThan(a.y * 0.75);
+    expect(t.x).toBeGreaterThan(a.x);
+  });
+});
+
+/** Width and height of one panel's initial positions, in meters. */
+function panelSpan(assembly: ClothAssembly, panelId: string): { x: number; y: number } {
+  const range = assembly.layout.rangeOf(panelId);
+  if (!range) return { x: Infinity, y: Infinity };
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (let i = range.start; i < range.end; i++) {
+    minX = Math.min(minX, assembly.positions[i * 3]!);
+    maxX = Math.max(maxX, assembly.positions[i * 3]!);
+    minY = Math.min(minY, assembly.positions[i * 3 + 1]!);
+    maxY = Math.max(maxY, assembly.positions[i * 3 + 1]!);
+  }
+  return { x: maxX - minX, y: maxY - minY };
+}
+
+/** Pearson correlation of two equal-length samples. */
+function correlation(a: number[], b: number[]): number {
+  const meanA = a.reduce((sum, value) => sum + value, 0) / a.length;
+  const meanB = b.reduce((sum, value) => sum + value, 0) / b.length;
+  let cov = 0;
+  let spreadA = 0;
+  let spreadB = 0;
+  for (let i = 0; i < a.length; i++) {
+    cov += (a[i]! - meanA) * (b[i]! - meanB);
+    spreadA += (a[i]! - meanA) ** 2;
+    spreadB += (b[i]! - meanB) ** 2;
+  }
+  return cov / Math.sqrt(spreadA * spreadB);
+}
 
 /** Area-weighted face normal of one triangle, as a flat triple. */
 function faceNormal(positions: Float32Array, a: number, b: number, c: number): [number, number, number] {

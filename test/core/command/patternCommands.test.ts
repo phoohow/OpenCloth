@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { vec2, type ArcGeom, type Pattern, type Project, type Vec2 } from '@/model/types';
 import { createDefaultProject } from '@/model/defaults';
 import { generateTShirt } from '@/pattern/template/tShirtTemplate';
-import { panelCutBounds, samplePanelOutline } from '@/pattern/panel/panelBuilder';
+import { panelMeshBounds, samplePanelOutline } from '@/pattern/panel/panelBuilder';
 import type { ProjectContext } from '@/commands/command';
 import {
   AddPointOnEdgeCommand, DeleteSelectionCommand, MoveGeometryCommand, MovePanelsCommand,
@@ -80,17 +80,17 @@ describe('MovePointsCommand', () => {
     const pattern = generateTShirt();
     const front = Object.values(pattern.panels).find(p => p.name === '前片')!;
     const topId = topVertexOf(pattern, front);
-    const topBefore = panelCutBounds(pattern, front).max.y;
+    const topBefore = panelMeshBounds(pattern, front).max.y;
     const anchorBefore = front.drape!.anchorOffsetCm ?? 0;
     const ctx = makeCtx(projectWithPattern(pattern));
 
     new MovePointsCommand(new Map([[topId, vec2(0, 5)]])).execute(ctx);
 
     // The drape anchor rides the top edge, so the panel keeps the height it is drawn at.
-    const grew = panelCutBounds(pattern, front).max.y - topBefore;
+    const grew = panelMeshBounds(pattern, front).max.y - topBefore;
     expect(grew).toBeGreaterThan(0);
     expect(front.drape!.anchorOffsetCm).toBeCloseTo(anchorBefore + grew, 6);
-    expect(panelCutBounds(pattern, front).max.y - (front.drape!.anchorOffsetCm ?? 0))
+    expect(panelMeshBounds(pattern, front).max.y - (front.drape!.anchorOffsetCm ?? 0))
       .toBeCloseTo(topBefore - anchorBefore, 6);
   });
 

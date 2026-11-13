@@ -1,7 +1,6 @@
 import type { SimulationConfig, FabricPhysics } from '@/model/types';
-import type { AvatarCollider } from '@/avatar/collider';
-import { packCapsules } from '@/avatar/collider';
-import type { MeshCollider } from '@/avatar/collider';
+import type { AvatarCollider, MeshCollider } from '@/avatar/collider';
+import { liftBuriedPositions, liftMovedPositions } from '@/sim/bodyRecovery';
 import { type Constraint } from '@/sim/buffers/constraintBuilder';
 import { buildNormalAdjacency } from '@/sim/buffers/normalAdjacency';
 import {
@@ -13,7 +12,7 @@ import {
 } from '@/sim/gpuPipelines';
 import {
   packCollideParams, packIntegrateParams, packPinParams, packSolveParams, packUpdateParams,
-  clothThicknessMeters, layerSpacingMeters, type CollideBody,
+  clothThicknessMeters, layerSpacingMeters, SURFACE_OFFSET, type CollideBody,
 } from '@/sim/simUniforms';
 import {
   buildCreaseConstraints, buildPanelConstraints, createBatchedConstraints, rewriteBatches,
@@ -64,13 +63,11 @@ export class ClothSimulator {
   private tornSeams = new Set<number>();
 
   // Body collision
-  private capsuleBuf!: GPUBuffer;
-  private capsuleCount = 0;
   /** Triangle grid of the body mesh: vertices, cell offsets and per-cell triangle indices. */
   private meshBuffers!: MeshColliderBuffers;
   /** Collider description the COLLIDE uniform block is packed from. */
   private collideBody: CollideBody = {
-    capsuleCount: 0, triangleCount: 0, gridOrigin: [0, 0, 0], gridCell: 1, gridDims: [0, 0, 0],
+    triangleCount: 0, gridOrigin: [0, 0, 0], gridCell: 1, gridDims: [0, 0, 0],
   };
   /** Per-particle damping mirroring each panel's material. */
   private dampingBuf!: GPUBuffer;
@@ -128,6 +125,10 @@ export class ClothSimulator {
   private layerByParticle: Uint8Array = new Uint8Array(0);
   /** Scratch upload buffer holding self-collision corrected positions. */
   private selfCollisionWriteback: Float32Array<ArrayBuffer> = new Float32Array(0);
+  /** Positions as the GPU left them, before the CPU self-collision pass moved any. */
+  private selfCollisionBefore: Float32Array<ArrayBuffer> = new Float32Array(0);
+  /** Body collider held for the CPU passes that lift buried particles out of the surface. */
+  private colliderMesh: MeshCollider | null = null;
   private selfCollisionSolver = new SelfCollisionSolver(0);
   /** Self-collision settings of the most recent step, read again by every readback. */
   private selfCollisionEnabled = true;
@@ -171,18 +172,23 @@ export class ClothSimulator {
     this.grabWeights = new Float32Array(pc);
     this.grabWeightBuf = createStorageBuffer(dev, this.grabWeights);
 
+    this.pinnedSet = new Set(input.pinnedIndices ?? []);
+    this.colliderMesh = avatarCollider?.mesh ?? null;
+
+    const startPositions = input.positions.slice(0, pc * 3);
+    if (config.avatarCollision) this.liftStartPositions(startPositions);
+
     const posData = new Float32Array(pc * 4);
     for (let i = 0; i < pc; i++) {
-      posData[i * 4] = input.positions[i * 3];
-      posData[i * 4 + 1] = input.positions[i * 3 + 1];
-      posData[i * 4 + 2] = input.positions[i * 3 + 2];
+      posData[i * 4] = startPositions[i * 3];
+      posData[i * 4 + 1] = startPositions[i * 3 + 1];
+      posData[i * 4 + 2] = startPositions[i * 3 + 2];
       posData[i * 4 + 3] = this.baseInvMass[i];
     }
     if (input.pinnedIndices) {
       for (const idx of input.pinnedIndices) posData[idx * 4 + 3] = 0;
     }
 
-    this.pinnedSet = new Set(input.pinnedIndices ?? []);
     this.pickGrid = null;
     this.syncCollisionState(input);
     this.applySelfCollisionConfig(config);
@@ -207,21 +213,9 @@ export class ClothSimulator {
       cellStart: createStorageBuffer(dev, new Uint32Array(2)),
       cellTriangles: createStorageBuffer(dev, new Uint32Array(1)),
     };
-    if (avatarCollider) {
-      const packed = packCapsules(avatarCollider);
-      this.capsuleCount = avatarCollider.capsules.length;
-      this.capsuleBuf = dev.createBuffer({
-        size: packed.byteLength,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-      });
-      dev.queue.writeBuffer(this.capsuleBuf, 0, packed.buffer as ArrayBuffer, packed.byteOffset, packed.byteLength);
-      if (avatarCollider.mesh) this.uploadMeshCollider(avatarCollider.mesh);
-      else this.collideBody = { ...this.collideBody, capsuleCount: this.capsuleCount, triangleCount: 0 };
-    } else {
-      this.capsuleCount = 0;
-      this.capsuleBuf = createStorageBuffer(dev, new Float32Array(8));
-      this.collideBody = { ...this.collideBody, capsuleCount: 0, triangleCount: 0 };
-    }
+    // The COLLIDE pass reads the body as triangles; the buffers start empty until a collider exists.
+    if (avatarCollider) this.uploadMeshCollider(avatarCollider.mesh);
+    else this.collideBody = { ...this.collideBody, triangleCount: 0 };
 
     this.integrateParamsBuf = createUniformBuffer(dev, 80);
     this.collideParamsBuf = createUniformBuffer(dev, 64);
@@ -280,6 +274,22 @@ export class ClothSimulator {
     this.selfCollisionWriteback = new Float32Array(pc * 4);
   }
 
+  /** Distance a particle of `index` is kept from the body surface, in meters. */
+  private clearanceAt(index: number): number {
+    return SURFACE_OFFSET + (this.thicknessByParticle[index] ?? 0);
+  }
+
+  /**
+   * Lifts a starting layout out of the body. The collide pass only searches a few cells around each
+   * particle, so a panel laid inside the body would never be found there and would stay buried for
+   * the whole run.
+   */
+  private liftStartPositions(positions: Float32Array): void {
+    const collider = this.colliderMesh;
+    if (!collider) return;
+    liftBuriedPositions(collider, positions, i => this.clearanceAt(i), i => this.pinnedSet.has(i));
+  }
+
   /** Refreshes the inverse-mass mirror from the live pin set and base masses. */
   private syncInvMassMirror(): void {
     const pc = this.particleCount;
@@ -303,12 +313,20 @@ export class ClothSimulator {
   private applySelfCollision(): void {
     if (!this.selfCollisionEnabled) return;
     const pc = this.particleCount;
+    if (this.selfCollisionBefore.length !== pc * 3) this.selfCollisionBefore = new Float32Array(pc * 3);
+    this.selfCollisionBefore.set(this.readPositions);
     const result = this.selfCollisionSolver.resolve(this.readPositions, this.invMassMirror, this.layerByParticle, {
       thickness: this.clothThickness,
       thicknesses: this.thicknessByParticle,
       layerSpacing: this.layerSpacing,
+      stitched: this.simInput?.seamConstraints,
     });
     if (!result.moved) return;
+    // This pass runs after the collide pass of the frame, so the separation it applies can leave
+    // fabric inside the body: lift those particles before the frame is uploaded.
+    if (this.colliderMesh) {
+      liftMovedPositions(this.colliderMesh, this.readPositions, this.selfCollisionBefore, i => this.clearanceAt(i));
+    }
     const data = this.selfCollisionWriteback;
     for (let i = 0; i < pc; i++) {
       data[i * 4] = this.readPositions[i * 3]!;
@@ -336,11 +354,12 @@ export class ClothSimulator {
     this.positionsVersion++;
   }
 
-  /** Switches body collision from the capsules to the mesh's triangle grid. */
+  /** Uploads the body's triangle grid for collision. */
   private uploadMeshCollider(mesh: MeshCollider): void {
     this.releaseMeshBuffers();
     this.meshBuffers = createMeshColliderBuffers(this.device, mesh);
-    this.collideBody = collideBodyForMesh(mesh, this.capsuleCount);
+    this.collideBody = collideBodyForMesh(mesh);
+    this.colliderMesh = mesh;
   }
 
   /** Releases the three mesh collision buffers. */
@@ -359,7 +378,7 @@ export class ClothSimulator {
       [this.posInvMassBuf, this.prevPosBuf, this.velocityBuf, this.predictedBuf, this.integrateParamsBuf,
         this.grabWeightBuf]);
     this.collideBG = bind(L.collide,
-      [this.predictedBuf, this.capsuleBuf, this.collideParamsBuf, this.prevPosBuf,
+      [this.predictedBuf, this.collideParamsBuf, this.prevPosBuf,
         this.meshBuffers.triangle, this.meshBuffers.cellStart, this.meshBuffers.cellTriangles, this.contactMoveBuf,
         this.thicknessBuf]);
     this.updateBG = bind(L.update,
@@ -703,12 +722,15 @@ export class ClothSimulator {
     if (!this.initialized) return;
     this.clearGrab();
     const pc = this.particleCount;
+    // The stored layout can sit inside the body; lift it out the same way setup does.
+    const restored = initialPositions.slice(0, pc * 3);
+    this.liftStartPositions(restored);
     const data = new Float32Array(pc * 4);
     // Inverse mass comes from initialPosInvMass, which mirrors live pin changes.
     for (let i = 0; i < pc; i++) {
-      data[i * 4] = initialPositions[i * 3];
-      data[i * 4 + 1] = initialPositions[i * 3 + 1];
-      data[i * 4 + 2] = initialPositions[i * 3 + 2];
+      data[i * 4] = restored[i * 3];
+      data[i * 4 + 1] = restored[i * 3 + 1];
+      data[i * 4 + 2] = restored[i * 3 + 2];
       data[i * 4 + 3] = this.initialPosInvMass.length > 0 ? this.initialPosInvMass[i * 4 + 3] : 1.0;
     }
     this.device.queue.writeBuffer(this.posInvMassBuf, 0, data);
@@ -717,7 +739,7 @@ export class ClothSimulator {
     this.device.queue.writeBuffer(this.velocityBuf, 0, new Float32Array(pc * 4));
     this.device.queue.writeBuffer(this.contactMoveBuf, 0, this.contactZeros);
     this.readContact.fill(0);
-    this.cachePositions(initialPositions);
+    this.cachePositions(restored);
     this.time = 0;
     this.setSeamProgress(0);
   }
@@ -842,10 +864,11 @@ export class ClothSimulator {
     if (!this.initialized || mesh.triangleCount !== this.collideBody.triangleCount) return false;
     const refreshed = refreshMeshColliderBuffers(this.device, mesh, this.meshBuffers);
     this.meshBuffers = refreshed.buffers;
-    this.collideBody = collideBodyForMesh(mesh, this.capsuleCount);
+    this.collideBody = collideBodyForMesh(mesh);
+    this.colliderMesh = mesh;
     if (refreshed.replaced) {
       this.collideBG = this.bindGroup(this.pipelines.layouts.collide, [
-        this.predictedBuf, this.capsuleBuf, this.collideParamsBuf, this.prevPosBuf,
+        this.predictedBuf, this.collideParamsBuf, this.prevPosBuf,
         this.meshBuffers.triangle, this.meshBuffers.cellStart, this.meshBuffers.cellTriangles, this.contactMoveBuf,
         this.thicknessBuf,
       ]);
@@ -961,7 +984,7 @@ export class ClothSimulator {
     const buffers: (GPUBuffer | undefined)[] = [
       this.posInvMassBuf, this.prevPosBuf, this.velocityBuf, this.predictedBuf, this.normalsBuf,
       this.contactMoveBuf, this.indicesBuf, this.groupStartBuf, this.groupTrianglesBuf, this.groupOfParticleBuf,
-      this.capsuleBuf, this.dampingBuf, this.grabWeightBuf, this.thicknessBuf,
+      this.dampingBuf, this.grabWeightBuf, this.thicknessBuf,
       this.meshBuffers.triangle, this.meshBuffers.cellStart, this.meshBuffers.cellTriangles,
       this.integrateParamsBuf, this.collideParamsBuf, this.updateParamsBuf, this.normalsParamsBuf,
       this.pinIndicesBuf, this.pinInvMassBuf, this.pinParamsBuf,

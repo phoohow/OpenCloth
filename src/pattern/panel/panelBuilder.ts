@@ -88,19 +88,20 @@ function to3D(positions2D: Float32Array): Float32Array {
 }
 
 /**
- * Bounds of a panel's cutting outline in centimeters: the outline a mesh is resampled from,
- * so the numbers match the mesh the drape wraps and the 2D pane can derive the same heights.
+ * Bounds of the outline a panel's simulation mesh is resampled from, in centimeters, so the 2D pane
+ * derives the same heights the drape wraps.
  */
-export function panelCutBounds(pattern: Pattern, panel: Panel): { min: Vec2; max: Vec2 } {
+export function panelMeshBounds(pattern: Pattern, panel: Panel): { min: Vec2; max: Vec2 } {
   const resolution = panel.meshResolutionCm ?? DEFAULT_MESH_RESOLUTION_CM;
-  const outline = resampleClosedOutline(panelOutlineWithAllowance(pattern, panel), resolution);
+  const outline = resampleClosedOutline(samplePanelOutline(pattern, panel), resolution);
   return computeBBox(outline.length >= 3 ? outline : samplePanelOutline(pattern, panel));
 }
 
 /**
- * Builds a panel's simulation mesh: outline sampling, seam allowance, triangulation, refinement, UVs and seam mapping.
- * `resolutionCm` overrides the panel's own mesh resolution when given; `sampling` overrides the
- * project's interior point distribution when given.
+ * Builds a panel's simulation mesh: outline sampling, triangulation, refinement, UVs and seam
+ * mapping. The piece is the seam line, not the cutting outline: stitching the seam allowances of
+ * two panels would lay one allowance over the other. `resolutionCm` overrides the panel's own mesh
+ * resolution when given; `sampling` overrides the project's interior point distribution when given.
  */
 export function buildPanelMesh(
   pattern: Pattern,
@@ -112,7 +113,7 @@ export function buildPanelMesh(
   if (!panel) return null;
 
   const resolution = resolutionCm ?? panel.meshResolutionCm ?? DEFAULT_MESH_RESOLUTION_CM;
-  const outline = resampleClosedOutline(panelOutlineWithAllowance(pattern, panel), resolution);
+  const outline = resampleClosedOutline(samplePanelOutline(pattern, panel), resolution);
   if (outline.length < 3) return null;
 
   const holes = (panel.holes ?? [])

@@ -201,16 +201,10 @@ describe('diffProject rebuild fields', () => {
       project.avatar.params.chestCm = 100;
     });
     expectRebuild(project => {
-      project.avatar.params.poseArmAngleRad = 0.3;
+      project.avatar.params.gender = 0.6;
     });
     expectRebuild(project => {
-      project.avatar.params.poseLegSpreadRad = 0.2;
-    });
-    expectRebuild(project => {
-      project.avatar.params.poseTorsoLeanRad = 0.1;
-    });
-    expectRebuild(project => {
-      project.avatar.source = 'procedural';
+      project.avatar.source = 'glb';
     });
     expectRebuild(project => {
       project.avatar.glbUrl = '/models/other.glb';

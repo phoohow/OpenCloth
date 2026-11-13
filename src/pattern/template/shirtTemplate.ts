@@ -110,10 +110,12 @@ export function generateShirt(params: ShirtParams = DEFAULT_SHIRT_PARAMS, fabric
   builder.seam(front.sideRight, back.sideRight);
   builder.seam(front.sideLeft, back.sideLeft);
 
+  // Each cap half pairs its underarm end with the armhole's underarm end. The right armhole is
+  // authored underarm first, the left one shoulder first, so the left seams flip their bodice side.
   builder.seam(sleeveR.capRight, front.armholeRight, { type: 'gather' });
   builder.seam(sleeveR.capLeft, back.armholeRight, { type: 'gather', flipB: true });
-  builder.seam(sleeveL.capRight, front.armholeLeft, { type: 'gather' });
-  builder.seam(sleeveL.capLeft, back.armholeLeft, { type: 'gather', flipB: true });
+  builder.seam(sleeveL.capRight, front.armholeLeft, { type: 'gather', flipB: true });
+  builder.seam(sleeveL.capLeft, back.armholeLeft, { type: 'gather' });
   builder.seam(sleeveR.seamRight, sleeveR.seamLeft, { flipB: true });
   builder.seam(sleeveL.seamRight, sleeveL.seamLeft, { flipB: true });
 

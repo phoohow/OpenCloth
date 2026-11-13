@@ -1,6 +1,6 @@
 import type { Pattern, PatternPoint, Vec2 } from '@/model/types';
 import type { BodyLandmarks } from '@/avatar';
-import { panelCutBounds } from '@/pattern/panel';
+import { panelMeshBounds } from '@/pattern/panel';
 import { drapeHeightOffsetCm } from '@/pattern/drape';
 
 /** Shifted copy of a pattern point; handles ride along with the anchor. */
@@ -25,7 +25,7 @@ export function panelHeightOffsets(pattern: Pattern, body: BodyLandmarks): Map<s
       offsets.set(panel.id, 0);
       continue;
     }
-    offsets.set(panel.id, drapeHeightOffsetCm(panel, panelCutBounds(pattern, panel).max.y, body));
+    offsets.set(panel.id, drapeHeightOffsetCm(panel, panelMeshBounds(pattern, panel).max.y, body));
   }
   return offsets;
 }

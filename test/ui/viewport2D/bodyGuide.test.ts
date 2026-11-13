@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bodyLandmarks } from '@/avatar';
+import { bodyLandmarks, makehumanBody } from '@/avatar';
 import { createEmptyPattern } from '@/model/defaults';
 import type { AvatarParams, Vec2 } from '@/model/types';
 import type { PatternElementKind } from '@/model';
@@ -10,10 +10,11 @@ import {
 } from '@/ui/viewport2D/drawBodyGuide';
 
 const PARAMS: AvatarParams = {
-  heightCm: 170, chestCm: 88, waistCm: 70, hipCm: 98, poseArmAngleRad: 0.12,
+  heightCm: 170, chestCm: 88, waistCm: 70, hipCm: 98,
 };
 const BODY = bodyLandmarks(PARAMS);
-const SOURCE: BodyGuideSource = { body: BODY };
+const BUILT = makehumanBody(PARAMS);
+const SOURCE: BodyGuideSource = { body: BODY, mesh: { positions: BUILT.positions, indices: BUILT.bodyIndices } };
 
 const ALL_KINDS: readonly PatternElementKind[] = [
   'panel', 'point', 'edge', 'internal', 'dart', 'seam',
@@ -38,9 +39,9 @@ describe('bodyGuideGeometry', () => {
     expect(outlines.every(outline => outline.length >= 3)).toBe(true);
     expect(all.length).toBeGreaterThan(100);
     expect(all.every(p => Number.isFinite(p.x) && Number.isFinite(p.y))).toBe(true);
-    expect(box.minY).toBeCloseTo(0, 6);
-    expect(box.maxY).toBeCloseTo(PARAMS.heightCm, 6);
-    expect(box.minX).toBeCloseTo(-box.maxX, 6);
+    expect(box.minY).toBeLessThan(0.5);
+    expect(box.maxY).toBeCloseTo(PARAMS.heightCm, 0);
+    expect(box.minX).toBeCloseTo(-box.maxX, 0);
   });
 
   it('places the construction rules at the shared body landmarks', () => {
@@ -52,13 +53,23 @@ describe('bodyGuideGeometry', () => {
     expect(rules.every(rule => rule.halfWidth > 0)).toBe(true);
   });
 
-  it('follows the posed mannequin', () => {
-    const straight = bounds(bodyGuideGeometry(SOURCE).outlines.flat());
-    const tPose = bounds(bodyGuideGeometry({
-      body: bodyLandmarks({ ...PARAMS, poseArmAngleRad: Math.PI / 2 }),
-    }).outlines.flat());
-    expect(tPose.maxX).toBeGreaterThan(straight.maxX * 1.5);
-    expect(tPose.maxY).toBeCloseTo(straight.maxY, 6);
+  it('draws only the outline, without the creases of eyes, lips or nostrils', () => {
+    const { outlines } = bodyGuideGeometry(SOURCE);
+    expect(outlines.length).toBeLessThanOrEqual(3);
+    for (const ring of outlines) {
+      const box = bounds(ring);
+      expect(Math.max(box.maxX - box.minX, box.maxY - box.minY)).toBeGreaterThan(12);
+    }
+  });
+
+  it('follows the arm pose of the body it is projected from', () => {
+    const open = { ...PARAMS, pose: 't' as const };
+    const built = makehumanBody(open);
+    const spread = bodyGuideGeometry({
+      body: bodyLandmarks(open),
+      mesh: { positions: built.positions, indices: built.bodyIndices },
+    }).outlines.flat();
+    expect(bounds(spread).maxX).toBeGreaterThan(bounds(bodyGuideGeometry(SOURCE).outlines.flat()).maxX * 1.3);
   });
 
   it('stays outside pattern picking', () => {

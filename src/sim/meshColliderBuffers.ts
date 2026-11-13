@@ -10,9 +10,8 @@ export interface MeshColliderBuffers {
 }
 
 /** Collision-uniform description of a body mesh. */
-export function collideBodyForMesh(mesh: MeshCollider, capsuleCount: number): CollideBody {
+export function collideBodyForMesh(mesh: MeshCollider): CollideBody {
   return {
-    capsuleCount,
     triangleCount: mesh.triangleCount,
     gridOrigin: mesh.origin,
     gridCell: mesh.cell,

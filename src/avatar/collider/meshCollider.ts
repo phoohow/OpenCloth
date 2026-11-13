@@ -10,10 +10,11 @@ const MAX_PER_CELL = 160;
 /** Upper bound on grid cells: 1M cells is 4 MB per index array on the GPU and 12 MB while building. */
 const MAX_CELLS = 1_000_000;
 /** Clearance reported for points outside the search range, in metres. */
-const FAR = 0.25;
-/** Cell rings searched first; widened when the first search finds no triangle at all. */
+export const FAR_CLEARANCE = 0.25;
+/** Cell rings searched first; the search doubles until the block provably holds the nearest face. */
 const RINGS = 1;
-const FALLBACK_RINGS = 3;
+/** Widest block the nearest-surface search grows to, in cells. */
+const MAX_RINGS = 8;
 
 /**
  * Uniform triangle grid over the body mesh: every cell lists the triangles whose bounds
@@ -251,13 +252,21 @@ export function nearestMeshPoint(
   for (let oz = -rings; oz <= rings; oz++) {
     const iz = baseZ + oz;
     if (iz < 0 || iz >= dims[2]) continue;
+    const cz = origin[2] + iz * cell;
     for (let oy = -rings; oy <= rings; oy++) {
       const iy = baseY + oy;
       if (iy < 0 || iy >= dims[1]) continue;
+      const cy = origin[1] + iy * cell;
       const row = (iz * dims[1] + iy) * dims[0];
       for (let ox = -rings; ox <= rings; ox++) {
         const ix = baseX + ox;
         if (ix < 0 || ix >= dims[0]) continue;
+        // Cells farther than the best hit so far cannot improve on it.
+        const cx = origin[0] + ix * cell;
+        const gx = Math.max(cx - px, px - (cx + cell), 0);
+        const gy = Math.max(cy - py, py - (cy + cell), 0);
+        const gz = Math.max(cz - pz, pz - (cz + cell), 0);
+        if (gx * gx + gy * gy + gz * gz > bestDist) continue;
         const c = row + ix;
         const end = cellStart[c + 1];
         for (let k = cellStart[c]; k < end; k++) {
@@ -294,11 +303,74 @@ export function nearestMeshPoint(
 }
 
 /**
+ * Nearest surface point with the search block grown until the result is provably the nearest: the
+ * (2*rings+1)³ block is exact once the hit it holds lies within `rings * cell`. A particle buried
+ * deeper than one cell therefore still gets the true nearest face instead of a null answer.
+ */
+export function nearestMeshPointWithin(
+  collider: MeshCollider,
+  px: number, py: number, pz: number,
+  maxRings = MAX_RINGS,
+): MeshHit | null {
+  for (let rings = RINGS; rings <= maxRings; rings *= 2) {
+    const hit = nearestMeshPoint(collider, px, py, pz, rings);
+    if (hit && hit.distance <= rings * collider.cell) return hit;
+    if (rings === maxRings) return hit;
+  }
+  return null;
+}
+
+/**
  * Signed distance to the body surface, negative inside; points beyond the searched range read as
- * `FAR`. The rings mirror the collide pass so the fit heatmap measures the surface collision sees.
+ * `FAR_CLEARANCE`. The search mirrors the collide pass, so the fit heatmap measures the surface
+ * collision sees.
  */
 export function sampleMeshCollider(collider: MeshCollider, px: number, py: number, pz: number): number {
-  const hit = nearestMeshPoint(collider, px, py, pz, RINGS) ?? nearestMeshPoint(collider, px, py, pz, FALLBACK_RINGS);
-  if (!hit) return FAR;
-  return hit.side > 0 ? hit.distance : -hit.distance;
+  const hit = nearestMeshPointWithin(collider, px, py, pz);
+  if (!hit) return FAR_CLEARANCE;
+  return hit.side < 0 ? -hit.distance : hit.distance;
 }
+
+/** Scratch socket of `pushOutOfBody`. */
+const pushOut = new Float64Array(3);
+/** Projections a single lift may chain; a concave pocket can need more than one. */
+const PUSH_PASSES = 3;
+
+/**
+ * Moves a point to just outside the body surface: a point inside is projected onto the nearest
+ * face along its normal, a point outside but closer than `clearance` is lifted to it. A projection
+ * can land inside another part of the body (a limb against the torso, the gap between the legs), so
+ * the query repeats until the point clears. Returns the corrected coordinates in `pushOut`, or null
+ * when the point already clears the surface.
+ */
+export function pushOutOfBody(
+  collider: MeshCollider,
+  px: number, py: number, pz: number,
+  clearance: number,
+  maxRings = MAX_RINGS,
+): Float64Array | null {
+  let x = px, y = py, z = pz;
+  let moved = false;
+  for (let pass = 0; pass < PUSH_PASSES; pass++) {
+    const hit = nearestMeshPointWithin(collider, x, y, z, maxRings);
+    if (!hit) return moved ? pushOut : null;
+    if (hit.side > 0 && hit.distance >= clearance) return moved ? pushOut : null;
+
+    const offX = x - hit.point[0], offY = y - hit.point[1], offZ = z - hit.point[2];
+    const len = Math.hypot(offX, offY, offZ);
+    // Inside, the offset points at the surface, so the outward normal is its negation.
+    const sign = hit.side >= 0 ? 1 : -1;
+    const nx = len > 1e-7 ? (offX / len) * sign : 0;
+    const ny = len > 1e-7 ? (offY / len) * sign : 1;
+    const nz = len > 1e-7 ? (offZ / len) * sign : 0;
+    x = hit.point[0] + nx * clearance;
+    y = hit.point[1] + ny * clearance;
+    z = hit.point[2] + nz * clearance;
+    moved = true;
+    pushOut[0] = x;
+    pushOut[1] = y;
+    pushOut[2] = z;
+  }
+  return moved ? pushOut : null;
+}
+

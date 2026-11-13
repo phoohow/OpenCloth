@@ -24,6 +24,9 @@ struct SimParams {
 // Per-particle pointer-drag weight, 0 for fabric outside the grabbed region.
 @group(0) @binding(5) var<storage, read> grabWeight: array<f32>;
 
+// Longest distance a grabbed particle travels in one substep, in meters.
+const MAX_GRAB_STEP = 0.02;
+
 @compute @workgroup_size(256)
 fn integrate(@builtin(global_invocation_id) gid: vec3<u32>) {
   let i = gid.x;
@@ -54,7 +57,11 @@ fn integrate(@builtin(global_invocation_id) gid: vec3<u32>) {
   // the remaining gap, so the pull travels through the constraint network as a force.
   let weight = grabWeight[i];
   if (params.grabTarget.w > 0.0 && weight > 0.0) {
-    pred = pred + (params.grabTarget.xyz - pos.xyz) * weight;
+    var step = (params.grabTarget.xyz - pos.xyz) * weight;
+    // Cap one substep of drag travel: a longer jump could cross the skin before collision runs.
+    let stepLen = length(step);
+    if (stepLen > MAX_GRAB_STEP) { step = step * (MAX_GRAB_STEP / stepLen); }
+    pred = pred + step;
   }
 
   predicted[i] = vec4<f32>(pred, 0.0);
@@ -116,7 +123,6 @@ export const COLLIDE_WGSL = /* wgsl */`
 struct SimParams {
   dt: f32,
   particleCount: u32,
-  capsuleCount: u32,
   surfaceOffset: f32,
   friction: f32,
   floorY: f32,
@@ -126,11 +132,6 @@ struct SimParams {
   gridOrigin: vec4<f32>,
   // Collision grid: xyz = cell counts per axis
   gridDims: vec4<f32>,
-};
-
-struct Capsule {
-  a: vec4<f32>,   // xyz = start point, w = radius x
-  b: vec4<f32>,   // xyz = end point, w = radius z (0 falls back to radius x)
 };
 
 struct SurfaceHit {
@@ -144,25 +145,15 @@ struct SurfaceHit {
 const MAX_CONTACT_MOVE = 0.02;
 
 @group(0) @binding(0) var<storage, read_write> predicted: array<vec4<f32>>;
-@group(0) @binding(1) var<storage, read> capsules: array<Capsule>;
-@group(0) @binding(2) var<uniform> params: SimParams;
-@group(0) @binding(3) var<storage, read> prevPos: array<vec4<f32>>;
-@group(0) @binding(4) var<storage, read> meshTriangles: array<vec4<f32>>;
-@group(0) @binding(5) var<storage, read> cellStart: array<u32>;
-@group(0) @binding(6) var<storage, read> cellTriangles: array<u32>;
+@group(0) @binding(1) var<uniform> params: SimParams;
+@group(0) @binding(2) var<storage, read> prevPos: array<vec4<f32>>;
+@group(0) @binding(3) var<storage, read> meshTriangles: array<vec4<f32>>;
+@group(0) @binding(4) var<storage, read> cellStart: array<u32>;
+@group(0) @binding(5) var<storage, read> cellTriangles: array<u32>;
 // Largest normal indentation the body contact applied to this particle, in meters.
-@group(0) @binding(7) var<storage, read_write> contactMove: array<f32>;
+@group(0) @binding(6) var<storage, read_write> contactMove: array<f32>;
 // Collision clearance of every particle, meters; a panel's construction layer sets it.
-@group(0) @binding(8) var<storage, read> thickness: array<f32>;
-
-fn pointSegmentClosest(p: vec3<f32>, a: vec3<f32>, b: vec3<f32>) -> vec3<f32> {
-  let ab = b - a;
-  let ap = p - a;
-  let abLen2 = dot(ab, ab);
-  var t = 0.0;
-  if (abLen2 > 0.0) { t = clamp(dot(ap, ab) / abLen2, 0.0, 1.0); }
-  return a + ab * t;
-}
+@group(0) @binding(7) var<storage, read> thickness: array<f32>;
 
 fn closestOnTriangle(p: vec3<f32>, a: vec3<f32>, b: vec3<f32>, c: vec3<f32>) -> vec3<f32> {
   let ab = b - a;
@@ -263,45 +254,6 @@ fn applyFriction(pos: vec3<f32>, n: vec3<f32>, prev: vec3<f32>, amount: f32) -> 
   return pos + (toPrev - dot(toPrev, n) * n) * amount;
 }
 
-// Fallback body collision: the capsule approximation used when no mesh collider is present.
-fn collideCapsules(posIn: vec3<f32>, clearance: f32) -> vec3<f32> {
-  var pos = posIn;
-  var minDist = 1e9;
-  var bestClosest = vec3<f32>(0.0);
-  var bestRadius = 0.0;
-  for (var ci = 0u; ci < params.capsuleCount; ci++) {
-    let cap = capsules[ci];
-    let a = cap.a.xyz;
-    let b = cap.b.xyz;
-    let rx = cap.a.w;
-    let rz = select(rx, cap.b.w, cap.b.w > 0.0);
-    let closest = pointSegmentClosest(pos, a, b);
-    let off = pos - closest;
-    // Capsule cross-sections are ellipses: bodies are wider than they are deep.
-    var r = rx;
-    if (length(vec2<f32>(off.x, off.z)) > 1e-6 && rz > 0.0) {
-      let t = atan2(off.z, off.x);
-      let cz = cos(t) * rz;
-      let sz = sin(t) * rx;
-      r = (rx * rz) / sqrt(cz * cz + sz * sz);
-    }
-    let d = length(off) - r;
-    if (d < minDist) {
-      minDist = d;
-      bestClosest = closest;
-      bestRadius = r;
-    }
-  }
-  if (minDist < clearance) {
-    let dir = pos - bestClosest;
-    let dirLen = length(dir);
-    var n = vec3<f32>(0.0, 1.0, 0.0);
-    if (dirLen > 1e-7) { n = dir / dirLen; }
-    return bestClosest + n * (bestRadius + clearance);
-  }
-  return pos;
-}
-
 @compute @workgroup_size(256)
 fn collide(@builtin(global_invocation_id) gid: vec3<u32>) {
   let i = gid.x;
@@ -318,8 +270,15 @@ fn collide(@builtin(global_invocation_id) gid: vec3<u32>) {
     // The body mesh is the collider: project onto the surface plus the clearance. A point inside
     // the body is pushed out along the nearest triangle normal, however deep the searched block
     // reaches; only points outside are gated by the clearance, which keeps them off the skin.
+    let cell = params.gridOrigin.w;
     var hit = nearestSurface(pos, 1);
-    if (hit.distance > 1e8) { hit = nearestSurface(pos, 3); }
+    // A face farther than one cell, or no face at all, means the 27-cell block did not hold the
+    // nearest one: widen once to three cells so a particle buried a few centimetres deep still
+    // finds the surface it has to leave through.
+    if (hit.distance > cell) {
+      let wide = nearestSurface(pos, 3);
+      if (wide.distance < hit.distance) { hit = wide; }
+    }
     if (hit.side < 0.0 || hit.distance < clearance) {
       let off = pos - hit.point;
       let len = length(off);
@@ -329,17 +288,6 @@ fn collide(@builtin(global_invocation_id) gid: vec3<u32>) {
       let indent = max(dot(surfacePoint - start, n), 0.0);
       contactMove[i] = max(contactMove[i], min(indent, MAX_CONTACT_MOVE));
       pos = applyFriction(surfacePoint, n, prev, params.friction);
-      moved = true;
-    }
-  } else if (params.capsuleCount > 0u) {
-    let pushed = collideCapsules(pos, clearance);
-    if (any(pushed != pos)) {
-      let offset = pushed - pos;
-      let offsetLen = length(offset);
-      var n = vec3<f32>(0.0, 1.0, 0.0);
-      if (offsetLen > 1e-7) { n = offset / offsetLen; }
-      contactMove[i] = max(contactMove[i], min(offsetLen, MAX_CONTACT_MOVE));
-      pos = applyFriction(pushed, n, prev, params.friction);
       moved = true;
     }
   }

@@ -56,7 +56,7 @@ export class AvatarView {
     });
   }
 
-  /** Collision capsules and mesh of the current body. */
+  /** Collision mesh of the current body. */
   get collider() { return this.stage.collider; }
 
   /** Asset owning the body object, clips and soft deformation. */
