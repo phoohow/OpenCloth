@@ -3,7 +3,8 @@
  *
  * The 2D pane draws the same surface the 3D view shows, projected orthographically: a triangle
  * faces the viewer when its projection keeps the mesh's counter-clockwise winding, and the outline
- * is the set of edges where a front-facing triangle meets a back-facing one. Nothing is
+ * is the boundary of the front-facing set — the edges used by exactly one front-facing triangle.
+ * That boundary is a closed 1-manifold, so every walk along it returns to its start. Nothing is
  * approximated, so a change of measurements, age or pose shows up in the reference exactly as it
  * does in the viewport.
  */
@@ -13,14 +14,6 @@ import { computeBBox, polygonArea } from '@/base/geom';
 
 /** Centimetres in one metre. */
 const CM = 100;
-
-/** Projected area under which a triangle counts as seen edge-on, in square meters. */
-const EDGE_ON_AREA = 1e-9;
-
-/** Facing bits of a projected triangle: front, back, or edge-on. */
-const FRONT = 1;
-const BACK = 2;
-const EDGE_ON = 4;
 
 /**
  * Smallest ring kept. Creases — eyelids, lips, the folds around a nostril and the slivers the
@@ -73,8 +66,8 @@ function nextOnOutline(
 /**
  * Closed outlines of the body seen from the front, in centimetres, feet on the ground.
  *
- * `positions` are meters, `indices` the body triangles. The result holds one ring per silhouette
- * loop, holes included, and the rings never cross so an even-odd fill paints the surface once.
+ * `positions` are meters, `indices` the body triangles. The result holds the boundary rings of the
+ * visible surface, holes included; where the outline touches itself the rings join at that vertex.
  * Rings too small to be more than a crease are dropped, which leaves the figure's outline alone.
  */
 export function bodySilhouette(positions: Float32Array, indices: Uint32Array): Vec2[][] {
@@ -87,41 +80,27 @@ export function bodySilhouette(positions: Float32Array, indices: Uint32Array): V
     const c = indices[t * 3 + 2]! * 3;
     const area = (positions[b]! - positions[a]!) * (positions[c + 1]! - positions[a + 1]!)
       - (positions[c]! - positions[a]!) * (positions[b + 1]! - positions[a + 1]!);
-    // Nearly edge-on triangles sit on the outline itself; classifying them as either side would
-    // cut the ring where the surface turns away from the viewer.
-    front[t] = area > EDGE_ON_AREA ? FRONT : area < -EDGE_ON_AREA ? BACK : EDGE_ON;
+    // An edge-on triangle belongs to the far side, so the outline runs along its front neighbour.
+    front[t] = area > 0 ? 1 : 0;
   }
 
-  // Facing of the two triangles that share each edge: one on each side means the edge is on the
-  // outline, and so does an edge-on triangle, which the outline runs through.
-  const facing = new Map<number, number>();
-  const addFacing = (a: number, b: number, side: number): void => {
-    const key = edgeKey(a, b, stride);
-    facing.set(key, (facing.get(key) ?? 0) | side);
-  };
+  // The visible surface covers each interior edge twice, once from each front-facing triangle;
+  // an edge covered once is where the visible surface ends.
+  const covered = new Map<number, number>();
   for (let t = 0; t < triangles; t++) {
-    const a = indices[t * 3]!;
-    const b = indices[t * 3 + 1]!;
-    const c = indices[t * 3 + 2]!;
-    const side = front[t]!;
-    addFacing(a, b, side);
-    addFacing(b, c, side);
-    addFacing(c, a, side);
+    if (!front[t]) continue;
+    for (let i = 0; i < 3; i++) {
+      const a = indices[t * 3 + i]!;
+      const b = indices[t * 3 + (i + 1) % 3]!;
+      const key = edgeKey(a, b, stride);
+      covered.set(key, (covered.get(key) ?? 0) + 1);
+    }
   }
 
   const edges: Array<[number, number]> = [];
-  for (let t = 0; t < triangles; t++) {
-    const corners = [indices[t * 3]!, indices[t * 3 + 1]!, indices[t * 3 + 2]!];
-    for (let i = 0; i < 3; i++) {
-      const a = corners[i]!;
-      const b = corners[(i + 1) % 3]!;
-      // A silhouette edge has a front-facing triangle on one side and a back-facing one on the
-      // other; the `a < b` guard keeps the single copy the two triangles share.
-      const mask = facing.get(edgeKey(a, b, stride)) ?? 0;
-      const outlined = (mask & (FRONT | BACK)) === (FRONT | BACK) || (mask & EDGE_ON) !== 0;
-      if (!outlined || a > b) continue;
-      edges.push([a, b]);
-    }
+  for (const [key, count] of covered) {
+    if (count !== 1) continue;
+    edges.push([Math.floor(key / stride), key % stride]);
   }
 
   const adjacency = new Map<number, number[]>();
@@ -152,8 +131,8 @@ export function bodySilhouette(positions: Float32Array, indices: Uint32Array): V
       previous = current;
       current = next;
     }
-    // Creases close into small rings of their own; the outline fragments that make up the figure
-    // may also close on themselves, so size, not closure, is what separates a crease from a limb.
+    // Creases close into small rings of their own, the figure into large ones, so size is what
+    // separates a crease from an outline.
     if (ring.length >= 3 && polygonArea(ring) >= MIN_RING_CM2 && ringSpan(ring) >= MIN_RING_SPAN_CM) {
       outlines.push(ring);
     }

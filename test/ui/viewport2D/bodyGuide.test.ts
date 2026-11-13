@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { bodyLandmarks, makehumanBody } from '@/avatar';
-import { createEmptyPattern } from '@/model/defaults';
+import { AVATAR_PRESETS, createEmptyPattern } from '@/model/defaults';
 import type { AvatarParams, Vec2 } from '@/model/types';
 import type { PatternElementKind } from '@/model';
 import { pickElements } from '@/ui/viewport2D/hitTest';
@@ -59,6 +59,29 @@ describe('bodyGuideGeometry', () => {
     for (const ring of outlines) {
       const box = bounds(ring);
       expect(Math.max(box.maxX - box.minX, box.maxY - box.minY)).toBeGreaterThan(12);
+    }
+  });
+
+  it('closes the outline of every figure without a chord across it', () => {
+    for (const preset of AVATAR_PRESETS) {
+      const built = makehumanBody(preset.params);
+      const { outlines } = bodyGuideGeometry({
+        body: bodyLandmarks(preset.params),
+        mesh: { positions: built.positions, indices: built.bodyIndices },
+      });
+      expect(outlines.length).toBeGreaterThan(0);
+      const box = bounds(outlines.flat());
+      expect(box.minY).toBeLessThan(0.5);
+      expect(box.maxY).toBeCloseTo(preset.params.heightCm, 0);
+      // A ring that fails to close draws a straight chord between its ends, far longer than any
+      // mesh edge.
+      for (const ring of outlines) {
+        for (let i = 0; i < ring.length; i++) {
+          const a = ring[i]!;
+          const b = ring[(i + 1) % ring.length]!;
+          expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeLessThan(15);
+        }
+      }
     }
   });
 
