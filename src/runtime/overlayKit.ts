@@ -99,8 +99,9 @@ export class OverlayKit {
     this.trims.update(positions);
   }
 
-  /** Hides the thread and trim overlays while a heatmap stands in for the cloth. */
+  /** Hides the seam, topstitch and trim overlays while a heatmap or a debug frame takes over. */
   setVisible(visible: boolean): void {
+    this.seams.setVisible(visible);
     this.topstitches.setVisible(visible);
     this.trims.setVisible(visible);
   }

@@ -164,7 +164,7 @@ export function Menubar({ actions }: { actions: MenuActions }) {
             : '自动保存 关闭'}
         </div>
       </div>
-      <MenuDialogs />
+      <MenuDialogs actions={actions} />
     </>
   );
 }

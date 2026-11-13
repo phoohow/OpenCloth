@@ -22,6 +22,8 @@ export class SeamThreads {
   private seams: Record<string, Seam> = {};
   /** Linear thread color of each seam. */
   private palette = new Map<string, Rgb>();
+  /** Whether the overlay is drawn; a rebuilt entity takes the flag with it. */
+  private visible = true;
 
   /** Builds one line segment per seam pair and writes the thread entity. */
   attach(
@@ -50,11 +52,20 @@ export class SeamThreads {
       tags: ['seamThreads'],
       mesh: { kind: 'mesh', id: this.meshId },
       materials: [{ kind: 'material', id: this.materialId }],
-      channels: CHANNEL_RASTER,
+      channels: this.visible ? CHANNEL_RASTER : 0,
     });
     host.bind('seam', this.entityId);
     this.setSeams(seams);
     this.update(pairs, positions);
+  }
+
+  /** Shows or hides the thread overlay. */
+  setVisible(visible: boolean): void {
+    if (this.visible === visible) return;
+    this.visible = visible;
+    if (this.writer !== null && this.entityId !== null) {
+      this.writer.updateEntity(this.entityId, { channels: visible ? CHANNEL_RASTER : 0 });
+    }
   }
 
   /** Sets the seam records whose thread color and visibility the overlay draws. */

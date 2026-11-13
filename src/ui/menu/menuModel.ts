@@ -312,7 +312,10 @@ export function buildMenus(state: MenuState, actions: MenuActions): TopMenu[] {
         leaf('shortcuts', '快捷键总览', actions.showShortcuts, { accel: comboOf('shortcuts') }),
         leaf('about', '关于 OpenCloth', actions.showAbout),
         menuSep(),
-        leaf('perfPanel', '调试：一帧耗时', actions.togglePerfPanel, { checked: state.showPerfPanel }),
+        group('debug', '调试', [
+          leaf('perfPanel', '一帧耗时', actions.togglePerfPanel, { checked: state.showPerfPanel }),
+          leaf('debugScreenshot', '导出截图…', actions.openDebugScreenshot),
+        ]),
       ],
     },
   ];

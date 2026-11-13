@@ -44,7 +44,7 @@ export function MobileShell({ actions, engineRef, onEngineReady, ready }: {
       </div>
       <Dock actions={actions} onOpenProps={() => setSheet('props')} />
       <MobileSheet sheet={sheet} onClose={() => setSheet(null)} actions={actions} engineRef={engineRef} />
-      <MenuDialogs />
+      <MenuDialogs actions={actions} />
     </div>
   );
 }

@@ -21,7 +21,7 @@ import {
 } from '@/ui/viewport2D/hitTest';
 import { snapToGrid, type ViewTransform } from '@/ui/viewport2D/viewMath';
 import { collectSnapCandidates, findSnapAtPattern, type SnapCandidate } from '@/ui/viewport2D/snap';
-import { drawScene, type PreviewDrag, type DisplayOptions } from '@/ui/viewport2D/render';
+import { drawScene, type PreviewDrag, type DisplayOptions, type SceneState } from '@/ui/viewport2D/render';
 import { bodyGuideGeometry, type BodyGuideGeometry } from '@/ui/viewport2D/drawBodyGuide';
 import { viewport2DCursor } from '@/ui/viewport2D/cursor';
 import {
@@ -37,6 +37,8 @@ import { ViewportHint } from '@/ui/widgets/viewportHint';
 import { reportActionError } from '@/ui/widgets/toast';
 import { isAssetDrag, currentAssetDrag, endAssetDrag, readAssetDrag } from '@/ui/assets/assetDrag';
 import { applyFabricToPanels, placeTrimOnPanel } from '@/ui/assets/applyAsset';
+import { registerViewport2DCapture, type Screenshot2DContent } from '@/ui/debug/screenshot';
+import { createEmptyPattern } from '@/model/defaults';
 
 /** 2D drafting canvas: draws the pattern and turns pointer and keyboard input into pattern edits. */
 export function Viewport2D() {
@@ -151,6 +153,24 @@ export function Viewport2D() {
     return pos;
   }, [resolvePlacedPoint]);
 
+  /** Document, view and display inputs of the current frame, interaction layers included. */
+  const sceneState = useCallback((): SceneState => {
+    const shown = preview ? preview.pattern : pattern;
+    const shownOffsets = preview ? (preview.offsets ?? panelHeightOffsets(shown, body)) : heightOffsets;
+    return {
+      pattern: preview ? toHeightPattern(shown, shownOffsets) : heights,
+      meshPattern: shown,
+      offsets: shownOffsets,
+      view, simulation: project.scene.simulation,
+      selection, hover: hoverTarget, markHint, dropHint, preview: preview && { ...preview, pattern: toHeightPattern(shown, shownOffsets) }, rect: rectWorld,
+      showSeams: activeTool === 'seam' || idsOfKind(selection, 'seam').length > 0,
+      draft, snapHint, insertHint, seamHover, hoverDelete: activeTool === 'deletePoint', display: displayOptions as DisplayOptions,
+      gradingOutlines,
+      bodyGuide,
+      onPrintImageReady: () => useUIStore.getState().requestRepaint(),
+    };
+  }, [pattern, heights, heightOffsets, body, bodyGuide, view, project.scene.simulation, selection, hoverTarget, markHint, dropHint, preview, rectWorld, activeTool, draft, snapHint, insertHint, seamHover, displayOptions, gradingOutlines]);
+
   const render = useCallback(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
@@ -168,23 +188,58 @@ export function Viewport2D() {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
 
-    const shown = preview ? preview.pattern : pattern;
-    const shownOffsets = preview ? (preview.offsets ?? panelHeightOffsets(shown, body)) : heightOffsets;
-    drawScene(ctx, w, h, {
-      pattern: preview ? toHeightPattern(shown, shownOffsets) : heights,
-      meshPattern: shown,
-      offsets: shownOffsets,
-      view, simulation: project.scene.simulation,
-      selection, hover: hoverTarget, markHint, dropHint, preview: preview && { ...preview, pattern: toHeightPattern(shown, shownOffsets) }, rect: rectWorld,
-      showSeams: activeTool === 'seam' || idsOfKind(selection, 'seam').length > 0,
-      draft, snapHint, insertHint, seamHover, hoverDelete: activeTool === 'deletePoint', display: displayOptions as DisplayOptions,
-      gradingOutlines,
-      bodyGuide,
-      onPrintImageReady: () => useUIStore.getState().requestRepaint(),
-    });
+    drawScene(ctx, w, h, sceneState());
     noteDrawnFrame('2d', performance.now());
-  }, [pattern, heights, heightOffsets, body, bodyGuide, view, project.scene.simulation, selection, hoverTarget, markHint, dropHint, preview, rectWorld, activeTool, draft, snapHint, insertHint, seamHover, displayOptions, gradingOutlines]);
+  }, [sceneState]);
 
+  /**
+   * Rendering of the pane for the debug screenshot export, in a fresh canvas: the same frame, or
+   * one of its two subjects alone. No interaction layer is dropped from the full frame.
+   */
+  const captureRef = useRef<(content: Screenshot2DContent) => HTMLCanvasElement | null>(() => null);
+  captureRef.current = (content) => {
+    const container = containerRef.current;
+    if (!container) return null;
+    const w = container.clientWidth, h = container.clientHeight;
+    if (w === 0 || h === 0) return null;
+    const dpr = window.devicePixelRatio || 1;
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(w * dpr));
+    canvas.height = Math.max(1, Math.round(h * dpr));
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    const scene = sceneState();
+    const display = displayOptions as DisplayOptions;
+    if (content === 'body') {
+      const blank = createEmptyPattern();
+      drawScene(ctx, w, h, {
+        ...scene,
+        pattern: blank,
+        meshPattern: blank,
+        offsets: new Map(),
+        selection: [], hover: null, markHint: null, dropHint: null, preview: null,
+        rect: null, draft: null, snapHint: null, insertHint: null, seamHover: null,
+        showSeams: false,
+        gradingOutlines: [],
+        // The body reference is the subject here even when the pane has it switched off.
+        display: { ...display, gradingOverlay: false, bodyGuide: true },
+        bodyGuide: bodyGuide ?? bodyGuideGeometry({ body, mesh: bodyMesh }),
+      });
+    } else if (content === 'pattern') {
+      drawScene(ctx, w, h, {
+        ...scene,
+        bodyGuide: undefined,
+        display: { ...display, bodyGuide: false },
+      });
+    } else {
+      drawScene(ctx, w, h, scene);
+    }
+    return canvas;
+  };
+
+  useEffect(() => registerViewport2DCapture(content => captureRef.current(content)), []);
   useEffect(() => { render(); }, [render, repaintToken]);
 
   // Tool switches clear any in-progress stroke and the hover affordance of the previous tool.

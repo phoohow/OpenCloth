@@ -15,6 +15,7 @@ import type { GarmentEngine, CameraPreset } from '@/runtime';
 import type { Viewport } from '@/runtime';
 import type { CameraProjection, EditPreviewTier, Project } from '@/model/types';
 import { reportActionError } from '@/ui/widgets/toast';
+import { exportDebugScreenshot, type ScreenshotRequest } from '@/ui/debug/screenshot';
 import { createProjectService } from '@/runtime';
 
 interface MenuActionContext {
@@ -56,6 +57,8 @@ export interface MenuActions {
   exportFbx: () => void;
   exportUsd: () => void;
   screenshot: () => void;
+  openDebugScreenshot: () => void;
+  debugScreenshot: (request: ScreenshotRequest) => Promise<string | null>;
   exportAnimation: () => void;
   exportSequence: () => void;
   openProduction: (kind?: ProductionKind) => void;
@@ -200,6 +203,8 @@ export function createMenuActions(refs: MenuActionContext): MenuActions {
       if (!viewport) return;
       exportScreenshot(viewport.canvas, `${project().meta.name}.png`);
     },
+    openDebugScreenshot: () => useMenuStore.getState().openDialog('screenshot'),
+    debugScreenshot: request => exportDebugScreenshot(refs.rendererRef.current, request),
     exportAnimation: () => {
       const viewport = refs.rendererRef.current;
       if (!viewport) return;
