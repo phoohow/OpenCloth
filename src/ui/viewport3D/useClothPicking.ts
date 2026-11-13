@@ -305,6 +305,7 @@ export function useClothPicking(
     const finishDrag = (pointerId: number) => {
       dragPointer = null;
       engineRef.current?.endClothDrag();
+      useUIStore.getState().setDragForce3d(null);
       if (canvas.hasPointerCapture(pointerId)) canvas.releasePointerCapture(pointerId);
       refreshHover();
     };
@@ -436,6 +437,7 @@ export function useClothPicking(
       unsubSim();
       if (hoverFrame) cancelAnimationFrame(hoverFrame);
       setCursor('default');
+      useUIStore.getState().setDragForce3d(null);
       // The engine releases its own drag when disposed, so nothing outlives the viewport.
     };
   }, [canvasRef, containerRef, engineRef]);

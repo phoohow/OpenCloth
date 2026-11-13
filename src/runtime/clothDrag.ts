@@ -3,7 +3,7 @@ import type { Vec3 } from '@/model/types';
 /**
  * Weight of every particle in a pointer grab, one per merged particle: `strength` at `center`,
  * falling off linearly to 0 at `radius`, and 0 outside it. The weights travel with the particles,
- * so the grabbed patch keeps following the pointer while the fabric moves.
+ * so the grabbed patch keeps receiving the pull while the fabric moves.
  */
 export function grabWeightsAround(
   positions: Float32Array,

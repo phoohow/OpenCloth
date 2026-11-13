@@ -25,7 +25,7 @@ export const PREVIEW_COARSE_RESOLUTION_CM = 6;
 /** World radius around the grabbed particle a pointer drag pulls, in meters. */
 export const DRAG_GRAB_RADIUS_M = 0.03;
 
-/** Share of the remaining gap a pointer drag covers per solver substep. */
+/** Pull weight at the grabbed point, fading linearly to 0 at the grab radius. */
 export const DRAG_GRAB_STRENGTH = 0.35;
 
 /** Distance from the grabbed point a drag target is clamped to, in meters. */

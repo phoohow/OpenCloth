@@ -339,6 +339,7 @@ export class EngineSync {
       // The engine owns the dressing stages, so the UI mirrors its state.
       if (simState.isDressing !== this.engine.isDressing) simState.setDressing(this.engine.isDressing);
       if (simState.isDressed !== this.engine.isDressed) simState.setDressed(this.engine.isDressed);
+      this.publishDragForce();
       if (useUIStore.getState().fitCheck) {
         const fit = useUIStore.getState();
         const stats = frameProfiler.span('analysis.fit',
@@ -378,6 +379,29 @@ export class EngineSync {
       if (!this.cancelled) this.raf = requestAnimationFrame(this.loop);
     }
   };
+
+  /**
+   * Keeps the pull badge on the arrow head while the cloth is held; the arrow moves with the
+   * readback, so only the frame loop can keep the two together.
+   */
+  private publishDragForce(): void {
+    const ui = useUIStore.getState();
+    const forceN = this.engine.isClothDragging() ? this.engine.clothDragForce() : null;
+    const head = forceN === null ? null : this.engine.clothDragArrowHeadNdc();
+    if (forceN === null || head === null) {
+      if (ui.dragForce3d !== null) ui.setDragForce3d(null);
+      return;
+    }
+    const { width, height } = this.viewport.size();
+    const x = (head.x * 0.5 + 0.5) * width;
+    const y = (-head.y * 0.5 + 0.5) * height;
+    const previous = ui.dragForce3d;
+    if (previous
+      && Math.abs(previous.x - x) < 0.25
+      && Math.abs(previous.y - y) < 0.25
+      && Math.abs(previous.forceN - forceN) < 1e-6) return;
+    ui.setDragForce3d({ x, y, forceN });
+  }
 
   /** Mirrors the body animation into the store and applies the dynamic sampling switch. */
   private syncAvatarAnimation(simState: ReturnType<typeof useSimStore.getState>): void {

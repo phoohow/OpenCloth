@@ -12,8 +12,8 @@ struct SimParams {
   time: f32,
   maxSpeed: f32,
   _p1: f32,
-  // Pointer drag: xyz = point the grabbed fabric is pulled toward, w = 1 while dragging.
-  grabTarget: vec4<f32>,
+  // Pointer drag: xyz = displacement per substep for a fully weighted particle, w = 1 while dragging.
+  grabStep: vec4<f32>,
 };
 
 @group(0) @binding(0) var<storage, read_write> posInvMass: array<vec4<f32>>;
@@ -23,9 +23,6 @@ struct SimParams {
 @group(0) @binding(4) var<uniform> params: SimParams;
 // Per-particle pointer-drag weight, 0 for fabric outside the grabbed region.
 @group(0) @binding(5) var<storage, read> grabWeight: array<f32>;
-
-// Longest distance a grabbed particle travels in one substep, in meters.
-const MAX_GRAB_STEP = 0.02;
 
 @compute @workgroup_size(256)
 fn integrate(@builtin(global_invocation_id) gid: vec3<u32>) {
@@ -53,15 +50,11 @@ fn integrate(@builtin(global_invocation_id) gid: vec3<u32>) {
   // Predicted position: x_pred = x + v*dt + a*dt^2.
   var pred = pos.xyz + vel.xyz * dt + accel * dt * dt;
 
-  // Pointer drag: the grabbed particles follow the pointer. Each substep covers their weight of
-  // the remaining gap, so the pull travels through the constraint network as a force.
+  // Pointer drag: the command is shared out by grab weight, so the pull spreads through the
+  // constraint network. The CPU bounds the distance one substep may cover.
   let weight = grabWeight[i];
-  if (params.grabTarget.w > 0.0 && weight > 0.0) {
-    var step = (params.grabTarget.xyz - pos.xyz) * weight;
-    // Cap one substep of drag travel: a longer jump could cross the skin before collision runs.
-    let stepLen = length(step);
-    if (stepLen > MAX_GRAB_STEP) { step = step * (MAX_GRAB_STEP / stepLen); }
-    pred = pred + step;
+  if (params.grabStep.w > 0.0 && weight > 0.0) {
+    pred = pred + params.grabStep.xyz * weight;
   }
 
   predicted[i] = vec4<f32>(pred, 0.0);

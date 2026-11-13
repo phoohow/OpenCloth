@@ -71,8 +71,8 @@ export class InteractionView {
   private readonly pins: PinMarkers;
   private readonly selection = new SelectionOverlay();
   private readonly marker = new DragMarker();
-  /** In-flight pointer drag. */
-  private drag: { center: Vec3; normal: Vec3; particle: number } | null = null;
+  /** In-flight pointer drag: the grab anchor and the plane the pointer moves on. */
+  private drag: { center: Vec3; normal: Vec3 } | null = null;
 
   constructor(private readonly deps: InteractionViewDeps) {
     this.picker = new ClothPicker(deps.camera, {
@@ -216,7 +216,7 @@ export class InteractionView {
     };
     const weights = grabWeightsAround(positions, center, DRAG_GRAB_RADIUS_M, DRAG_GRAB_STRENGTH);
     if (!simulator.setGrab(weights, [center.x, center.y, center.z])) return false;
-    this.drag = { center, normal: ray.direction, particle: hit.index };
+    this.drag = { center, normal: ray.direction };
     this.marker.show(hit.index, positions, this.deps.host, this.deps.camera.snapshot());
     return true;
   }
@@ -236,6 +236,7 @@ export class InteractionView {
     const reach = length3(offset);
     if (reach > DRAG_MAX_REACH_M) point = add3(drag.center, scale3(offset, DRAG_MAX_REACH_M / reach));
     simulator.moveGrab([point.x, point.y, point.z]);
+    this.marker.moveTip(point);
   }
 
   /** Releases the drag; the cloth keeps the velocity the pull gave it. */
@@ -244,6 +245,19 @@ export class InteractionView {
     this.drag = null;
     this.marker.hide(this.deps.host);
     this.deps.simulator()?.clearGrab();
+  }
+
+  /** Current pull force in newtons, quoted at the drag's reference solver step; null when idle. */
+  dragForceN(): number | null {
+    return this.deps.simulator()?.grabForceN() ?? null;
+  }
+
+  /** Screen position of the pull arrow head, in NDC; null while no arrow is shown. */
+  dragArrowHeadNdc(): { x: number; y: number } | null {
+    const head = this.marker.arrowHeadWorld();
+    if (!head) return null;
+    const { width, height } = this.deps.viewport();
+    return projectWorldToNdc(head, this.deps.camera.snapshot(), width / Math.max(1, height));
   }
 
   /** True while a pointer holds the cloth. */

@@ -18,9 +18,11 @@ import {
   buildCreaseConstraints, buildPanelConstraints, createBatchedConstraints, rewriteBatches,
 } from '@/sim/constraintBatches';
 import {
-  computeBaseInvMass, computeParticleDamping, computeParticleLayers, computeParticleThickness,
-  CONSTRAINT_GROUP_ORDER, type ClothSimInput, type ConstraintGroup, type ConstraintGroupKind,
+  computeBaseInvMass, computeParticleDamping, computeParticleLayers, computeParticleMass,
+  computeParticleThickness, CONSTRAINT_GROUP_ORDER, type ClothSimInput, type ConstraintGroup,
+  type ConstraintGroupKind,
 } from '@/sim/simTypes';
+import { ClothGrab, usableGrabWeights } from '@/sim/clothGrab';
 import { SelfCollisionSolver } from '@/sim/selfCollision';
 import { frameProfiler } from '@/base/perf';
 import {
@@ -136,10 +138,8 @@ export class ClothSimulator {
   private layerSpacing = 0.004;
   /** Particle indices currently pinned (inverse mass = 0). */
   private pinnedSet = new Set<number>();
-  /** Per-particle pointer-drag weight; 0 everywhere while no fabric is grabbed. */
-  private grabWeights: Float32Array<ArrayBuffer> = new Float32Array(0);
-  /** Point the grabbed fabric is pulled toward, or null while nothing is grabbed. */
-  private grabTarget: [number, number, number] | null = null;
+  /** Per-particle pointer-drag state, weights and the force they command. */
+  private readonly grab = new ClothGrab();
   /** Setup input, kept so material edits can rebuild constraints without touching geometry. */
   private simInput: ClothSimInput | null = null;
   /** Per-panel material physics behind the live constraint buffers. */
@@ -169,8 +169,7 @@ export class ClothSimulator {
       input, this.panelPhysics, pc, this.panelPhysics[0]?.damping ?? 0.02));
     this.thicknessByParticle = computeParticleThickness(input, pc, clothThicknessMeters(config));
     this.thicknessBuf = createStorageBuffer(dev, this.thicknessByParticle);
-    this.grabWeights = new Float32Array(pc);
-    this.grabWeightBuf = createStorageBuffer(dev, this.grabWeights);
+    this.grabWeightBuf = createStorageBuffer(dev, this.grab.setMasses(computeParticleMass(input, this.panelPhysics, pc)));
 
     this.pinnedSet = new Set(input.pinnedIndices ?? []);
     this.colliderMesh = avatarCollider?.mesh ?? null;
@@ -513,6 +512,8 @@ export class ClothSimulator {
     const pc = this.particleCount;
     const substeps = Math.max(1, Math.round(config.substeps || 1));
     const subDt = config.dt / substeps;
+    this.grab.setSubsteps(substeps);
+    const grabStep = this.grab.stepUniform();
     const frameStart = this.time;
     this.time += config.dt;
     this.applySelfCollisionConfig(config);
@@ -530,7 +531,7 @@ export class ClothSimulator {
       const subTime = frameStart + (sub + 1) * subDt;
       const encoder = dev.createCommandEncoder();
 
-      dev.queue.writeBuffer(this.integrateParamsBuf, 0, packIntegrateParams(subConfig, fabric, pc, subTime, this.grabTarget));
+      dev.queue.writeBuffer(this.integrateParamsBuf, 0, packIntegrateParams(subConfig, fabric, pc, subTime, grabStep));
       dev.queue.writeBuffer(this.updateParamsBuf, 0, packUpdateParams(subConfig, pc));
 
       // Predict positions from velocity, gravity and wind
@@ -636,6 +637,7 @@ export class ClothSimulator {
     if (!inPlace) for (const [kind, constraints] of sets) this.installGroup(kind, constraints);
 
     this.baseInvMass = computeBaseInvMass(input, this.panelPhysics, input.particleCount);
+    this.grab.setMasses(computeParticleMass(input, this.panelPhysics, input.particleCount));
     this.device.queue.writeBuffer(this.dampingBuf, 0, computeParticleDamping(
       input, this.panelPhysics, input.particleCount, this.panelPhysics[0]?.damping ?? 0.02));
     this.syncInvMassMirror();
@@ -757,6 +759,7 @@ export class ClothSimulator {
     this.panelPhysics = input.panels.map(p => p.physics);
     this.panelMap = computeParticlePanelMap(input);
     this.baseInvMass = computeBaseInvMass(input, this.panelPhysics, pc);
+    this.grab.setMasses(computeParticleMass(input, this.panelPhysics, pc));
     this.layerByParticle = computeParticleLayers(input, pc);
     this.uploadIndices(input.indices);
     this.rebuildNormalTopology(input);
@@ -877,28 +880,24 @@ export class ClothSimulator {
   }
 
   /**
-   * Grabs the fabric: `weights` holds one pull weight per particle (0 outside the grabbed
-   * region), and every following step moves those particles that fraction of the way toward
-   * `target`. Weights stay with the particles, so the grab follows the fabric as it moves.
+   * Grabs the fabric with one pull weight per particle; pointer travel from `target` becomes a
+   * per-substep displacement shared out by weight, and the weights travel with the particles.
+   * Pinned particles are dropped so the patch mass only covers what can actually move.
    */
   setGrab(weights: Float32Array, target: readonly [number, number, number]): boolean {
-    if (!this.initialized || weights.length !== this.particleCount) return false;
-    this.grabWeights.set(weights);
-    this.device.queue.writeBuffer(this.grabWeightBuf, 0, this.grabWeights);
-    this.grabTarget = [target[0], target[1], target[2]];
+    if (!this.initialized || !this.grab.set(usableGrabWeights(weights, this.pinnedSet), target)) return false;
+    this.device.queue.writeBuffer(this.grabWeightBuf, 0, this.grab.weightData);
     return true;
   }
 
   /** Moves the point the grabbed fabric is pulled toward. Ignored when nothing is grabbed. */
-  moveGrab(target: readonly [number, number, number]): void {
-    if (!this.grabTarget) return;
-    this.grabTarget = [target[0], target[1], target[2]];
-  }
+  moveGrab(target: readonly [number, number, number]): void { this.grab.move(target); }
+
+  /** Pull force the grabbed patch commands, in newtons; null while the cloth is not grabbed. */
+  grabForceN(): number | null { return this.grab.forceN(); }
 
   /** Releases the grab; the particles keep the velocity the pull gave them. */
-  clearGrab(): void {
-    this.grabTarget = null;
-  }
+  clearGrab(): void { this.grab.clear(); }
 
   /** Pins or unpins one particle at runtime. False when the solver rejects the index. */
   async setParticlePin(particleIndex: number, pinned: boolean): Promise<boolean> {

@@ -3,19 +3,19 @@ import { packCollideParams, packIntegrateParams } from '@/sim/simUniforms';
 import { FABRIC_PHYSICS_PRESETS, createDefaultProject } from '@/model/defaults';
 
 /** Uniforms of one integrate dispatch over 64 particles. */
-function packed(grabTarget: readonly [number, number, number] | null): Float32Array {
+function packed(grabStep: readonly [number, number, number, number] | null): Float32Array {
   return packIntegrateParams(
-    createDefaultProject().scene.simulation, FABRIC_PHYSICS_PRESETS.cotton, 64, 0.5, grabTarget,
+    createDefaultProject().scene.simulation, FABRIC_PHYSICS_PRESETS.cotton, 64, 0.5, grabStep,
   );
 }
 
 describe('integrate params', () => {
-  it('carries the drag target only while the cloth is being pulled', () => {
+  it('carries the grab step and its flag only while the cloth is pulled', () => {
     const idle = packed(null);
     expect(idle.length).toBe(20);
     expect(Array.from(idle.slice(16))).toEqual([0, 0, 0, 0]);
 
-    const data = packed([0.4, 0.5, 0.6]);
+    const data = packed([0.4, 0.5, 0.6, 1]);
     expect(data[16]).toBeCloseTo(0.4, 5);
     expect(data[17]).toBeCloseTo(0.5, 5);
     expect(data[18]).toBeCloseTo(0.6, 5);
@@ -23,7 +23,7 @@ describe('integrate params', () => {
   });
 
   it('keeps the fields before the drag block in their packed slots', () => {
-    const data = packed([1, 1, 1]);
+    const data = packed([1, 1, 1, 1]);
     const config = createDefaultProject().scene.simulation;
     expect(data[0]).toBeCloseTo(config.dt, 6);
     expect(new Uint32Array(data.buffer)[1]).toBe(64);

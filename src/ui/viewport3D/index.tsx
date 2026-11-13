@@ -237,6 +237,7 @@ export function Viewport3D({ onEngineReady }: Viewport3DProps) {
       />
       <TransformGizmoOverlay state={gizmo} />
       {dropActive && dropPoint && <DropMarker point={dropPoint} />}
+      <DragForceBadge />
       {isMobileUi() && gizmo.layout && <TransformModeSwitch />}
       {sessionReady && <AxisIndicator viewportRef={viewportRef} engineRef={engineRef} />}
       <ViewportHint right={isMobileUi() ? MOBILE_HINT_RIGHT : 8}>{statusHint(layout, activeTool)}</ViewportHint>
@@ -264,6 +265,23 @@ export function Viewport3D({ onEngineReady }: Viewport3DProps) {
           borderRadius: 4, fontSize: 'var(--oc-fs-body)', pointerEvents: 'none',
         }}>{renderError}</div>
       )}
+    </div>
+  );
+}
+
+/** Pull force of the held cloth, drawn above the head of its arrow. */
+function DragForceBadge() {
+  const readout = useUIStore(s => s.dragForce3d);
+  if (!readout) return null;
+  return (
+    <div style={{
+      position: 'absolute', left: readout.x, top: readout.y - 12,
+      transform: 'translate(-50%, -100%)',
+      color: '#eaf7ff', fontSize: 'var(--oc-fs-micro)', fontWeight: 600,
+      textShadow: '0 0 3px rgba(0, 0, 0, 0.9), 0 1px 2px rgba(0, 0, 0, 0.9)',
+      pointerEvents: 'none', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums',
+    }}>
+      {readout.forceN.toFixed(2)} N
     </div>
   );
 }

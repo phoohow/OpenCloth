@@ -14,6 +14,9 @@ export interface Constraint {
 /** Fabric weight (g/m²) used when a panel has no material record. */
 const FABRIC_DEFAULT_MASS_PER_AREA = 180;
 
+/** Area a particle outside every panel stands for, in square meters. */
+const NOMINAL_PARTICLE_AREA_M2 = 1e-4;
+
 /** Merged geometry and constraints of all pattern pieces handed to the GPU solver. */
 export interface ClothSimInput {
   /**
@@ -112,6 +115,52 @@ export function computeParticleDamping(
     for (let i = panel.vertexOffset; i < end; i++) out[i] = value;
   });
   return out;
+}
+
+/**
+ * Per-particle mass in kilograms: each panel's areal weight spread over its own mesh area, so a
+ * grabbed patch can turn an acceleration into a force. Particles outside every panel take the
+ * default weight over a nominal 1 cm² patch.
+ */
+export function computeParticleMass(
+  input: ClothSimInput,
+  physics: FabricPhysics[],
+  particleCount: number,
+): Float32Array<ArrayBuffer> {
+  const out = new Float32Array(particleCount).fill(
+    (FABRIC_DEFAULT_MASS_PER_AREA / 1000) * NOMINAL_PARTICLE_AREA_M2,
+  );
+  input.panels.forEach((panel, slot) => {
+    const kgPerM2 = Math.max(physics[slot]?.massPerArea ?? FABRIC_DEFAULT_MASS_PER_AREA, 1) / 1000;
+    const shares = vertexAreas(panel.mesh);
+    const end = Math.min(panel.vertexOffset + panel.mesh.vertexCount, particleCount);
+    for (let i = panel.vertexOffset; i < end; i++) {
+      out[i] = kgPerM2 * shares[i - panel.vertexOffset]!;
+    }
+  });
+  return out;
+}
+
+/** Area each vertex of a flat panel mesh stands for, in square meters; the mesh is in centimetres. */
+function vertexAreas(mesh: TriangleMesh): Float32Array {
+  const areas = new Float32Array(mesh.vertexCount);
+  const { positions, indices } = mesh;
+  for (let t = 0; t + 2 < indices.length; t += 3) {
+    const a = indices[t]!;
+    const b = indices[t + 1]!;
+    const c = indices[t + 2]!;
+    const ax = positions[a * 2]!;
+    const ay = positions[a * 2 + 1]!;
+    const bx = positions[b * 2]!;
+    const by = positions[b * 2 + 1]!;
+    const cx = positions[c * 2]!;
+    const cy = positions[c * 2 + 1]!;
+    const third = Math.abs((bx - ax) * (cy - ay) - (cx - ax) * (by - ay)) / 6 * 1e-4;
+    areas[a] += third;
+    areas[b] += third;
+    areas[c] += third;
+  }
+  return areas;
 }
 
 /** Per-particle collision clearance in meters from each panel record. */

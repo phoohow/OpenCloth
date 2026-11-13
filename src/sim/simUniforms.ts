@@ -13,13 +13,13 @@ export const SURFACE_OFFSET = 0.008;
 /** Tangential pull toward the previous frame position on contact, used when a fabric sets none. */
 const DEFAULT_CONTACT_FRICTION = 0.5;
 
-/** INTEGRATE SimParams block: 80 bytes; the drag target only counts while its w flag is 1. */
+/** INTEGRATE SimParams block: 80 bytes; the drag block counts while its flag is 1. */
 export function packIntegrateParams(
   config: SimulationConfig,
   fabric: FabricPhysics,
   particleCount: number,
   time: number,
-  grabTarget: readonly [number, number, number] | null,
+  grabStep: readonly [number, number, number, number] | null,
 ): Float32Array<ArrayBuffer> {
   const data = new Float32Array(20);
   const u32 = new Uint32Array(data.buffer);
@@ -35,11 +35,11 @@ export function packIntegrateParams(
   data[12] = fabric.damping;
   data[13] = time;
   data[14] = MAX_SPEED;
-  if (grabTarget) {
-    data[16] = grabTarget[0];
-    data[17] = grabTarget[1];
-    data[18] = grabTarget[2];
-    data[19] = 1;
+  if (grabStep) {
+    data[16] = grabStep[0];
+    data[17] = grabStep[1];
+    data[18] = grabStep[2];
+    data[19] = grabStep[3];
   }
   return data;
 }

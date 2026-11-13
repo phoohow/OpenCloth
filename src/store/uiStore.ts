@@ -17,6 +17,15 @@ export interface MeasureReadout {
   distanceCm: number | null;
 }
 
+/** Pull force of an in-flight 3D cloth drag, drawn above its arrow. */
+export interface DragForceReadout {
+  /** Arrow head position inside the 3D pane, in CSS pixels. */
+  x: number;
+  y: number;
+  /** Pull force the grabbed patch commands, in newtons. */
+  forceN: number;
+}
+
 import type { AssetTab, PaneId, PropTab, ViewLayout } from '@/store/types';
 
 export type { AssetTab, PaneId, PropTab, ViewLayout } from '@/store/types';
@@ -172,6 +181,8 @@ interface UIStore {
   lastAutosaveAt: string | null;
   /** Pending 3D measurement reading; null when no measurement is armed. */
   measure3d: MeasureReadout | null;
+  /** Pull force of an in-flight 3D cloth drag; null when nothing is held. */
+  dragForce3d: DragForceReadout | null;
   /** Transient message over the viewports; null when none is shown. */
   toast: ToastMessage | null;
   setLayout: (v: ViewLayout) => void;
@@ -221,6 +232,7 @@ interface UIStore {
   togglePerfPanel: () => void;
   setAutoSaveSeconds: (s: number) => void;
   setMeasure3d: (r: MeasureReadout | null) => void;
+  setDragForce3d: (r: DragForceReadout | null) => void;
   setLastAutosaveAt: (at: string | null) => void;
   showToast: (text: string) => void;
   dismissToast: () => void;
@@ -282,6 +294,7 @@ export const useUIStore = create<UIStore>((set, get) => ({
   lastAutosaveAt: null,
   toast: null,
   measure3d: null,
+  dragForce3d: null,
 
   setLayout: (v) => set({ layout: v }),
   setSplitRatio: (r) => set({ splitRatio: r }),
@@ -372,6 +385,7 @@ export const useUIStore = create<UIStore>((set, get) => ({
   togglePerfPanel: () => set(s => ({ showPerfPanel: !s.showPerfPanel })),
   setAutoSaveSeconds: (s) => set({ autoSaveSeconds: s }),
   setMeasure3d: (r) => set({ measure3d: r }),
+  setDragForce3d: (r) => set({ dragForce3d: r }),
   setLastAutosaveAt: (at) => set({ lastAutosaveAt: at }),
   showToast: (text) => set({ toast: { id: ++toastSeq, text } }),
   dismissToast: () => set({ toast: null }),

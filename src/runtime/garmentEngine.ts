@@ -604,6 +604,21 @@ export class GarmentEngine {
     this.interactionView.moveDrag(ndcX, ndcY);
   }
 
+  /** Reads the current pull force of a pointer drag, in newtons; null when no cloth is held. */
+  clothDragForce(): number | null {
+    return this.interactionView.dragForceN();
+  }
+
+  /** True while a pointer holds the cloth. */
+  isClothDragging(): boolean {
+    return this.interactionView.dragging;
+  }
+
+  /** Screen position of the pull arrow head in NDC; null while no arrow is shown. */
+  clothDragArrowHeadNdc(): { x: number; y: number } | null {
+    return this.interactionView.dragArrowHeadNdc();
+  }
+
   /** Releases the pointer drag; the cloth keeps the velocity the pull gave it. */
   endClothDrag(): void {
     this.interactionView.endDrag();
