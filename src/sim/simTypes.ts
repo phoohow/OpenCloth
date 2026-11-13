@@ -17,6 +17,9 @@ const FABRIC_DEFAULT_MASS_PER_AREA = 180;
 /** Area a particle outside every panel stands for, in square meters. */
 const NOMINAL_PARTICLE_AREA_M2 = 1e-4;
 
+/** Mass the nominal patch and degenerate panel vertices get, in kilograms. */
+const NOMINAL_PARTICLE_MASS_KG = (FABRIC_DEFAULT_MASS_PER_AREA / 1000) * NOMINAL_PARTICLE_AREA_M2;
+
 /** Merged geometry and constraints of all pattern pieces handed to the GPU solver. */
 export interface ClothSimInput {
   /**
@@ -36,7 +39,7 @@ export interface ClothSimInput {
     positions3D: Float32Array;
     /** Flat-pattern positions the piece's rest lengths were measured from, in meters. */
     restPositions: Float32Array;
-    /** Material physics of the piece; its stiffness and weight shape its own constraints. */
+    /** Material physics of the piece; stiffness shapes its constraints and areal weight its mass. */
     physics: FabricPhysics;
     /** Collision layer of the piece, 0 is the innermost. */
     collisionLayer?: number;
@@ -83,21 +86,21 @@ export interface ConstraintGroup {
 }
 
 /**
- * Per-particle inverse mass from each panel's fabric weight; particles outside every
- * panel keep the mid-weight default so they never read as pinned.
+ * Per-particle inverse mass in kg⁻¹ from the physical panel mass; particles outside every panel
+ * keep the nominal patch mass. The solver integrates accelerations, so this is the only inertia
+ * the cloth has.
  */
 export function computeBaseInvMass(
   input: ClothSimInput,
   physics: FabricPhysics[],
   particleCount: number,
 ): Float32Array {
-  const toInvMass = (massPerArea: number): number => 1.0 / Math.max(massPerArea, 1) * 100;
-  const out = new Float32Array(particleCount).fill(toInvMass(FABRIC_DEFAULT_MASS_PER_AREA));
-  input.panels.forEach((panel, slot) => {
-    const invMass = toInvMass(physics[slot]?.massPerArea ?? FABRIC_DEFAULT_MASS_PER_AREA);
-    const end = panel.vertexOffset + panel.mesh.vertexCount;
-    for (let i = panel.vertexOffset; i < end && i < particleCount; i++) out[i] = invMass;
-  });
+  const mass = computeParticleMass(input, physics, particleCount);
+  const out = new Float32Array(particleCount);
+  for (let i = 0; i < particleCount; i++) {
+    const value = mass[i]!;
+    out[i] = 1 / (value > 0 ? value : NOMINAL_PARTICLE_MASS_KG);
+  }
   return out;
 }
 
@@ -118,18 +121,16 @@ export function computeParticleDamping(
 }
 
 /**
- * Per-particle mass in kilograms: each panel's areal weight spread over its own mesh area, so a
- * grabbed patch can turn an acceleration into a force. Particles outside every panel take the
- * default weight over a nominal 1 cm² patch.
+ * Per-particle mass in kilograms: each panel's areal weight spread over its own mesh area. This is
+ * the inertia the solver integrates and the mass the drag force acts on; particles outside every
+ * panel take the default weight over a nominal 1 cm² patch.
  */
 export function computeParticleMass(
   input: ClothSimInput,
   physics: FabricPhysics[],
   particleCount: number,
 ): Float32Array<ArrayBuffer> {
-  const out = new Float32Array(particleCount).fill(
-    (FABRIC_DEFAULT_MASS_PER_AREA / 1000) * NOMINAL_PARTICLE_AREA_M2,
-  );
+  const out = new Float32Array(particleCount).fill(NOMINAL_PARTICLE_MASS_KG);
   input.panels.forEach((panel, slot) => {
     const kgPerM2 = Math.max(physics[slot]?.massPerArea ?? FABRIC_DEFAULT_MASS_PER_AREA, 1) / 1000;
     const shares = vertexAreas(panel.mesh);
@@ -139,6 +140,24 @@ export function computeParticleMass(
     }
   });
   return out;
+}
+
+/** Mean rest area one particle of a panel mesh stands for, in square meters. */
+export function meanParticleAreaM2(mesh: TriangleMesh): number {
+  if (mesh.vertexCount <= 0) return NOMINAL_PARTICLE_AREA_M2;
+  const shares = vertexAreas(mesh);
+  let total = 0;
+  for (let i = 0; i < shares.length; i++) total += shares[i]!;
+  return total / mesh.vertexCount;
+}
+
+/**
+ * Factor from the mass unit the compliance presets are tuned against to the physical per-particle
+ * mass. XPBD's alpha term has to grow with the inverse-mass sum, so it scales by
+ * oldMass / newMass. The fabric weight cancels, leaving 10 / mean vertex area in square meters.
+ */
+export function complianceMassScale(mesh: TriangleMesh): number {
+  return 10 / Math.max(meanParticleAreaM2(mesh), 1e-12);
 }
 
 /** Area each vertex of a flat panel mesh stands for, in square meters; the mesh is in centimetres. */

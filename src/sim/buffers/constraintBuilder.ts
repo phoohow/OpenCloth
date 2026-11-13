@@ -41,6 +41,7 @@ export function creaseConstraintsForEdges(
   creaseEdges: readonly number[],
   fabric: FabricPhysics,
   dt: number,
+  massScale: number,
 ): Constraint[] {
   const wanted = new Set<string>();
   for (let i = 0; i + 1 < creaseEdges.length; i += 2) {
@@ -62,7 +63,7 @@ export function creaseConstraintsForEdges(
     }
   }
 
-  const compliance = stiffnessToCompliance(creaseStiffnessOf(fabric), dt);
+  const compliance = stiffnessToCompliance(creaseStiffnessOf(fabric), dt, massScale);
   const getPos = (i: number): [number, number, number] =>
     [positions[i * 3]!, positions[i * 3 + 1]!, positions[i * 3 + 2]!];
   const creased = new Set<string>();
@@ -88,11 +89,12 @@ export function creaseConstraintsForEdges(
 /**
  * Maps stiffness to the XPBD compliance the SOLVE shader uses as alpha, normalised to a fixed
  * 60 Hz frame step so substepping cannot change it; `s = 1` is rigid, `s = 0` is free.
+ * `massScale` carries the presets' mass unit over to the physical particle mass.
  */
-function stiffnessToCompliance(stiffness: number, frameDt: number): number {
+function stiffnessToCompliance(stiffness: number, frameDt: number, massScale: number): number {
   const s = Math.min(1, Math.max(0, stiffness));
   const softness = 1e-3 + (1 - s) * (1 - s) * 2;
-  return softness / (frameDt * frameDt * 60 * 60);
+  return softness / (frameDt * frameDt * 60 * 60) * massScale;
 }
 
 /**
@@ -104,14 +106,15 @@ export function buildMeshConstraints(
   mesh: TriangleMesh,
   fabric: FabricPhysics,
   dt: number,
+  massScale: number,
 ): Pick<ConstraintSet, 'structural' | 'shear' | 'bending'> {
   const structural: Constraint[] = [];
   const shear: Constraint[] = [];
   const bending: Constraint[] = [];
 
-  const structuralCompliance = stiffnessToCompliance(fabric.stretchStiffness, dt);
-  const shearCompliance = stiffnessToCompliance(fabric.shearStiffness, dt);
-  const bendingCompliance = stiffnessToCompliance(fabric.bendingStiffness, dt);
+  const structuralCompliance = stiffnessToCompliance(fabric.stretchStiffness, dt, massScale);
+  const shearCompliance = stiffnessToCompliance(fabric.shearStiffness, dt, massScale);
+  const bendingCompliance = stiffnessToCompliance(fabric.bendingStiffness, dt, massScale);
 
   const getPos = (i: number): [number, number, number] =>
     [positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]];

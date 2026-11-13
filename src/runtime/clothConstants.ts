@@ -25,9 +25,6 @@ export const PREVIEW_COARSE_RESOLUTION_CM = 6;
 /** World radius around the grabbed particle a pointer drag pulls, in meters. */
 export const DRAG_GRAB_RADIUS_M = 0.03;
 
-/** Pull weight at the grabbed point, fading linearly to 0 at the grab radius. */
-export const DRAG_GRAB_STRENGTH = 0.35;
-
 /** Distance from the grabbed point a drag target is clamped to, in meters. */
 export const DRAG_MAX_REACH_M = 1;
 

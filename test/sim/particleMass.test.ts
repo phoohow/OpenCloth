@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { computeParticleMass, type ClothSimInput } from '@/sim/simTypes';
+import {
+  complianceMassScale, computeBaseInvMass, computeParticleMass, meanParticleAreaM2,
+  type ClothSimInput,
+} from '@/sim/simTypes';
+import { buildMeshConstraints } from '@/sim/buffers/constraintBuilder';
 import { FABRIC_PHYSICS_PRESETS } from '@/model/defaults';
 
 /** One square metre split into two triangles, carrying its own areal weight. */
@@ -46,5 +50,30 @@ describe('computeParticleMass', () => {
     const input = squareInput(100, 1);
     const mass = computeParticleMass(input, input.panels.map(panel => panel.physics), 5);
     expect(mass[4]).toBeCloseTo(0.18 * 1e-4, 10);
+  });
+
+  it('turns the physical mass into inverse mass in kg^-1', () => {
+    const input = squareInput(100);
+    const inverse = computeBaseInvMass(input, input.panels.map(panel => panel.physics), 4);
+    expect(inverse[0]).toBeCloseTo(30, 5);
+    expect(inverse[1]).toBeCloseTo(60, 5);
+    expect(inverse[2]).toBeCloseTo(30, 5);
+    expect(inverse[3]).toBeCloseTo(60, 5);
+  });
+});
+
+describe('compliance mass scale', () => {
+  it('carries the preset mass unit over to the physical particle mass', () => {
+    const input = squareInput(180);
+    const mesh = input.panels[0]!.mesh;
+    // One square metre shared by four vertices.
+    expect(meanParticleAreaM2(mesh)).toBeCloseTo(0.25, 5);
+    expect(complianceMassScale(mesh)).toBeCloseTo(40, 5);
+
+    const built = buildMeshConstraints(
+      input.panels[0]!.positions3D, mesh, input.panels[0]!.physics, 1 / 60, 40,
+    );
+    // Cotton stretch stiffness 0.9 gives softness 0.021 at a 60 Hz step.
+    expect(built.structural[0]!.compliance).toBeCloseTo(0.021 * 40, 8);
   });
 });

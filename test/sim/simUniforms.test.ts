@@ -3,14 +3,14 @@ import { packCollideParams, packIntegrateParams } from '@/sim/simUniforms';
 import { FABRIC_PHYSICS_PRESETS, createDefaultProject } from '@/model/defaults';
 
 /** Uniforms of one integrate dispatch over 64 particles. */
-function packed(grabStep: readonly [number, number, number, number] | null): Float32Array {
+function packed(grabForce: readonly [number, number, number, number] | null): Float32Array {
   return packIntegrateParams(
-    createDefaultProject().scene.simulation, FABRIC_PHYSICS_PRESETS.cotton, 64, 0.5, grabStep,
+    createDefaultProject().scene.simulation, FABRIC_PHYSICS_PRESETS.cotton, 64, 0.5, grabForce,
   );
 }
 
 describe('integrate params', () => {
-  it('carries the grab step and its flag only while the cloth is pulled', () => {
+  it('carries the grab force and its flag only while the cloth is pulled', () => {
     const idle = packed(null);
     expect(idle.length).toBe(20);
     expect(Array.from(idle.slice(16))).toEqual([0, 0, 0, 0]);

@@ -18,7 +18,7 @@ import { bodyOccludesSegment } from '@/runtime/bodyOcclusion';
 import { pinsByScreenDistance } from '@/runtime/pinHover';
 import { grabWeightsAround } from '@/runtime/clothDrag';
 import {
-  DRAG_GRAB_RADIUS_M, DRAG_GRAB_STRENGTH, DRAG_MAX_REACH_M, PIN_HOVER_RADIUS_PX,
+  DRAG_GRAB_RADIUS_M, DRAG_MAX_REACH_M, PIN_HOVER_RADIUS_PX,
 } from '@/runtime/clothConstants';
 
 /** A cloth surface point resolved to its panel's flat pattern coordinates. */
@@ -214,7 +214,7 @@ export class InteractionView {
       y: positions[hit.index * 3 + 1]!,
       z: positions[hit.index * 3 + 2]!,
     };
-    const weights = grabWeightsAround(positions, center, DRAG_GRAB_RADIUS_M, DRAG_GRAB_STRENGTH);
+    const weights = grabWeightsAround(positions, center, DRAG_GRAB_RADIUS_M);
     if (!simulator.setGrab(weights, [center.x, center.y, center.z])) return false;
     this.drag = { center, normal: ray.direction };
     this.marker.show(hit.index, positions, this.deps.host, this.deps.camera.snapshot());
@@ -247,7 +247,7 @@ export class InteractionView {
     this.deps.simulator()?.clearGrab();
   }
 
-  /** Current pull force in newtons, quoted at the drag's reference solver step; null when idle. */
+  /** Current pull force the grab applies, in newtons; null when idle. */
   dragForceN(): number | null {
     return this.deps.simulator()?.grabForceN() ?? null;
   }

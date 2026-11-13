@@ -22,7 +22,7 @@ export interface DragForceReadout {
   /** Arrow head position inside the 3D pane, in CSS pixels. */
   x: number;
   y: number;
-  /** Pull force the grabbed patch commands, in newtons. */
+  /** Pull force the grab applies, in newtons. */
   forceN: number;
 }
 

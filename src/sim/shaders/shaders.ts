@@ -12,8 +12,8 @@ struct SimParams {
   time: f32,
   maxSpeed: f32,
   _p1: f32,
-  // Pointer drag: xyz = displacement per substep for a fully weighted particle, w = 1 while dragging.
-  grabStep: vec4<f32>,
+  // Pointer drag: xyz = force per unit grab weight in newtons, w = 1 while dragging.
+  grabForce: vec4<f32>,
 };
 
 @group(0) @binding(0) var<storage, read_write> posInvMass: array<vec4<f32>>;
@@ -46,16 +46,16 @@ fn integrate(@builtin(global_invocation_id) gid: vec3<u32>) {
   let windPhase = sin(params.time * 2.0 + f32(i) * 0.013);
   accel = accel + params.windDir * params.windSpeed * (1.0 + 0.3 * windPhase);
 
+  // Pointer drag: each particle takes force * weight / mass as an acceleration, so the pull
+  // spreads through the constraint network and the patch receives exactly the reported force.
+  let weight = grabWeight[i];
+  if (params.grabForce.w > 0.0 && weight > 0.0) {
+    accel = accel + params.grabForce.xyz * (weight * invMass);
+  }
+
   let dt = params.dt;
   // Predicted position: x_pred = x + v*dt + a*dt^2.
   var pred = pos.xyz + vel.xyz * dt + accel * dt * dt;
-
-  // Pointer drag: the command is shared out by grab weight, so the pull spreads through the
-  // constraint network. The CPU bounds the distance one substep may cover.
-  let weight = grabWeight[i];
-  if (params.grabStep.w > 0.0 && weight > 0.0) {
-    pred = pred + params.grabStep.xyz * weight;
-  }
 
   predicted[i] = vec4<f32>(pred, 0.0);
 }

@@ -3,7 +3,7 @@ import {
   buildMeshConstraints, colorConstraints, creaseConstraintsForEdges, packConstraints,
   type Constraint,
 } from '@/sim/buffers/constraintBuilder';
-import type { BatchedConstraints, ClothSimInput } from '@/sim/simTypes';
+import { complianceMassScale, type BatchedConstraints, type ClothSimInput } from '@/sim/simTypes';
 
 /** Structural, shear, crease and bending constraints of every panel, each with its own material stiffness. */
 export function buildPanelConstraints(
@@ -17,8 +17,10 @@ export function buildPanelConstraints(
   const crease: Constraint[] = [];
 
   input.panels.forEach((panel, slot) => {
+    // Compliance is tuned against the presets' mass unit; carry it to the physical particle mass.
+    const massScale = complianceMassScale(panel.mesh);
     // Rest lengths come from the 3D conformed positions.
-    const meshConstraints = buildMeshConstraints(panel.positions3D, panel.mesh, physics[slot], dt);
+    const meshConstraints = buildMeshConstraints(panel.positions3D, panel.mesh, physics[slot], dt, massScale);
     const offset = (arr: Constraint[]) => arr.map(c => ({
       ...c, p0: c.p0 + panel.vertexOffset, p1: c.p1 + panel.vertexOffset,
     }));
@@ -26,7 +28,7 @@ export function buildPanelConstraints(
     shear.push(...offset(meshConstraints.shear));
     bending.push(...offset(meshConstraints.bending));
     crease.push(...offset(creaseConstraintsForEdges(
-      panel.positions3D, panel.mesh, panel.creaseEdges ?? [], physics[slot], dt,
+      panel.positions3D, panel.mesh, panel.creaseEdges ?? [], physics[slot], dt, massScale,
     )));
   });
   return { structural, shear, bending, crease };
@@ -40,7 +42,10 @@ export function buildCreaseConstraints(
 ): Constraint[] {
   const crease: Constraint[] = [];
   input.panels.forEach((panel, slot) => {
-    const local = creaseConstraintsForEdges(panel.positions3D, panel.mesh, panel.creaseEdges ?? [], physics[slot], dt);
+    const massScale = complianceMassScale(panel.mesh);
+    const local = creaseConstraintsForEdges(
+      panel.positions3D, panel.mesh, panel.creaseEdges ?? [], physics[slot], dt, massScale,
+    );
     for (const c of local) crease.push({ ...c, p0: c.p0 + panel.vertexOffset, p1: c.p1 + panel.vertexOffset });
   });
   return crease;

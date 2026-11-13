@@ -9,7 +9,7 @@ import { ParticleLayout, type PanelSlice } from '@/runtime/particleLayout';
 import { fabricForPanel } from '@/model';
 import { panelCollisionLayer, panelThicknessCm } from '@/model';
 import { collapseSeamPairs, drapeReversesWinding, type VertexRef } from '@/pattern/drape';
-import { seamBreakStretch } from '@/sim';
+import { complianceMassScale, seamBreakStretch } from '@/sim';
 import { FALLBACK_PHYSICS } from '@/runtime/clothConstants';
 import { flatRestPositions, initialPositions3D, posedPositions3D, type BodyLandmarkCache } from '@/runtime/initialPose';
 
@@ -233,7 +233,12 @@ export class ClothAssembly {
       const restOf = seam.type === 'gather' && seam.gatherRatio
         ? (gap: number): number => gap * seam.gatherRatio!
         : (gap: number): number => gap;
-      const compliance = 1.0 / (Math.max(seam.strength, 0.01) * 3600);
+      // Compliance is tuned against the presets' mass unit; both sides carry it to physical masses.
+      const meshA = panelMeshes.get(a.panelId);
+      const meshB = panelMeshes.get(b.panelId);
+      const massScale = ((meshA ? complianceMassScale(toTriangleMesh(meshA)) : 1)
+        + (meshB ? complianceMassScale(toTriangleMesh(meshB)) : 1)) / 2;
+      const compliance = massScale / (Math.max(seam.strength, 0.01) * 3600);
       const tearFactor = seamBreakStretch(seam.strength);
       for (const [secA, secB] of sections) {
         this.stitchRun(secA, secB, offA, offB, restOf, compliance, seam.id, undefined, tearFactor, constraints);
@@ -251,8 +256,9 @@ export class ClothAssembly {
         const [legA, legB] = dartLegRuns(pattern, dart, toTriangleMesh(panelMesh));
         if (legA.length === 0 || legB.length === 0) continue;
         // The legs meet at the tip, so reversing one run pairs base to base and tip to tip.
+        const massScale = complianceMassScale(toTriangleMesh(panelMesh));
         this.stitchRun(legA, [...legB].reverse(), off, off, () => 0,
-          1.0 / (DART_STITCH_STRENGTH * 3600), dartId, dartId, undefined, constraints);
+          massScale / (DART_STITCH_STRENGTH * 3600), dartId, dartId, undefined, constraints);
       }
     }
     return constraints;

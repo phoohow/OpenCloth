@@ -19,7 +19,7 @@ export function packIntegrateParams(
   fabric: FabricPhysics,
   particleCount: number,
   time: number,
-  grabStep: readonly [number, number, number, number] | null,
+  grabForce: readonly [number, number, number, number] | null,
 ): Float32Array<ArrayBuffer> {
   const data = new Float32Array(20);
   const u32 = new Uint32Array(data.buffer);
@@ -35,11 +35,11 @@ export function packIntegrateParams(
   data[12] = fabric.damping;
   data[13] = time;
   data[14] = MAX_SPEED;
-  if (grabStep) {
-    data[16] = grabStep[0];
-    data[17] = grabStep[1];
-    data[18] = grabStep[2];
-    data[19] = grabStep[3];
+  if (grabForce) {
+    data[16] = grabForce[0];
+    data[17] = grabForce[1];
+    data[18] = grabForce[2];
+    data[19] = grabForce[3];
   }
   return data;
 }

@@ -1,24 +1,11 @@
-/** Pointer grab state: per-particle weights, patch mass and the pull a pointer commands. */
+/** Pointer grab state: per-particle weights and the force a pointer commands. */
 
-/**
- * Solver step the reported pull is quoted at, in seconds: the default 60 Hz frame split into four
- * substeps. Fixed so the reading describes the drag rather than the project's timestep.
- */
-const GRAB_REFERENCE_STEP_S = 1 / 240;
+/** Pull stiffness: newtons the grab commands per metre of pointer travel. */
+const GRAB_STIFFNESS_N_PER_M = 3.4;
+/** Upper bound on the pull, in newtons, so a target beyond the reach stays bounded. */
+const MAX_GRAB_FORCE_N = 4;
 
-/**
- * Substep count the pull is calibrated at: the default project's simulation setting. The command
- * is split over the live count, so a solver refinement does not change how strongly the drag pulls.
- */
-const GRAB_REFERENCE_SUBSTEPS = 4;
-
-/**
- * Longest distance a fully weighted grabbed particle travels in one substep, in meters. The force
- * reading uses the same cap, so the number and the command saturate together.
- */
-const MAX_GRAB_STEP_M = 0.4;
-
-/** Copies grab weights with pinned particles zeroed; a pin cannot move, so it carries no pull. */
+/** Copies grab weights with pinned particles zeroed; a pin cannot move, so it carries no force. */
 export function usableGrabWeights(weights: Float32Array, pinned: Iterable<number>): Float32Array {
   const out = weights.slice();
   for (const index of pinned) {
@@ -28,33 +15,21 @@ export function usableGrabWeights(weights: Float32Array, pinned: Iterable<number
 }
 
 /**
- * Per-particle pull weights plus the patch mass they cover. Pointer travel from the grab anchor
- * becomes a per-substep displacement, which INTEGRATE shares out by weight so the pull travels
- * through the constraint network; the patch mass turns the same command into a force reading.
+ * Per-particle pull weights plus the total force they share. Pointer travel from the grab anchor
+ * becomes a force, which INTEGRATE turns into `force * weight / mass` accelerations, so the pull
+ * travels through the constraint network and the reported number is the force actually applied.
  */
 export class ClothGrab {
-  private masses: Float32Array<ArrayBuffer> = new Float32Array(0);
   private weights: Float32Array<ArrayBuffer> = new Float32Array(0);
+  private weightSum = 0;
   private anchor: [number, number, number] | null = null;
   private target: [number, number, number] | null = null;
-  private inverseMass = 0;
-  private maxWeight = 0;
-  private substeps = GRAB_REFERENCE_SUBSTEPS;
 
-  /** Sets the substep count the frame command is split over. */
-  setSubsteps(substeps: number): void {
-    this.substeps = Math.max(1, Math.round(substeps));
-  }
-
-  /** Adopts new particle masses; keeps the live pull while the particle count stays the same. */
-  setMasses(masses: Float32Array<ArrayBuffer>): Float32Array<ArrayBuffer> {
-    const sameCount = this.weights.length === masses.length;
-    this.masses = masses;
-    if (!sameCount) {
-      this.weights = new Float32Array(masses.length);
+  /** Sizes the weight array to the particle count; clears the pull when the count changes. */
+  setParticleCount(count: number): Float32Array<ArrayBuffer> {
+    if (this.weights.length !== count) {
+      this.weights = new Float32Array(count);
       this.clear();
-    } else {
-      this.refresh();
     }
     return this.weights;
   }
@@ -64,15 +39,16 @@ export class ClothGrab {
     return this.weights;
   }
 
-  /** Copies `weights` and freezes `target` as the anchor; false when they cover no mass. */
+  /** Copies `weights` and freezes `target` as the anchor; false when they cover no weight. */
   set(weights: Float32Array, target: readonly [number, number, number]): boolean {
-    if (weights.length !== this.masses.length) {
+    if (weights.length !== this.weights.length) {
       this.clear();
       return false;
     }
     this.weights.set(weights);
-    this.refresh();
-    if (this.inverseMass === 0) {
+    this.weightSum = 0;
+    for (let i = 0; i < weights.length; i++) this.weightSum += weights[i]!;
+    if (!(this.weightSum > 0)) {
       this.clear();
       return false;
     }
@@ -91,61 +67,39 @@ export class ClothGrab {
   clear(): void {
     this.anchor = null;
     this.target = null;
-    this.inverseMass = 0;
-    this.maxWeight = 0;
+    this.weightSum = 0;
   }
 
-  /**
-   * Pull force in newtons the grabbed patch commands, quoted at the reference solver step; null
-   * while the cloth is not grabbed. Travel beyond the per-substep limit stops adding force, so the
-   * reading and the step INTEGRATE applies saturate together.
-   */
+  /** Pull force in newtons the grab applies to the patch; null while the cloth is not grabbed. */
   forceN(): number | null {
     const pull = this.pull();
-    if (!pull) return null;
-    const travel = this.travel(pull.length);
-    return travel / (this.inverseMass * GRAB_REFERENCE_STEP_S * GRAB_REFERENCE_STEP_S);
+    return pull ? this.forceOf(pull.length) : null;
   }
 
   /**
-   * Displacement per substep for a fully weighted particle, packed for INTEGRATE, or null while
-   * the pull is zero. INTEGRATE scales it by each particle's grab weight.
+   * Force shared out for INTEGRATE: xyz is newtons per unit grab weight and w = 1 while dragging.
+   * INTEGRATE multiplies it by `weight * inverse mass`, so the patch receives `forceN()` in total.
    */
-  stepUniform(): [number, number, number, number] | null {
+  forceUniform(): [number, number, number, number] | null {
     const pull = this.pull();
     if (!pull || pull.length < 1e-9) return null;
-    const step = this.travel(pull.length) * (GRAB_REFERENCE_SUBSTEPS / this.substeps) / pull.length;
-    return [pull.x * step, pull.y * step, pull.z * step, 1];
+    const scale = this.forceOf(pull.length) / (pull.length * this.weightSum);
+    return [pull.x * scale, pull.y * scale, pull.z * scale, 1];
   }
 
   /** Anchor-to-target vector of the live pull, or null while the cloth is not grabbed. */
   private pull(): { x: number; y: number; z: number; length: number } | null {
     const anchor = this.anchor;
     const target = this.target;
-    if (!anchor || !target || this.inverseMass === 0 || !(this.maxWeight > 0)) return null;
+    if (!anchor || !target || !(this.weightSum > 0)) return null;
     const x = target[0] - anchor[0];
     const y = target[1] - anchor[1];
     const z = target[2] - anchor[2];
     return { x, y, z, length: Math.hypot(x, y, z) };
   }
 
-  /** Pointer travel the pull uses, capped so the heaviest weight moves within MAX_GRAB_STEP_M. */
-  private travel(length: number): number {
-    const limit = MAX_GRAB_STEP_M * this.substeps / (GRAB_REFERENCE_SUBSTEPS * this.maxWeight);
-    return Math.min(length, limit);
-  }
-
-  /** Recomputes the grabbed patch mass and its heaviest weight from the live weights and masses. */
-  private refresh(): void {
-    let weightedMass = 0;
-    let maxWeight = 0;
-    for (let i = 0; i < this.weights.length; i++) {
-      const weight = this.weights[i]!;
-      if (weight <= 0) continue;
-      weightedMass += weight * this.masses[i]!;
-      if (weight > maxWeight) maxWeight = weight;
-    }
-    this.inverseMass = weightedMass > 0 ? 1 / weightedMass : 0;
-    this.maxWeight = maxWeight;
+  /** Force the pointer travel commands, in newtons. */
+  private forceOf(travel: number): number {
+    return Math.min(GRAB_STIFFNESS_N_PER_M * travel, MAX_GRAB_FORCE_N);
   }
 }
