@@ -50,7 +50,7 @@ export interface MakehumanData {
   /** Triangles of the two eyeballs, which share the body's vertex buffer. */
   readonly eyeIndices: Uint32Array;
   /** Vertex offsets per target, one row of `vertexCount * 3` per name, scaled by {@link targetScales}. */
-  readonly targets: Int8Array;
+  readonly targets: Int16Array;
   /** Target names, in row order. */
   readonly names: readonly string[];
   /** Meters per unit of each target row. */
@@ -109,7 +109,7 @@ function parseMakehumanData(
     rest,
     bodyIndices: bodyIndexData,
     eyeIndices: eyeIndexData,
-    targets: new Int8Array(targets),
+    targets: new Int16Array(targets),
     names: manifest.targets,
     targetScales: Float32Array.from(manifest.targetScales),
     vertexCount: vertices,

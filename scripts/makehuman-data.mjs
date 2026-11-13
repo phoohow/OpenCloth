@@ -7,7 +7,7 @@
  *
  *   body.bin       Float32 vertex positions in meters, body and eye triangle indices, then the
  *                  per-vertex weight of each arm chain, used to pose the arms
- *   targets.bin    Int8 vertex offsets, one row per target, with a per-row scale in the manifest
+ *   targets.bin    Int16 vertex offsets, one row per target, with a per-row scale in the manifest
  *   manifest.json  names of those targets, in row order, plus the joint vertices
  *
  * Run with `npm run data:makehuman`.
@@ -27,7 +27,8 @@ const OUT = resolve(ROOT, 'assets/makehuman');
 const DM_TO_M = 0.1;
 /** Meters per unit of the packed target table. */
 const TARGET_SCALE = 1e-4;
-
+/** Largest offset a half-word stores, the step of the MakeHuman tables this data comes from. */
+const TARGET_MAX = 32767;
 /** Materials of the body surface; every helper and joint group is dropped. */
 const BODY_MATERIAL = 'body';
 /** Materials of the two eyeball spheres. */
@@ -270,20 +271,20 @@ function main() {
     return out;
   };
 
-  // One byte per offset with a per-row scale: the rows are smooth, and a byte keeps the step far
-  // below the millimetre while the whole table stays small.
-  const targets = new Int8Array(sources.length * vertexCount * 3);
+  // One half-word per offset with a per-row scale: the rows are smooth and the step stays at the
+  // MakeHuman table's own tenth of a millimetre, which the eyelid and lip scale needs.
+  const targets = new Int16Array(sources.length * vertexCount * 3);
   const scales = [];
   const names = sources.map(([name, files], row) => {
     const source = readRow(files);
     let maxAbs = 0;
     for (let i = 0; i < rowLength; i++) maxAbs = Math.max(maxAbs, Math.abs(source[i]));
-    const scale = maxAbs > 0 ? (maxAbs * TARGET_SCALE) / 127 : 0;
+    const scale = maxAbs > 0 ? (maxAbs * TARGET_SCALE) / TARGET_MAX : 0;
     const out = row * vertexCount * 3;
     if (scale > 0) {
       kept.forEach((v, i) => {
         for (let axis = 0; axis < 3; axis++) {
-          targets[out + i * 3 + axis] = Math.round(source[v * 3 + axis] / (maxAbs / 127));
+          targets[out + i * 3 + axis] = Math.round(source[v * 3 + axis] / (maxAbs / TARGET_MAX));
         }
       });
     }
