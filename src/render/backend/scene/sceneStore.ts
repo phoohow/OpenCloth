@@ -217,7 +217,8 @@ export class SceneStore {
         this.group(item.rasterStage).add(entry.root);
       }
       this.selectStage(entry, item.rasterStage);
-      entry.root.visible = item.rasterMaterials.length > 0 || item.wire !== null;
+      // An asset owns its own visibility: hiding the avatar or a reference is a flag on that
+      // object, not a missing draw item, so the draw list must not force it back on.
       return;
     }
     const mesh = this.meshData(item.mesh.id);

@@ -36,10 +36,3 @@ export function neckArcSpan(neckWidthCm: number, panelWidthCm: number): number {
   const u = neckWidthCm / 2 / panelWidthCm + 0.5;
   return Math.max(2 * (u * 180 - 90), 10);
 }
-
-/** Approximate length of a neckline curve from its half width and depth. */
-export function necklineLengthCm(halfWidthCm: number, depthCm: number): number {
-  const a = halfWidthCm;
-  const b = depthCm;
-  return Math.PI * (3 * (a + b) - Math.sqrt((3 * a + b) * (a + 3 * b))) / 2;
-}

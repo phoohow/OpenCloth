@@ -6,7 +6,8 @@
 import { degToRad } from '@/base/math';
 import { pixelsToPngDataUrl, waitForChange, whenImagesReady } from '@/base/platform';
 import type {
-  Bounds, CameraState, LightData, SceneItem, SceneSnapshot, Transform, VersionStamp,
+  AssetMesh, AssetSource, Bounds, CameraState, LightData, SceneItem, SceneSnapshot, Transform,
+  VersionStamp,
 } from '@/render/common';
 import type { Backend } from '@/render/backend';
 import { PreviewGraph } from '@/render/renderer/frame/previewGraph';
@@ -52,6 +53,8 @@ export interface PreviewDeps {
 export interface Previewer {
   /** Draws a body model as a portrait; null when the file cannot be loaded. */
   model(url: string): Promise<string | null>;
+  /** Draws procedural body meshes as a portrait; null when they cannot be built. */
+  body(meshes: readonly AssetMesh[]): Promise<string | null>;
   /** Draws an equirectangular image as it looks around the horizon; null when it cannot be read. */
   environment(url: string): Promise<string | null>;
   dispose(): void;
@@ -68,6 +71,8 @@ class PreviewPipeline implements Previewer {
   private readonly graph: PreviewGraph;
   /** Requests queue here: they share one target pool, one command stream and one scene store. */
   private tail: Promise<unknown> = Promise.resolve();
+  /** Distinguishes the asset keys of successive procedural bodies. */
+  private bodyCount = 0;
 
   constructor(deps: PreviewDeps) {
     this.backend = deps.backend;
@@ -78,7 +83,12 @@ class PreviewPipeline implements Previewer {
   }
 
   model(url: string): Promise<string | null> {
-    return this.enqueue(() => this.drawModel(url));
+    return this.enqueue(() => this.drawAsset(`preview:model:${url}`, { kind: 'model', url }));
+  }
+
+  body(meshes: readonly AssetMesh[]): Promise<string | null> {
+    const key = `preview:body:${++this.bodyCount}`;
+    return this.enqueue(() => this.drawAsset(key, { kind: 'meshes', meshes }));
   }
 
   environment(url: string): Promise<string | null> {
@@ -90,9 +100,9 @@ class PreviewPipeline implements Previewer {
     this.graph.dispose();
   }
 
-  private async drawModel(url: string): Promise<string | null> {
-    const key = `preview:model:${url}`;
-    const handle = await this.backend.assets.load(key, { kind: 'model', url }).catch(() => null);
+  /** Loads one asset and frames its portrait from the front. */
+  private async drawAsset(key: string, source: AssetSource): Promise<string | null> {
+    const handle = await this.backend.assets.load(key, source).catch(() => null);
     if (!handle) return null;
     try {
       return await this.frame(assetScene(key), portraitCamera(handle.bounds));

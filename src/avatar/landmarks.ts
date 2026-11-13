@@ -439,7 +439,8 @@ export function bodyLandmarks(params: AvatarParams): BodyLandmarks {
       // and mirroring the result keeps them identical even when the scan differs by a millimetre.
       const joints = region === 'arm' ? rightArm.chain : rightLeg.chain;
       const measured = fitLimb(
-        body.positions, armWeights, region, 1, anchorY, joints.root, joints.mid, depth, torso.crotchY,
+        body.positions, armWeights, region, 1, anchorY, joints.root, joints.mid, joints.end,
+        depth, torso.crotchY,
       );
       return side > 0 ? measured : mirrorEnvelope(measured);
     },

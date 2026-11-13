@@ -9,6 +9,8 @@ import { cm, defineTemplate } from '@/pattern/template/garmentTemplate';
 export interface DressParams {
   chestCm: number;
   waistCm: number;
+  /** Hip girth the skirt has to clear at the hip line. */
+  hipCm: number;
   hemCm: number;
   /** Shoulder-to-waist length. */
   waistLineCm: number;
@@ -24,6 +26,7 @@ export interface DressParams {
 export const DEFAULT_DRESS_PARAMS: DressParams = {
   chestCm: 92,
   waistCm: 76,
+  hipCm: 98,
   hemCm: 160,
   waistLineCm: 36,
   lengthCm: 112,
@@ -32,20 +35,29 @@ export const DEFAULT_DRESS_PARAMS: DressParams = {
   neckDepthCm: 10,
 };
 
+/** Shoulder drop from the neck seam to the shoulder tip, in centimeters. */
+const SHOULDER_SLOPE_CM = 4.5;
+
 /** Builds a sleeveless dress: fitted bodice halves joined to a flared two-panel skirt. */
 export function generateDress(params: DressParams = DEFAULT_DRESS_PARAMS, fabricId = 'fabric_default'): Pattern {
   const builder = new PatternBuilder(fabricId);
-  const { chestCm, waistCm, hemCm, waistLineCm, lengthCm, shoulderCm, neckWidthCm, neckDepthCm } = params;
+  const { chestCm, waistCm, hipCm, hemCm, waistLineCm, lengthCm, shoulderCm, neckWidthCm, neckDepthCm } = params;
 
   const skirtLengthCm = Math.max(lengthCm - waistLineCm, 20);
   const backNeckDepth = neckDepthCm * 0.35;
+  // The armscye follows the chest, so a fitted waistline does not flatten it into a shoulder box.
+  const armholeDepth = Math.min(chestCm * 0.205, waistLineCm * 0.55);
+  const underarmAt = (waistLineCm - SHOULDER_SLOPE_CM - armholeDepth) / waistLineCm;
 
-  // Straight-hemmed bodice with hem corners on the side-seam angle.
+  // The bodice narrows from the bust to the waist, matching the skirt it is sewn to.
   const bodiceBase = {
     halfWidthCm: chestCm / 4,
+    hemHalfWidthCm: waistCm / 4,
     halfShoulderCm: shoulderCm / 2,
     lengthCm: waistLineCm,
     neckHalfWidthCm: neckWidthCm / 2,
+    underarmAt,
+    shoulderSlopeCm: SHOULDER_SLOPE_CM,
   };
 
   const front = addBodice(builder, {
@@ -67,6 +79,8 @@ export function generateDress(params: DressParams = DEFAULT_DRESS_PARAMS, fabric
     waistWidthCm: waistCm / 2,
     hemWidthCm: Math.max(hemCm / 2, waistCm / 2),
     lengthCm: skirtLengthCm,
+    // Two panels cover the waist; each has to clear its half of the hip.
+    hipWidthCm: (hipCm + 4) / 2,
     seamAllowanceCm: 1,
   };
 
@@ -118,6 +132,7 @@ export const dressTemplate = defineTemplate({
   fields: [
     cm('chestCm', '胸围', 76, 130),
     cm('waistCm', '腰围', 56, 120),
+    cm('hipCm', '臀围', 60, 150),
     cm('hemCm', '摆围', 80, 320),
     cm('waistLineCm', '腰节', 28, 46),
     cm('lengthCm', '衣长', 70, 145),

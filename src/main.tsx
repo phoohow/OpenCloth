@@ -11,6 +11,9 @@ import { createViewport } from '@/runtime';
 import { RenderHostContext, type RenderHostFactory } from '@/ui/viewport3D/renderHost';
 import { registerAssetPreviews } from '@/ui/assets/assetPreviews';
 import { loadMakehumanBody } from '@/avatar/makehuman/data';
+import { makehumanBody } from '@/avatar';
+import { makehumanAvatarMeshes } from '@/runtime/makehumanAvatar';
+import type { AvatarParams } from '@/model/types';
 import './index.css';
 
 // Published before the first paint so the CSS control metrics match the shell about to render.
@@ -32,6 +35,11 @@ function previewPipeline(): Promise<Previewer | null> {
 
 registerAssetPreviews({
   model: async url => (await previewPipeline())?.model(url) ?? null,
+  // The catalogue hands over a preset's measurements as JSON; the body is built from them here.
+  body: async key => {
+    const params = JSON.parse(key) as AvatarParams;
+    return (await previewPipeline())?.body(makehumanAvatarMeshes(makehumanBody(params))) ?? null;
+  },
   environment: async url => (await previewPipeline())?.environment(url) ?? null,
 });
 

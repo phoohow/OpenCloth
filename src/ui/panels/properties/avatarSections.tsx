@@ -1,5 +1,5 @@
 import type { Avatar, AvatarPose, Project } from '@/model/types';
-import { AVATAR_PRESETS } from '@/model/defaults';
+import { AVATAR_PRESETS, matchAvatarPreset } from '@/model/defaults';
 import { patchValue, type EngineRef } from '@/ui/sceneCommands';
 import { importAvatarViaPicker } from '@/ui/modelImport';
 import {
@@ -34,13 +34,7 @@ export function AvatarData({ project, engineRef }: { project: Project; engineRef
   const setParam = (label: string, patch: Partial<typeof params>) =>
     setAvatar(label, { params: { ...params, ...patch } });
 
-  const preset = AVATAR_PRESETS.find(item =>
-    item.params.heightCm === params.heightCm
-    && item.params.chestCm === params.chestCm
-    && item.params.waistCm === params.waistCm
-    && item.params.hipCm === params.hipCm
-    && item.params.gender === params.gender
-    && item.params.ageYears === params.ageYears)?.id;
+  const preset = matchAvatarPreset(params)?.id;
 
   const modelOptions: Array<{ value: string; label: string; disabled?: boolean }> = [
     ...AVATAR_PRESETS.map(item => ({ value: item.id, label: item.label })),

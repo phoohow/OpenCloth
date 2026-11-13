@@ -4,7 +4,7 @@ import { elementNodeId } from '@/model';
 import { seamNumbers } from '@/pattern/seam';
 import {
   EDGE_SEMANTIC_LABELS, LIGHT_TYPE_LABELS, SEAM_TYPE_LABELS,
-  TRIM_KIND_LABELS, normalizeLights,
+  TRIM_KIND_LABELS, matchAvatarPreset, normalizeLights,
 } from '@/model';
 import {
   AVATAR_NODE_ID, CAMERA_NODE_ID, ENVIRONMENT_NODE_ID, GARMENT_COLLECTION_ID, LIGHT_COLLECTION_ID,
@@ -367,7 +367,7 @@ export function avatarLabel(project: Project): string {
   const { avatar } = project;
   if (avatar.name) return avatar.name;
   if (avatar.source === 'glb') return avatar.modelName ?? '导入模型';
-  return '基础模特';
+  return matchAvatarPreset(avatar.params)?.label ?? '自定义模特';
 }
 
 /** Rows with a placement: a scene transform, or the position and target of a light. */

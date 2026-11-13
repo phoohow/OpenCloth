@@ -1,9 +1,11 @@
-import type { PanelDrape, Pattern } from '@/model/types';
+import type { Pattern } from '@/model/types';
 import { PatternBuilder } from '@/pattern/template/templateKit';
 import { layoutRows } from '@/pattern/template/patternLayout';
 import { frontArc, backArc } from '@/pattern/template/drapeArcs';
 import { cm, defineTemplate } from '@/pattern/template/garmentTemplate';
-import { addBodice, addSleeve, capHeightForArmhole } from '@/pattern/template/panelShapes';
+import {
+  addBodice, addSleeve, capHeightForArmhole, shoulderSleeveDrape,
+} from '@/pattern/template/panelShapes';
 import { sampleEdge } from '@/pattern/panel/panelBuilder';
 import { polylineLength } from '@/base/geom';
 
@@ -75,26 +77,13 @@ export function generateTShirt(params: TShirtParams = DEFAULT_TSHIRT_PARAMS, fab
   const capHeight = capHeightForArmhole(sleeveWidth, armholeArc, Math.max(sleeveLengthCm - 4, 8));
   const sleeveShaft = Math.max(sleeveLengthCm - capHeight, 2);
 
-  const sleeveDrape = (side: 'left' | 'right'): PanelDrape => ({
-    region: 'arm',
-    side,
-    // The cap crown joins the shoulder tip, which sits one slope below the neck seam.
-    anchor: 'shoulderTop',
-    anchorOffsetCm: -SHOULDER_SLOPE_CM,
-    // Centre the full turn on the underarm: the panel's edges meet under the arm and its cap
-    // crown rides over the top of the shoulder, the way the flat cap sits above the panel. The
-    // limb's own axis mirrors with the side, so both sleeves use the same angle.
-    startDeg: 180,
-    sweepDeg: 360,
-  });
-
   const sleeveL = addSleeve(builder, {
     name: '左袖',
     widthCm: sleeveWidth,
     lengthCm: sleeveShaft,
     capHeightCm: capHeight,
     side: 'left',
-    drape: sleeveDrape('left'),
+    drape: shoulderSleeveDrape('left', SHOULDER_SLOPE_CM),
   });
 
   const sleeveR = addSleeve(builder, {
@@ -103,7 +92,7 @@ export function generateTShirt(params: TShirtParams = DEFAULT_TSHIRT_PARAMS, fab
     lengthCm: sleeveShaft,
     capHeightCm: capHeight,
     side: 'right',
-    drape: sleeveDrape('right'),
+    drape: shoulderSleeveDrape('right', SHOULDER_SLOPE_CM),
   });
 
   layoutRows(builder.pattern, [[sleeveL.panel, front.panel, back.panel, sleeveR.panel]]);

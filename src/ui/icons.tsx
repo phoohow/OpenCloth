@@ -20,7 +20,7 @@ export const ICON_NAMES = [
   // Transport
   'play', 'pause', 'reset', 'step',
   // Garment templates
-  't-shirt', 'shirt', 'dress', 'skirt', 'sleeve', 'bag', 'shoe',
+  't-shirt', 'shirt', 'hoodie', 'dress', 'skirt',
 ] as const;
 
 /** Name of one UI glyph, drawn from `assets/icons/<name>.svg`. */

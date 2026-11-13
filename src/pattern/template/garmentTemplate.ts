@@ -1,7 +1,7 @@
 import type { Pattern } from '@/model/types';
 
 /** Glyph key of a template card; the UI resolves it to an icon. */
-export type TemplateIcon = 't-shirt' | 'shirt' | 'dress' | 'skirt' | 'sleeve' | 'bag' | 'shoe';
+export type TemplateIcon = 't-shirt' | 'shirt' | 'hoodie' | 'dress' | 'skirt';
 
 /** One numeric garment measurement shown in the template picker. */
 export interface ParamField {

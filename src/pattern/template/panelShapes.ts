@@ -12,6 +12,9 @@ export interface BodiceEdges {
   armholeRight: string;
   shoulderRight: string;
   neckline: string;
+  /** Right and left halves of the neckline, present when it was split at its centre. */
+  necklineRight?: string;
+  necklineLeft?: string;
   shoulderLeft: string;
   armholeLeft: string;
   sideLeft: string;
@@ -22,6 +25,8 @@ export interface BodiceOptions {
   name: string;
   /** Half width of the panel at the side seams and hem. */
   halfWidthCm: number;
+  /** Half width of the hem when the bodice narrows toward the waist; defaults to `halfWidthCm`. */
+  hemHalfWidthCm?: number;
   /** Half distance between the shoulder tips. */
   halfShoulderCm: number;
   lengthCm: number;
@@ -33,6 +38,8 @@ export interface BodiceOptions {
   underarmAt?: number;
   /** Drop of the shoulder tip below the neck seam, which a flat shoulder line omits. */
   shoulderSlopeCm?: number;
+  /** Drafts the neckline as two halves meeting at its centre. */
+  splitNeckline?: boolean;
   drape: PanelDrape;
   seamAllowanceCm?: number;
 }
@@ -44,8 +51,9 @@ export function addBodice(builder: PatternBuilder, o: BodiceOptions): BodiceEdge
   const underarmY = shoulderY - Math.max(shoulderY - top * (o.underarmAt ?? 0.75), 0.5);
   const armholeH = shoulderY - underarmY;
   const halfNeck = o.neckHalfWidthCm;
-  const hemL = builder.point(-o.halfWidthCm, 0);
-  const hemR = builder.point(o.halfWidthCm, 0);
+  const halfHem = o.hemHalfWidthCm ?? o.halfWidthCm;
+  const hemL = builder.point(-halfHem, 0);
+  const hemR = builder.point(halfHem, 0);
   const underarmR = builder.point(o.halfWidthCm, underarmY);
   const shoulderR = builder.point(o.halfShoulderCm, shoulderY);
   const neckR = builder.point(halfNeck, top);
@@ -62,10 +70,31 @@ export function addBodice(builder: PatternBuilder, o: BodiceOptions): BodiceEdge
     vec2(o.halfWidthCm, underarmY + armholeOut),
     vec2(o.halfShoulderCm + 1.5, shoulderY - armholeIn), 'armhole');
   const shoulderRight = builder.line(shoulderR, neckR, 'shoulder');
-  // One cubic carries the whole neck opening, dropping about neckDepthCm at the center.
-  const neckline = builder.bezier(neckR, neckL,
+  // The whole neck opening is one cubic, dropping about neckDepthCm at its center.
+  const neckControls: [Vec2, Vec2] = [
     vec2(halfNeck * 0.55, top - o.neckDepthCm * (4 / 3)),
-    vec2(-halfNeck * 0.55, top - o.neckDepthCm * (4 / 3)), 'neckline');
+    vec2(-halfNeck * 0.55, top - o.neckDepthCm * (4 / 3)),
+  ];
+  let neckline: string;
+  let necklineRight: string | undefined;
+  let necklineLeft: string | undefined;
+  let outlineNeck: string[];
+  if (o.splitNeckline) {
+    // de Casteljau split at t = 0.5 keeps the drafted neck curve unchanged.
+    const ab = midpoint(neckR.pos, neckControls[0]);
+    const bc = midpoint(neckControls[0], neckControls[1]);
+    const cd = midpoint(neckControls[1], neckL.pos);
+    const abc = midpoint(ab, bc);
+    const bcd = midpoint(bc, cd);
+    const neckCenter = builder.point(0, top - o.neckDepthCm);
+    necklineRight = builder.bezier(neckR, neckCenter, ab, abc, 'neckline');
+    necklineLeft = builder.bezier(neckCenter, neckL, bcd, cd, 'neckline');
+    neckline = necklineRight;
+    outlineNeck = [necklineRight, necklineLeft];
+  } else {
+    neckline = builder.bezier(neckR, neckL, neckControls[0], neckControls[1], 'neckline');
+    outlineNeck = [neckline];
+  }
   const shoulderLeft = builder.line(neckL, shoulderL, 'shoulder');
   const armholeLeft = builder.bezier(shoulderL, underarmL,
     vec2(-o.halfShoulderCm - 1.5, shoulderY - armholeIn),
@@ -74,12 +103,20 @@ export function addBodice(builder: PatternBuilder, o: BodiceOptions): BodiceEdge
 
   const panel = builder.panel({
     name: o.name,
-    edges: [hem, sideRight, armholeRight, shoulderRight, neckline, shoulderLeft, armholeLeft, sideLeft],
+    edges: [hem, sideRight, armholeRight, shoulderRight, ...outlineNeck, shoulderLeft, armholeLeft, sideLeft],
     drape: o.drape,
     seamAllowanceCm: o.seamAllowanceCm ?? 1,
   });
 
-  return { panel, hem, sideRight, armholeRight, shoulderRight, neckline, shoulderLeft, armholeLeft, sideLeft };
+  return {
+    panel, hem, sideRight, armholeRight, shoulderRight, neckline, necklineRight, necklineLeft,
+    shoulderLeft, armholeLeft, sideLeft,
+  };
+}
+
+/** Point halfway between two positions. */
+function midpoint(a: Vec2, b: Vec2): Vec2 {
+  return vec2(lerp(a.x, b.x, 0.5), lerp(a.y, b.y, 0.5));
 }
 
 /** Sleeve panel plus its named outline edges. */
@@ -106,6 +143,21 @@ export interface SleeveOptions {
   /** Wrap override; defaults to a row-wrapped arm draped from the shoulder hinge. */
   drape?: PanelDrape;
   seamAllowanceCm?: number;
+}
+
+/**
+ * Wrap of a set-in sleeve: the cap crown rides over the shoulder tip and the underarm seam
+ * closes below it, centred on one full turn around the arm.
+ */
+export function shoulderSleeveDrape(side: 'left' | 'right', shoulderSlopeCm: number): PanelDrape {
+  return {
+    region: 'arm',
+    side,
+    anchor: 'shoulderTop',
+    anchorOffsetCm: -shoulderSlopeCm,
+    startDeg: 180,
+    sweepDeg: 360,
+  };
 }
 
 /** Adds a one-piece sleeve panel: hem, underarm seams and a two-segment cap. */
@@ -194,18 +246,51 @@ export interface FlaredOptions {
   waistWidthCm: number;
   hemWidthCm: number;
   lengthCm: number;
-  /** Bow of the side seams outward at the hip line. */
-  sideBowCm?: number;
+  /** Panel width at the hip line; the side seams bow out until they reach it. */
+  hipWidthCm?: number;
   drape: PanelDrape;
   seamAllowanceCm?: number;
   meshResolutionCm?: number;
+}
+
+/**
+ * Bow that widens the side seam to the requested hip width 18 cm below the waist. The cubic's
+ * height is monotonic, so the hip parameter is found by bisection and the bow follows from the
+ * width.
+ */
+function hipBow(
+  halfHemCm: number, halfWaistCm: number, lengthCm: number, hipWidthCm: number | undefined,
+): number {
+  if (hipWidthCm === undefined) return 0;
+  const depth = Math.min(18, lengthCm * 0.9);
+  const targetY = lengthCm - depth;
+  const c0y = lengthCm * 0.35;
+  const c1y = lengthCm * 0.7;
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 40; i++) {
+    const t = (lo + hi) / 2;
+    if (cubicAt(0, c0y, c1y, lengthCm, t) < targetY) lo = t; else hi = t;
+  }
+  const t = (lo + hi) / 2;
+  const baseX = cubicAt(halfHemCm, lerp(halfHemCm, halfWaistCm, 0.35), lerp(halfHemCm, halfWaistCm, 0.7), halfWaistCm, t);
+  const weight = 3 * (1 - t) ** 2 * t + 3 * (1 - t) * t ** 2;
+  return weight > 1e-6 ? Math.max(0, (hipWidthCm / 2 - baseX) / weight) : 0;
+}
+
+/** Value of one cubic Bezier coordinate at `t`. */
+function cubicAt(p0: number, c0: number, c1: number, p1: number, t: number): number {
+  const u = 1 - t;
+  return u * u * u * p0 + 3 * u * u * t * c0 + 3 * u * t * t * c1 + t * t * t * p1;
 }
 
 /** Adds a skirt or dress-body panel that widens from the waist edge to the hem. */
 export function addFlaredPanel(builder: PatternBuilder, o: FlaredOptions): FlaredEdges {
   const halfWaist = o.waistWidthCm / 2;
   const halfHem = o.hemWidthCm / 2;
-  const bow = o.sideBowCm ?? 0;
+  const c0 = { x: lerp(halfHem, halfWaist, 0.35), y: o.lengthCm * 0.35 };
+  const c1 = { x: lerp(halfHem, halfWaist, 0.7), y: o.lengthCm * 0.7 };
+  const bow = hipBow(halfHem, halfWaist, o.lengthCm, o.hipWidthCm);
 
   const hemL = builder.point(-halfHem, 0);
   const hemR = builder.point(halfHem, 0);
@@ -214,12 +299,10 @@ export function addFlaredPanel(builder: PatternBuilder, o: FlaredOptions): Flare
 
   const hem = builder.line(hemL, hemR, 'hem');
   const sideRight = builder.bezier(hemR, waistR,
-    vec2(lerp(halfHem, halfWaist, 0.35) + bow, o.lengthCm * 0.35),
-    vec2(lerp(halfHem, halfWaist, 0.7) + bow, o.lengthCm * 0.7), 'sideSeam');
+    vec2(c0.x + bow, c0.y), vec2(c1.x + bow, c1.y), 'sideSeam');
   const waist = builder.line(waistR, waistL, 'waist');
   const sideLeft = builder.bezier(waistL, hemL,
-    vec2(-lerp(halfHem, halfWaist, 0.7) - bow, o.lengthCm * 0.7),
-    vec2(-lerp(halfHem, halfWaist, 0.35) - bow, o.lengthCm * 0.35), 'sideSeam');
+    vec2(-c1.x - bow, c1.y), vec2(-c0.x - bow, c0.y), 'sideSeam');
 
   const panel = builder.panel({
     name: o.name,
@@ -230,6 +313,52 @@ export function addFlaredPanel(builder: PatternBuilder, o: FlaredOptions): Flare
   });
 
   return { panel, hem, sideRight, waist, sideLeft };
+}
+
+/** Band whose bottom edge is split into equal segments; each segment is sewn to one piece. */
+export interface SplitBandEdges {
+  panel: Panel;
+  top: string;
+  endRight: string;
+  /** Bottom edges, left to right. */
+  bottoms: string[];
+  endLeft: string;
+}
+
+/** Measurements for addSplitBand, in centimeters. */
+export interface SplitBandOptions {
+  name: string;
+  /** Total length of the band, split evenly across the segments. */
+  lengthCm: number;
+  heightCm: number;
+  /** Pieces the bottom edge is sewn to. */
+  segments: number;
+  drape: PanelDrape;
+  seamAllowanceCm?: number;
+}
+
+/** Adds a rectangular band whose bottom edge is split, so several pieces can be sewn to it. */
+export function addSplitBand(builder: PatternBuilder, o: SplitBandOptions): SplitBandEdges {
+  const half = o.lengthCm / 2;
+  const segments = Math.max(1, Math.round(o.segments));
+  const bottom = Array.from({ length: segments + 1 }, (_, i) =>
+    builder.point(-half + (o.lengthCm * i) / segments, 0));
+  const tr = builder.point(half, o.heightCm);
+  const tl = builder.point(-half, o.heightCm);
+
+  const bottoms = bottom.slice(0, -1).map((point, i) => builder.line(point, bottom[i + 1]!, 'waist'));
+  const endRight = builder.line(bottom[segments]!, tr, 'free');
+  const top = builder.line(tr, tl, 'hem');
+  const endLeft = builder.line(tl, bottom[0]!, 'free');
+
+  const panel = builder.panel({
+    name: o.name,
+    edges: [...bottoms, endRight, top, endLeft],
+    drape: o.drape,
+    seamAllowanceCm: o.seamAllowanceCm ?? 0.7,
+  });
+
+  return { panel, top, endRight, bottoms, endLeft };
 }
 
 /** Waistband or collar band plus its named outline edges. */

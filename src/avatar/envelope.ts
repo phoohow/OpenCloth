@@ -226,13 +226,14 @@ export function fitTorso(
 }
 
 /**
- * Limb: one straight axis fitted to the limb's own surface over the span the panel covers.
+ * Limb: an axis fitted to the limb's own surface over the span the panel covers.
  *
  * The seed is the direction between two joint rings measured on the finished mesh, so it already
- * follows the pose (down for a relaxed arm, outward for a T pose). Only vertices of the covered
- * span take part in the section fit: the hand, the shoulder blend and the rest of the arm must not
- * size an upper-arm sleeve. The section is the smallest ellipse of the measured shape which
- * encloses every vertex of that band.
+ * follows the pose (down for a relaxed arm, outward for a T pose). Beyond the middle joint the axis
+ * turns onto the next bone, so a long sleeve follows the forearm instead of carrying the upper-arm
+ * direction past the elbow. Only vertices of the covered span take part in the section fit: the
+ * hand, the shoulder blend and the rest of the arm must not size an upper-arm sleeve. The section
+ * is the smallest ellipse of the measured shape which encloses every vertex of that band.
  */
 export function fitLimb(
   positions: Float32Array,
@@ -242,6 +243,7 @@ export function fitLimb(
   anchorY: number,
   root: Point3,
   mid: Point3,
+  end: Point3,
   depth: number,
   legCeiling: number,
 ): RegionEnvelope {
@@ -285,7 +287,13 @@ export function fitLimb(
     return [dot(d, u), dot(d, v)] as [number, number];
   }));
   const offset = add(scale(u, section.offsetU), scale(v, section.offsetV));
-  const tTop = dot(sub(top, origin), axis);
+  // Distance from the top edge to the middle joint, measured along the upper segment.
+  const upperSpan = Math.max(dot(sub(mid, top), seed), 0);
+  const lowerDir = unit(sub(end, mid), seed);
+  /** Centreline point at `t` metres from the panel's top edge, turning at the middle joint. */
+  const along = (t: number): Point3 => (t <= upperSpan
+    ? add(top, scale(seed, t))
+    : add(mid, scale(lowerDir, t - upperSpan)));
   return {
     axis,
     u,
@@ -294,7 +302,7 @@ export function fitLimb(
     rx: section.rx,
     rz: section.rz,
     girth: section.girth,
-    at: (t: number): Point3 => add(add(origin, scale(axis, tTop + t)), offset),
+    at: (t: number): Point3 => add(along(t), offset),
     centre: (y: number): Point3 =>
       add(add(origin, scale(axis, (y - origin[1]) / (axis[1] || 1))), offset),
   };
