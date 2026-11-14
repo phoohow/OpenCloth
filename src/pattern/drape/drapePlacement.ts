@@ -150,10 +150,10 @@ function cylinderSurface(
 
 /** Torso: the vertical elliptic cylinder the proxy shows. */
 function torsoSurface(
-  torso: TorsoShape, topY: number, slot: WrapSlot, direction: number, offset: number,
+  torso: TorsoShape, topY: number, slot: WrapSlot, direction: number,
 ): WrapSurface {
   return cylinderSurface(
-    torso.rx + offset, torso.rz + offset,
+    torso.rx, torso.rz,
     depth => [torso.centreX, topY - depth, torso.centreZ],
     [0, 0, 1], [1, 0, 0], slot, direction,
   );
@@ -161,10 +161,10 @@ function torsoSurface(
 
 /** Neck: a vertical circular cylinder between the shoulder line and the chin. */
 function neckSurface(
-  neck: TubeShape, topY: number, slot: WrapSlot, direction: number, offset: number,
+  neck: TubeShape, topY: number, slot: WrapSlot, direction: number,
 ): WrapSurface {
   return cylinderSurface(
-    neck.fromR + offset, neck.fromR + offset,
+    neck.fromR, neck.fromR,
     depth => [0, topY - depth, neck.from[2]],
     [0, 0, 1], [1, 0, 0], slot, direction,
   );
@@ -180,52 +180,18 @@ interface PathSample {
 }
 
 /**
- * Half width of a panel at each pattern depth, read from its boundary. A limb or neck panel wraps
- * its own width once around the body, so a row wider than the section it covers spreads over the
- * whole turn instead of lapping over the row beside it and folding the cloth into itself.
- */
-function halfWidthProfile(mesh: PanelMesh, bounds: PanelBounds): (depth: number) => number {
-  const buckets = new Map<number, { min: number; max: number }>();
-  for (const [a, b] of mesh.boundaryEdges) {
-    for (const index of [a, b]) {
-      const y = Math.round(mesh.positions2D[index * 2 + 1]! * 10) / 10;
-      const x = mesh.positions2D[index * 2]!;
-      const bucket = buckets.get(y) ?? { min: x, max: x };
-      bucket.min = Math.min(bucket.min, x);
-      bucket.max = Math.max(bucket.max, x);
-      buckets.set(y, bucket);
-    }
-  }
-  const ys = [...buckets.keys()].sort((p, q) => p - q);
-  // Half widths in meters, matching the flat offsets the wrap is fed.
-  const halves = ys.map(y => Math.max((buckets.get(y)!.max - buckets.get(y)!.min) / 2, 0.5) * 0.01);
-  const halfAtY = (y: number): number => {
-    if (ys.length === 0) return 0.005;
-    if (y <= ys[0]!) return halves[0]!;
-    if (y >= ys[ys.length - 1]!) return halves[halves.length - 1]!;
-    let lo = 0;
-    let hi = ys.length - 1;
-    while (hi - lo > 1) {
-      const mid = (lo + hi) >> 1;
-      if (ys[mid]! < y) lo = mid; else hi = mid;
-    }
-    const span = ys[hi]! - ys[lo]!;
-    const t = span > 1e-9 ? (y - ys[lo]!) / span : 0;
-    return halves[lo]! + (halves[hi]! - halves[lo]!) * t;
-  };
-  return depth => halfAtY(bounds.maxY - depth * 100);
-}
-
-/**
  * Arms and legs: the panel follows the limb's own centreline, which already rounds the elbow or
  * knee, so consecutive rows never span two different section frames. The frames are carried along
  * the path rather than rebuilt from a fixed reference, which keeps a sleeve from twisting as it
  * passes the joint.
+ *
+ * Every row keeps the limb's own section radius, so the piece lies on the proxy surface the 3D
+ * model draws. A piece cut wider than the limb therefore laps around it instead of standing off it
+ * as a tube of its own girth.
  */
 function limbSurface(
   limb: LimbShape, anchorY: number, downCm: number,
-  slot: WrapSlot, direction: number, offset: number,
-  halfWidthAt: (depth: number) => number,
+  slot: WrapSlot, direction: number,
 ): WrapSurface {
   const path = limb.path;
   const lengths: number[] = [0];
@@ -257,7 +223,7 @@ function limbSurface(
       tangent,
       cosDir: u,
       sinDir: frame.v,
-      radius: limb.radii[i]! + offset,
+      radius: limb.radii[i]!,
     });
   }
 
@@ -271,32 +237,22 @@ function limbSurface(
   const startArc = landmarkAlong + downCm;
   const centreAngle = slot.startRad + slot.sweepRad / 2;
 
-  /**
-   * Section radius at a depth: the limb's own, widened to the piece's girth when the piece is
-   * wider. A sleeve wider than the arm then stands off it as a tube of its own circumference
-   * instead of wrapping more than a full turn and folding into itself.
-   */
-  const sectionRadius = (limbRadius: number, depth: number): number =>
-    Math.max(limbRadius, halfWidthAt(depth) / Math.PI);
-
   const sectionAt = (depth: number): SurfaceSection => {
     const arc = startArc + depth;
     if (arc <= 0) {
       const sample = samples[0]!;
-      const radius = sectionRadius(sample.radius, depth);
       return {
         centre: add3t(sample.point, scale3t(sample.tangent, arc)),
         cosDir: sample.cosDir, sinDir: sample.sinDir,
-        rSin: radius, rCos: radius,
+        rSin: sample.radius, rCos: sample.radius,
       };
     }
     if (arc >= total) {
       const sample = samples[samples.length - 1]!;
-      const radius = sectionRadius(sample.radius, depth);
       return {
         centre: add3t(sample.point, scale3t(sample.tangent, arc - total)),
         cosDir: sample.cosDir, sinDir: sample.sinDir,
-        rSin: radius, rCos: radius,
+        rSin: sample.radius, rCos: sample.radius,
       };
     }
     let lo = 0;
@@ -312,7 +268,7 @@ function limbSurface(
     const tangent = normalize3t(lerp3t(a.tangent, b.tangent, t));
     const blended = lerp3t(a.cosDir, b.cosDir, t);
     const u = normalize3t(sub3t(blended, scale3t(tangent, dot3t(tangent, blended))));
-    const radius = sectionRadius(a.radius + (b.radius - a.radius) * t, depth);
+    const radius = a.radius + (b.radius - a.radius) * t;
     return {
       centre: lerp3t(a.point, b.point, t),
       cosDir: u,
@@ -332,11 +288,11 @@ function limbSurface(
 /** Head: a latitude/longitude patch from the crown down to the neck-width section. */
 function headSurface(
   head: HeadShape, body: BodyLandmarks, panelHeight: number,
-  slot: WrapSlot, direction: number, offset: number,
+  slot: WrapSlot, direction: number,
 ): WrapSurface {
   const [cx, cy, cz] = head.centre;
   const [rx, ry, rz] = head.radii;
-  const full = sectionArcs(Math.max(rx + offset, 1e-4), Math.max(rz + offset, 1e-4), 0, 360);
+  const full = sectionArcs(Math.max(rx, 1e-4), Math.max(rz, 1e-4), 0, 360);
   const perimeter = full.arcs[full.arcs.length - 1]!;
   const centreArc = arcAtAngle(full, slot.startRad + slot.sweepRad / 2);
   // Stop the patch where the head section is as wide as the neck, but never below the chin:
@@ -358,8 +314,8 @@ function headSurface(
         centre: [cx, cy + ry * sinPhi, cz],
         cosDir: [0, 0, 1],
         sinDir: [1, 0, 0],
-        rSin: rx * cosPhi + offset,
-        rCos: rz * cosPhi + offset,
+        rSin: rx * cosPhi,
+        rCos: rz * cosPhi,
       };
     },
   };
@@ -372,11 +328,9 @@ function surfaceFor(
   slot: WrapSlot,
   topY: number,
   panelHeight: number,
-  halfWidthAt: (depth: number) => number,
 ): WrapSurface {
   const shapes = body.bodyShapes();
   const direction = (Math.sign(slot.sweepRad) || 1) * (wrap.flip ? -1 : 1);
-  const offset = wrap.radiusOffsetCm * 0.01;
   if (wrap.region === 'arm' || wrap.region === 'leg') {
     const side: LimbSide = wrap.side === 'left' ? -1 : 1;
     const limb = shapes.find((shape): shape is LimbShape =>
@@ -384,20 +338,20 @@ function surfaceFor(
     if (limb) {
       // A limb panel's anchor offset is a distance down the limb, not a height below the landmark.
       return limbSurface(limb, topY - wrap.anchorOffsetCm * 0.01, -wrap.anchorOffsetCm * 0.01,
-        slot, direction * side, offset, halfWidthAt);
+        slot, direction * side);
     }
   }
   if (wrap.region === 'head') {
     const head = shapes.find((shape): shape is HeadShape => shape.kind === 'ellipsoid');
-    if (head) return headSurface(head, body, panelHeight, slot, direction, offset);
+    if (head) return headSurface(head, body, panelHeight, slot, direction);
   }
   if (wrap.region === 'neck') {
     const neck = shapes.find((shape): shape is TubeShape => shape.kind === 'tube' && shape.part === 'neck');
-    if (neck) return neckSurface(neck, topY, slot, direction, offset);
+    if (neck) return neckSurface(neck, topY, slot, direction);
   }
   // The torso column carries torso pieces, and a head or neck piece whose proxy shape is missing.
   const torso = shapes.find((shape): shape is TorsoShape => shape.kind === 'torso')!;
-  return torsoSurface(torso, topY, slot, direction, offset);
+  return torsoSurface(torso, topY, slot, direction);
 }
 
 /**
@@ -419,7 +373,7 @@ export function drapePositions(
   const slot = slotOverride ?? zoneSweep(wrap.region, wrap.zone);
   const topY = anchorHeight(panel, body);
   const panelHeight = Math.max((bounds.maxY - bounds.minY) * 0.01, 1e-4);
-  const surface = surfaceFor(wrap, body, slot, topY, panelHeight, halfWidthProfile(mesh, bounds));
+  const surface = surfaceFor(wrap, body, slot, topY, panelHeight);
   const midX = (bounds.minX + bounds.maxX) / 2;
   const out = new Float32Array(mesh.vertexCount * 3);
 

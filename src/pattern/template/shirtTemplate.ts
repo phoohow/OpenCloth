@@ -64,18 +64,6 @@ const COLLAR_FALL_CM = 5;
 /** Length of the sleeve placket, measured up from the cuff. */
 const SLEEVE_PLACKET_CM = 10;
 
-/** Air the sleeve keeps around the arm, in centimeters. */
-const SLEEVE_GAP_CM = 0.6;
-
-/** Air the cuff keeps around the wrist, in centimeters. */
-const CUFF_GAP_CM = 0.8;
-
-/** Air the collar stand keeps around the neck, so the stand does not overlap itself. */
-const COLLAR_GAP_CM = 2.2;
-
-/** Air the collar keeps outside the stand once it folds over it. */
-const COLLAR_FOLD_GAP_CM = 3;
-
 /** Builds a shirt pattern: two placketed front halves, a back yoke over the back body, two sleeves
  * with cuffs, and a two-piece collar over a stand. */
 export function generateShirt(params: ShirtParams = DEFAULT_SHIRT_PARAMS, fabricId = 'fabric_default'): Pattern {
@@ -162,7 +150,7 @@ export function generateShirt(params: ShirtParams = DEFAULT_SHIRT_PARAMS, fabric
     capHeightCm: capHeight,
     cuffCm,
     side: 'left',
-    drape: { ...shoulderSleeveDrape('left'), radiusOffsetCm: SLEEVE_GAP_CM },
+    drape: shoulderSleeveDrape('left'),
   });
 
   const sleeveR = addSleeve(builder, {
@@ -172,21 +160,21 @@ export function generateShirt(params: ShirtParams = DEFAULT_SHIRT_PARAMS, fabric
     capHeightCm: capHeight,
     cuffCm,
     side: 'right',
-    drape: { ...shoulderSleeveDrape('right'), radiusOffsetCm: SLEEVE_GAP_CM },
+    drape: shoulderSleeveDrape('right'),
   });
 
   const cuffL = addCuff(builder, {
     name: '左袖克夫',
     lengthCm: cuffCm,
     heightCm: cuffHeightCm,
-    drape: { region: 'arm', side: 'left', zone: 'full', anchorOffsetCm: cuffAnchorCm, radiusOffsetCm: CUFF_GAP_CM },
+    drape: { region: 'arm', side: 'left', zone: 'full', anchorOffsetCm: cuffAnchorCm },
   });
 
   const cuffR = addCuff(builder, {
     name: '右袖克夫',
     lengthCm: cuffCm,
     heightCm: cuffHeightCm,
-    drape: { region: 'arm', side: 'right', zone: 'full', anchorOffsetCm: cuffAnchorCm, radiusOffsetCm: CUFF_GAP_CM },
+    drape: { region: 'arm', side: 'right', zone: 'full', anchorOffsetCm: cuffAnchorCm },
   });
 
   // Shoulder seams join the front halves to the yoke; the yoke line joins the yoke to the back body.
@@ -222,7 +210,7 @@ export function generateShirt(params: ShirtParams = DEFAULT_SHIRT_PARAMS, fabric
     necklineCm: frontNeckCm * 2 + backNeckCm,
     heightCm: collarHeightCm,
     endHeightCm: collarHeightCm * 0.8,
-    drape: { region: 'neck', zone: 'full', anchorOffsetCm: collarHeightCm, radiusOffsetCm: COLLAR_GAP_CM },
+    drape: { region: 'neck', zone: 'full', anchorOffsetCm: collarHeightCm },
   });
 
   const frontShare = frontNeckCm / (frontNeckCm * 2 + backNeckCm);
@@ -238,10 +226,7 @@ export function generateShirt(params: ShirtParams = DEFAULT_SHIRT_PARAMS, fabric
     widthCm: COLLAR_FALL_CM,
     pointOutCm: 3.2,
     pointRiseCm: 2.4,
-    drape: {
-      region: 'neck', zone: 'full', anchorOffsetCm: collarHeightCm + COLLAR_FALL_CM,
-      radiusOffsetCm: COLLAR_FOLD_GAP_CM,
-    },
+    drape: { region: 'neck', zone: 'full', anchorOffsetCm: collarHeightCm + COLLAR_FALL_CM },
   });
   builder.seam(stand.top, fall.bottom, { flipB: true, strength: 1 });
 

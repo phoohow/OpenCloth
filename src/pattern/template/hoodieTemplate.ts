@@ -50,15 +50,6 @@ const HEM_RIB_CM = 6.5;
 /** Height of the ribbed cuff, in centimeters. */
 const CUFF_RIB_CM = 6;
 
-/** Air the sleeve keeps around the arm, in centimeters. */
-const SLEEVE_GAP_CM = 0.6;
-
-/** Air the cuff rib keeps around the wrist, in centimeters. */
-const CUFF_GAP_CM = 0.8;
-
-/** Air the hood keeps over the skull, in centimeters. */
-const HOOD_GAP_CM = 0.6;
-
 /** Half-hood panel plus its named outline edges. */
 interface HoodEdges {
   panel: Panel;
@@ -208,7 +199,7 @@ export function generateHoodie(params: HoodieParams = DEFAULT_HOODIE_PARAMS, fab
     capHeightCm: capHeight,
     cuffCm,
     side: 'left',
-    drape: { ...shoulderSleeveDrape('left'), radiusOffsetCm: SLEEVE_GAP_CM },
+    drape: shoulderSleeveDrape('left'),
   });
 
   const sleeveR = addSleeve(builder, {
@@ -218,7 +209,7 @@ export function generateHoodie(params: HoodieParams = DEFAULT_HOODIE_PARAMS, fab
     capHeightCm: capHeight,
     cuffCm,
     side: 'right',
-    drape: { ...shoulderSleeveDrape('right'), radiusOffsetCm: SLEEVE_GAP_CM },
+    drape: shoulderSleeveDrape('right'),
   });
 
   // The hem ribs hang from the bodice hem, one band per bodice half.
@@ -243,14 +234,14 @@ export function generateHoodie(params: HoodieParams = DEFAULT_HOODIE_PARAMS, fab
     name: '左袖口罗纹',
     lengthCm: cuffCm,
     heightCm: CUFF_RIB_CM,
-    drape: { region: 'arm', side: 'left', zone: 'full', anchorOffsetCm: cuffAnchorCm, radiusOffsetCm: CUFF_GAP_CM },
+    drape: { region: 'arm', side: 'left', zone: 'full', anchorOffsetCm: cuffAnchorCm },
   });
 
   const cuffR = addRibBand(builder, {
     name: '右袖口罗纹',
     lengthCm: cuffCm,
     heightCm: CUFF_RIB_CM,
-    drape: { region: 'arm', side: 'right', zone: 'full', anchorOffsetCm: cuffAnchorCm, radiusOffsetCm: CUFF_GAP_CM },
+    drape: { region: 'arm', side: 'right', zone: 'full', anchorOffsetCm: cuffAnchorCm },
   });
 
   // Both hood halves follow the neck opening; each takes one half of the front and back neckline.
@@ -262,7 +253,7 @@ export function generateHoodie(params: HoodieParams = DEFAULT_HOODIE_PARAMS, fab
     frontNeckCm: frontNeckHalfCm,
     backNeckCm: backNeckHalfCm,
     heightCm: hoodHeightCm,
-    drape: { region: 'head', zone: 'left', radiusOffsetCm: HOOD_GAP_CM },
+    drape: { region: 'head', zone: 'left' },
   });
 
   const hoodR = addHoodHalf(builder, {
@@ -270,7 +261,7 @@ export function generateHoodie(params: HoodieParams = DEFAULT_HOODIE_PARAMS, fab
     frontNeckCm: frontNeckHalfCm,
     backNeckCm: backNeckHalfCm,
     heightCm: hoodHeightCm,
-    drape: { region: 'head', zone: 'right', radiusOffsetCm: HOOD_GAP_CM },
+    drape: { region: 'head', zone: 'right' },
   });
 
   addPocketMark(builder, front.panel, halfWidth);

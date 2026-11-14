@@ -102,8 +102,9 @@ export type WrapZone = 'front' | 'back' | 'left' | 'right' | 'full';
  * Drape: how a flat panel wraps the body in the pre-simulation placement. A panel
  * without one stays flat at its pattern coordinates.
  *
- * The wrap is one measured surface per body part: the panel's cut width decides how far
- * around the part it reaches, so a piece only has to name the part and the sector it covers.
+ * The wrap is the measured surface of one body part, and a piece is laid on that surface: its cut
+ * width only decides how far around the part it reaches, so surplus girth leaves the seam gap the
+ * sewing closes or laps over the piece, and it never lifts the piece off the body.
  */
 export interface PanelDrape {
   /** Body part the panel wraps. */
@@ -120,11 +121,6 @@ export interface PanelDrape {
   side?: 'left' | 'right';
   /** Design ease of the piece, in centimeters; used to order separate garments into layers. */
   easeCm?: number;
-  /**
-   * Gap the piece keeps outside the body surface, in centimeters. A collar, a cuff or a sleeve
-   * hood holds air against the skin, and wrapping it on the skin itself makes it overlap itself.
-   */
-  radiusOffsetCm?: number;
 }
 
 /** Construction layer a panel belongs to, from the body outward. */

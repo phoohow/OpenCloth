@@ -6,6 +6,8 @@ import { simplifiedDepth, type SimplifiedShape } from '@/avatar/simplifiedBody';
 import { createStarterProject } from '@/pattern/template/starterProject';
 import { generateShirt } from '@/pattern/template/shirtTemplate';
 import { generateHoodie } from '@/pattern/template/hoodieTemplate';
+import { generateSkirt } from '@/pattern/template/skirtTemplate';
+import { generateDress } from '@/pattern/template/dressTemplate';
 import { ClothAssembly } from '@/runtime/clothAssembly';
 import { BodyLandmarkCache } from '@/runtime/initialPose';
 import type { SeamPair } from '@/runtime/seamPair';
@@ -131,7 +133,91 @@ describe('unsewn layout', () => {
       expect(checked, c.name).toBeGreaterThan(200);
     }
   });
+
+  // The wrap reads one proxy section per body part and lays the piece on it, whatever the pattern
+  // did with the piece's girth: nothing in the templates may lift a panel off the surface.
+  it('lays every wrapped panel of the templates on the section it wraps', () => {
+    const starter = createStarterProject();
+    const cache = new BodyLandmarkCache();
+    for (const pattern of [
+      starter.pattern,
+      generateShirt(undefined, 'fabric_default'),
+      generateHoodie(undefined, 'fabric_default'),
+      generateSkirt(undefined, 'fabric_default'),
+      generateDress(undefined, 'fabric_default'),
+    ]) {
+      const project = { ...starter, pattern };
+      const meshes = new Map<string, PanelMesh>();
+      for (const panelId of Object.keys(pattern.panels)) {
+        const mesh = buildPanelMesh(pattern, panelId);
+        if (mesh) meshes.set(panelId, mesh);
+      }
+      const assembly = new ClothAssembly();
+      assembly.build(project, meshes, cache);
+      const shapes = cache.resolve(project.avatar.params).bodyShapes();
+      for (const panel of Object.values(pattern.panels)) {
+        const drape = panel.drape;
+        if (!drape) continue;
+        const shape = sectionFor(shapes, drape.region, drape.side);
+        if (!shape) continue;
+        const range = assembly.layout.rangeOf(panel.id)!;
+        let checked = 0;
+        for (let i = range.start; i < range.end; i++) {
+          const p: [number, number, number] = [
+            assembly.positions[i * 3]!, assembly.positions[i * 3 + 1]!, assembly.positions[i * 3 + 2]!,
+          ];
+          const gap = shape.kind === 'limb' ? limbSectionGap(shape, p) : simplifiedDepth(shape, p);
+          // Rows past either end of a section, like a hem below the pelvis, have no surface.
+          if (gap === null || gap <= -0.5) continue;
+          expect(Math.abs(gap), `${panel.name}`).toBeLessThan(0.002);
+          checked++;
+        }
+        // A piece that wraps entirely past the section, like a collar falling above the neck, has
+        // no surface of its own to sit on.
+        if (checked > 0) expect(checked, panel.name).toBeGreaterThan(20);
+      }
+    }
+  });
 });
+
+/** Proxy section a wrap region reads: the limb of its side, or the single shape of the part. */
+function sectionFor(
+  shapes: readonly SimplifiedShape[],
+  region: NonNullable<Panel['drape']>['region'],
+  side: 'left' | 'right' | undefined,
+): SimplifiedShape | undefined {
+  if (region === 'arm' || region === 'leg') {
+    const sign = side === 'left' ? -1 : 1;
+    return shapes.find(shape => shape.kind === 'limb' && shape.part === region && shape.side === sign);
+  }
+  if (region === 'head') return shapes.find(shape => shape.kind === 'ellipsoid');
+  if (region === 'neck') return shapes.find(shape => shape.kind === 'tube' && shape.part === 'neck');
+  return shapes.find(shape => shape.kind === 'torso');
+}
+
+/** Distance from a point to the limb surface across its axis, or null past either end. */
+function limbSectionGap(limb: Extract<SimplifiedShape, { kind: 'limb' }>, p: readonly number[]): number | null {
+  let best = Infinity;
+  let radius = 0;
+  for (let i = 1; i < limb.path.length; i++) {
+    const a = limb.path[i - 1]!;
+    const b = limb.path[i]!;
+    const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    const lengthSq = ab[0]! ** 2 + ab[1]! ** 2 + ab[2]! ** 2;
+    const raw = ((p[0]! - a[0]!) * ab[0]! + (p[1]! - a[1]!) * ab[1]! + (p[2]! - a[2]!) * ab[2]!) / lengthSq;
+    // A point that projects off either end of the centreline has no section of its own.
+    if ((i === 1 && raw < 0) || (i === limb.path.length - 1 && raw > 1)) return null;
+    const t = Math.min(1, Math.max(0, raw));
+    const distance = Math.hypot(
+      p[0]! - (a[0]! + ab[0]! * t), p[1]! - (a[1]! + ab[1]! * t), p[2]! - (a[2]! + ab[2]! * t),
+    );
+    if (distance < best) {
+      best = distance;
+      radius = limb.radii[i - 1]! + (limb.radii[i]! - limb.radii[i - 1]!) * t;
+    }
+  }
+  return best - radius;
+}
 
 describe('merged cloth winding', () => {
   it('turns every stitched side the same way in the sewn pose', () => {
