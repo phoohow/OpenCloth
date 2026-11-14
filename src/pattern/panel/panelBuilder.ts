@@ -88,12 +88,39 @@ function to3D(positions2D: Float32Array): Float32Array {
 }
 
 /**
+ * Seam line of a panel resampled for simulation. Every pattern point is kept as an outline vertex, so
+ * each edge run starts and ends on its corners rather than one mesh step short of them.
+ */
+function resampledPanelOutline(pattern: Pattern, panel: Panel, resolution: number): Vec2[] {
+  const outline = samplePanelOutline(pattern, panel);
+  return resampleClosedOutline(outline, resolution, patternPointIndices(pattern, panel, outline));
+}
+
+/** Indices of the panel's pattern points, where two of its edges meet, inside its sampled outline. */
+function patternPointIndices(pattern: Pattern, panel: Panel, outline: Vec2[]): number[] {
+  const indices: number[] = [];
+  for (const edgeId of panel.outlineEdgeIds) {
+    const edge = pattern.edges[edgeId];
+    const point = edge ? pattern.points[edge.startPointId] : undefined;
+    if (!point) continue;
+    let best = -1;
+    let bestDistance = 1e-3;
+    for (let i = 0; i < outline.length; i++) {
+      const d = distance2(outline[i]!, point.pos);
+      if (d < bestDistance) { bestDistance = d; best = i; }
+    }
+    if (best >= 0) indices.push(best);
+  }
+  return indices;
+}
+
+/**
  * Bounds of the outline a panel's simulation mesh is resampled from, in centimeters, so the 2D pane
  * derives the same heights the drape wraps.
  */
 export function panelMeshBounds(pattern: Pattern, panel: Panel): { min: Vec2; max: Vec2 } {
   const resolution = panel.meshResolutionCm ?? DEFAULT_MESH_RESOLUTION_CM;
-  const outline = resampleClosedOutline(samplePanelOutline(pattern, panel), resolution);
+  const outline = resampledPanelOutline(pattern, panel, resolution);
   return computeBBox(outline.length >= 3 ? outline : samplePanelOutline(pattern, panel));
 }
 
@@ -113,7 +140,7 @@ export function buildPanelMesh(
   if (!panel) return null;
 
   const resolution = resolutionCm ?? panel.meshResolutionCm ?? DEFAULT_MESH_RESOLUTION_CM;
-  const outline = resampleClosedOutline(samplePanelOutline(pattern, panel), resolution);
+  const outline = resampledPanelOutline(pattern, panel, resolution);
   if (outline.length < 3) return null;
 
   const holes = (panel.holes ?? [])
@@ -213,7 +240,8 @@ export function panelGrainLine(panel: Panel, outline: Vec2[]): Vec2[] | null {
 /**
  * Maps pattern edge IDs to the mesh boundary vertices lying along each edge. Every boundary
  * vertex joins the edge whose sampled polyline it sits closest to and the run is ordered along
- * that edge, so seams cover the full length of an edge instead of its endpoints only.
+ * that edge, so seams cover the full length of an edge instead of its endpoints only. A vertex
+ * sitting on a corner joins both edges that meet there, so each run reaches the corner it ends on.
  */
 function buildEdgeVertexMap(
   pattern: Pattern,
@@ -256,6 +284,14 @@ function buildEdgeVertexMap(
       }
       assignments[fallback]!.push({ vertex, t: near.t });
     }
+    // The corner also ends the neighbouring edges, and a seam that stops one vertex short of it
+    // leaves that last mesh edge unstitched, which opens a notch where the pieces are joined.
+    for (let k = 0; k < tracks.length; k++) {
+      if (k === bestTrack) continue;
+      const track = tracks[k]!;
+      if (track.startsAt(p)) assignments[k]!.push({ vertex, t: 0 });
+      else if (track.endsAt(p)) assignments[k]!.push({ vertex, t: track.length });
+    }
   }
 
   for (let k = 0; k < tracks.length; k++) {
@@ -267,6 +303,9 @@ function buildEdgeVertexMap(
 
 /** Margin a boundary vertex may sit outside an edge's bounding box, in centimetres. */
 const TRACK_MARGIN_CM = 6;
+
+/** Distance within which a boundary vertex counts as sitting on an edge's endpoint, in centimetres. */
+const CORNER_EPS_CM = 0.02;
 
 /** A sampled pattern edge that boundary vertices are assigned to. */
 class EdgeTrack {
@@ -293,6 +332,23 @@ class EdgeTrack {
   /** True when `p` falls inside the edge's bounding box plus the assignment margin. */
   near(p: Vec2): boolean {
     return p.x >= this.minX && p.x <= this.maxX && p.y >= this.minY && p.y <= this.maxY;
+  }
+
+  /** True when `p` sits on the edge's first sample, the corner it starts at. */
+  startsAt(p: Vec2): boolean {
+    const first = this.points[0];
+    return first !== undefined && distance2(first, p) <= CORNER_EPS_CM;
+  }
+
+  /** True when `p` sits on the edge's last sample, the corner it ends at. */
+  endsAt(p: Vec2): boolean {
+    const last = this.points[this.points.length - 1];
+    return last !== undefined && distance2(last, p) <= CORNER_EPS_CM;
+  }
+
+  /** Arc length of the whole edge. */
+  get length(): number {
+    return this.arc[this.arc.length - 1] ?? 0;
   }
 
   /** Distance to the polyline and the arc length of the closest point on it. */

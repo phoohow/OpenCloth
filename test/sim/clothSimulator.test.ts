@@ -259,6 +259,17 @@ describe('live seam constraint sets', () => {
     sim.setSeamProgress(1);
     expect(constraintsOf(sim, 'seam').map(c => c.restLength)).toEqual([0, 0]);
   });
+
+  it('keeps a dressed garment closed when its seam group is replaced', async () => {
+    const { sim } = await setupSimulator(makeInput({ seamConstraints: [seam(0, 3, 0.4)] }));
+    // The sewing stage closes every stitch before the garment settles.
+    sim.setSeamProgress(1);
+    expect(constraintsOf(sim, 'seam').map(c => c.restLength)).toEqual([0]);
+
+    // A later edit rebuilds the group from the open layout; the stitches must stay shut.
+    sim.setSeamConstraints([seam(0, 3, 0.4), seam(1, 2, 0)]);
+    expect(constraintsOf(sim, 'seam').map(c => c.restLength)).toEqual([0, 0]);
+  });
 });
 
 describe('simulator teardown', () => {  it('destroy releases every buffer and stops the solver', async () => {

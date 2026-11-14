@@ -18,10 +18,12 @@ import {
   buildCreaseConstraints, buildPanelConstraints, createBatchedConstraints, rewriteBatches,
 } from '@/sim/constraintBatches';
 import {
-  computeBaseInvMass, computeParticleDamping, computeParticleLayers,
-  computeParticleThickness, CONSTRAINT_GROUP_ORDER, type ClothSimInput, type ConstraintGroup,
-  type ConstraintGroupKind,
+  computeBaseInvMass, computeParticleLayers, computeParticleThickness, CONSTRAINT_GROUP_ORDER,
+  type ClothSimInput, type ConstraintGroup, type ConstraintGroupKind,
 } from '@/sim/simTypes';
+import {
+  createParticleMaterialBuffers, writeParticleMaterialBuffers, type ParticleMaterialBuffers,
+} from '@/sim/particleMaterials';
 import { ClothGrab, usableGrabWeights } from '@/sim/clothGrab';
 import { SelfCollisionSolver } from '@/sim/selfCollision';
 import { frameProfiler } from '@/base/perf';
@@ -63,6 +65,8 @@ export class ClothSimulator {
   private seamTearing = false;
   /** Flat indices (into the live seam constraint stream) already torn. */
   private tornSeams = new Set<number>();
+  /** Seam closure fraction last applied, so a replaced seam group starts from it. */
+  private seamProgress = 0;
 
   // Body collision
   /** Triangle grid of the body mesh: vertices, cell offsets and per-cell triangle indices. */
@@ -71,8 +75,8 @@ export class ClothSimulator {
   private collideBody: CollideBody = {
     triangleCount: 0, gridOrigin: [0, 0, 0], gridCell: 1, gridDims: [0, 0, 0],
   };
-  /** Per-particle damping mirroring each panel's material. */
-  private dampingBuf!: GPUBuffer;
+  /** Per-particle damping and friction mirroring each panel's material. */
+  private materialBufs!: ParticleMaterialBuffers;
   /** Per-particle pointer-drag weights read by the INTEGRATE pass. */
   private grabWeightBuf!: GPUBuffer;
   /** Per-particle collision clearance read by the COLLIDE pass, in meters. */
@@ -165,8 +169,7 @@ export class ClothSimulator {
     this.panelPhysics = input.panels.map(p => p.physics);
     this.panelMap = computeParticlePanelMap(input);
     this.baseInvMass = computeBaseInvMass(input, this.panelPhysics, pc);
-    this.dampingBuf = createStorageBuffer(dev, computeParticleDamping(
-      input, this.panelPhysics, pc, this.panelPhysics[0]?.damping ?? 0.02));
+    this.materialBufs = createParticleMaterialBuffers(dev, input, this.panelPhysics, pc);
     this.thicknessByParticle = computeParticleThickness(input, pc, clothThicknessMeters(config));
     this.thicknessBuf = createStorageBuffer(dev, this.thicknessByParticle);
     this.grabWeightBuf = createStorageBuffer(dev, this.grab.setParticleCount(pc));
@@ -296,6 +299,11 @@ export class ClothSimulator {
     for (let i = 0; i < pc; i++) this.invMassMirror[i] = this.pinnedSet.has(i) ? 0 : this.baseInvMass[i]!;
   }
 
+  /** Rewrites the per-particle damping and friction after a panel material changed. */
+  private uploadMaterialFields(input: ClothSimInput): void {
+    writeParticleMaterialBuffers(this.device, this.materialBufs, input, this.panelPhysics, this.particleCount);
+  }
+
   /** Copies the cloth self-collision and seam-tearing tunables of one frame step. */
   private applySelfCollisionConfig(config: SimulationConfig): void {
     this.selfCollisionEnabled = config.selfCollision !== false;
@@ -379,10 +387,10 @@ export class ClothSimulator {
     this.collideBG = bind(L.collide,
       [this.predictedBuf, this.collideParamsBuf, this.prevPosBuf,
         this.meshBuffers.triangle, this.meshBuffers.cellStart, this.meshBuffers.cellTriangles, this.contactMoveBuf,
-        this.thicknessBuf]);
+        this.thicknessBuf, this.materialBufs.friction]);
     this.updateBG = bind(L.update,
       [this.posInvMassBuf, this.prevPosBuf, this.velocityBuf, this.predictedBuf, this.updateParamsBuf,
-        this.dampingBuf]);
+        this.materialBufs.damping]);
     this.setPinBG = bind(L.setPin,
       [this.posInvMassBuf, this.pinIndicesBuf, this.pinParamsBuf, this.pinInvMassBuf]);
   }
@@ -560,7 +568,7 @@ export class ClothSimulator {
       // Body collision; the floor plane is always active and always dispatched
       {
         dev.queue.writeBuffer(this.collideParamsBuf, 0,
-          packCollideParams(subConfig, pc, this.collideBody, this.floorY, fabric.contactFriction));
+          packCollideParams(subConfig, pc, this.collideBody, this.floorY));
         const pass = encoder.beginComputePass();
         pass.setPipeline(this.pipelines.collide);
         pass.setBindGroup(0, this.collideBG);
@@ -636,8 +644,7 @@ export class ClothSimulator {
     if (!inPlace) for (const [kind, constraints] of sets) this.installGroup(kind, constraints);
 
     this.baseInvMass = computeBaseInvMass(input, this.panelPhysics, input.particleCount);
-    this.device.queue.writeBuffer(this.dampingBuf, 0, computeParticleDamping(
-      input, this.panelPhysics, input.particleCount, this.panelPhysics[0]?.damping ?? 0.02));
+    this.uploadMaterialFields(input);
     this.syncInvMassMirror();
     for (let i = 0; i < input.particleCount; i++) {
       const w = this.pinnedSet.has(i) ? 0 : this.baseInvMass[i];
@@ -656,6 +663,7 @@ export class ClothSimulator {
     this.installGroup('seam', constraints);
     this.seamOpenLengths = this.group('seam').batched.batches.map(batch => batch.map(c => c.restLength));
     this.tornSeams.clear();
+    if (this.seamProgress > 0) this.setSeamProgress(this.seamProgress);
     this.rebuildNormalTopology(this.simInput);
   }
 
@@ -760,8 +768,7 @@ export class ClothSimulator {
     this.layerByParticle = computeParticleLayers(input, pc);
     this.uploadIndices(input.indices);
     this.rebuildNormalTopology(input);
-    this.device.queue.writeBuffer(this.dampingBuf, 0, computeParticleDamping(
-      input, this.panelPhysics, pc, this.panelPhysics[0]?.damping ?? 0.02));
+    this.uploadMaterialFields(input);
     this.syncInvMassMirror();
 
     const data = new Float32Array(pc * 4);
@@ -791,12 +798,10 @@ export class ClothSimulator {
     this.time = 0;
   }
 
-  /**
-   * Closes every seam by the same fraction: rest length runs from the open pair distance to zero.
-   * `progress` is clamped to 0..1 and the batches are repacked into their existing buffers.
-   */
+  /** Closes every seam by the same fraction, running the rest length from the open pair distance to zero. */
   setSeamProgress(progress: number): void {
-    const writes = seamProgressWrites(this.groups, this.seamOpenLengths, this.tornSeams, progress);
+    this.seamProgress = Math.min(1, Math.max(0, progress));
+    const writes = seamProgressWrites(this.groups, this.seamOpenLengths, this.tornSeams, this.seamProgress);
     for (const write of writes) this.device.queue.writeBuffer(write.buffer, 0, write.data);
   }
 
@@ -870,7 +875,7 @@ export class ClothSimulator {
       this.collideBG = this.bindGroup(this.pipelines.layouts.collide, [
         this.predictedBuf, this.collideParamsBuf, this.prevPosBuf,
         this.meshBuffers.triangle, this.meshBuffers.cellStart, this.meshBuffers.cellTriangles, this.contactMoveBuf,
-        this.thicknessBuf,
+        this.thicknessBuf, this.materialBufs.friction,
       ]);
     }
     return true;
@@ -980,7 +985,7 @@ export class ClothSimulator {
     const buffers: (GPUBuffer | undefined)[] = [
       this.posInvMassBuf, this.prevPosBuf, this.velocityBuf, this.predictedBuf, this.normalsBuf,
       this.contactMoveBuf, this.indicesBuf, this.groupStartBuf, this.groupTrianglesBuf, this.groupOfParticleBuf,
-      this.dampingBuf, this.grabWeightBuf, this.thicknessBuf,
+      this.materialBufs.damping, this.grabWeightBuf, this.thicknessBuf, this.materialBufs.friction,
       this.meshBuffers.triangle, this.meshBuffers.cellStart, this.meshBuffers.cellTriangles,
       this.integrateParamsBuf, this.collideParamsBuf, this.updateParamsBuf, this.normalsParamsBuf,
       this.pinIndicesBuf, this.pinInvMassBuf, this.pinParamsBuf,

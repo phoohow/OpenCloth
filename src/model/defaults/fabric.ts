@@ -13,19 +13,19 @@ export const DEFAULT_COMPRESSION_LIMIT = 0.1;
 export const FABRIC_PHYSICS_PRESETS: Record<FabricPresetKey, FabricPhysics> = {
   cotton: {
     stretchStiffness: 0.9, bendingStiffness: 0.4, shearStiffness: 0.8, massPerArea: 180,
-    damping: 0.02, contactFriction: 0.55, stretchLimit: 0.08, compressionLimit: 0.1,
+    damping: 0.02, contactFriction: 0.25, stretchLimit: 0.08, compressionLimit: 0.1,
   },
   silk: {
     stretchStiffness: 0.95, bendingStiffness: 0.15, shearStiffness: 0.85, massPerArea: 80,
-    damping: 0.015, contactFriction: 0.35, stretchLimit: 0.12, compressionLimit: 0.08,
+    damping: 0.015, contactFriction: 0.15, stretchLimit: 0.12, compressionLimit: 0.08,
   },
   denim: {
     stretchStiffness: 0.8, bendingStiffness: 0.75, shearStiffness: 0.7, massPerArea: 400,
-    damping: 0.03, contactFriction: 0.7, stretchLimit: 0.06, compressionLimit: 0.06,
+    damping: 0.03, contactFriction: 0.45, stretchLimit: 0.06, compressionLimit: 0.06,
   },
   knit: {
     stretchStiffness: 0.5, bendingStiffness: 0.25, shearStiffness: 0.4, massPerArea: 250,
-    damping: 0.02, contactFriction: 0.5, stretchLimit: 0.25, compressionLimit: 0.2,
+    damping: 0.02, contactFriction: 0.35, stretchLimit: 0.25, compressionLimit: 0.2,
   },
 };
 

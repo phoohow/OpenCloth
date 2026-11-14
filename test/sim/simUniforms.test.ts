@@ -42,15 +42,21 @@ describe('collide params', () => {
     gridDims: [1, 1, 1] as [number, number, number],
   };
 
-  it('writes the fabric contact friction and clamps it to 0..1', () => {
+  it('packs the collision grid, floor and triangle count', () => {
     const config = createDefaultProject().scene.simulation;
-    expect(packCollideParams(config, 32, body, 0, 0.7)[3]).toBeCloseTo(0.7, 6);
-    expect(packCollideParams(config, 32, body, 0, -1)[3]).toBe(0);
-    expect(packCollideParams(config, 32, body, 0, 2)[3]).toBe(1);
+    const data = packCollideParams(config, 32, body, -0.7);
+    expect(data.length).toBe(16);
+    expect(data[0]).toBeCloseTo(config.dt, 6);
+    expect(new Uint32Array(data.buffer)[1]).toBe(32);
+    expect(data[4]).toBeCloseTo(-0.7, 6);
+    expect(new Uint32Array(data.buffer)[6]).toBe(1);
+    expect(data[8]).toBeCloseTo(body.gridOrigin[0], 6);
+    expect(data[11]).toBeCloseTo(body.gridCell, 6);
+    expect(data[12]).toBeCloseTo(body.gridDims[0], 6);
   });
 
-  it('falls back to the default friction when the value is missing', () => {
-    const config = createDefaultProject().scene.simulation;
-    expect(packCollideParams(config, 32, body, 0)[3]).toBeCloseTo(0.5, 6);
+  it('drops the body triangles while avatar collision is off', () => {
+    const config = { ...createDefaultProject().scene.simulation, avatarCollision: false };
+    expect(new Uint32Array(packCollideParams(config, 32, body, 0).buffer)[6]).toBe(0);
   });
 });

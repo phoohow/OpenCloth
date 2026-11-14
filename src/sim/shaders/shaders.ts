@@ -117,10 +117,12 @@ struct SimParams {
   dt: f32,
   particleCount: u32,
   surfaceOffset: f32,
-  friction: f32,
+  // Reserved: keeps the grid block 16-byte aligned.
+  _p0: f32,
   floorY: f32,
   clothThickness: f32,
   triangleCount: u32,
+  _p1: f32,
   // Collision grid: xyz = minimum corner, w = cell edge
   gridOrigin: vec4<f32>,
   // Collision grid: xyz = cell counts per axis
@@ -147,6 +149,8 @@ const MAX_CONTACT_MOVE = 0.02;
 @group(0) @binding(6) var<storage, read_write> contactMove: array<f32>;
 // Collision clearance of every particle, meters; a panel's construction layer sets it.
 @group(0) @binding(7) var<storage, read> thickness: array<f32>;
+// Coulomb friction coefficient of every particle, from its fabric.
+@group(0) @binding(8) var<storage, read> friction: array<f32>;
 
 fn closestOnTriangle(p: vec3<f32>, a: vec3<f32>, b: vec3<f32>, c: vec3<f32>) -> vec3<f32> {
   let ab = b - a;
@@ -241,10 +245,17 @@ fn nearestSurface(p: vec3<f32>, rings: i32) -> SurfaceHit {
   return hit;
 }
 
-// Tangential pull toward the sub-step start; the normal component is unchanged.
-fn applyFriction(pos: vec3<f32>, n: vec3<f32>, prev: vec3<f32>, amount: f32) -> vec3<f32> {
+// Coulomb friction: cancels the tangential slip of the sub-step, but never more than the friction
+// cone of the normal displacement the contact applied, so resting fabric holds still and sliding
+// fabric loses mu times the normal force.
+fn applyFriction(pos: vec3<f32>, n: vec3<f32>, prev: vec3<f32>, normalDepth: f32, mu: f32) -> vec3<f32> {
+  if (mu <= 0.0) { return pos; }
   let toPrev = prev - pos;
-  return pos + (toPrev - dot(toPrev, n) * n) * amount;
+  let slip = toPrev - dot(toPrev, n) * n;
+  let slipLength = length(slip);
+  if (slipLength < 1e-9) { return pos; }
+  let limit = mu * min(normalDepth, MAX_CONTACT_MOVE);
+  return pos + slip * min(1.0, limit / slipLength);
 }
 
 @compute @workgroup_size(256)
@@ -258,6 +269,7 @@ fn collide(@builtin(global_invocation_id) gid: vec3<u32>) {
   // Per-particle thickness adds to the clearance kept against every collision surface.
   let clearance = params.surfaceOffset + thickness[i];
   let prev = prevPos[i].xyz;
+  let mu = friction[i];
 
   if (params.triangleCount > 0u) {
     // The body mesh is the collider: project onto the surface plus the clearance. A point inside
@@ -280,7 +292,7 @@ fn collide(@builtin(global_invocation_id) gid: vec3<u32>) {
       let surfacePoint = hit.point + n * clearance;
       let indent = max(dot(surfacePoint - start, n), 0.0);
       contactMove[i] = max(contactMove[i], min(indent, MAX_CONTACT_MOVE));
-      pos = applyFriction(surfacePoint, n, prev, params.friction);
+      pos = applyFriction(surfacePoint, n, prev, indent, mu);
       moved = true;
     }
   }
@@ -289,8 +301,9 @@ fn collide(@builtin(global_invocation_id) gid: vec3<u32>) {
   let floorLimit = params.floorY + clearance;
   if (pos.y < floorLimit) {
     let floorN = vec3<f32>(0.0, 1.0, 0.0);
-    contactMove[i] = max(contactMove[i], min(floorLimit - pos.y, MAX_CONTACT_MOVE));
-    pos = applyFriction(vec3<f32>(pos.x, floorLimit, pos.z), floorN, prev, params.friction);
+    let indent = floorLimit - pos.y;
+    contactMove[i] = max(contactMove[i], min(indent, MAX_CONTACT_MOVE));
+    pos = applyFriction(vec3<f32>(pos.x, floorLimit, pos.z), floorN, prev, indent, mu);
     pos.y = floorLimit;
     moved = true;
   }

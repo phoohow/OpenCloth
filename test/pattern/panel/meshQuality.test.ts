@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { GARMENT_TEMPLATES } from '@/pattern/template';
+import { sampleEdge } from '@/pattern/panel';
 import { DEFAULT_TSHIRT_PARAMS, generateTShirt } from '@/pattern/template/tShirtTemplate';
 import { buildPanelMesh, samplePanelOutline, type PanelMesh } from '@/pattern/panel/panelBuilder';
 import type { Vec2 } from '@/model/types';
@@ -77,6 +79,34 @@ describe('版片网格质量', () => {
           expect(distanceToOutline(pointOf(mesh, p), outline)).toBeLessThan(1e-3);
         }
       });
+    });
+  }
+});
+
+describe('edge vertex runs', () => {
+  // A seam stitches vertex run to vertex run, so a run that stops one mesh step short of a corner
+  // leaves that last piece of the edge unstitched, and the two pieces open a notch there once the
+  // garment is dressed. Every run therefore has to start and end on the edge's own endpoints.
+  for (const template of GARMENT_TEMPLATES) {
+    it(`covers both corners of every ${template.key} edge`, () => {
+      const pattern = template.generate(template.defaults, 'fabric_default');
+      for (const panel of Object.values(pattern.panels)) {
+        const mesh = buildPanelMesh(pattern, panel.id);
+        if (!mesh) continue;
+        for (const edgeId of panel.outlineEdgeIds) {
+          const run = mesh.edgeVertexMap.get(edgeId);
+          const samples = sampleEdge(pattern, edgeId);
+          if (!run || run.length === 0 || samples.length === 0) continue;
+          const first = pointOf(mesh, run[0]!);
+          const last = pointOf(mesh, run[run.length - 1]!);
+          const start = samples[0]!;
+          const end = samples[samples.length - 1]!;
+          expect(Math.hypot(first.x - start.x, first.y - start.y), `${panel.name} ${edgeId} start`)
+            .toBeLessThan(1e-3);
+          expect(Math.hypot(last.x - end.x, last.y - end.y), `${panel.name} ${edgeId} end`)
+            .toBeLessThan(1e-3);
+        }
+      }
     });
   }
 });

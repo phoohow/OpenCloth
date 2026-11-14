@@ -282,11 +282,15 @@ export class ClothAssembly {
     const fractionsB = arcFractions(this.positions, vertsB, offB);
     const pairs: Array<[number, number]> = [];
     const seen = new Set<string>();
+    const pairedA = new Set<number>();
+    const pairedB = new Set<number>();
     const addPair = (ia: number, ib: number): void => {
       const key = `${ia}_${ib}`;
       if (seen.has(key)) return;
       seen.add(key);
       pairs.push([ia, ib]);
+      pairedA.add(ia);
+      pairedB.add(ib);
     };
 
     // Shared fractions first, so both runs advance together along the seam.
@@ -299,9 +303,16 @@ export class ClothAssembly {
       ib = nearestFraction(fractionsB, f, ib);
       addPair(ia, ib);
     }
-    // The uneven run has leftover vertices; each of them still needs a stitch.
-    for (let i = 0; i < fractionsA.length; i++) addPair(i, nearestFraction(fractionsB, fractionsA[i]!, 0));
-    for (let j = 0; j < fractionsB.length; j++) addPair(nearestFraction(fractionsA, fractionsB[j]!, 0), j);
+    // Fill the vertices the fraction walk stepped over: a partner stitched elsewhere would pull
+    // such a vertex to two points at once and leave the pieces apart.
+    for (let i = 0; i < fractionsA.length; i++) {
+      if (pairedA.has(i)) continue;
+      addPair(i, nearestFreeFraction(fractionsB, fractionsA[i]!, pairedB));
+    }
+    for (let j = 0; j < fractionsB.length; j++) {
+      if (pairedB.has(j)) continue;
+      addPair(nearestFreeFraction(fractionsA, fractionsB[j]!, pairedA), j);
+    }
 
     for (const [pairA, pairB] of pairs) {
       const p0 = vertsA[pairA]! + offA, p1 = vertsB[pairB]! + offB;
@@ -338,6 +349,27 @@ function nearestFraction(fractions: number[], target: number, from: number): num
 }
 
 /**
+ * Index of the fraction closest to `target` that no stitch uses yet, so the pairing stays one
+ * partner per vertex. Falls back to the closest index of all when the run is fully taken.
+ */
+function nearestFreeFraction(fractions: number[], target: number, taken: Set<number>): number {
+  let best = -1;
+  let bestError = Infinity;
+  for (let i = 0; i < fractions.length; i++) {
+    const error = Math.abs(fractions[i]! - target);
+    if (error < bestError && !taken.has(i)) { best = i; bestError = error; }
+  }
+  if (best >= 0) return best;
+  let fallback = 0;
+  let fallbackError = Infinity;
+  for (let i = 0; i < fractions.length; i++) {
+    const error = Math.abs(fractions[i]! - target);
+    if (error < fallbackError) { fallback = i; fallbackError = error; }
+  }
+  return fallback;
+}
+
+/**
  * Vertex runs of a dart's two legs on its panel mesh, sampled at the mesh's own spacing so the
  * fabric eases toward the tip instead of stitching only the two leg endpoints.
  */
@@ -349,22 +381,21 @@ function dartLegRuns(pattern: Pattern, dart: Dart, mesh: TriangleMesh): [number[
   ];
 }
 
-/** Vertex indices of the boundary run whose arc-length fraction lies inside [t0, t1]. */
+/**
+ * Vertex indices of the boundary run between `t0` and `t1`. Both ends snap to the nearest vertex, so
+ * two seams splitting one edge at the same fraction stitch their junction to one vertex instead of
+ * leaving one vertex of that edge free on either side of the cut.
+ */
 function intervalVertices(
   vertices: number[], t0: number, t1: number, positions: Float32Array, offset: number,
 ): number[] {
   if ((t0 === 0 && t1 === 1) || vertices.length < 2) return vertices;
-  const acc = [0];
-  for (let i = 1; i < vertices.length; i++) {
-    acc.push(acc[i - 1] + distance(positions, offset + vertices[i - 1], offset + vertices[i]));
-  }
-  const total = acc[acc.length - 1] || 1;
-  const out: number[] = [];
-  for (let i = 0; i < vertices.length; i++) {
-    const f = acc[i] / total;
-    if (f >= Math.min(t0, t1) - 1e-9 && f <= Math.max(t0, t1) + 1e-9) out.push(vertices[i]);
-  }
-  return out.length >= 2 ? out : vertices;
+  const fractions = arcFractions(positions, vertices, offset);
+  const lo = nearestFraction(fractions, Math.min(t0, t1), 0);
+  let hi = nearestFraction(fractions, Math.max(t0, t1), 0);
+  if (hi <= lo) hi = Math.min(vertices.length - 1, lo + 1);
+  if (hi - lo < 1) return vertices;
+  return vertices.slice(lo, hi + 1);
 }
 
 /** Splits a vertex run into the parts before and after an anchor fraction. */

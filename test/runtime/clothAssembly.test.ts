@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Panel, PanelDrape } from '@/model/types';
+import type { Panel, PanelDrape, Seam } from '@/model/types';
 import { buildPanelMesh, type PanelMesh } from '@/pattern/panel';
 import { drapeReversesWinding } from '@/pattern/drape';
 import { simplifiedDepth, type SimplifiedShape } from '@/avatar/simplifiedBody';
@@ -304,6 +304,138 @@ describe('body pose', () => {
     expect(a.y).toBeGreaterThan(a.x);
   });
 });
+
+describe('seam closure', () => {
+  // A seam that closes has to leave both pieces on one line: a pair still apart after the collapse,
+  // or two pairs whose edges bow apart between them, is the gap a dressed garment must not show.
+  for (const [label, build] of [
+    ['starter', () => createStarterProject().pattern],
+    ['shirt', () => generateShirt(undefined, 'fabric_default')],
+    ['hoodie', () => generateHoodie(undefined, 'fabric_default')],
+  ] as const) {
+    it(`closes every ${label} stitch pair and the seam line between them`, () => {
+      const project = { ...createStarterProject(), pattern: build() };
+      const meshes = new Map<string, PanelMesh>();
+      for (const panelId of Object.keys(project.pattern.panels)) {
+        const mesh = buildPanelMesh(project.pattern, panelId);
+        if (mesh) meshes.set(panelId, mesh);
+      }
+      const assembly = new ClothAssembly();
+      assembly.build(project, meshes, new BodyLandmarkCache());
+      const closed = assembly.dressPositions;
+
+      const bySeam = new Map<string, SeamPair[]>();
+      for (const pair of assembly.seamPairs) {
+        const list = bySeam.get(pair.seamId) ?? [];
+        list.push(pair);
+        bySeam.set(pair.seamId, list);
+      }
+      for (const [seamId, pairs] of bySeam) {
+        for (const pair of pairs) {
+          expect(distanceAt(closed, pair.p0, pair.p1), seamId).toBeLessThan(0.001);
+        }
+        for (let i = 1; i < pairs.length; i++) {
+          const previous = pairs[i - 1]!;
+          const current = pairs[i]!;
+          const middle: [number, number, number] = [0, 1, 2].map(k =>
+            (closed[previous.p0 * 3 + k]! + closed[current.p0 * 3 + k]!) / 2) as [number, number, number];
+          expect(
+            distanceToSegment(middle, closed, previous.p1, current.p1), `${seamId} #${i}`,
+          ).toBeLessThan(0.004);
+        }
+      }
+    });
+  }
+});
+
+describe('seam junctions', () => {
+  // One pattern edge split between several seams leaves two pieces standing on the same corner. Both
+  // have to be stitched to one vertex of that edge, or closing the seams tears a wedge open there.
+  // Only the shirt splits an edge (the yoke cuts the armhole and the neckline into stretches).
+  for (const [label, build, splitsEdge] of [
+    ['starter', () => createStarterProject().pattern, false],
+    ['shirt', () => generateShirt(undefined, 'fabric_default'), true],
+    ['hoodie', () => generateHoodie(undefined, 'fabric_default'), false],
+  ] as const) {
+    it(`stitches the ${label} split corner of an edge to one vertex`, () => {
+      const project = { ...createStarterProject(), pattern: build() };
+      const meshes = new Map<string, PanelMesh>();
+      for (const panelId of Object.keys(project.pattern.panels)) {
+        const mesh = buildPanelMesh(project.pattern, panelId);
+        if (mesh) meshes.set(panelId, mesh);
+      }
+      const assembly = new ClothAssembly();
+      assembly.build(project, meshes, new BodyLandmarkCache());
+      const closed = assembly.dressPositions;
+      const pattern = project.pattern;
+
+      // Boundary vertices each seam interval uses, per side, as merged indices.
+      const usage = new Map<string, Array<{ lo: number; hi: number; indices: number[] }>>();
+      for (const seam of Object.values(pattern.seams) as Seam[]) {
+        for (const side of ['a', 'b'] as const) {
+          const edgeId = seam[side].edgeId;
+          const panel = Object.values(pattern.panels)
+            .find(candidate => candidate.outlineEdgeIds.includes(edgeId));
+          const mesh = panel ? meshes.get(panel.id) : undefined;
+          const run = mesh?.edgeVertexMap.get(edgeId);
+          if (!panel || !run) continue;
+          const offset = assembly.layout.rangeOf(panel.id)!.start;
+          const stitched = new Set(assembly.seamPairs
+            .filter(pair => pair.seamId === seam.id)
+            .map(pair => (side === 'a' ? pair.p0 : pair.p1) - offset));
+          const indices = run.filter(vertex => stitched.has(vertex)).map(vertex => vertex + offset);
+          if (indices.length === 0) continue;
+          const list = usage.get(edgeId) ?? [];
+          list.push({
+            lo: Math.min(seam[side].t0, seam[side].t1),
+            hi: Math.max(seam[side].t0, seam[side].t1),
+            indices,
+          });
+          usage.set(edgeId, list);
+        }
+      }
+
+      let junctions = 0;
+      for (const [edgeId, list] of usage) {
+        const sorted = [...list].sort((a, b) => a.lo - b.lo);
+        for (let i = 1; i < sorted.length; i++) {
+          const before = sorted[i - 1]!;
+          const after = sorted[i]!;
+          if (Math.abs(before.hi - after.lo) > 1e-6) continue;
+          junctions++;
+          const corner = before.indices[before.indices.length - 1]!;
+          const neighbour = after.indices[0]!;
+          expect(neighbour, `${edgeId} split at ${before.hi.toFixed(3)}`).toBe(corner);
+          expect(distanceAt(closed, corner, neighbour), edgeId).toBeLessThan(0.001);
+        }
+      }
+      expect(junctions > 0).toBe(splitsEdge);
+    });
+  }
+});
+
+/** Distance between two particles of a flat xyz buffer, in meters. */
+function distanceAt(positions: Float32Array, a: number, b: number): number {
+  return Math.hypot(
+    positions[a * 3]! - positions[b * 3]!,
+    positions[a * 3 + 1]! - positions[b * 3 + 1]!,
+    positions[a * 3 + 2]! - positions[b * 3 + 2]!,
+  );
+}
+
+/** Distance from a point to the segment between two particles, in meters. */
+function distanceToSegment(
+  point: [number, number, number], positions: Float32Array, a: number, b: number,
+): number {
+  const ax = positions[a * 3]!, ay = positions[a * 3 + 1]!, az = positions[a * 3 + 2]!;
+  const ex = positions[b * 3]! - ax, ey = positions[b * 3 + 1]! - ay, ez = positions[b * 3 + 2]! - az;
+  const lengthSquared = ex * ex + ey * ey + ez * ez;
+  const projection = lengthSquared > 1e-12
+    ? ((point[0] - ax) * ex + (point[1] - ay) * ey + (point[2] - az) * ez) / lengthSquared
+    : 0;
+  const t = Math.max(0, Math.min(1, projection));
+  return Math.hypot(point[0] - (ax + ex * t), point[1] - (ay + ey * t), point[2] - (az + ez * t));
+}
 
 /** Width and height of one panel's initial positions, in meters. */
 function panelSpan(assembly: ClothAssembly, panelId: string): { x: number; y: number } {

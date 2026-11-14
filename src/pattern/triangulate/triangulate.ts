@@ -18,14 +18,17 @@ const CORNER_ANGLE_RAD = (50 * Math.PI) / 180;
  * Resamples a closed outline to a uniform vertex spacing. Sharp corners keep their original position, and
  * each run between two corners is divided into equal segments, so a panel enters triangulation with boundary
  * vertices of one size instead of a dense curve next to a coarse straight edge or a stub left over at the end
- * of a run.
+ * of a run. `keep` lists further indices that survive as outline vertices, which is how a pattern point stays
+ * on the mesh and every edge run ends exactly on the corners it is stitched along.
  */
-export function resampleClosedOutline(points: Vec2[], spacing: number): Vec2[] {
+export function resampleClosedOutline(points: Vec2[], spacing: number, keep: readonly number[] = []): Vec2[] {
   const n = points.length;
   if (!(spacing > 0) || n < 4) return points.slice();
 
-  const corners: number[] = [];
-  for (let i = 0; i < n; i++) if (outlineTurn(points, i) > CORNER_ANGLE_RAD) corners.push(i);
+  const cornerSet = new Set<number>();
+  for (let i = 0; i < n; i++) if (outlineTurn(points, i) > CORNER_ANGLE_RAD) cornerSet.add(i);
+  for (const i of keep) if (Number.isInteger(i) && i >= 0 && i < n) cornerSet.add(i);
+  const corners = [...cornerSet].sort((a, b) => a - b);
 
   if (corners.length <= 1) {
     const start = corners[0] ?? 0;

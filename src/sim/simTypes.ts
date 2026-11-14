@@ -104,6 +104,25 @@ export function computeBaseInvMass(
   return out;
 }
 
+/**
+ * Copies one value per panel over the particles of that panel; particles outside every panel
+ * keep `fallback`.
+ */
+function spreadPanelValues(
+  input: ClothSimInput,
+  particleCount: number,
+  fallback: number,
+  valueOf: (panel: ClothSimInput['panels'][number], slot: number) => number,
+): Float32Array<ArrayBuffer> {
+  const out = new Float32Array(particleCount).fill(fallback);
+  input.panels.forEach((panel, slot) => {
+    const value = valueOf(panel, slot);
+    const end = Math.min(panel.vertexOffset + panel.mesh.vertexCount, particleCount);
+    for (let i = panel.vertexOffset; i < end; i++) out[i] = value;
+  });
+  return out;
+}
+
 /** Per-particle damping from each panel's fabric; particles outside every panel keep the fallback. */
 export function computeParticleDamping(
   input: ClothSimInput,
@@ -111,13 +130,23 @@ export function computeParticleDamping(
   particleCount: number,
   fallback: number,
 ): Float32Array<ArrayBuffer> {
-  const out = new Float32Array(particleCount).fill(fallback);
-  input.panels.forEach((panel, slot) => {
-    const value = physics[slot]?.damping ?? fallback;
-    const end = Math.min(panel.vertexOffset + panel.mesh.vertexCount, particleCount);
-    for (let i = panel.vertexOffset; i < end; i++) out[i] = value;
+  return spreadPanelValues(input, particleCount, fallback, (_, slot) => physics[slot]?.damping ?? fallback);
+}
+
+/**
+ * Per-particle Coulomb friction coefficient against the body and the floor, taken from each
+ * panel's fabric and clamped to 0..1; particles outside every panel keep the fallback.
+ */
+export function computeParticleFriction(
+  input: ClothSimInput,
+  physics: FabricPhysics[],
+  particleCount: number,
+  fallback: number,
+): Float32Array<ArrayBuffer> {
+  return spreadPanelValues(input, particleCount, fallback, (_, slot) => {
+    const value = physics[slot]?.contactFriction;
+    return typeof value === 'number' && Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : fallback;
   });
-  return out;
 }
 
 /**
@@ -188,13 +217,7 @@ export function computeParticleThickness(
   particleCount: number,
   fallback: number,
 ): Float32Array<ArrayBuffer> {
-  const out = new Float32Array(particleCount).fill(fallback);
-  for (const panel of input.panels) {
-    const value = panel.thicknessMeters ?? fallback;
-    const end = Math.min(panel.vertexOffset + panel.mesh.vertexCount, particleCount);
-    for (let i = panel.vertexOffset; i < end; i++) out[i] = value;
-  }
-  return out;
+  return spreadPanelValues(input, particleCount, fallback, panel => panel.thicknessMeters ?? fallback);
 }
 
 /** Per-particle collision layer from each panel record, clamped to 0–9. */

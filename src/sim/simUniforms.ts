@@ -10,8 +10,6 @@ const MAX_SPEED = 6;
  * surface between two particles cross the skin.
  */
 export const SURFACE_OFFSET = 0.008;
-/** Tangential pull toward the previous frame position on contact, used when a fabric sets none. */
-const DEFAULT_CONTACT_FRICTION = 0.5;
 
 /** INTEGRATE SimParams block: 80 bytes; the drag block counts while its flag is 1. */
 export function packIntegrateParams(
@@ -66,13 +64,15 @@ export interface CollideBody {
   gridDims: [number, number, number];
 }
 
-/** COLLIDE SimParams block: 64 bytes. `triangleCount` is 0 without body collision. */
+/**
+ * COLLIDE SimParams block: 64 bytes. `triangleCount` is 0 without body collision; the friction
+ * coefficient of every particle rides in its own storage buffer.
+ */
 export function packCollideParams(
   config: SimulationConfig,
   particleCount: number,
   body: CollideBody,
   floorY: number,
-  friction = DEFAULT_CONTACT_FRICTION,
 ): Float32Array<ArrayBuffer> {
   const data = new Float32Array(16);
   const u32 = new Uint32Array(data.buffer);
@@ -81,7 +81,6 @@ export function packCollideParams(
   data[0] = config.dt;
   u32[1] = particleCount;
   data[2] = SURFACE_OFFSET;
-  data[3] = Number.isFinite(friction) ? Math.min(1, Math.max(0, friction)) : DEFAULT_CONTACT_FRICTION;
   data[4] = floorY;
   // Global value kept for the uniform layout; COLLIDE reads the per-particle thickness buffer.
   data[5] = clothThicknessMeters(config);
