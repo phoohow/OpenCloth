@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useProjectStore } from '@/store';
+import { useProjectStore, useUIStore } from '@/store';
 import { AppendTemplateCommand, ApplyTemplateCommand, GARMENT_TEMPLATES } from '@/pattern/template';
 import type { GarmentTemplate, ParamField } from '@/pattern/template';
 import { Icon } from '@/ui/icons';
@@ -44,6 +44,28 @@ function TemplateRow({ template }: { template: GarmentTemplate }) {
         <span style={styles.text}>
           <span style={styles.name}>{template.name}</span>
         </span>
+        {/* The two build actions sit on the row itself, so they act without opening the sizes. */}
+        <button
+          style={styles.glyphBtn}
+          title={`替换：清空当前版型，按「${template.name}」重新生成`}
+          aria-label={`替换为${template.name}`}
+          onClick={e => {
+            e.stopPropagation();
+            executeCommand(new ApplyTemplateCommand(template, params));
+            // A new sheet is a different size, so frame all of it in the 2D pane.
+            useUIStore.getState().requestFit();
+          }}
+        ><Icon name="refresh" size={11} /></button>
+        <button
+          style={styles.glyphBtn}
+          title={`添加：保留已有版片，把「${template.name}」的片排在右侧`}
+          aria-label={`添加${template.name}`}
+          onClick={e => {
+            e.stopPropagation();
+            executeCommand(new AppendTemplateCommand(template, params));
+            useUIStore.getState().requestFit();
+          }}
+        ><Icon name="plus" size={11} /></button>
         <Icon name={open ? 'chevron-down' : 'chevron-right'} size={10} style={{ color: '#666' }} />
       </div>
 
@@ -67,18 +89,6 @@ function TemplateRow({ template }: { template: GarmentTemplate }) {
               <span style={styles.fieldLabel}>{field.unit}</span>
             </label>
           ))}
-          <div style={styles.fieldRow}>
-            <button
-              style={styles.iconBtn}
-              title="清空当前版型，再按模板重新生成"
-              onClick={() => executeCommand(new ApplyTemplateCommand(template, params))}
-            >替换</button>
-            <button
-              style={styles.iconBtn}
-              title="保留已有版片，把模板的片排在右侧"
-              onClick={() => executeCommand(new AppendTemplateCommand(template, params))}
-            >追加</button>
-          </div>
         </div>
       )}
     </>

@@ -23,4 +23,6 @@ export { createStarterProject, createBlankProject } from '@/pattern/template/sta
 export { PatternBuilder } from '@/pattern/template/templateKit';
 export { layoutRows, appendPattern, offsetPanel } from '@/pattern/template/patternLayout';
 export { type GarmentTemplate, type ParamField } from '@/pattern/template/garmentTemplate';
-export { AppendTemplateCommand, ApplyTemplateCommand } from '@/pattern/template/templateCommands';
+export {
+  AppendTemplateCommand, ApplyTemplateCommand, ArrangePanelsCommand,
+} from '@/pattern/template/templateCommands';

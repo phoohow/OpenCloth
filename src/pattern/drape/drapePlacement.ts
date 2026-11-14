@@ -3,8 +3,8 @@ import {
   add3t, clamp, cross3t, degToRad, distance3t, dot3t, lerp3t, normalize3t, scale3t, sub3t,
 } from '@/base/math';
 import {
-  frameRef, landmarkY, tubeFrame, type BodyLandmarks, type HeadShape, type LimbSide, type Point3,
-  type TorsoShape, type TubeShape,
+  frameRef, landmarkY, tubeFrame, type BodyLandmarks, type HeadShape, type LimbShape, type LimbSide,
+  type Point3, type TorsoShape, type TubeShape,
 } from '@/avatar';
 import type { PanelMesh } from '@/pattern/panel/panelBuilder';
 import { resolveWrap, zoneSweep, type ResolvedWrap, type WrapSlot } from '@/pattern/drape/wrapPlan';
@@ -150,10 +150,10 @@ function cylinderSurface(
 
 /** Torso: the vertical elliptic cylinder the proxy shows. */
 function torsoSurface(
-  torso: TorsoShape, topY: number, slot: WrapSlot, direction: number,
+  torso: TorsoShape, topY: number, slot: WrapSlot, direction: number, offset: number,
 ): WrapSurface {
   return cylinderSurface(
-    torso.rx, torso.rz,
+    torso.rx + offset, torso.rz + offset,
     depth => [torso.centreX, topY - depth, torso.centreZ],
     [0, 0, 1], [1, 0, 0], slot, direction,
   );
@@ -161,169 +161,170 @@ function torsoSurface(
 
 /** Neck: a vertical circular cylinder between the shoulder line and the chin. */
 function neckSurface(
-  neck: TubeShape, topY: number, slot: WrapSlot, direction: number,
+  neck: TubeShape, topY: number, slot: WrapSlot, direction: number, offset: number,
 ): WrapSurface {
   return cylinderSurface(
-    neck.fromR, neck.fromR,
+    neck.fromR + offset, neck.fromR + offset,
     depth => [0, topY - depth, neck.from[2]],
     [0, 0, 1], [1, 0, 0], slot, direction,
   );
 }
 
-/** One straight section of a limb path. */
-interface PathSegment {
-  from: Point3;
-  axis: Point3;
-  length: number;
-  fromR: number;
-  toR: number;
-}
-
-/** One sample of the smoothed centreline a panel's rows follow. */
+/** One sample of the centreline a panel's rows follow. */
 interface PathSample {
   point: Point3;
   tangent: Point3;
-  u: Point3;
-  v: Point3;
+  cosDir: Point3;
+  sinDir: Point3;
   radius: number;
 }
 
-/** Radius of a section at a point on its segment. */
-function radiusOn(segment: PathSegment, point: Point3): number {
-  const along = dot3t(sub3t(point, segment.from), segment.axis) / segment.length;
-  return segment.fromR + (segment.toR - segment.fromR) * clamp(along, 0, 1);
+/**
+ * Half width of a panel at each pattern depth, read from its boundary. A limb or neck panel wraps
+ * its own width once around the body, so a row wider than the section it covers spreads over the
+ * whole turn instead of lapping over the row beside it and folding the cloth into itself.
+ */
+function halfWidthProfile(mesh: PanelMesh, bounds: PanelBounds): (depth: number) => number {
+  const buckets = new Map<number, { min: number; max: number }>();
+  for (const [a, b] of mesh.boundaryEdges) {
+    for (const index of [a, b]) {
+      const y = Math.round(mesh.positions2D[index * 2 + 1]! * 10) / 10;
+      const x = mesh.positions2D[index * 2]!;
+      const bucket = buckets.get(y) ?? { min: x, max: x };
+      bucket.min = Math.min(bucket.min, x);
+      bucket.max = Math.max(bucket.max, x);
+      buckets.set(y, bucket);
+    }
+  }
+  const ys = [...buckets.keys()].sort((p, q) => p - q);
+  // Half widths in meters, matching the flat offsets the wrap is fed.
+  const halves = ys.map(y => Math.max((buckets.get(y)!.max - buckets.get(y)!.min) / 2, 0.5) * 0.01);
+  const halfAtY = (y: number): number => {
+    if (ys.length === 0) return 0.005;
+    if (y <= ys[0]!) return halves[0]!;
+    if (y >= ys[ys.length - 1]!) return halves[halves.length - 1]!;
+    let lo = 0;
+    let hi = ys.length - 1;
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1;
+      if (ys[mid]! < y) lo = mid; else hi = mid;
+    }
+    const span = ys[hi]! - ys[lo]!;
+    const t = span > 1e-9 ? (y - ys[lo]!) / span : 0;
+    return halves[lo]! + (halves[hi]! - halves[lo]!) * t;
+  };
+  return depth => halfAtY(bounds.maxY - depth * 100);
 }
 
 /**
- * Arms and legs: the panel follows the proxy's two sections, with the corner at the elbow or knee
- * rounded by a short fillet so one row of triangles never spans two section frames.
+ * Arms and legs: the panel follows the limb's own centreline, which already rounds the elbow or
+ * knee, so consecutive rows never span two different section frames. The frames are carried along
+ * the path rather than rebuilt from a fixed reference, which keeps a sleeve from twisting as it
+ * passes the joint.
  */
 function limbSurface(
-  tubes: readonly TubeShape[], topY: number, slot: WrapSlot, direction: number,
+  limb: LimbShape, anchorY: number, downCm: number,
+  slot: WrapSlot, direction: number, offset: number,
+  halfWidthAt: (depth: number) => number,
 ): WrapSurface {
-  const segments: PathSegment[] = tubes.map((tube) => {
-    const dx = tube.to[0] - tube.from[0];
-    const dy = tube.to[1] - tube.from[1];
-    const dz = tube.to[2] - tube.from[2];
-    const length = Math.hypot(dx, dy, dz) || 1e-6;
-    return {
-      from: tube.from,
-      axis: [dx / length, dy / length, dz / length],
-      length,
-      fromR: tube.fromR,
-      toR: tube.toR,
-    };
-  });
-  const first = segments[0]!;
-  const second = segments[1] ?? first;
-  // The top edge can sit above the joint; extend the first section to reach it.
-  const startAlong = Math.abs(first.axis[1]) > 1e-3 ? (topY - first.from[1]) / first.axis[1] : 0;
-  const startPoint = add3t(first.from, scale3t(first.axis, startAlong));
-  const endPoint = add3t(second.from, scale3t(second.axis, second.length + 0.06));
-  const blend = Math.min(0.05, first.length * 0.35, second.length * 0.35);
-  const filletStart = add3t(first.from, scale3t(first.axis, first.length - blend));
-  const filletEnd = add3t(second.from, scale3t(second.axis, blend));
-  const samples: PathSample[] = [];
-  // One reference for the whole path keeps the frame continuous across the joint fillet.
-  const ref = frameRef(first.axis);
-
-  /** Appends one centreline sample with the shared frame of its tangent. */
-  const push = (point: Point3, tangent: Point3, radius: number) => {
-    const { u, v } = tubeFrame(tangent, ref);
-    samples.push({ point, tangent, u, v, radius });
-  };
-  /** Appends a straight run, skipping a start point the previous run already added. */
-  const straight = (from: Point3, to: Point3, tangent: Point3, radiusAt: (p: Point3) => number) => {
-    const steps = Math.max(1, Math.ceil(distance3t(from, to) / 0.015));
-    for (let i = samples.length === 0 ? 0 : 1; i <= steps; i++) {
-      const point = lerp3t(from, to, i / steps);
-      push(point, tangent, radiusAt(point));
-    }
-  };
-
-  if (startAlong <= first.length - blend) {
-    straight(startPoint, filletStart, first.axis, point => radiusOn(first, point));
-    // Quadratic fillet through the joint, tangent to both sections at its ends.
-    const joint = add3t(first.from, scale3t(first.axis, first.length));
-    const fromRadius = radiusOn(first, filletStart);
-    const toRadius = radiusOn(second, filletEnd);
-    const steps = 10;
-    for (let i = 1; i <= steps; i++) {
-      const u = i / steps;
-      const inverse = 1 - u;
-      const point: Point3 = [
-        inverse * inverse * filletStart[0] + 2 * inverse * u * joint[0] + u * u * filletEnd[0],
-        inverse * inverse * filletStart[1] + 2 * inverse * u * joint[1] + u * u * filletEnd[1],
-        inverse * inverse * filletStart[2] + 2 * inverse * u * joint[2] + u * u * filletEnd[2],
-      ];
-      const tangent = normalize3t([
-        2 * inverse * (joint[0] - filletStart[0]) + 2 * u * (filletEnd[0] - joint[0]),
-        2 * inverse * (joint[1] - filletStart[1]) + 2 * u * (filletEnd[1] - joint[1]),
-        2 * inverse * (joint[2] - filletStart[2]) + 2 * u * (filletEnd[2] - joint[2]),
-      ]);
-      push(point, tangent, fromRadius + (toRadius - fromRadius) * u);
-    }
-    straight(filletEnd, endPoint, second.axis, point => radiusOn(second, point));
-  } else if (startAlong < first.length) {
-    straight(startPoint, filletEnd, first.axis, point => radiusOn(first, point));
-    straight(filletEnd, endPoint, second.axis, point => radiusOn(second, point));
-  } else {
-    const along = startAlong - first.length;
-    const lowerStart = add3t(second.from, scale3t(second.axis, along));
-    straight(lowerStart, endPoint, second.axis, point => radiusOn(second, point));
-  }
-
+  const path = limb.path;
   const lengths: number[] = [0];
-  for (let i = 1; i < samples.length; i++) {
-    lengths.push(lengths[i - 1]! + distance3t(samples[i - 1]!.point, samples[i]!.point));
+  for (let i = 1; i < path.length; i++) {
+    lengths.push(lengths[i - 1]! + distance3t(path[i - 1]!, path[i]!));
   }
   const total = lengths[lengths.length - 1]!;
+  const tangentAt = (i: number): Point3 => {
+    const a = path[Math.max(0, i - 1)]!;
+    const b = path[Math.min(path.length - 1, i + 1)]!;
+    return normalize3t(sub3t(b, a));
+  };
+
+  const samples: PathSample[] = [];
+  let frame = tubeFrame(tangentAt(0), frameRef(tangentAt(0)));
+  for (let i = 0; i < path.length; i++) {
+    const tangent = tangentAt(i);
+    // Carrying the previous across-section onto the new normal plane squares up the frame
+    // without ever letting it spin around the axis.
+    const along = dot3t(tangent, frame.u);
+    const u = normalize3t([
+      frame.u[0] - tangent[0] * along,
+      frame.u[1] - tangent[1] * along,
+      frame.u[2] - tangent[2] * along,
+    ]);
+    frame = { u, v: cross3t(tangent, u) };
+    samples.push({
+      point: path[i]!,
+      tangent,
+      cosDir: u,
+      sinDir: frame.v,
+      radius: limb.radii[i]! + offset,
+    });
+  }
+
+  // Where the landmark sits on the limb: its height read along the first run, then the panel's own
+  // offset walked down the limb as an arc length, so a cuff anchored 48 cm below the shoulder lands
+  // 48 cm along the arm instead of 48 cm of drop.
+  const rootTangent = samples[0]!.tangent;
+  const landmarkAlong = Math.abs(rootTangent[1]) > 0.2
+    ? (anchorY - samples[0]!.point[1]) / rootTangent[1]
+    : 0;
+  const startArc = landmarkAlong + downCm;
   const centreAngle = slot.startRad + slot.sweepRad / 2;
 
+  /**
+   * Section radius at a depth: the limb's own, widened to the piece's girth when the piece is
+   * wider. A sleeve wider than the arm then stands off it as a tube of its own circumference
+   * instead of wrapping more than a full turn and folding into itself.
+   */
+  const sectionRadius = (limbRadius: number, depth: number): number =>
+    Math.max(limbRadius, halfWidthAt(depth) / Math.PI);
+
   const sectionAt = (depth: number): SurfaceSection => {
-    if (samples.length === 0) {
-      return { centre: startPoint, cosDir: [0, 0, 1], sinDir: [1, 0, 0], rSin: first.fromR, rCos: first.fromR };
-    }
-    if (depth <= 0) {
+    const arc = startArc + depth;
+    if (arc <= 0) {
       const sample = samples[0]!;
-      const point = add3t(sample.point, scale3t(sample.tangent, depth));
+      const radius = sectionRadius(sample.radius, depth);
       return {
-        centre: point, cosDir: sample.u, sinDir: sample.v,
-        rSin: sample.radius, rCos: sample.radius,
+        centre: add3t(sample.point, scale3t(sample.tangent, arc)),
+        cosDir: sample.cosDir, sinDir: sample.sinDir,
+        rSin: radius, rCos: radius,
       };
     }
-    if (depth >= total) {
+    if (arc >= total) {
       const sample = samples[samples.length - 1]!;
-      const point = add3t(sample.point, scale3t(sample.tangent, depth - total));
+      const radius = sectionRadius(sample.radius, depth);
       return {
-        centre: point, cosDir: sample.u, sinDir: sample.v,
-        rSin: sample.radius, rCos: sample.radius,
+        centre: add3t(sample.point, scale3t(sample.tangent, arc - total)),
+        cosDir: sample.cosDir, sinDir: sample.sinDir,
+        rSin: radius, rCos: radius,
       };
     }
     let lo = 0;
-    let hi = samples.length - 1;
+    let hi = lengths.length - 1;
     while (hi - lo > 1) {
       const mid = (lo + hi) >> 1;
-      if (lengths[mid]! < depth) lo = mid; else hi = mid;
+      if (lengths[mid]! < arc) lo = mid; else hi = mid;
     }
     const span = lengths[hi]! - lengths[lo]!;
-    const t = span > 1e-9 ? (depth - lengths[lo]!) / span : 0;
+    const t = span > 1e-9 ? (arc - lengths[lo]!) / span : 0;
     const a = samples[lo]!;
     const b = samples[hi]!;
     const tangent = normalize3t(lerp3t(a.tangent, b.tangent, t));
-    const blended = lerp3t(a.u, b.u, t);
+    const blended = lerp3t(a.cosDir, b.cosDir, t);
     const u = normalize3t(sub3t(blended, scale3t(tangent, dot3t(tangent, blended))));
+    const radius = sectionRadius(a.radius + (b.radius - a.radius) * t, depth);
     return {
       centre: lerp3t(a.point, b.point, t),
       cosDir: u,
       sinDir: cross3t(tangent, u),
-      rSin: a.radius + (b.radius - a.radius) * t,
-      rCos: a.radius + (b.radius - a.radius) * t,
+      rSin: radius,
+      rCos: radius,
     };
   };
+
   return {
     thetaAt: (distance, depth) =>
-      centreAngle + direction * distance / Math.max(sectionAt(depth).rSin, 1e-4),
+      centreAngle + direction * distance / Math.max(sectionAt(depth).rSin, 0.005),
     sectionAt,
   };
 }
@@ -331,11 +332,11 @@ function limbSurface(
 /** Head: a latitude/longitude patch from the crown down to the neck-width section. */
 function headSurface(
   head: HeadShape, body: BodyLandmarks, panelHeight: number,
-  slot: WrapSlot, direction: number,
+  slot: WrapSlot, direction: number, offset: number,
 ): WrapSurface {
   const [cx, cy, cz] = head.centre;
   const [rx, ry, rz] = head.radii;
-  const full = sectionArcs(Math.max(rx, 1e-4), Math.max(rz, 1e-4), 0, 360);
+  const full = sectionArcs(Math.max(rx + offset, 1e-4), Math.max(rz + offset, 1e-4), 0, 360);
   const perimeter = full.arcs[full.arcs.length - 1]!;
   const centreArc = arcAtAngle(full, slot.startRad + slot.sweepRad / 2);
   // Stop the patch where the head section is as wide as the neck, but never below the chin:
@@ -357,8 +358,8 @@ function headSurface(
         centre: [cx, cy + ry * sinPhi, cz],
         cosDir: [0, 0, 1],
         sinDir: [1, 0, 0],
-        rSin: rx * cosPhi,
-        rCos: rz * cosPhi,
+        rSin: rx * cosPhi + offset,
+        rCos: rz * cosPhi + offset,
       };
     },
   };
@@ -371,27 +372,32 @@ function surfaceFor(
   slot: WrapSlot,
   topY: number,
   panelHeight: number,
+  halfWidthAt: (depth: number) => number,
 ): WrapSurface {
   const shapes = body.bodyShapes();
   const direction = (Math.sign(slot.sweepRad) || 1) * (wrap.flip ? -1 : 1);
+  const offset = wrap.radiusOffsetCm * 0.01;
   if (wrap.region === 'arm' || wrap.region === 'leg') {
     const side: LimbSide = wrap.side === 'left' ? -1 : 1;
-    const parts = wrap.region === 'arm' ? ['upperArm', 'forearm'] : ['thigh', 'shin'];
-    const tubes = shapes.filter((shape): shape is TubeShape =>
-      shape.kind === 'tube' && shape.side === side && parts.includes(shape.part));
-    return limbSurface(tubes, topY, slot, direction * side);
+    const limb = shapes.find((shape): shape is LimbShape =>
+      shape.kind === 'limb' && shape.side === side && shape.part === wrap.region);
+    if (limb) {
+      // A limb panel's anchor offset is a distance down the limb, not a height below the landmark.
+      return limbSurface(limb, topY - wrap.anchorOffsetCm * 0.01, -wrap.anchorOffsetCm * 0.01,
+        slot, direction * side, offset, halfWidthAt);
+    }
   }
   if (wrap.region === 'head') {
     const head = shapes.find((shape): shape is HeadShape => shape.kind === 'ellipsoid');
-    if (head) return headSurface(head, body, panelHeight, slot, direction);
+    if (head) return headSurface(head, body, panelHeight, slot, direction, offset);
   }
   if (wrap.region === 'neck') {
     const neck = shapes.find((shape): shape is TubeShape => shape.kind === 'tube' && shape.part === 'neck');
-    if (neck) return neckSurface(neck, topY, slot, direction);
+    if (neck) return neckSurface(neck, topY, slot, direction, offset);
   }
   // The torso column carries torso pieces, and a head or neck piece whose proxy shape is missing.
   const torso = shapes.find((shape): shape is TorsoShape => shape.kind === 'torso')!;
-  return torsoSurface(torso, topY, slot, direction);
+  return torsoSurface(torso, topY, slot, direction, offset);
 }
 
 /**
@@ -413,7 +419,7 @@ export function drapePositions(
   const slot = slotOverride ?? zoneSweep(wrap.region, wrap.zone);
   const topY = anchorHeight(panel, body);
   const panelHeight = Math.max((bounds.maxY - bounds.minY) * 0.01, 1e-4);
-  const surface = surfaceFor(wrap, body, slot, topY, panelHeight);
+  const surface = surfaceFor(wrap, body, slot, topY, panelHeight, halfWidthProfile(mesh, bounds));
   const midX = (bounds.minX + bounds.maxX) / 2;
   const out = new Float32Array(mesh.vertexCount * 3);
 

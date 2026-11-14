@@ -32,8 +32,8 @@ describe('wrap enclosure', () => {
       const sleeve = panelNamed(pattern, '右袖');
       const mesh = buildPanelMesh(pattern, sleeve.id)!;
       const draped = drapePositions(mesh, sleeve, body);
-      const tubes = shapes.filter(shape => shape.kind === 'tube'
-        && (shape.part === 'upperArm' || shape.part === 'forearm') && shape.side === 1);
+      const tubes = shapes.filter(shape => shape.kind === 'limb'
+        && shape.part === 'arm' && shape.side === 1);
       let checked = 0;
       for (let i = 0; i < mesh.vertexCount; i++) {
         const p: [number, number, number] = [draped[i * 3]!, draped[i * 3 + 1]!, draped[i * 3 + 2]!];

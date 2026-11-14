@@ -4,6 +4,8 @@ import { buildPanelMesh, type PanelMesh } from '@/pattern/panel';
 import { drapeReversesWinding } from '@/pattern/drape';
 import { simplifiedDepth, type SimplifiedShape } from '@/avatar/simplifiedBody';
 import { createStarterProject } from '@/pattern/template/starterProject';
+import { generateShirt } from '@/pattern/template/shirtTemplate';
+import { generateHoodie } from '@/pattern/template/hoodieTemplate';
 import { ClothAssembly } from '@/runtime/clothAssembly';
 import { BodyLandmarkCache } from '@/runtime/initialPose';
 import type { SeamPair } from '@/runtime/seamPair';
@@ -106,7 +108,7 @@ describe('unsewn layout', () => {
     const cases: Array<{ name: string; pick: (shape: SimplifiedShape) => boolean }> = [
       {
         name: '右袖',
-        pick: s => s.kind === 'tube' && s.side === 1 && (s.part === 'upperArm' || s.part === 'forearm'),
+        pick: s => s.kind === 'limb' && s.side === 1 && s.part === 'arm',
       },
       { name: '前片', pick: s => s.kind === 'torso' },
       { name: '后片', pick: s => s.kind === 'torso' },
@@ -164,6 +166,41 @@ describe('merged cloth winding', () => {
   });
 });
 
+describe('template winding', () => {
+  // Every piece of a drafted garment has to face the same way once sewn; a mirrored half whose
+  // outline was not reversed wraps inside out.
+  for (const [label, build] of [
+    ['shirt', () => generateShirt(undefined, 'fabric_default')],
+    ['hoodie', () => generateHoodie(undefined, 'fabric_default')],
+  ] as const) {
+    it(`turns every sewn ${label} side the same way`, () => {
+      const project = { ...createStarterProject(), pattern: build() };
+      const meshes = new Map<string, PanelMesh>();
+      for (const panelId of Object.keys(project.pattern.panels)) {
+        const mesh = buildPanelMesh(project.pattern, panelId);
+        if (mesh) meshes.set(panelId, mesh);
+      }
+      const assembly = new ClothAssembly();
+      const input = assembly.build(project, meshes, new BodyLandmarkCache());
+      expect(input).not.toBeNull();
+      const positions = assembly.dressPositions;
+      const own = new Float64Array(input!.particleCount * 3);
+      for (let t = 0; t < input!.indices.length / 3; t++) {
+        const tri = [input!.indices[t * 3]!, input!.indices[t * 3 + 1]!, input!.indices[t * 3 + 2]!];
+        const n = faceNormal(positions, tri[0]!, tri[1]!, tri[2]!);
+        for (const i of tri) {
+          own[i * 3] += n[0]; own[i * 3 + 1] += n[1]; own[i * 3 + 2] += n[2];
+        }
+      }
+      let agreed = 0;
+      for (const pair of assembly.seamPairs) {
+        if (dot3(own, pair.p0, own, pair.p1) > 0) agreed++;
+      }
+      expect(agreed / assembly.seamPairs.length).toBeGreaterThan(0.9);
+    });
+  }
+});
+
 describe('sleeve cap seams', () => {
   // A cap's underarm end has to land on the armhole's underarm end and its crown on the shoulder;
   // a reversed pairing crosses the threads and twists the sleeve as the seam closes.
@@ -197,6 +234,39 @@ describe('sleeve cap seams', () => {
     }
     expect(checked).toBe(4);
   });
+
+  // The shirt and the hoodie are drafted from the templates rather than the starter block, and the
+  // shirt seams its cap to a back armhole the yoke cuts in two.
+  for (const [label, build] of [
+    ['shirt', () => generateShirt(undefined, 'fabric_default')],
+    ['hoodie', () => generateHoodie(undefined, 'fabric_default')],
+  ] as const) {
+    it(`pairs every ${label} cap end with the same end of its armhole`, () => {
+      const project = { ...createStarterProject(), pattern: build() };
+      const meshes = new Map<string, PanelMesh>();
+      for (const panelId of Object.keys(project.pattern.panels)) {
+        const mesh = buildPanelMesh(project.pattern, panelId);
+        if (mesh) meshes.set(panelId, mesh);
+      }
+      const assembly = new ClothAssembly();
+      assembly.build(project, meshes, new BodyLandmarkCache());
+      const positions = assembly.positions;
+      let checked = 0;
+      for (const seam of Object.values(project.pattern.seams)) {
+        if (project.pattern.edges[seam.a.edgeId]?.semantic !== 'sleeveCap') continue;
+        if (project.pattern.edges[seam.b.edgeId]?.semantic !== 'armhole') continue;
+        const pairs = assembly.seamPairs.filter(pair => pair.seamId === seam.id);
+        const capY = pairs.map(pair => positions[pair.p0 * 3 + 1]!);
+        const armholeY = pairs.map(pair => positions[pair.p1 * 3 + 1]!);
+        // The lowest cap particle has to sit on the lowest armhole particle: the underarm ends pair.
+        expect(capY.indexOf(Math.min(...capY)), seam.id).toBe(armholeY.indexOf(Math.min(...armholeY)));
+        // A short interval cut by the yoke has too few particles for a correlation to mean anything.
+        if (pairs.length >= 3) expect(correlation(capY, armholeY), seam.id).toBeGreaterThan(0.9);
+        checked++;
+      }
+      expect(checked).toBeGreaterThanOrEqual(4);
+    });
+  }
 });
 
 describe('body pose', () => {

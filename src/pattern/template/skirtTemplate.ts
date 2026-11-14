@@ -93,11 +93,10 @@ export function generateSkirt(params: SkirtParams = DEFAULT_SKIRT_PARAMS, fabric
   builder.seam(frontBand.endRight, backBand.endRight, { strength: 1 });
   builder.seam(frontBand.endLeft, backBand.endLeft, { strength: 1 });
 
-  layoutRows(builder.pattern, [
-    front.map(g => g.panel),
-    back.map(g => g.panel),
-    [frontBand.panel, backBand.panel],
-  ]);
+  // Front gore, back gore, then the two waistbands.
+  layoutRows(builder.pattern, [[
+    ...front.map(g => g.panel), ...back.map(g => g.panel), frontBand.panel, backBand.panel,
+  ]]);
   return builder.pattern;
 }
 

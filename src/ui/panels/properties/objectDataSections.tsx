@@ -281,6 +281,11 @@ export function PanelDrapeData({ project, panelId }: { project: Project; panelId
                 <NumberField value={drape.anchorOffsetCm ?? 0} step={0.1} precision={2}
                   title="正数向上，负数向下" onCommit={value => setDrape({ ...drape, anchorOffsetCm: value }, '调整环绕偏移')} />
               </Row>
+              <Row label="外扩(cm)">
+                <NumberField value={drape.radiusOffsetCm ?? 0} step={0.1} precision={2}
+                  title="版片离体表的间隙；领子、袖口这类有厚度或松量的版片要留空，否则会绕到自身里"
+                  onCommit={value => setDrape({ ...drape, radiusOffsetCm: value }, '调整环绕外扩')} />
+              </Row>
             </>
           )}
           {region === 'head' && <Hint>头部从颅顶铺到颈线，高度由头形决定。</Hint>}

@@ -11,6 +11,8 @@ import type { PresenterHost } from '@/runtime/presenters/host';
 /** Angular and axial resolution of the proxy line grid. */
 const TUBE_SEGMENTS = 16;
 const TUBE_LENGTH_SEGMENTS = 8;
+/** Rings drawn along one limb; the joint lands between two of them. */
+const LIMB_RINGS = 14;
 const TORSO_SEGMENTS = 32;
 const TORSO_HEIGHT_SEGMENTS = 16;
 const HEAD_SEGMENTS = 24;
@@ -76,6 +78,59 @@ function addTube(out: WireMesh, shape: Extract<SimplifiedShape, { kind: 'tube' }
       const ring = rings[level]!;
       link(out, ring[i]!, ring[next]!);
       if (level < rings.length - 1) link(out, ring[i]!, rings[level + 1]![i]!);
+    }
+  }
+}
+
+/** Adds the rings and meridians of a limb swept along its sampled centreline. */
+function addLimb(out: WireMesh, shape: Extract<SimplifiedShape, { kind: 'limb' }>): void {
+  const path = shape.path;
+  const tangentAt = (i: number): [number, number, number] => {
+    const a = path[Math.max(0, i - 1)]!;
+    const b = path[Math.min(path.length - 1, i + 1)]!;
+    return normalize3t([b[0] - a[0], b[1] - a[1], b[2] - a[2]]);
+  };
+  // Frames are carried along the path instead of rebuilt from a fixed reference, so the grid keeps
+  // its orientation over the bend and never pinches where the sections turn.
+  let frame = tubeFrame(tangentAt(0));
+  const rings: number[][] = [];
+  const last = path.length - 1;
+  for (let level = 0; level <= LIMB_RINGS; level++) {
+    const index = Math.round((last * level) / LIMB_RINGS);
+    const tangent = tangentAt(index);
+    // Project the previous across-section onto the new normal plane, then square it up.
+    const along = tangent[0] * frame.u[0] + tangent[1] * frame.u[1] + tangent[2] * frame.u[2];
+    const carried: [number, number, number] = [
+      frame.u[0] - tangent[0] * along,
+      frame.u[1] - tangent[1] * along,
+      frame.u[2] - tangent[2] * along,
+    ];
+    const u = normalize3t(carried);
+    frame = { u, v: normalize3t([
+      tangent[1] * u[2] - tangent[2] * u[1],
+      tangent[2] * u[0] - tangent[0] * u[2],
+      tangent[0] * u[1] - tangent[1] * u[0],
+    ]) };
+    const centre = path[index]!;
+    const radius = shape.radii[index]!;
+    const ring: number[] = [];
+    for (let i = 0; i < TUBE_SEGMENTS; i++) {
+      const angle = (i / TUBE_SEGMENTS) * Math.PI * 2;
+      const c = Math.cos(angle);
+      const s = Math.sin(angle);
+      ring.push(pushVertex(out, [
+        centre[0] + (frame.u[0] * c + frame.v[0] * s) * radius,
+        centre[1] + (frame.u[1] * c + frame.v[1] * s) * radius,
+        centre[2] + (frame.u[2] * c + frame.v[2] * s) * radius,
+      ]));
+    }
+    rings.push(ring);
+  }
+  for (let i = 0; i < TUBE_SEGMENTS; i++) {
+    const next = (i + 1) % TUBE_SEGMENTS;
+    for (let level = 0; level < rings.length; level++) {
+      link(out, rings[level]![i]!, rings[level]![next]!);
+      if (level < rings.length - 1) link(out, rings[level]![i]!, rings[level + 1]![i]!);
     }
   }
 }
@@ -156,6 +211,7 @@ function proxyMesh(shapes: readonly SimplifiedShape[]): MeshDesc {
   const out: WireMesh = { positions: [], colors: [], index: [] };
   for (const shape of shapes) {
     if (shape.kind === 'tube') addTube(out, shape);
+    else if (shape.kind === 'limb') addLimb(out, shape);
     else if (shape.kind === 'torso') addTorso(out, shape);
     else if (shape.kind === 'ellipsoid') addEllipsoid(out, shape);
     else addBox(out, shape);

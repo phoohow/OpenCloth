@@ -14,7 +14,7 @@ export interface HoodieParams {
   chestCm: number;
   lengthCm: number;
   sleeveLengthCm: number;
-  /** Sleeve opening circumference. */
+  /** Sleeve opening circumference, which is also the cuff rib length. */
   cuffCm: number;
   shoulderCm: number;
   neckWidthCm: number;
@@ -26,8 +26,8 @@ export interface HoodieParams {
 export const DEFAULT_HOODIE_PARAMS: HoodieParams = {
   chestCm: 110,
   lengthCm: 70,
-  sleeveLengthCm: 55,
-  cuffCm: 20,
+  sleeveLengthCm: 54,
+  cuffCm: 21,
   shoulderCm: 46,
   neckWidthCm: 20,
   neckDepthCm: 8,
@@ -35,14 +35,29 @@ export const DEFAULT_HOODIE_PARAMS: HoodieParams = {
   hoodHeightCm: 23.8,
 };
 
-/** Shoulder drop from the neck seam to the shoulder tip, in centimeters. */
-const SHOULDER_SLOPE_CM = 5;
+/** Shoulder drop per centimetre of neck-to-tip run. */
+const SHOULDER_SLOPE_SHARE = 0.22;
+
+/** Shoulder seam extended past the body on each side; a hoodie sits off the shoulder. */
+const SHOULDER_DROP_CM = 3;
 
 /** Back neck drop as a share of the front drop. */
 const BACK_NECK_SHARE = 0.35;
 
-/** Height of the ribbed hem bands, in centimeters. */
-const RIB_HEIGHT_CM = 7;
+/** Height of the ribbed hem band, in centimeters. */
+const HEM_RIB_CM = 6.5;
+
+/** Height of the ribbed cuff, in centimeters. */
+const CUFF_RIB_CM = 6;
+
+/** Air the sleeve keeps around the arm, in centimeters. */
+const SLEEVE_GAP_CM = 0.6;
+
+/** Air the cuff rib keeps around the wrist, in centimeters. */
+const CUFF_GAP_CM = 0.8;
+
+/** Air the hood keeps over the skull, in centimeters. */
+const HOOD_GAP_CM = 0.6;
 
 /** Half-hood panel plus its named outline edges. */
 interface HoodEdges {
@@ -50,11 +65,14 @@ interface HoodEdges {
   bottomFront: string;
   bottomBack: string;
   centerBack: string;
+  /** The centre-back seam carried on over the crown to the forehead. */
+  crownSeam: string;
 }
 
 /**
- * Adds one half of a two-piece hood. The bottom edge follows the neck opening, the centre-back
- * edge joins the other half and the face opening stays free.
+ * Adds one half of a two-piece hood. The bottom edge follows the neck opening, the centre back runs
+ * from the nape over the crown to the forehead, and the face opening falls from the forehead to the
+ * chin. Two halves join along the whole centre back, so the seam has two edges on each half.
  */
 function addHoodHalf(builder: PatternBuilder, o: {
   name: string;
@@ -64,31 +82,37 @@ function addHoodHalf(builder: PatternBuilder, o: {
   drape: PanelDrape;
 }): HoodEdges {
   const bottomWidth = o.frontNeckCm + o.backNeckCm;
-  // The crown carries extra width over the neck opening; it gathers at the top of the shell.
-  const crownWidth = bottomWidth + Math.max(4, o.heightCm * 0.14);
   const height = o.heightCm;
+  // The hood bulges out behind the skull and meets itself over the crown.
+  const backOut = bottomWidth + Math.max(3, height * 0.12);
+  const foreheadX = Math.max(3.5, o.frontNeckCm * 0.4);
 
   const faceBottom = builder.point(0, 0);
   const shoulder = builder.point(o.frontNeckCm, 0);
   const backBottom = builder.point(bottomWidth, 0);
-  const crown = builder.point(crownWidth, height);
+  const crownBack = builder.point(backOut, height * 0.995);
+  const forehead = builder.point(foreheadX, height);
 
   const bottomFront = builder.line(faceBottom, shoulder, 'neckline');
   const bottomBack = builder.line(shoulder, backBottom, 'neckline');
-  const centerBack = builder.bezier(backBottom, crown,
-    vec2(bottomWidth, height * 0.4), vec2(crownWidth * 0.95, height * 0.8), 'free');
-  const faceOpening = builder.bezier(crown, faceBottom,
-    vec2(crownWidth * 0.3, height * 0.97), vec2(-bottomWidth * 0.08, height * 0.45), 'free');
+  const centerBack = builder.bezier(backBottom, crownBack,
+    vec2(bottomWidth + 1.6, height * 0.34), vec2(backOut, height * 0.8), 'free');
+  const crownSeam = builder.bezier(crownBack, forehead,
+    vec2(backOut - (backOut - foreheadX) * 0.3, height * 0.995),
+    vec2(foreheadX + (backOut - foreheadX) * 0.3, height * 0.995), 'free');
+  // The face opening drops from the forehead to the chin, bowing forward over the jaw.
+  const faceOpening = builder.bezier(forehead, faceBottom,
+    vec2(foreheadX * 0.92, height * 0.6), vec2(0.6, height * 0.18), 'free');
 
   const panel = builder.panel({
     name: o.name,
-    edges: [bottomFront, bottomBack, centerBack, faceOpening],
+    edges: [bottomFront, bottomBack, centerBack, crownSeam, faceOpening],
     drape: o.drape,
   });
-  return { panel, bottomFront, bottomBack, centerBack };
+  return { panel, bottomFront, bottomBack, centerBack, crownSeam };
 }
 
-/** Rib band hanging from a hem: the top edge attaches, the bottom edge is finished. */
+/** Rib band hanging from an opening: the top edge attaches, the bottom edge is finished. */
 interface RibEdges {
   panel: Panel;
   top: string;
@@ -124,7 +148,8 @@ function addRibBand(builder: PatternBuilder, o: {
 }
 
 /**
- * Builds a hooded sweatshirt: bodice halves, long sleeves, a two-piece hood and a ribbed hem.
+ * Builds a hooded sweatshirt: a boxy body with a dropped shoulder, low-capped sleeves with ribbed
+ * cuffs, a ribbed hem, a two-piece hood and a kangaroo pocket marked on the front.
  */
 export function generateHoodie(params: HoodieParams = DEFAULT_HOODIE_PARAMS, fabricId = 'fabric_default'): Pattern {
   const builder = new PatternBuilder(fabricId);
@@ -134,18 +159,20 @@ export function generateHoodie(params: HoodieParams = DEFAULT_HOODIE_PARAMS, fab
   } = params;
 
   const halfWidth = chestCm / 4;
-  const sleeveWidth = chestCm * 0.36;
-  // Armhole depth follows the chest; a long sweatshirt must not turn it into a shallow cap sleeve.
-  const armholeDepth = Math.min(chestCm * 0.205, lengthCm * 0.55);
-  const underarmAt = (lengthCm - SHOULDER_SLOPE_CM - armholeDepth) / lengthCm;
+  const halfShoulder = shoulderCm / 2 + SHOULDER_DROP_CM;
+  const halfNeck = neckWidthCm / 2;
+  const shoulderSlope = Math.max(halfShoulder - halfNeck, 0) * SHOULDER_SLOPE_SHARE;
+  // A hoodie armhole is deep and close to the side seam, which is what lets the sleeve cap stay low.
+  const armholeDepth = Math.min(chestCm * 0.2, lengthCm * 0.4);
+  const underarmAt = (lengthCm - shoulderSlope - armholeDepth) / lengthCm;
 
   const bodice = {
     halfWidthCm: halfWidth,
-    halfShoulderCm: shoulderCm / 2,
+    halfShoulderCm: halfShoulder,
     lengthCm,
-    neckHalfWidthCm: neckWidthCm / 2,
+    neckHalfWidthCm: halfNeck,
     underarmAt,
-    shoulderSlopeCm: SHOULDER_SLOPE_CM,
+    shoulderSlopeCm: shoulderSlope,
     splitNeckline: true,
   };
 
@@ -163,13 +190,16 @@ export function generateHoodie(params: HoodieParams = DEFAULT_HOODIE_PARAMS, fab
     drape: { region: 'torso', zone: 'back' },
   });
 
-  // The cap arc must match the armhole arc, so the cap height follows from the armhole length.
+  // A dropped shoulder runs the seam down the arm, so the sleeve is cut wide and its cap barely
+  // rises above the bicep line.
+  const sleeveWidth = chestCm * 0.36;
   const armholeArc = polylineLength(sampleEdge(builder.pattern, front.armholeRight));
   const capHeight = capHeightForArmhole(
-    sleeveWidth, armholeArc, Math.max(Math.min(sleeveLengthCm - 4, sleeveWidth * 0.9), 8),
+    sleeveWidth, armholeArc, Math.max(Math.min(sleeveLengthCm * 0.35, sleeveWidth * 0.9), 8),
   );
-  // Sleeve length is measured from the shoulder, so the shaft below the cap is what is left.
-  const sleeveShaft = Math.max(sleeveLengthCm - capHeight, 4);
+  // Sleeve length runs from the shoulder to the cuff edge, so the shaft carries neither the cap nor
+  // the cuff rib.
+  const sleeveShaft = Math.max(sleeveLengthCm - capHeight - CUFF_RIB_CM, 4);
 
   const sleeveL = addSleeve(builder, {
     name: '左袖',
@@ -178,7 +208,7 @@ export function generateHoodie(params: HoodieParams = DEFAULT_HOODIE_PARAMS, fab
     capHeightCm: capHeight,
     cuffCm,
     side: 'left',
-    drape: shoulderSleeveDrape('left'),
+    drape: { ...shoulderSleeveDrape('left'), radiusOffsetCm: SLEEVE_GAP_CM },
   });
 
   const sleeveR = addSleeve(builder, {
@@ -188,23 +218,39 @@ export function generateHoodie(params: HoodieParams = DEFAULT_HOODIE_PARAMS, fab
     capHeightCm: capHeight,
     cuffCm,
     side: 'right',
-    drape: shoulderSleeveDrape('right'),
+    drape: { ...shoulderSleeveDrape('right'), radiusOffsetCm: SLEEVE_GAP_CM },
   });
 
-  // The hem rib hangs from the bodice hem, one band per bodice half.
+  // The hem ribs hang from the bodice hem, one band per bodice half.
   const ribDrape = { region: 'torso' as const, anchor: 'shoulderTop' as const, anchorOffsetCm: -lengthCm };
   const frontRib = addRibBand(builder, {
     name: '前下摆罗纹',
     lengthCm: chestCm / 2,
-    heightCm: RIB_HEIGHT_CM,
+    heightCm: HEM_RIB_CM,
     drape: { ...ribDrape, zone: 'front' },
   });
 
   const backRib = addRibBand(builder, {
     name: '后下摆罗纹',
     lengthCm: chestCm / 2,
-    heightCm: RIB_HEIGHT_CM,
+    heightCm: HEM_RIB_CM,
     drape: { ...ribDrape, zone: 'back' },
+  });
+
+  // Cuff ribs close the sleeve; they sit at the wrist, not at the shoulder.
+  const cuffAnchorCm = -(sleeveLengthCm - CUFF_RIB_CM);
+  const cuffL = addRibBand(builder, {
+    name: '左袖口罗纹',
+    lengthCm: cuffCm,
+    heightCm: CUFF_RIB_CM,
+    drape: { region: 'arm', side: 'left', zone: 'full', anchorOffsetCm: cuffAnchorCm, radiusOffsetCm: CUFF_GAP_CM },
+  });
+
+  const cuffR = addRibBand(builder, {
+    name: '右袖口罗纹',
+    lengthCm: cuffCm,
+    heightCm: CUFF_RIB_CM,
+    drape: { region: 'arm', side: 'right', zone: 'full', anchorOffsetCm: cuffAnchorCm, radiusOffsetCm: CUFF_GAP_CM },
   });
 
   // Both hood halves follow the neck opening; each takes one half of the front and back neckline.
@@ -216,10 +262,7 @@ export function generateHoodie(params: HoodieParams = DEFAULT_HOODIE_PARAMS, fab
     frontNeckCm: frontNeckHalfCm,
     backNeckCm: backNeckHalfCm,
     heightCm: hoodHeightCm,
-    drape: {
-      region: 'head',
-      zone: 'left',
-    },
+    drape: { region: 'head', zone: 'left', radiusOffsetCm: HOOD_GAP_CM },
   });
 
   const hoodR = addHoodHalf(builder, {
@@ -227,11 +270,10 @@ export function generateHoodie(params: HoodieParams = DEFAULT_HOODIE_PARAMS, fab
     frontNeckCm: frontNeckHalfCm,
     backNeckCm: backNeckHalfCm,
     heightCm: hoodHeightCm,
-    drape: {
-      region: 'head',
-      zone: 'right',
-    },
+    drape: { region: 'head', zone: 'right', radiusOffsetCm: HOOD_GAP_CM },
   });
+
+  addPocketMark(builder, front.panel, halfWidth);
 
   // Shoulder and side seams join matching ends.
   builder.seam(front.shoulderRight, back.shoulderRight);
@@ -247,6 +289,8 @@ export function generateHoodie(params: HoodieParams = DEFAULT_HOODIE_PARAMS, fab
   builder.seam(sleeveL.capLeft, back.armholeLeft);
   builder.seam(sleeveR.seamRight, sleeveR.seamLeft, { flipB: true });
   builder.seam(sleeveL.seamRight, sleeveL.seamLeft, { flipB: true });
+  builder.seam(sleeveR.hem, cuffR.top, { flipB: true, strength: 1 });
+  builder.seam(sleeveL.hem, cuffL.top, { flipB: true, strength: 1 });
 
   builder.seam(front.hem, frontRib.top, { flipB: true, strength: 1 });
   builder.seam(back.hem, backRib.top, { flipB: true, strength: 1 });
@@ -256,24 +300,41 @@ export function generateHoodie(params: HoodieParams = DEFAULT_HOODIE_PARAMS, fab
   // Each hood half meets the other at the centre back. The left half takes the left halves of the
   // neckline and the right half the right ones, so both centre-front ends pair with a neck centre.
   builder.seam(hoodL.centerBack, hoodR.centerBack);
+  builder.seam(hoodL.crownSeam, hoodR.crownSeam, { flipB: true });
   builder.seam(hoodL.bottomFront, front.necklineLeft!, { strength: 1 });
   builder.seam(hoodL.bottomBack, back.necklineLeft!, { flipB: true, strength: 1 });
   builder.seam(hoodR.bottomFront, front.necklineRight!, { flipB: true, strength: 1 });
   builder.seam(hoodR.bottomBack, back.necklineRight!, { strength: 1 });
 
-  layoutRows(builder.pattern, [
-    [sleeveL.panel, front.panel, back.panel, sleeveR.panel],
-    [hoodL.panel, hoodR.panel, frontRib.panel, backRib.panel],
-  ]);
+  // One row read like the body: hood at the head, left arm, the body, right arm, then the ribs.
+  layoutRows(builder.pattern, [[
+    hoodL.panel, hoodR.panel, sleeveL.panel, cuffL.panel, front.panel, back.panel,
+    sleeveR.panel, cuffR.panel, frontRib.panel, backRib.panel,
+  ]]);
 
   return builder.pattern;
+}
+
+/** Marks the kangaroo pocket across the front panel, its side edges slanted for the hand openings. */
+function addPocketMark(builder: PatternBuilder, panel: Panel, halfWidthCm: number): void {
+  const bottom = 6;
+  const top = bottom + 18;
+  const halfBottom = Math.min(halfWidthCm * 0.72, 19);
+  const halfTop = halfBottom * 1.1;
+  builder.internalLine(panel, [
+    vec2(-halfBottom, bottom),
+    vec2(halfBottom, bottom),
+    vec2(halfTop, top),
+    vec2(-halfTop, top),
+    vec2(-halfBottom, bottom),
+  ], 'decor', '袋鼠袋');
 }
 
 export const hoodieTemplate = defineTemplate({
   key: 'hoodie',
   name: '卫衣',
   icon: 'hoodie',
-  summary: '前片 · 后片 · 长袖 · 兜帽 · 罗纹下摆',
+  summary: '前片 · 后片 · 落肩长袖 · 罗纹 · 兜帽',
   fields: [
     cm('chestCm', '胸围', 80, 150),
     cm('lengthCm', '衣长', 55, 90),

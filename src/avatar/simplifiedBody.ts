@@ -9,7 +9,7 @@
 import { CLOTH_CLEARANCE, type LimbSide } from '@/avatar/envelope';
 import type { MakehumanBody, Point3 } from '@/avatar/makehuman/body';
 import { SectionIndex } from '@/avatar/makehuman/section';
-import { add3t, cross3t, dot3t, normalize3t, scale3t, sub3t } from '@/base/math';
+import { add3t, cross3t, distance3t, dot3t, normalize3t, scale3t, sub3t } from '@/base/math';
 
 /** Measurements the proxy reads; the full landmark set satisfies this. */
 export interface SimplifiedBodySource {
@@ -27,8 +27,7 @@ export interface SimplifiedBodySource {
 
 /** Part a proxy shape stands for. */
 export type SimplifiedPart =
-  | 'head' | 'neck' | 'torso'
-  | 'upperArm' | 'forearm' | 'thigh' | 'shin' | 'foot';
+  | 'head' | 'neck' | 'torso' | 'arm' | 'leg' | 'foot';
 
 /** Fields shared by every proxy shape. */
 interface ShapeBase {
@@ -53,6 +52,19 @@ export interface TubeShape extends ShapeBase {
   toR: number;
 }
 
+/**
+ * A limb swept along one continuous centreline: the shoulder, elbow and wrist the panel rows
+ * follow, with the corner at the joint rounded and the section radius blended across it.
+ */
+export interface LimbShape extends ShapeBase {
+  kind: 'limb';
+  part: 'arm' | 'leg';
+  /** Centreline samples from the root joint to just past the tip. */
+  path: Point3[];
+  /** Section radius at each sample. */
+  radii: number[];
+}
+
 /** Torso: one vertical elliptic cylinder through the measured wrap section. */
 export interface TorsoShape extends ShapeBase {
   kind: 'torso';
@@ -72,7 +84,7 @@ export interface BoxShape extends ShapeBase {
 }
 
 /** One proxy of the simplified body. */
-export type SimplifiedShape = HeadShape | TubeShape | TorsoShape | BoxShape;
+export type SimplifiedShape = HeadShape | TubeShape | LimbShape | TorsoShape | BoxShape;
 
 /** Gap the head ellipsoid leaves around the measured skull, in meters. */
 const HEAD_CLEARANCE = 0.005;
@@ -302,6 +314,124 @@ function fitLimbCone(
   return { from, to, fromR, toR };
 }
 
+/** Spacing the limb centreline is sampled at, in meters. */
+const LIMB_STEP = 0.02;
+
+/** Distance a limb reaches past its last joint, covering the wrist or the ankle. */
+const LIMB_TIP_COVER = 0.02;
+
+/** Smallest fillet the joint between two bones is rounded with, in meters. */
+const JOINT_FILLET_MIN = 0.04;
+
+/** Room a joint fillet keeps between its own centre and the section it sweeps, in meters. */
+const JOINT_FILLET_CLEARANCE = 0.015;
+
+/** Longest fillet tangent, as a share of either bone, so the straight runs stay the longer part. */
+const JOINT_FILLET_SHARE = 0.4;
+
+/** Bend below which two bones count as one straight run, in radians. */
+const JOINT_BEND_MIN = 0.03;
+
+/** Half width of the window the section radius eases across the joint, in meters. */
+const JOINT_RADIUS_BLEND = 0.06;
+
+/** Section radius a cone carries at a point along its axis. */
+function boneRadiusAt(bone: { from: Point3; to: Point3; fromR: number; toR: number }, point: Point3): number {
+  const span = sub3t(bone.to, bone.from);
+  const length = Math.hypot(span[0], span[1], span[2]) || 1e-6;
+  const along = dot3t(sub3t(point, bone.from), span) / (length * length);
+  return bone.fromR + (bone.toR - bone.fromR) * Math.min(1, Math.max(0, along));
+}
+
+/** Moves a point off the joint until it sits one fillet tangent back along a bone. */
+function backAlong(point: Point3, axis: Point3, distance: number): Point3 {
+  return add3t(point, scale3t(axis, -distance));
+}
+
+/**
+ * Samples a limb's centreline through two bones. The corner at the joint is replaced by a circular
+ * fillet tangent to both bones, so the swept surface bends instead of breaking: no crease at the
+ * elbow, and no section pushed through the one below it. The radius eases from the first bone's
+ * taper onto the second's over a window wider than the fillet, so the sleeve narrows the way a
+ * real one does instead of pinching to a waist at the joint.
+ */
+function limbPath(
+  upper: { from: Point3; to: Point3; fromR: number; toR: number },
+  lower: { from: Point3; to: Point3; fromR: number; toR: number },
+): { path: Point3[]; radii: number[] } {
+  const axis0 = normalize3t(sub3t(upper.to, upper.from));
+  const axis1 = normalize3t(sub3t(lower.to, lower.from));
+  const joint = upper.to;
+  const upperLength = distance3t(upper.from, upper.to);
+  const lowerLength = distance3t(lower.from, lower.to);
+  const bend = Math.acos(Math.min(1, Math.max(-1, dot3t(axis0, axis1))));
+
+  const path: Point3[] = [];
+  /** Appends a run, skipping a start point the previous run already laid down. */
+  const run = (from: Point3, to: Point3, skipStart = false): void => {
+    const steps = Math.max(1, Math.ceil(distance3t(from, to) / LIMB_STEP));
+    for (let i = skipStart ? 1 : 0; i <= steps; i++) {
+      const t = i / steps;
+      path.push([
+        from[0] + (to[0] - from[0]) * t,
+        from[1] + (to[1] - from[1]) * t,
+        from[2] + (to[2] - from[2]) * t,
+      ]);
+    }
+  };
+
+  // The root reaches into the torso so the shoulder section has no open end.
+  const root = backAlong(upper.from, axis0, JOINT_OVERLAP);
+  const tip = add3t(lower.to, scale3t(axis1, LIMB_TIP_COVER));
+  let jointArc = 0;
+
+  if (bend < JOINT_BEND_MIN) {
+    run(root, tip);
+    jointArc = distance3t(root, joint);
+  } else {
+    const rJoint = (boneRadiusAt(upper, joint) + boneRadiusAt(lower, lower.from)) / 2;
+    let fillet = Math.max(JOINT_FILLET_MIN, rJoint + JOINT_FILLET_CLEARANCE);
+    let tangent = fillet * Math.tan(bend / 2);
+    const maxTangent = Math.min(upperLength, lowerLength) * JOINT_FILLET_SHARE;
+    if (tangent > maxTangent) {
+      tangent = maxTangent;
+      fillet = tangent / Math.tan(bend / 2);
+    }
+    const arcStart = backAlong(joint, axis0, tangent);
+    const arcEnd = add3t(joint, scale3t(axis1, tangent));
+    // The fillet centre sits inside the bend, where its distance to either bone is the radius.
+    const inside = normalize3t(add3t(scale3t(axis0, -1), axis1));
+    const centre = add3t(joint, scale3t(inside, fillet / Math.cos(bend / 2)));
+
+    run(root, arcStart);
+    jointArc = distance3t(root, arcStart) + (bend * fillet) / 2;
+    const from: Point3 = sub3t(arcStart, centre);
+    const to: Point3 = sub3t(arcEnd, centre);
+    const axis = normalize3t(cross3t(from, to));
+    const arcSteps = Math.max(3, Math.ceil((bend * fillet) / LIMB_STEP));
+    for (let i = 1; i <= arcSteps; i++) {
+      const angle = bend * (i / arcSteps);
+      const rotated = add3t(
+        add3t(scale3t(from, Math.cos(angle)), scale3t(cross3t(axis, from), Math.sin(angle))),
+        scale3t(axis, dot3t(axis, from) * (1 - Math.cos(angle))),
+      );
+      path.push(add3t(centre, rotated));
+    }
+    run(arcEnd, tip, true);
+  }
+
+  // Radius: both bones' tapers, eased into one another across the joint so no ring stands out.
+  const arcs: number[] = [0];
+  for (let i = 1; i < path.length; i++) arcs.push(arcs[i - 1]! + distance3t(path[i - 1]!, path[i]!));
+  const window = Math.max(JOINT_RADIUS_BLEND, distance3t(root, tip) * 0.12);
+  const radii = path.map((point, i) => {
+    const t = Math.min(1, Math.max(0, (arcs[i]! - jointArc + window) / (2 * window)));
+    const eased = t * t * (3 - 2 * t);
+    return boneRadiusAt(upper, point) * (1 - eased) + boneRadiusAt(lower, point) * eased;
+  });
+  return { path, radii };
+}
+
 /** Proxy shapes of the current body: head, neck, torso, two arm cones, two leg cones, feet. */
 export function simplifiedBodyShapes(
   body: MakehumanBody,
@@ -408,13 +538,16 @@ export function simplifiedBodyShapes(
     };
 
   for (const side of [-1, 1] as LimbSide[]) {
-    for (const part of ['upperArm', 'forearm', 'thigh', 'shin'] as const) {
-      const cone = mirrored(cones[part], side);
+    // Each limb is one swept tube through both bones: the shoulder, elbow and wrist the cloth
+    // follows are a single surface, so a sleeve bends over the joint instead of breaking at it.
+    for (const [part, upperPart, lowerPart] of [
+      ['arm', 'upperArm', 'forearm'], ['leg', 'thigh', 'shin'],
+    ] as const) {
       shapes.push({
-        kind: 'tube',
+        kind: 'limb',
         part,
         side,
-        ...extendTube(cone.from, cone.to, cone.fromR, cone.toR, JOINT_OVERLAP),
+        ...limbPath(mirrored(cones[upperPart], side), mirrored(cones[lowerPart], side)),
       });
     }
 
@@ -467,6 +600,25 @@ export function simplifiedDepth(shape: SimplifiedShape, point: Point3): number {
         point[1] - shape.min[1], shape.max[1] - point[1],
         point[2] - shape.min[2], shape.max[2] - point[2],
       );
+    }
+    case 'limb': {
+      // Nearest point on the sampled centreline; the section radius there is the surface.
+      let best = -1;
+      for (let i = 1; i < shape.path.length; i++) {
+        const a = shape.path[i - 1]!;
+        const b = shape.path[i]!;
+        const span = sub3t(b, a);
+        const lengthSq = dot3t(span, span);
+        if (lengthSq < 1e-12) continue;
+        const t = dot3t(sub3t(point, a), span) / lengthSq;
+        // Past either end of the limb the point is outside it, as for a capped tube.
+        if ((i === 1 && t < 0) || (i === shape.path.length - 1 && t > 1)) continue;
+        const clamped = Math.min(1, Math.max(0, t));
+        const centre = add3t(a, scale3t(span, clamped));
+        const radius = shape.radii[i - 1]! + (shape.radii[i]! - shape.radii[i - 1]!) * clamped;
+        best = Math.max(best, radius - distance3t(point, centre));
+      }
+      return best;
     }
     case 'tube': {
       const axis: Point3 = [

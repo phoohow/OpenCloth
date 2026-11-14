@@ -1,7 +1,8 @@
 import type { Command, Fabric, Pattern, ProjectContext } from '@/model/types';
 import { createFabric } from '@/model';
-import { appendPattern } from '@/pattern/template/patternLayout';
+import { appendPattern, layoutByHeight } from '@/pattern/template/patternLayout';
 import { type GarmentTemplate } from '@/pattern/template/garmentTemplate';
+import { bodyLandmarks } from '@/avatar';
 
 /** Pattern and fabric bookkeeping a template command restores on undo. */
 interface Snapshot {
@@ -27,16 +28,26 @@ function templateFabric(ctx: ProjectContext): Fabric {
   return fabric;
 }
 
-/** Copies every entity collection so appended panels never touch the pattern being replaced. */
+/**
+ * Copies every entity collection, and every entity in it, so neither appended panels nor a fresh
+ * layout ever reach back into the pattern the undo snapshot keeps.
+ */
 function detachedPattern(pattern: Pattern): Pattern {
+  const copy = <T,>(items: Record<string, T>): Record<string, T> =>
+    Object.fromEntries(Object.entries(items).map(([id, item]) => [id, { ...item }]));
   return {
     ...pattern,
-    points: { ...pattern.points },
-    edges: { ...pattern.edges },
-    darts: { ...pattern.darts },
-    internalLines: { ...pattern.internalLines },
-    panels: { ...pattern.panels },
-    seams: { ...pattern.seams },
+    points: copy(pattern.points),
+    edges: copy(pattern.edges),
+    darts: copy(pattern.darts),
+    internalLines: Object.fromEntries(
+      Object.entries(pattern.internalLines).map(([id, line]) => [id, { ...line, points: [...line.points] }]),
+    ),
+    panels: copy(pattern.panels),
+    seams: copy(pattern.seams),
+    prints: copy(pattern.prints),
+    topstitches: copy(pattern.topstitches),
+    trims: copy(pattern.trims),
   };
 }
 
@@ -52,7 +63,10 @@ export class ApplyTemplateCommand implements Command {
   execute(ctx: ProjectContext): void {
     this.saved = take(ctx);
     const fabric = templateFabric(ctx);
-    ctx.project.pattern = this.template.generate(this.params, fabric.id);
+    const pattern = this.template.generate(this.params, fabric.id);
+    // The 2D pane draws each piece at its body height, so the sheet is laid out in that view.
+    layoutByHeight(pattern, bodyLandmarks(ctx.project.avatar.params));
+    ctx.project.pattern = pattern;
   }
 
   undo(ctx: ProjectContext): void {
@@ -72,8 +86,34 @@ export class AppendTemplateCommand implements Command {
   execute(ctx: ProjectContext): void {
     this.saved = take(ctx);
     const fabric = templateFabric(ctx);
+    const body = bodyLandmarks(ctx.project.avatar.params);
     const pattern = detachedPattern(ctx.project.pattern);
-    appendPattern(pattern, this.template.generate(this.params, fabric.id));
+    // Both sheets are laid out in the height view on their own, then the new garment is carried to
+    // the right of the old one: two garments never share a column, so neither lands on the other.
+    layoutByHeight(pattern, body);
+    const incoming = this.template.generate(this.params, fabric.id);
+    layoutByHeight(incoming, body);
+    appendPattern(pattern, incoming);
+    ctx.project.pattern = pattern;
+  }
+
+  undo(ctx: ProjectContext): void {
+    if (this.saved) restore(ctx, this.saved);
+  }
+}
+
+/** Re-flows the whole sheet in the body-height view, keeping every piece where it belongs. */
+export class ArrangePanelsCommand implements Command {
+  readonly label = '自动排位';
+  private saved: Snapshot | null = null;
+
+  constructor(private readonly gapCm = 6) {}
+
+  execute(ctx: ProjectContext): void {
+    this.saved = take(ctx);
+    // Laid out on a copy: the snapshot has to keep the sheet as it was before the move.
+    const pattern = detachedPattern(ctx.project.pattern);
+    layoutByHeight(pattern, bodyLandmarks(ctx.project.avatar.params), this.gapCm);
     ctx.project.pattern = pattern;
   }
 

@@ -129,6 +129,12 @@ export const styles: Record<string, CSSProperties> = {
     background: 'transparent', border: '1px solid #3a3a42', borderRadius: 3,
     color: '#9ab', cursor: 'pointer', fontSize: 'var(--oc-fs-note)',
   },
+  /** The same button carrying one glyph instead of a word. */
+  glyphBtn: {
+    flex: '0 0 auto', width: 17, height: 17, padding: 0, display: 'flex', alignItems: 'center',
+    justifyContent: 'center', background: 'transparent', border: '1px solid #3a3a42',
+    borderRadius: 3, color: '#9ab', cursor: 'pointer',
+  },
   note: { color: '#666', fontSize: 'var(--oc-fs-note)', lineHeight: 1.5, margin: '2px 2px 0' },
   body: { display: 'flex', flexDirection: 'column', gap: 4, padding: '3px 4px 6px' },
   field: {

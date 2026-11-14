@@ -120,6 +120,11 @@ export interface PanelDrape {
   side?: 'left' | 'right';
   /** Design ease of the piece, in centimeters; used to order separate garments into layers. */
   easeCm?: number;
+  /**
+   * Gap the piece keeps outside the body surface, in centimeters. A collar, a cuff or a sleeve
+   * hood holds air against the skin, and wrapping it on the skin itself makes it overlap itself.
+   */
+  radiusOffsetCm?: number;
 }
 
 /** Construction layer a panel belongs to, from the body outward. */
@@ -143,6 +148,11 @@ export interface Panel {
   /** Offsets the panel's built pose around its own centre; absent leaves it as built. */
   transform?: ObjectTransform;
   drape?: PanelDrape;
+  /**
+   * Shift of the piece in the 2D height view, in centimeters; the sheet layout sets it so pieces
+   * that meet on the body also meet on the sheet. It never moves the piece in 3D.
+   */
+  sheetLiftCm?: number;
   /** Grain line direction in degrees, counter-clockwise from pattern X+. */
   grainAngleDeg?: number;
   /** Grain line midpoint as an offset from the outline bounding-box centre, in cm. */

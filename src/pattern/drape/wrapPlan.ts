@@ -21,6 +21,7 @@ export interface ResolvedWrap {
   side: 'left' | 'right';
   flip: boolean;
   easeCm: number;
+  radiusOffsetCm: number;
 }
 
 /** Landmark each region hangs from unless the panel overrides it. */
@@ -62,6 +63,7 @@ export function resolveWrap(panel: Panel): ResolvedWrap {
     side: drape.side ?? 'right',
     flip: drape.flip ?? false,
     easeCm: drape.easeCm ?? REGION_EASE[region],
+    radiusOffsetCm: drape.radiusOffsetCm ?? 0,
   };
 }
 
@@ -153,6 +155,7 @@ export function wrapDrapeForMode(mode: PanelWrapMode, previous?: PanelDrape): Pa
     ...(keep?.anchorOffsetCm !== undefined ? { anchorOffsetCm: keep.anchorOffsetCm } : {}),
     ...(keep?.flip !== undefined ? { flip: keep.flip } : {}),
     ...(keep?.easeCm !== undefined ? { easeCm: keep.easeCm } : {}),
+    ...(keep?.radiusOffsetCm !== undefined ? { radiusOffsetCm: keep.radiusOffsetCm } : {}),
   };
   if (region === 'torso') return { ...base, zone: mode === 'torso-back' ? 'back' : mode === 'torso-full' ? 'full' : 'front' };
   if (region === 'neck') {

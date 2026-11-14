@@ -15,7 +15,7 @@ export const ICON_NAMES = [
   // Mobile shell
   'atom', 'aperture',
   // Shared controls
-  'chevron-down', 'chevron-right', 'eye', 'eye-off', 'plus', 'minus', 'check',
+  'chevron-down', 'chevron-right', 'eye', 'eye-off', 'plus', 'minus', 'check', 'refresh',
   'collapse-all', 'expand-all', 'status-dot', 'menu', 'close',
   // Transport
   'play', 'pause', 'reset', 'step',

@@ -105,10 +105,10 @@ export function generateDress(params: DressParams = DEFAULT_DRESS_PARAMS, fabric
   builder.seam(skirtFront.sideRight, skirtBack.sideRight);
   builder.seam(skirtFront.sideLeft, skirtBack.sideLeft);
 
-  layoutRows(builder.pattern, [
-    [front.panel, back.panel],
-    [skirtFront.panel, skirtBack.panel],
-  ]);
+  // Bodice pieces above the skirt body, each row read left to right like the body.
+  layoutRows(builder.pattern, [[
+    front.panel, back.panel, skirtFront.panel, skirtBack.panel,
+  ]]);
 
   return builder.pattern;
 }

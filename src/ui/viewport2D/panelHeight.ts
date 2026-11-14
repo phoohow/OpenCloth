@@ -16,16 +16,15 @@ function shiftPoint(point: PatternPoint, dy: number): PatternPoint {
 
 /**
  * Vertical offsets in centimeters from each panel's pattern y to the height the 3D pane puts it at.
- * A panel without a drape is built flat at its pattern coordinates, so its offset is zero.
+ * A panel without a drape is built flat at its pattern coordinates, so its offset is zero. The
+ * sheet layout's own lift is added on top, so a piece can be nudged clear of the one above it
+ * without leaving the height its wrap anchors it to.
  */
 export function panelHeightOffsets(pattern: Pattern, body: BodyLandmarks): Map<string, number> {
   const offsets = new Map<string, number>();
   for (const panel of Object.values(pattern.panels)) {
-    if (!panel.drape) {
-      offsets.set(panel.id, 0);
-      continue;
-    }
-    offsets.set(panel.id, drapeHeightOffsetCm(panel, panelMeshBounds(pattern, panel).max.y, body));
+    const drape = panel.drape ? drapeHeightOffsetCm(panel, panelMeshBounds(pattern, panel).max.y, body) : 0;
+    offsets.set(panel.id, drape + (panel.sheetLiftCm ?? 0));
   }
   return offsets;
 }
@@ -42,7 +41,7 @@ export function panelMoveOffsets(
   for (const id of panelIds) {
     const panel = pattern.panels[id];
     if (!panel) continue;
-    offsets.set(id, panel.drape ? (base.get(id) ?? 0) + dy : 0);
+    offsets.set(id, panel.drape ? (base.get(id) ?? 0) + dy : (panel.sheetLiftCm ?? 0));
   }
   return offsets;
 }

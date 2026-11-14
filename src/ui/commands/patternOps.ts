@@ -1,13 +1,13 @@
 import {
-  BreakPointCommand, BlendSeamJointCommand, CompositeCommand, ConnectPointsCommand,
+  BreakPointCommand, BlendSeamJointCommand, ConnectPointsCommand,
   CreateMultiSeamCommand, CreatePanelFromEdgesCommand, FilletCornersCommand,
-  MergeCollinearEdgesCommand, MirrorPanelCommand, MergePanelsCommand, MovePanelsCommand,
+  MergeCollinearEdgesCommand, MirrorPanelCommand, MergePanelsCommand,
   OffsetInternalLineCommand, PanelFromInternalLoopCommand, RhombusDartCommand, SimplifyCurveCommand,
   SyncMirrorCommand, PanelBooleanCommand, type MirrorAxis, type PanelBooleanOp, type SeamPart,
 } from '@/commands';
-import { placePanelsAuto } from '@/pattern/auto';
 import { useProjectStore, useUIStore, type ToolType } from '@/store';
 import { idsOfKind } from '@/model';
+import { ArrangePanelsCommand } from '@/pattern/template';
 import { reportActionError } from '@/ui/widgets/toast';
 
 /** Structure operations offered by the 版型 ▸ 结构 menu and the 2D toolbar slot. */
@@ -165,17 +165,10 @@ export function runStructure(action: StructureAction): void {
 
 /** Groups panels by drape region and moves them as one undo step. */
 export function autoPlacePanels(): void {
-  const pattern = useProjectStore.getState().project.pattern;
-  const offsets = placePanelsAuto(pattern, { gapCm: 4 });
-  if (offsets.length === 0) return;
-  // A draped panel's height comes from its drape anchor, so its row position is not visible.
-  const cmds = offsets
-    .map(o => (pattern.panels[o.panelId]?.drape ? { ...o, dy: 0 } : o))
-    .filter(o => o.dx !== 0 || o.dy !== 0)
-    .map(o => new MovePanelsCommand([o.panelId], { x: o.dx, y: o.dy }));
-  if (cmds.length === 0) return;
   try {
-    useProjectStore.getState().executeCommand(new CompositeCommand('自动排位', cmds));
+    // The sheet is laid out in the body-height view the 2D pane draws, so pieces that meet on the
+    // body stay stacked on the sheet.
+    useProjectStore.getState().executeCommand(new ArrangePanelsCommand());
   } catch (err) {
     reportActionError(err);
   }

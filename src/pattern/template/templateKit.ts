@@ -1,6 +1,7 @@
 import { genId } from '@/base/id';
 import type {
   Panel, PanelDrape, Pattern, PatternEdge, PatternPoint, Seam, SeamEnd, Vec2, EdgeSemantic,
+  InternalLine, TrimKind,
 } from '@/model/types';
 import { vec2 } from '@/model/types';
 import { createEmptyPattern, DEFAULT_MESH_RESOLUTION_CM } from '@/model';
@@ -93,9 +94,23 @@ export class PatternBuilder {
 
   /** Joins two outline edges; paired by arc-length fraction while dressing. */
   seam(edgeAId: string, edgeBId: string, opts: { flipB?: boolean; type?: Seam['type']; strength?: number } = {}): void {
+    this.seamRange(edgeAId, { t0: 0, t1: 1 }, edgeBId, { t0: 0, t1: 1 }, opts);
+  }
+
+  /**
+   * Joins two arc-length intervals of outline edges. Long openings such as an armhole split by a
+   * yoke are sewn piece by piece, so each side names the interval it covers.
+   */
+  seamRange(
+    edgeAId: string,
+    rangeA: { t0: number; t1: number },
+    edgeBId: string,
+    rangeB: { t0: number; t1: number },
+    opts: { flipB?: boolean; type?: Seam['type']; strength?: number } = {},
+  ): void {
     const id = genId('seam');
-    const a: SeamEnd = { edgeId: edgeAId, t0: 0, t1: 1 };
-    const b: SeamEnd = { edgeId: edgeBId, t0: 0, t1: 1 };
+    const a: SeamEnd = { edgeId: edgeAId, t0: rangeA.t0, t1: rangeA.t1 };
+    const b: SeamEnd = { edgeId: edgeBId, t0: rangeB.t0, t1: rangeB.t1 };
     const seam: Seam = {
       id,
       type: opts.type ?? 'normal',
@@ -107,5 +122,23 @@ export class PatternBuilder {
       stitchVisible: true,
     };
     this.pattern.seams[id] = seam;
+  }
+
+  /** Adds a construction line inside a panel, in the builder's placed coordinates. */
+  internalLine(panel: Panel, points: Vec2[], kind: InternalLine['kind'] = 'decor', name?: string): string {
+    const id = genId('line');
+    const shifted = points.map(p => vec2(p.x + this.origin.x, p.y + this.origin.y));
+    this.pattern.internalLines[id] = { id, ...(name ? { name } : {}), points: shifted, kind };
+    panel.internalLineIds.push(id);
+    return id;
+  }
+
+  /** Marks a trim on a panel at a placed pattern position. */
+  trim(panel: Panel, kind: TrimKind, pos: Vec2, sizeMm = 12): void {
+    const id = genId('trim');
+    this.pattern.trims[id] = {
+      id, panelId: panel.id, kind, pos: vec2(pos.x + this.origin.x, pos.y + this.origin.y),
+      sizeMm, color: '#c9a227', qty: 1, visible: true,
+    };
   }
 }
