@@ -29,6 +29,14 @@ export interface SimplifiedBodySource {
 export type SimplifiedPart =
   | 'head' | 'neck' | 'torso' | 'arm' | 'leg' | 'foot';
 
+/** One straight run of a limb between two joints, with the radius at each end. */
+interface Bone {
+  from: Point3;
+  to: Point3;
+  fromR: number;
+  toR: number;
+}
+
 /** Fields shared by every proxy shape. */
 interface ShapeBase {
   part: SimplifiedPart;
@@ -173,17 +181,19 @@ function axisDistance(from: Point3, axis: Point3, point: Point3): number {
 }
 
 /**
- * One limb cone fitted on its flesh: the axis runs parallel to the bone line through the mean
- * section centre, and the end radii are the cheapest straight taper that stays outside every
- * measured section, so a muscle belly offset from the bone stays inside the cone. Sections are
- * cut perpendicular to the axis, so a horizontal arm reads the same as a hanging one.
+ * One limb bone fitted on its flesh: the axis runs parallel to the bone line through the mean
+ * section centre, and the radius stays outside every measured section, so a muscle belly offset
+ * from the bone stays inside the shape. A tapered bone carries the cheapest straight taper that
+ * clears its sections; a tubular bone carries the widest section at both ends. Sections are cut
+ * perpendicular to the axis, so a horizontal arm reads the same as a hanging one.
  */
-function fitLimbCone(
+function fitLimbBone(
   positions: Float32Array, indices: Uint32Array,
   root: Point3, end: Point3, clearance: number,
+  shape: 'taper' | 'tube',
   startPad = 0,
   endTrim = 0.005,
-): { from: Point3; to: Point3; fromR: number; toR: number } {
+): Bone {
   const axis = normalize3t(sub3t(end, root));
   const { u, v } = tubeFrame(axis);
   const toWorld = (x: number, y: number, z: number): Point3 =>
@@ -285,9 +295,11 @@ function fitLimbCone(
     radii[i] = nearest < 0 ? clearance : radii[nearest]!;
   }
 
+  const maxR = Math.max(...radii);
+  if (shape === 'tube') return { from, to, fromR: maxR, toR: maxR };
+
   // Cheapest enclosing taper: the line through two stations that clears all of them without
   // extrapolating past the widest measured section.
-  const maxR = Math.max(...radii);
   let fromR = maxR;
   let toR = maxR;
   let cost = Infinity;
@@ -432,7 +444,7 @@ function limbPath(
   return { path, radii };
 }
 
-/** Proxy shapes of the current body: head, neck, torso, two arm cones, two leg cones, feet. */
+/** Proxy shapes of the current body: head, neck, torso, two arms, two legs, feet. */
 export function simplifiedBodyShapes(
   body: MakehumanBody,
   landmarks: SimplifiedBodySource,
@@ -506,12 +518,13 @@ export function simplifiedBodyShapes(
     rz: torso.rz,
   });
 
-  // Limb cones are measured on the right side and mirrored, so a symmetric body gets exactly
-  // symmetric proxies and sleeves.
+  // Limbs are measured on the right side and mirrored, so a symmetric body gets exactly symmetric
+  // proxies and sleeves. An upper arm or a thigh narrows from shoulder to elbow, so it tapers; a
+  // forearm or a calf is cut as a tube around the limb, so it keeps one girth.
   const rightArm = landmarks.armChain(1);
   const rightLeg = landmarks.legChain(1);
-  const upperArm = fitLimbCone(
-    body.positions, body.bodyIndices, rightArm.root, rightArm.mid, CLOTH_CLEARANCE,
+  const upperArm = fitLimbBone(
+    body.positions, body.bodyIndices, rightArm.root, rightArm.mid, CLOTH_CLEARANCE, 'taper',
     Math.max(JOINT_OVERLAP, landmarks.deltoidR),
   );
   // Sections above the armpit merge into the torso, so the deltoid cap is measured directly
@@ -525,16 +538,16 @@ export function simplifiedBodyShapes(
     capR = Math.max(capR, axisDistance(upperArm.from, capAxis, p));
   }
   upperArm.fromR = Math.max(upperArm.fromR, capR + CLOTH_CLEARANCE);
-  const forearm = fitLimbCone(body.positions, body.bodyIndices, rightArm.mid, rightArm.end, CLOTH_CLEARANCE, 0, -0.008);
-  const thigh = fitLimbCone(body.positions, body.bodyIndices, rightLeg.root, rightLeg.mid, CLOTH_CLEARANCE);
-  const shin = fitLimbCone(body.positions, body.bodyIndices, rightLeg.mid, rightLeg.end, CLOTH_CLEARANCE, 0, -0.008);
-  const cones = { upperArm, forearm, thigh, shin };
-  const mirrored = (cone: { from: Point3; to: Point3; fromR: number; toR: number }, side: LimbSide) =>
-    side > 0 ? cone : {
-      from: [-cone.from[0], cone.from[1], cone.from[2]] as Point3,
-      to: [-cone.to[0], cone.to[1], cone.to[2]] as Point3,
-      fromR: cone.fromR,
-      toR: cone.toR,
+  const forearm = fitLimbBone(body.positions, body.bodyIndices, rightArm.mid, rightArm.end, CLOTH_CLEARANCE, 'tube', 0, -0.008);
+  const thigh = fitLimbBone(body.positions, body.bodyIndices, rightLeg.root, rightLeg.mid, CLOTH_CLEARANCE, 'taper');
+  const shin = fitLimbBone(body.positions, body.bodyIndices, rightLeg.mid, rightLeg.end, CLOTH_CLEARANCE, 'tube', 0, -0.008);
+  const bones = { upperArm, forearm, thigh, shin };
+  const mirrored = (bone: Bone, side: LimbSide): Bone =>
+    side > 0 ? bone : {
+      from: [-bone.from[0], bone.from[1], bone.from[2]] as Point3,
+      to: [-bone.to[0], bone.to[1], bone.to[2]] as Point3,
+      fromR: bone.fromR,
+      toR: bone.toR,
     };
 
   for (const side of [-1, 1] as LimbSide[]) {
@@ -547,7 +560,7 @@ export function simplifiedBodyShapes(
         kind: 'limb',
         part,
         side,
-        ...limbPath(mirrored(cones[upperPart], side), mirrored(cones[lowerPart], side)),
+        ...limbPath(mirrored(bones[upperPart], side), mirrored(bones[lowerPart], side)),
       });
     }
 

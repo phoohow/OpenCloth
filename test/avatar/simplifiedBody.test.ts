@@ -56,6 +56,20 @@ describe('simplified body', () => {
     }
   });
 
+  it('tapers the upper limb and tubes the lower one', () => {
+    for (const part of ['arm', 'leg'] as const) {
+      const limb = shapes.find(shape => shape.kind === 'limb' && shape.part === part && shape.side === 1);
+      if (!limb || limb.kind !== 'limb') throw new Error(`${part} proxy missing`);
+      // The upper bone narrows from its joint to the next, the way a sleeve head or a thigh does.
+      const joint = part === 'arm' ? body.armChain(1).mid : body.legChain(1).mid;
+      const jointIndex = nearestSample(limb.path, joint);
+      expect(limb.radii[0]!).toBeGreaterThan(limb.radii[jointIndex]! + 0.005);
+      // The lower bone is cut as a tube: one girth from the joint to the wrist or ankle.
+      const lower = limb.radii.slice(Math.floor(limb.path.length * 0.8));
+      expect(Math.max(...lower) - Math.min(...lower)).toBeLessThan(0.001);
+    }
+  });
+
   it('rounds the elbow instead of breaking it', () => {
     const arm = shapes.find(shape => shape.kind === 'limb' && shape.part === 'arm' && shape.side === 1);
     if (!arm || arm.kind !== 'limb') throw new Error('arm proxy missing');
@@ -88,3 +102,16 @@ describe('simplified body', () => {
       .toBeLessThan(0);
   });
 });
+
+/** Index of the centreline sample closest to a joint. */
+function nearestSample(path: readonly (readonly number[])[], joint: readonly number[]): number {
+  let best = 0;
+  let bestDistance = Infinity;
+  for (let i = 0; i < path.length; i++) {
+    const distance = Math.hypot(
+      path[i]![0]! - joint[0]!, path[i]![1]! - joint[1]!, path[i]![2]! - joint[2]!,
+    );
+    if (distance < bestDistance) { bestDistance = distance; best = i; }
+  }
+  return best;
+}

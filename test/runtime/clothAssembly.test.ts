@@ -169,7 +169,10 @@ describe('unsewn layout', () => {
           const gap = shape.kind === 'limb' ? limbSectionGap(shape, p) : simplifiedDepth(shape, p);
           // Rows past either end of a section, like a hem below the pelvis, have no surface.
           if (gap === null || gap <= -0.5) continue;
-          expect(Math.abs(gap), `${panel.name}`).toBeLessThan(0.002);
+          // A limb's section is measured by arc length along its sampled centreline; measuring a
+          // chord across the elbow fillet reads a few millimetres wide of that section.
+          const tolerance = shape.kind === 'limb' ? 0.003 : 0.002;
+          expect(Math.abs(gap), `${panel.name}`).toBeLessThan(tolerance);
           checked++;
         }
         // A piece that wraps entirely past the section, like a collar falling above the neck, has
