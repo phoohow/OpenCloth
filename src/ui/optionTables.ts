@@ -1,9 +1,11 @@
 import type { CameraPreset } from '@/runtime';
 import type {
-  CameraProjection, DenoiseModel, EditPreviewTier, GarmentLayer, MeshSampling, ToneMappingMode, WireMode,
+  BodyLandmark, CameraProjection, DenoiseModel, EditPreviewTier, GarmentLayer, MeshSampling,
+  PanelDrape, ToneMappingMode,
 } from '@/model/types';
 import { DEFAULT_SKIN_APPEARANCE } from '@/model';
-import type { PropTab, DisplayMode, AssetTab } from '@/store';
+import type { PanelWrapMode } from '@/pattern/drape';
+import type { PropTab, DisplayMode, AssetTab, AuxGroupMode } from '@/store';
 import type { IconName } from '@/ui/icons';
 import type { DisplayOptions } from '@/ui/viewport2D/render';
 import type { RayTraceFailure, TraceStatus as RayTraceState, RayTracingCapability } from '@/render/common';
@@ -95,11 +97,18 @@ export const CAMERA_PROJECTIONS: CameraProjectionOption[] = [
   { value: 'orthographic', menuId: 'cameraProjectionOrthographic', label: '正交' },
 ];
 
-/** Wire overlay switch: off, edges alone, or edges on top of the surface. */
-export const WIRE_MODES: Array<{ value: WireMode; label: string }> = [
+/** Wireframe group: how the cloth panels are drawn. */
+export const WIRE_AUX_OPTIONS: Array<{ value: AuxGroupMode; label: string }> = [
   { value: 'off', label: '关闭' },
   { value: 'only', label: '仅线框' },
   { value: 'over', label: '叠加线框' },
+];
+
+/** Proxy group: how the model is drawn. */
+export const PROXY_AUX_OPTIONS: Array<{ value: AuxGroupMode; label: string }> = [
+  { value: 'off', label: '关闭' },
+  { value: 'only', label: '仅简模' },
+  { value: 'over', label: '叠加简模' },
 ];
 
 /** Display modes shared by the 3D toolbar, the render tab and the phone drawer. */
@@ -194,6 +203,50 @@ export function nextSimStep(dt: number): number {
 export const GARMENT_LAYER_LABELS: Record<GarmentLayer, string> = {
   lining: '里布', padding: '填充', shell: '外壳',
 };
+
+/** Wrap modes in editor order: flat first, then the body parts. */
+export const PANEL_WRAP_MODES: Array<{ value: PanelWrapMode; label: string }> = [
+  { value: 'flat', label: '扁平' },
+  { value: 'torso-front', label: '躯干 · 前' },
+  { value: 'torso-back', label: '躯干 · 后' },
+  { value: 'torso-full', label: '躯干 · 整圈' },
+  { value: 'arm-left', label: '左臂' },
+  { value: 'arm-right', label: '右臂' },
+  { value: 'leg-left', label: '左腿' },
+  { value: 'leg-right', label: '右腿' },
+  { value: 'neck', label: '领口' },
+  { value: 'neck-left', label: '领口 · 左半' },
+  { value: 'neck-right', label: '领口 · 右半' },
+  { value: 'head', label: '头部 · 整圈' },
+  { value: 'head-left', label: '头部 · 左半' },
+  { value: 'head-right', label: '头部 · 右半' },
+];
+
+/** Display name of one wrap mode. */
+export function panelWrapLabel(mode: PanelWrapMode): string {
+  return PANEL_WRAP_MODES.find(option => option.value === mode)?.label ?? mode;
+}
+
+/** Body landmarks offered as the top-edge level of each part. */
+export function anchorOptionsFor(region: PanelDrape['region']): Array<{ value: BodyLandmark; label: string }> {
+  const all: Array<{ value: BodyLandmark; label: string }> = [
+    { value: 'neckTop', label: '颈顶' },
+    { value: 'shoulderTop', label: '肩线' },
+    { value: 'shoulderCap', label: '肩峰' },
+    { value: 'shoulder', label: '肩关节' },
+    { value: 'bust', label: '胸' },
+    { value: 'waist', label: '腰' },
+    { value: 'hip', label: '胯' },
+    { value: 'crotch', label: '裆' },
+    { value: 'knee', label: '膝' },
+    { value: 'ankle', label: '踝' },
+  ];
+  if (region === 'arm') return all.filter(option => ['neckTop', 'shoulderTop', 'shoulderCap', 'shoulder', 'bust'].includes(option.value));
+  if (region === 'leg') return all.filter(option => ['hip', 'crotch', 'knee', 'ankle'].includes(option.value));
+  if (region === 'neck') return all.filter(option => ['neckTop', 'shoulderTop', 'shoulderCap'].includes(option.value));
+  if (region === 'head') return all.filter(option => ['neckTop', 'shoulderTop'].includes(option.value));
+  return all;
+}
 
 /** Skin tones offered as one-click presets, light to deep. */
 export const SKIN_TONES: Array<{ key: string; label: string; color: string }> = [

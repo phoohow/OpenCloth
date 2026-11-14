@@ -5,9 +5,8 @@ import type { AvatarParams, Pattern, Seam } from '@/model/types';
 import { createDefaultAvatar } from '@/model';
 import { buildPanelMesh, sampleEdge, type PanelMesh } from '@/pattern/panel';
 import { bodyLandmarks, makehumanBody } from '@/avatar';
-import { drapePositions } from '@/pattern/drape';
+import { drapePositions, planWraps } from '@/pattern/drape';
 import { flatLayout } from '@/tools/flatLayout';
-import { explodeOffBody } from '@/pattern/drape';
 import { collapseSeamPairs, type SeamPairRef } from '@/pattern/drape';
 import { GARMENT_TEMPLATES } from '@/pattern/template';
 import { polylineLength } from '@/base/geom';
@@ -38,8 +37,8 @@ const VIEWS = [0, 90, 180, -90];
 /** Command-line selection of template, stage and output image. */
 interface Options {
   template: string;
-  /** `exploded` is the app's unsewn state; `sewn` collapses every seam pair onto one point. */
-  stage: 'flat' | 'wrapped' | 'exploded' | 'sewn';
+  /** `wrapped` is the app's unsewn state; `sewn` collapses every seam pair onto one point. */
+  stage: 'flat' | 'wrapped' | 'sewn';
   out: string;
   width: number;
   chestCm?: number;
@@ -52,8 +51,11 @@ function parseArgs(argv: string[]): Options {
   };
   const chest = get('chestCm', '');
   const stageArg = get('stage', 'flat');
+  if (stageArg === 'exploded') {
+    console.warn('The exploded stage no longer exists; rendering the flat stage instead.');
+  }
   const stage: Options['stage'] =
-    stageArg === 'wrapped' || stageArg === 'sewn' || stageArg === 'exploded' ? stageArg : 'flat';
+    stageArg === 'wrapped' || stageArg === 'sewn' ? stageArg : 'flat';
   return {
     template: get('template', 'tshirt'),
     stage,
@@ -115,14 +117,13 @@ function buildScene(opts: Options): Scene {
     if (mesh) inputs.push({ panelId, mesh });
   }
 
-  const flat = flatLayout(inputs.map(i => ({ panel: pattern.panels[i.panelId], mesh: i.mesh })), body);
+  const slots = planWraps(pattern);
+  const flat = flatLayout(inputs.map(i => ({ panel: pattern.panels[i.panelId], mesh: i.mesh })), body, pattern);
   const panels = inputs.map((input, index) => {
     const panel = pattern.panels[input.panelId];
     const positions = opts.stage === 'flat'
       ? flat[index]
-      : opts.stage === 'exploded'
-        ? explodeOffBody(drapePositions(input.mesh, panel, body))
-        : drapePositions(input.mesh, panel, body);
+      : drapePositions(input.mesh, panel, body, slots.get(panel.id));
     return {
       panelId: input.panelId,
       name: panel.name,

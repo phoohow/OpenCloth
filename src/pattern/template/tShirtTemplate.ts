@@ -1,7 +1,6 @@
 import type { Pattern } from '@/model/types';
 import { PatternBuilder } from '@/pattern/template/templateKit';
 import { layoutRows } from '@/pattern/template/patternLayout';
-import { frontArc, backArc } from '@/pattern/template/drapeArcs';
 import { cm, defineTemplate } from '@/pattern/template/garmentTemplate';
 import {
   addBodice, addSleeve, capHeightForArmhole, shoulderSleeveDrape,
@@ -57,7 +56,7 @@ export function generateTShirt(params: TShirtParams = DEFAULT_TSHIRT_PARAMS, fab
     neckDepthCm,
     underarmAt,
     shoulderSlopeCm: SHOULDER_SLOPE_CM,
-    drape: { region: 'torso', ...frontArc(180) },
+    drape: { region: 'torso', zone: 'front' },
   });
 
   const back = addBodice(builder, {
@@ -69,7 +68,7 @@ export function generateTShirt(params: TShirtParams = DEFAULT_TSHIRT_PARAMS, fab
     neckDepthCm: neckDepthCm * BACK_NECK_SHARE,
     underarmAt,
     shoulderSlopeCm: SHOULDER_SLOPE_CM,
-    drape: { region: 'torso', ...backArc(180) },
+    drape: { region: 'torso', zone: 'back' },
   });
 
   // The cap arc must match the armhole arc, so the cap height follows from the armhole length.
@@ -83,7 +82,7 @@ export function generateTShirt(params: TShirtParams = DEFAULT_TSHIRT_PARAMS, fab
     lengthCm: sleeveShaft,
     capHeightCm: capHeight,
     side: 'left',
-    drape: shoulderSleeveDrape('left', SHOULDER_SLOPE_CM),
+    drape: shoulderSleeveDrape('left'),
   });
 
   const sleeveR = addSleeve(builder, {
@@ -92,7 +91,7 @@ export function generateTShirt(params: TShirtParams = DEFAULT_TSHIRT_PARAMS, fab
     lengthCm: sleeveShaft,
     capHeightCm: capHeight,
     side: 'right',
-    drape: shoulderSleeveDrape('right', SHOULDER_SLOPE_CM),
+    drape: shoulderSleeveDrape('right'),
   });
 
   layoutRows(builder.pattern, [[sleeveL.panel, front.panel, back.panel, sleeveR.panel]]);

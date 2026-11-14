@@ -18,6 +18,8 @@ export interface ViewInputs {
   fill: FillMode;
   wire: WireMode;
   mode: RenderMode;
+  /** Hides the model so the cloth reads on the simplified body proxy. */
+  proxyOnly: boolean;
   overrides: readonly DisplayOverride[];
   frame: number;
 }
@@ -60,9 +62,10 @@ export function resolveView(inputs: ViewInputs): RenderView {
     camera: inputs.camera,
     viewport: { width: inputs.width, height: inputs.height },
     layers: ['underlay', 'subject', 'overlay', 'gizmo'],
-    channels: inputs.mode === 'pathtrace' ? CHANNEL_ALL : CHANNEL_RASTER,
+    channels: inputs.mode === 'pathtrace' && !inputs.proxyOnly ? CHANNEL_ALL : CHANNEL_RASTER,
     settings,
     overrides: inputs.overrides,
+    ...(inputs.proxyOnly ? { hideTags: ['avatar'] } : {}),
     frame: inputs.frame,
   };
 }

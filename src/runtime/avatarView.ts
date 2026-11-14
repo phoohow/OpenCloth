@@ -141,6 +141,11 @@ export class AvatarView {
     this.stage.applyDisplay(display);
   }
 
+  /** Shows or hides the simplified body proxy built from the current measurements. */
+  applySimplifiedBody(visible: boolean, avatar: Project['avatar']): void {
+    this.stage.setSimplifiedBody(visible, avatar);
+  }
+
   applyAppearance(appearance?: SkinAppearance): void {
     this.stage.applyAppearance(appearance);
   }

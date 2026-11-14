@@ -18,10 +18,12 @@ export interface AssetObjects {
   objectFor(key: AssetKey): THREE.Object3D | null;
 }
 
+type WireObject = THREE.Mesh | THREE.LineSegments | THREE.Points;
+
 interface RasterEntry {
   readonly root: THREE.Object3D;
   stage: DrawStage;
-  wire: THREE.Mesh | null;
+  wire: WireObject | null;
   meshId: MeshId | null;
   assetKey: AssetKey | null;
   instanceCount: number;
@@ -246,10 +248,12 @@ export class SceneStore {
     const root = entry.root as THREE.Mesh;
     root.geometry = geometry;
     if (root instanceof THREE.InstancedMesh && mesh.instances) copyInstances(root, mesh.instances);
-    root.material = this.materialList(item.rasterMaterials, mesh.groups);
+    if (item.rasterMaterials.length > 0) {
+      root.material = this.materialList(item.rasterMaterials, mesh.groups);
+    }
     // Wire-only frames leave the shaded root in place but not drawn.
     root.visible = item.rasterMaterials.length > 0 || item.wire === null;
-    this.syncWire(entry, item, mesh.groups);
+    this.syncWire(entry, item, mesh.groups, mesh.topology);
     this.selectStage(entry, item.rasterStage);
     applyTransform(root, item.transform, item.key);
   }
@@ -325,11 +329,19 @@ export class SceneStore {
     return list;
   }
 
-  private syncWire(entry: RasterEntry, item: SceneItem, groups?: readonly MeshGroup[]): void {
+  private syncWire(
+    entry: RasterEntry, item: SceneItem, groups: readonly MeshGroup[] | undefined,
+    topology: MeshData['topology'],
+  ): void {
     if (item.wire) {
-      const wire = entry.wire ?? new THREE.Mesh((entry.root as THREE.Mesh).geometry);
-      wire.geometry = (entry.root as THREE.Mesh).geometry;
-      const material = this.materials.get(item.wire, this.textures);
+      const geometry = (entry.root as THREE.Mesh).geometry;
+      const wire = entry.wire ?? createObject(topology, geometry) as WireObject;
+      wire.geometry = geometry;
+      // A line mesh needs the line material even when the guide is routed through the wire pass.
+      const variant: ResolvedMaterial = topology === 'line'
+        ? { ...item.wire, technique: 'line' }
+        : item.wire;
+      const material = this.materials.get(variant, this.textures);
       // Every group draws in the one wire colour, so the list repeats it once per material slot.
       const slots = groups ? groupSlots(groups) : 0;
       wire.material = slots > 0 ? Array.from({ length: slots }, () => material) : material;

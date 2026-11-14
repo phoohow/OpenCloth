@@ -1,7 +1,6 @@
 import type { Pattern } from '@/model/types';
 import { addBodice, addFlaredPanel } from '@/pattern/template/panelShapes';
 import { PatternBuilder } from '@/pattern/template/templateKit';
-import { bandArc, backArc, frontArc } from '@/pattern/template/drapeArcs';
 import { layoutRows } from '@/pattern/template/patternLayout';
 import { cm, defineTemplate } from '@/pattern/template/garmentTemplate';
 
@@ -64,14 +63,14 @@ export function generateDress(params: DressParams = DEFAULT_DRESS_PARAMS, fabric
     ...bodiceBase,
     name: '前上身片',
     neckDepthCm,
-    drape: { region: 'torso', ...frontArc(180) },
+    drape: { region: 'torso', zone: 'front' },
   });
 
   const back = addBodice(builder, {
     ...bodiceBase,
     name: '后上身片',
     neckDepthCm: backNeckDepth,
-    drape: { region: 'torso', ...backArc(180) },
+    drape: { region: 'torso', zone: 'back' },
   });
 
   // The skirt hangs from the bodice hem, so its top row lands on the same body height.
@@ -87,23 +86,13 @@ export function generateDress(params: DressParams = DEFAULT_DRESS_PARAMS, fabric
   const skirtFront = addFlaredPanel(builder, {
     ...skirtBase,
     name: '前裙片',
-    drape: {
-      region: 'torso',
-      anchor: 'shoulderTop',
-      anchorOffsetCm: -waistLineCm,
-      ...bandArc(0, 1),
-    },
+    drape: { region: 'torso', anchor: 'waist', zone: 'front' },
   });
 
   const skirtBack = addFlaredPanel(builder, {
     ...skirtBase,
     name: '后裙片',
-    drape: {
-      region: 'torso',
-      anchor: 'shoulderTop',
-      anchorOffsetCm: -waistLineCm,
-      ...bandArc(0, 1, true),
-    },
+    drape: { region: 'torso', anchor: 'waist', zone: 'back' },
   });
 
   builder.seam(front.shoulderRight, back.shoulderRight);

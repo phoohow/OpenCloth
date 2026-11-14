@@ -29,6 +29,8 @@ export interface ViewPrefs {
   readonly fill: ViewSettings['fill'];
   readonly wire: ViewSettings['wire'];
   readonly mode: RenderMode;
+  /** Draws only the simplified body model. */
+  readonly proxyOnly: boolean;
 }
 
 /** Owns the presenters, the frame view and the interaction services of one 3D pane. */
@@ -43,7 +45,7 @@ export class Viewport {
   private readonly exporter: ExportService;
   private readonly bindings = new DomainBindings();
   private project: Project | null = null;
-  private prefs: ViewPrefs = { fill: 'physical', wire: 'off', mode: 'raster' };
+  private prefs: ViewPrefs = { fill: 'physical', wire: 'off', mode: 'raster', proxyOnly: false };
   private width = 1;
   private height = 1;
   private frame = 0;
@@ -95,6 +97,7 @@ export class Viewport {
       fill: this.prefs.fill,
       wire: this.prefs.wire,
       mode: this.prefs.mode,
+      proxyOnly: this.prefs.proxyOnly,
       overrides: this.overrides(),
       frame: this.frame,
     });
@@ -112,6 +115,7 @@ export class Viewport {
       fill: this.prefs.fill,
       wire: this.prefs.wire,
       mode: this.prefs.mode,
+      proxyOnly: this.prefs.proxyOnly,
       overrides: [],
       frame: this.frame,
     });

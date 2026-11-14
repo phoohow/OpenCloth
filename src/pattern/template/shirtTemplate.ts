@@ -1,6 +1,5 @@
 import type { Pattern } from '@/model/types';
 import { PatternBuilder } from '@/pattern/template/templateKit';
-import { frontArc, backArc, frontArcFlipped, backArcFlipped, neckArcSpan } from '@/pattern/template/drapeArcs';
 import { layoutRows } from '@/pattern/template/patternLayout';
 import { cm, defineTemplate } from '@/pattern/template/garmentTemplate';
 import {
@@ -25,7 +24,7 @@ export interface ShirtParams {
 export const DEFAULT_SHIRT_PARAMS: ShirtParams = {
   chestCm: 100,
   lengthCm: 72,
-  sleeveLengthCm: 60,
+  sleeveLengthCm: 52,
   cuffCm: 24,
   shoulderCm: 44,
   neckWidthCm: 17,
@@ -61,7 +60,7 @@ export function generateShirt(params: ShirtParams = DEFAULT_SHIRT_PARAMS, fabric
     neckDepthCm,
     underarmAt,
     shoulderSlopeCm: SHOULDER_SLOPE_CM,
-    drape: { region: 'torso', ...frontArc(180) },
+    drape: { region: 'torso', zone: 'front' },
   });
 
   const back = addBodice(builder, {
@@ -73,7 +72,7 @@ export function generateShirt(params: ShirtParams = DEFAULT_SHIRT_PARAMS, fabric
     neckDepthCm: backNeckDepth,
     underarmAt,
     shoulderSlopeCm: SHOULDER_SLOPE_CM,
-    drape: { region: 'torso', ...backArc(180) },
+    drape: { region: 'torso', zone: 'back' },
   });
 
   // The cap arc must match the armhole arc, so the cap height follows from the armhole length.
@@ -91,7 +90,7 @@ export function generateShirt(params: ShirtParams = DEFAULT_SHIRT_PARAMS, fabric
     capHeightCm: capHeight,
     cuffCm,
     side: 'left',
-    drape: shoulderSleeveDrape('left', SHOULDER_SLOPE_CM),
+    drape: shoulderSleeveDrape('left'),
   });
 
   const sleeveR = addSleeve(builder, {
@@ -101,11 +100,10 @@ export function generateShirt(params: ShirtParams = DEFAULT_SHIRT_PARAMS, fabric
     capHeightCm: capHeight,
     cuffCm,
     side: 'right',
-    drape: shoulderSleeveDrape('right', SHOULDER_SLOPE_CM),
+    drape: shoulderSleeveDrape('right'),
   });
 
-  // The collar bands stand on the neckline edges, so their spans match the opening they close.
-  const neckSpan = neckArcSpan(neckWidthCm, halfWidth * 2);
+  // The collar bands stand on the neckline edges and wrap by their own cut length.
   const frontNecklineCm = polylineLength(sampleEdge(builder.pattern, front.neckline));
   const backNecklineCm = polylineLength(sampleEdge(builder.pattern, back.neckline));
   const collarFront = addBand(builder, {
@@ -114,7 +112,8 @@ export function generateShirt(params: ShirtParams = DEFAULT_SHIRT_PARAMS, fabric
     heightCm: collarHeightCm,
     drape: {
       region: 'torso',
-      ...frontArcFlipped(neckSpan),
+      zone: 'front',
+      flip: true,
       anchorOffsetCm: collarHeightCm,
     },
   });
@@ -125,7 +124,8 @@ export function generateShirt(params: ShirtParams = DEFAULT_SHIRT_PARAMS, fabric
     heightCm: collarHeightCm,
     drape: {
       region: 'torso',
-      ...backArcFlipped(neckSpan),
+      zone: 'back',
+      flip: true,
       anchorOffsetCm: collarHeightCm,
     },
   });

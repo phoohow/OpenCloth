@@ -13,7 +13,7 @@ export function snapshotSignature(
   return [
     versions.topology, versions.geometry, versions.transform, versions.material,
     versions.visibility, versions.lights, versions.environment, textureVersion,
-    view.channels, view.layers.join(','),
+    view.channels, view.layers.join(','), view.hideTags?.join(',') ?? '',
     view.settings.fill, view.settings.wire,
     JSON.stringify(view.settings.wireOptions),
     JSON.stringify(view.overrides),

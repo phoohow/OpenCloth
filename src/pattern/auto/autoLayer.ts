@@ -1,5 +1,5 @@
 import type { Pattern } from '@/model/types';
-import { resolveDrape } from '@/pattern/drape/drapePlacement';
+import { resolveWrap } from '@/pattern/drape/wrapPlan';
 
 /** Highest collision layer the auto-assignment recognises. */
 const MAX_LAYER = 9;
@@ -55,7 +55,7 @@ export function inferCollisionLayers(pattern: Pattern): Map<string, number> {
     else components.set(root, [panelId]);
   }
 
-  const easeOf = (panelId: string): number => resolveDrape(pattern.panels[panelId]).easeCm;
+  const easeOf = (panelId: string): number => resolveWrap(pattern.panels[panelId]).easeCm;
   const ordered = [...components.values()].sort((a, b) => {
     const easeA = a.reduce((sum, id) => sum + easeOf(id), 0) / a.length;
     const easeB = b.reduce((sum, id) => sum + easeOf(id), 0) / b.length;

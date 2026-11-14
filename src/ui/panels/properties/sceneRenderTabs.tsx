@@ -11,7 +11,7 @@ import { DynamicFitSection } from '@/ui/panels/properties/dynamicFitSection';
 import { LayerSection } from '@/ui/panels/properties/layerSection';
 import { PomSection } from '@/ui/panels/properties/pomSection';
 import {
-  DENOISE_MODELS, DISPLAY_MODES, MESH_SAMPLINGS, TONE_MAPPING, WIRE_MODES,
+  WIRE_AUX_OPTIONS, PROXY_AUX_OPTIONS, DENOISE_MODELS, DISPLAY_MODES, MESH_SAMPLINGS, TONE_MAPPING,
   rayTracingUnavailableReason,
 } from '@/ui/optionTables';
 import { ButtonRow, CheckRow, Row, Section, SelectRow, SliderRow, SmallButton, TextRow } from '@/ui/widgets/propertyRows';
@@ -100,8 +100,8 @@ export function ProjectTab({ project, engineRef }: { project: Project; engineRef
 export function RenderTab({ project }: { project: Project }) {
   const displayMode = useUIStore(displayModeOf);
   const backend = useUIStore(s => s.backend);
-  const wire = useUIStore(s => s.wire);
-  const setWire = useUIStore(s => s.setWire);
+  const aux = useUIStore(s => s.aux);
+  const setAux = useUIStore(s => s.setAux);
   const setDisplayMode = useUIStore(s => s.setDisplayMode);
   const fitCheck = useUIStore(s => s.fitCheck);
   const fitTightCm = useUIStore(s => s.fitTightCm);
@@ -135,9 +135,12 @@ export function RenderTab({ project }: { project: Project }) {
             ? { value: m.value, label: `${m.label}（不支持）`, disabled: true }
             : { value: m.value, label: m.label })}
           onChange={v => setDisplayMode(v)} />
-        <SelectRow label="线框" value={wire}
-          options={WIRE_MODES.map(m => ({ value: m.value, label: m.label }))}
-          onChange={v => setWire(v)} />
+        <SelectRow label="线框" value={aux.wire}
+          options={WIRE_AUX_OPTIONS}
+          onChange={v => setAux({ ...aux, wire: v })} />
+        <SelectRow label="简模" value={aux.proxy}
+          options={PROXY_AUX_OPTIONS}
+          onChange={v => setAux({ ...aux, proxy: v })} />
         {rayUnavailable && <div style={styles.note}>本机 WebGPU 跑不了光线追踪：{rayUnavailable}。</div>}
       </Section>
       {fitCheck && (

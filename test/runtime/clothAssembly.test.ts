@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Panel, PanelDrape } from '@/model/types';
 import { buildPanelMesh, type PanelMesh } from '@/pattern/panel';
 import { drapeReversesWinding } from '@/pattern/drape';
+import { simplifiedDepth, type SimplifiedShape } from '@/avatar/simplifiedBody';
 import { createStarterProject } from '@/pattern/template/starterProject';
 import { ClothAssembly } from '@/runtime/clothAssembly';
 import { BodyLandmarkCache } from '@/runtime/initialPose';
@@ -19,17 +20,17 @@ function withDrape(panel: Panel, drape: PanelDrape): Panel {
 }
 
 describe('drapeReversesWinding', () => {
-  it('keeps a positively swept torso wrap facing the same way as the pattern', () => {
+  it('keeps a front torso wrap facing the same way as the pattern', () => {
     const front = starterPanels()['前片']!;
-    expect(front.drape!.sweepDeg).toBeGreaterThan(0);
+    expect(front.drape!.zone).toBe('front');
     expect(drapeReversesWinding(front)).toBe(false);
   });
 
   it('mirrors a torso half that wraps the other way', () => {
     const panels = starterPanels();
     expect(drapeReversesWinding(panels['后片']!)).toBe(true);
-    expect(drapeReversesWinding(withDrape(panels['前片']!, { region: 'torso', startDeg: 90, sweepDeg: -180 }))).toBe(true);
-    expect(drapeReversesWinding(withDrape(panels['后片']!, { region: 'torso', startDeg: 90, sweepDeg: 180 }))).toBe(false);
+    expect(drapeReversesWinding(withDrape(panels['前片']!, { region: 'torso', zone: 'front', flip: true }))).toBe(true);
+    expect(drapeReversesWinding(withDrape(panels['后片']!, { region: 'torso', zone: 'back', flip: true }))).toBe(false);
   });
 
   it('turns a limb tube over once and its mirror image back', () => {
@@ -37,17 +38,24 @@ describe('drapeReversesWinding', () => {
     expect(drapeReversesWinding(panels['右袖']!)).toBe(true);
     expect(drapeReversesWinding(panels['左袖']!)).toBe(false);
     for (const region of ['arm', 'leg'] as const) {
-      expect(drapeReversesWinding(withDrape(panels['左袖']!, { region, side: 'left', sweepDeg: 90 }))).toBe(false);
-      expect(drapeReversesWinding(withDrape(panels['左袖']!, { region, side: 'left', sweepDeg: -90 }))).toBe(true);
-      expect(drapeReversesWinding(withDrape(panels['右袖']!, { region, side: 'right', sweepDeg: 90 }))).toBe(true);
-      expect(drapeReversesWinding(withDrape(panels['右袖']!, { region, side: 'right', sweepDeg: -90 }))).toBe(false);
+      // Both limb halves run the same way around the axis; flipping the sheet reverses it.
+      expect(drapeReversesWinding(withDrape(panels['左袖']!, { region, side: 'left', zone: 'front' }))).toBe(false);
+      expect(drapeReversesWinding(withDrape(panels['左袖']!, { region, side: 'left', zone: 'front', flip: true }))).toBe(true);
+      expect(drapeReversesWinding(withDrape(panels['右袖']!, { region, side: 'right', zone: 'front' }))).toBe(true);
+      expect(drapeReversesWinding(withDrape(panels['右袖']!, { region, side: 'right', zone: 'front', flip: true }))).toBe(false);
     }
   });
 
   it('turns a neck tube over on every positive wrap', () => {
     const panel = starterPanels()['左袖']!;
-    expect(drapeReversesWinding(withDrape(panel, { region: 'neck', sweepDeg: 90 }))).toBe(true);
-    expect(drapeReversesWinding(withDrape(panel, { region: 'neck', sweepDeg: -90 }))).toBe(false);
+    expect(drapeReversesWinding(withDrape(panel, { region: 'neck', zone: 'front' }))).toBe(true);
+    expect(drapeReversesWinding(withDrape(panel, { region: 'neck', zone: 'back' }))).toBe(false);
+  });
+
+  it('keeps the right hood half facing out and turns its mirror image over', () => {
+    const panel = starterPanels()['左袖']!;
+    expect(drapeReversesWinding(withDrape(panel, { region: 'head', zone: 'right' }))).toBe(false);
+    expect(drapeReversesWinding(withDrape(panel, { region: 'head', zone: 'left' }))).toBe(true);
   });
 
   it('leaves flat panels alone and follows a mirroring transform scale', () => {
@@ -78,6 +86,48 @@ describe('merged cloth positions', () => {
     expect(input.positions).toEqual(assembly.positions);
     input.positions[0] = 99;
     expect(assembly.positions[0]).not.toBe(99);
+  });
+});
+
+describe('unsewn layout', () => {
+  // The unsewn garment starts on the proxy: every wrapped panel hugs the surface it wraps, so the
+  // cloth and the simplified body coincide before any seam closes.
+  it('lays every wrapped panel on its proxy surface', () => {
+    const project = createStarterProject();
+    const meshes = new Map<string, PanelMesh>();
+    for (const panelId of Object.keys(project.pattern.panels)) {
+      const mesh = buildPanelMesh(project.pattern, panelId);
+      if (mesh) meshes.set(panelId, mesh);
+    }
+    const assembly = new ClothAssembly();
+    const cache = new BodyLandmarkCache();
+    assembly.build(project, meshes, cache);
+    const shapes = cache.resolve(project.avatar.params).bodyShapes();
+    const cases: Array<{ name: string; pick: (shape: SimplifiedShape) => boolean }> = [
+      {
+        name: '右袖',
+        pick: s => s.kind === 'tube' && s.side === 1 && (s.part === 'upperArm' || s.part === 'forearm'),
+      },
+      { name: '前片', pick: s => s.kind === 'torso' },
+      { name: '后片', pick: s => s.kind === 'torso' },
+    ];
+    for (const c of cases) {
+      const panel = Object.values(project.pattern.panels).find(p => p.name === c.name)!;
+      const range = assembly.layout.rangeOf(panel.id)!;
+      const targets = shapes.filter(c.pick);
+      let checked = 0;
+      for (let i = range.start; i < range.end; i++) {
+        const p: [number, number, number] = [
+          assembly.positions[i * 3]!, assembly.positions[i * 3 + 1]!, assembly.positions[i * 3 + 2]!,
+        ];
+        const depth = Math.max(...targets.map(t => simplifiedDepth(t, p)));
+        // Rows past the proxy's ends, like a hem below the pelvis, lie outside every section.
+        if (depth <= -0.5) continue;
+        expect(Math.abs(depth), c.name).toBeLessThan(0.002);
+        checked++;
+      }
+      expect(checked, c.name).toBeGreaterThan(200);
+    }
   });
 });
 
@@ -178,9 +228,10 @@ describe('body pose', () => {
     assembly.build(project, meshes, cache);
     const t = panelSpan(assembly, sleeveId);
 
-    // A horizontal arm turns the tube sideways: its height span shrinks and its reach grows.
-    expect(t.y).toBeLessThan(a.y * 0.75);
-    expect(t.x).toBeGreaterThan(a.x);
+    // A horizontal arm turns the tube sideways: its height span shrinks and its length runs along x.
+    expect(t.y).toBeLessThan(a.y * 0.8);
+    expect(t.x).toBeGreaterThan(t.y);
+    expect(a.y).toBeGreaterThan(a.x);
   });
 });
 

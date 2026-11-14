@@ -1,7 +1,7 @@
 /** What one frame sees: the view description and the draw items built from it. */
 
 import type {
-  Bounds, CameraState, ChannelMask, DisplayOverride, MaterialKind,
+  Bounds, CameraState, ChannelMask, DisplayOverride, EntityTag, MaterialKind,
   DrawBucket, DrawStage, EntityId, LayerId, MaterialTechnique, MeshRef,
   ResolvedMaterial, Transform, ViewSettings,
 } from '@/render/common';
@@ -20,6 +20,8 @@ export interface RenderView {
   readonly channels: ChannelMask;
   readonly settings: ViewSettings;
   readonly overrides: readonly DisplayOverride[];
+  /** When set, entities carrying any listed tag are hidden. */
+  readonly hideTags?: readonly EntityTag[];
   readonly frame: number;
 }
 
@@ -69,9 +71,10 @@ export function defaultViewSettings(): ViewSettings {
   };
 }
 
-/** Whether the view traces; a wire-only frame stays on the raster pipeline. */
+/** Whether the view traces; an auxiliary-only frame stays on the raster pipeline. */
 export function traces(view: RenderView): boolean {
-  return view.settings.mode === 'pathtrace' && view.settings.wire !== 'only';
+  return view.settings.mode === 'pathtrace' && view.settings.wire !== 'only'
+    && !view.hideTags?.length;
 }
 
 /** Technique a base material kind resolves to. */

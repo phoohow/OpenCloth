@@ -257,7 +257,7 @@ describe('diffProject rebuild fields', () => {
       project.pattern.panels.panel_a.grainAngleDeg = 45;
     });
     expectRebuild(project => {
-      project.pattern.panels.panel_a.drape = { region: 'torso', sweepDeg: 180 };
+      project.pattern.panels.panel_a.drape = { region: 'torso', zone: 'front' };
     });
     expectRebuild(project => {
       project.pattern.panels.panel_b = { ...project.pattern.panels.panel_a, id: 'panel_b' };

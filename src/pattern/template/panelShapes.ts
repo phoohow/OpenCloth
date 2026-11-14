@@ -146,18 +146,11 @@ export interface SleeveOptions {
 }
 
 /**
- * Wrap of a set-in sleeve: the cap crown rides over the shoulder tip and the underarm seam
+ * Wrap of a set-in sleeve: the cap crown rides over the shoulder cap and the underarm seam
  * closes below it, centred on one full turn around the arm.
  */
-export function shoulderSleeveDrape(side: 'left' | 'right', shoulderSlopeCm: number): PanelDrape {
-  return {
-    region: 'arm',
-    side,
-    anchor: 'shoulderTop',
-    anchorOffsetCm: -shoulderSlopeCm,
-    startDeg: 180,
-    sweepDeg: 360,
-  };
+export function shoulderSleeveDrape(side: 'left' | 'right'): PanelDrape {
+  return { region: 'arm', side, zone: 'full' };
 }
 
 /** Adds a one-piece sleeve panel: hem, underarm seams and a two-segment cap. */

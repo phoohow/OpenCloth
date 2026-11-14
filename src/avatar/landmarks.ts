@@ -17,8 +17,9 @@ import {
 } from '@/avatar/makehuman/body';
 import { makehumanBodyData } from '@/avatar/makehuman/data';
 import { girthAt } from '@/avatar/makehuman/measure';
-import { fitLimb, fitTorso, mirrorEnvelope, type LimbSide, type RegionEnvelope } from '@/avatar/envelope';
+import { CLOTH_CLEARANCE, fitTorso, type LimbSide, type RegionEnvelope } from '@/avatar/envelope';
 import { limbLoop, SectionIndex, torsoLoop, type SectionLoop } from '@/avatar/makehuman/section';
+import { simplifiedBodyShapes, type SimplifiedShape } from '@/avatar/simplifiedBody';
 
 /** Half width and half depth of an elliptical body cross-section, in meters. */
 export interface BodyEllipse {
@@ -148,22 +149,20 @@ export interface BodyLandmarks extends BodyProportions {
   legChain(side: LimbSide): LimbChain;
   /** Axis and measured section of the torso, fitted once on the mesh and shared by every panel. */
   torsoEnvelopeAt(): RegionEnvelope;
-  /**
-   * Axis and measured section of one limb. `anchorY` is the world height of the panel's top edge
-   * and `depth` the length it covers; both place the measured span without any per-size constant.
-   */
-  limbEnvelopeAt(
-    region: 'arm' | 'leg',
-    side: LimbSide,
-    anchorY: number,
-    depth: number,
-  ): RegionEnvelope;
+  /** Simplified body proxy shapes, shared by the 3D proxy and the drape targets. */
+  bodyShapes(): readonly SimplifiedShape[];
 }
 
 /** Widest half width of one cross-section loop. */
 function loopRadius(loop: SectionLoop | undefined): number {
   if (!loop) return 0;
   return (loop.maxX - loop.minX) / 2;
+}
+
+/** Widest half depth of one cross-section loop. */
+function loopDepth(loop: SectionLoop | undefined): number {
+  if (!loop) return 0;
+  return (loop.maxZ - loop.minZ) / 2;
 }
 
 /** Highest point of the shoulder ridge, the line a bodice's shoulder seam sits on. */
@@ -271,9 +270,11 @@ export function bodyLandmarks(params: AvatarParams): BodyLandmarks {
 
   const sides: LimbSide[] = [-1, 1];
 
-  /** Radius of one limb at a height, cut at the limb's own axis. */
-  const radiusAt = (limb: LimbJoints, y: number): number =>
-    loopRadius(limbSlice(y, axisXAt(limb, y)));
+  /** Radius of one limb at a height: the larger half extent of its section. */
+  const radiusAt = (limb: LimbJoints, y: number): number => {
+    const loop = limbSlice(y, axisXAt(limb, y));
+    return Math.max(loopRadius(loop), loopDepth(loop));
+  };
 
   const armData = new Map<LimbSide, { chain: LimbChain; joints: LimbJoints }>();
   const legData = new Map<LimbSide, { chain: LimbChain; joints: LimbJoints }>();
@@ -291,7 +292,7 @@ export function bodyLandmarks(params: AvatarParams): BodyLandmarks {
 
   const midThighY = (hipJointY + kneeY) / 2;
   const midCalfY = (kneeY + ankleY) * 0.62;
-  const thighTopY = (index.ys[0]! + kneeY) / 2;
+  const thighTopY = hipJointY - height * 0.02;
 
   const chestHalfW = profileAt(index.ys, index.rx, torso.bustY);
   const waistHalfW = profileAt(index.ys, index.rx, torso.waistY);
@@ -315,6 +316,9 @@ export function bodyLandmarks(params: AvatarParams): BodyLandmarks {
 
   const headLoop = torsoLoop(index3d.loops(headCenterY));
   const neckLoop = torsoLoop(index3d.loops(neckTopY - height * 0.01));
+  const neckHalfD = neckLoop
+    ? Math.max(neckLoop.maxZ - neckLoop.centerZ, neckLoop.centerZ - neckLoop.minZ)
+    : 0;
   const leanX = profileAt(index.ys, index.cx, shoulderY) - profileAt(index.ys, index.cx, torso.hipY);
 
   const armRake = rakeOf(rightArm.chain.dir1, 1);
@@ -322,9 +326,9 @@ export function bodyLandmarks(params: AvatarParams): BodyLandmarks {
   // The shoulder ridge is measured on the surface: the acromion table sits below the real ridge,
   // which is what a bodice hangs from.
   const ridgeY = shoulderRidge(body.positions, Math.abs(rightArm.joints.root[0]), neckTopY);
-  // One straight cylinder for the whole torso: every bodice, skirt band and panel hangs on the
-  // same measured section. It has to contain the widest outline of the figure, or the cloth cuts
-  // through the skin; how far around it a cut panel reaches is decided by the width it was cut to.
+  // One column for the whole torso: every bodice, skirt band and panel reads the same body
+  // heights. The sections are measured between the ridge and the crotch, so the cloth follows the
+  // bust, waist and hip instead of one widest outline.
   const torsoWrap = fitTorso(body.positions, armWeights, ridgeY, torso.crotchY);
 
   const armRadii = (side: LimbSide) => {
@@ -363,7 +367,8 @@ export function bodyLandmarks(params: AvatarParams): BodyLandmarks {
     back: profileAt(index.ys, index.back, y),
   });
 
-  return {
+  let shapeCache: readonly SimplifiedShape[] | null = null;
+  const landmarks: BodyLandmarks = {
     height,
     headH: height - neckTopY,
     neckH: Math.max(neckTopY - ridgeY, height * 0.02),
@@ -393,7 +398,7 @@ export function bodyLandmarks(params: AvatarParams): BodyLandmarks {
     hipR: hipGirth / (2 * Math.PI),
     armR: rightArmRadii.biceps || cmToM(4.5),
     legR: rightLegRadii.midThigh || cmToM(7),
-    neckR: loopRadius(neckLoop) || cmToM(5.5),
+    neckR: Math.max(loopRadius(neckLoop) || cmToM(5.5), neckHalfD) + CLOTH_CLEARANCE,
     chestHalfW,
     shoulderHalfW,
     waistHalfW,
@@ -429,22 +434,9 @@ export function bodyLandmarks(params: AvatarParams): BodyLandmarks {
     armChain: (side: LimbSide): LimbChain => (side < 0 ? leftArm : rightArm).chain,
     legChain: (side: LimbSide): LimbChain => (side < 0 ? leftLeg : rightLeg).chain,
     torsoEnvelopeAt: (): RegionEnvelope => torsoWrap,
-    limbEnvelopeAt: (
-      region: 'arm' | 'leg',
-      side: LimbSide,
-      anchorY: number,
-      depth: number,
-    ): RegionEnvelope => {
-      // Sleeves and trouser legs are cut as mirror pairs. Fitting one limb from its own vertices
-      // and mirroring the result keeps them identical even when the scan differs by a millimetre.
-      const joints = region === 'arm' ? rightArm.chain : rightLeg.chain;
-      const measured = fitLimb(
-        body.positions, armWeights, region, 1, anchorY, joints.root, joints.mid, joints.end,
-        depth, torso.crotchY,
-      );
-      return side > 0 ? measured : mirrorEnvelope(measured);
-    },
+    bodyShapes: () => (shapeCache ??= simplifiedBodyShapes(body, landmarks)),
   };
+  return landmarks;
 }
 
 /** Height of a named landmark. */
@@ -452,6 +444,7 @@ export function landmarkY(body: BodyLandmarks, landmark: BodyLandmark): number {
   switch (landmark) {
     case 'neckTop': return body.neckTopY;
     case 'shoulderTop': return body.shoulderTopY;
+    case 'shoulderCap': return body.shoulderY + body.deltoidR / 2;
     case 'shoulder': return body.shoulderY;
     case 'bust': return body.bustY;
     case 'waist': return body.waistY;

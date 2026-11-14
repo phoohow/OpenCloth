@@ -2,7 +2,6 @@ import type { Panel, PanelDrape, Pattern } from '@/model/types';
 import { vec2 } from '@/model/types';
 import { PatternBuilder } from '@/pattern/template/templateKit';
 import { layoutRows } from '@/pattern/template/patternLayout';
-import { frontArc, backArc } from '@/pattern/template/drapeArcs';
 import { cm, defineTemplate } from '@/pattern/template/garmentTemplate';
 import {
   addBodice, addSleeve, capHeightForArmhole, shoulderSleeveDrape,
@@ -20,19 +19,20 @@ export interface HoodieParams {
   shoulderCm: number;
   neckWidthCm: number;
   neckDepthCm: number;
-  /** Crown height above the shoulder line. */
+  /** Cut height of the hood patch, from the crown to the neck opening. */
   hoodHeightCm: number;
 }
 
 export const DEFAULT_HOODIE_PARAMS: HoodieParams = {
   chestCm: 110,
   lengthCm: 70,
-  sleeveLengthCm: 60,
+  sleeveLengthCm: 55,
   cuffCm: 20,
   shoulderCm: 46,
   neckWidthCm: 20,
   neckDepthCm: 8,
-  hoodHeightCm: 32,
+  // Matches the head proxy patch from the crown to the neck-width section.
+  hoodHeightCm: 23.8,
 };
 
 /** Shoulder drop from the neck seam to the shoulder tip, in centimeters. */
@@ -64,7 +64,7 @@ function addHoodHalf(builder: PatternBuilder, o: {
   drape: PanelDrape;
 }): HoodEdges {
   const bottomWidth = o.frontNeckCm + o.backNeckCm;
-  // The crown is wider than the neck opening so the hood clears the head.
+  // The crown carries extra width over the neck opening; it gathers at the top of the shell.
   const crownWidth = bottomWidth + Math.max(4, o.heightCm * 0.14);
   const height = o.heightCm;
 
@@ -153,14 +153,14 @@ export function generateHoodie(params: HoodieParams = DEFAULT_HOODIE_PARAMS, fab
     ...bodice,
     name: '前片',
     neckDepthCm,
-    drape: { region: 'torso', ...frontArc(180) },
+    drape: { region: 'torso', zone: 'front' },
   });
 
   const back = addBodice(builder, {
     ...bodice,
     name: '后片',
     neckDepthCm: neckDepthCm * BACK_NECK_SHARE,
-    drape: { region: 'torso', ...backArc(180) },
+    drape: { region: 'torso', zone: 'back' },
   });
 
   // The cap arc must match the armhole arc, so the cap height follows from the armhole length.
@@ -178,7 +178,7 @@ export function generateHoodie(params: HoodieParams = DEFAULT_HOODIE_PARAMS, fab
     capHeightCm: capHeight,
     cuffCm,
     side: 'left',
-    drape: shoulderSleeveDrape('left', SHOULDER_SLOPE_CM),
+    drape: shoulderSleeveDrape('left'),
   });
 
   const sleeveR = addSleeve(builder, {
@@ -188,7 +188,7 @@ export function generateHoodie(params: HoodieParams = DEFAULT_HOODIE_PARAMS, fab
     capHeightCm: capHeight,
     cuffCm,
     side: 'right',
-    drape: shoulderSleeveDrape('right', SHOULDER_SLOPE_CM),
+    drape: shoulderSleeveDrape('right'),
   });
 
   // The hem rib hangs from the bodice hem, one band per bodice half.
@@ -197,14 +197,14 @@ export function generateHoodie(params: HoodieParams = DEFAULT_HOODIE_PARAMS, fab
     name: '前下摆罗纹',
     lengthCm: chestCm / 2,
     heightCm: RIB_HEIGHT_CM,
-    drape: { ...ribDrape, ...frontArc(180) },
+    drape: { ...ribDrape, zone: 'front' },
   });
 
   const backRib = addRibBand(builder, {
     name: '后下摆罗纹',
     lengthCm: chestCm / 2,
     heightCm: RIB_HEIGHT_CM,
-    drape: { ...ribDrape, ...backArc(180) },
+    drape: { ...ribDrape, zone: 'back' },
   });
 
   // Both hood halves follow the neck opening; each takes one half of the front and back neckline.
@@ -217,11 +217,8 @@ export function generateHoodie(params: HoodieParams = DEFAULT_HOODIE_PARAMS, fab
     backNeckCm: backNeckHalfCm,
     heightCm: hoodHeightCm,
     drape: {
-      region: 'neck',
-      anchor: 'shoulderTop',
-      anchorOffsetCm: hoodHeightCm,
-      startDeg: 90,
-      sweepDeg: 180,
+      region: 'head',
+      zone: 'left',
     },
   });
 
@@ -231,11 +228,8 @@ export function generateHoodie(params: HoodieParams = DEFAULT_HOODIE_PARAMS, fab
     backNeckCm: backNeckHalfCm,
     heightCm: hoodHeightCm,
     drape: {
-      region: 'neck',
-      anchor: 'shoulderTop',
-      anchorOffsetCm: hoodHeightCm,
-      startDeg: 90,
-      sweepDeg: -180,
+      region: 'head',
+      zone: 'right',
     },
   });
 

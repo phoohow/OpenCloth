@@ -14,6 +14,7 @@ const BUCKET_ORDER: Record<DrawBucket, number> = {
 export function buildDrawList(world: WorldView, view: RenderView): DrawList {
   const items: DrawItem[] = [];
   for (const entity of world.entities({ layers: view.layers, channels: view.channels })) {
+    if (view.hideTags && view.hideTags.some(tag => entity.tags.has(tag))) continue;
     const resolved = resolveMaterials(entity, world, view);
     const drawable = resolved.base.length > 0 || resolved.wire !== null
       || resolved.trace.length > 0;

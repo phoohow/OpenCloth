@@ -35,10 +35,21 @@ test('显示模式视觉清单', async ({ page }) => {
   await canvas.screenshot({ path: 'test-results/visual-fit.png' });
 
   await pickDisplay('光栅化');
-  await page.getByRole('button', { name: '线框', exact: true }).click();
+  await page.getByRole('button', { name: '辅助', exact: true }).click();
   await page.getByText('叠加线框', { exact: true }).click();
   await page.waitForTimeout(1500);
   await canvas.screenshot({ path: 'test-results/visual-wire.png' });
+
+  // The simplified model is a scene line grid drawn in the wire pass: alone, then over the cloth.
+  await page.getByRole('button', { name: '辅助', exact: true }).click();
+  await page.getByText('仅简模', { exact: true }).click();
+  await page.waitForTimeout(1500);
+  await canvas.screenshot({ path: 'test-results/visual-proxy-only.png' });
+
+  await page.getByRole('button', { name: '辅助', exact: true }).click();
+  await page.getByText('叠加简模', { exact: true }).click();
+  await page.waitForTimeout(1500);
+  await canvas.screenshot({ path: 'test-results/visual-proxy-over.png' });
 
   expect(errors, `WebGPU 校验错误：\n${errors.slice(0, 3).join('\n')}`).toEqual([]);
 });

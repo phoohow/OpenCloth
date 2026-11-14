@@ -21,7 +21,7 @@ function inferDrapeFromName(name: string): PanelDrape {
     return { region: 'neck' };
   }
   if (name.includes('后')) {
-    return { region: 'torso', startDeg: 270, sweepDeg: -180 };
+    return { region: 'torso', zone: 'back' };
   }
   return { region: 'torso' };
 }

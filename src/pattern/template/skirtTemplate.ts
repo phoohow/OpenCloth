@@ -1,7 +1,6 @@
 import type { Pattern } from '@/model/types';
 import { addFlaredPanel, addSplitBand, type FlaredEdges } from '@/pattern/template/panelShapes';
 import { PatternBuilder } from '@/pattern/template/templateKit';
-import { backArc, bandArc, frontArc } from '@/pattern/template/drapeArcs';
 import { layoutRows } from '@/pattern/template/patternLayout';
 import { cm, count, defineTemplate } from '@/pattern/template/garmentTemplate';
 
@@ -53,7 +52,7 @@ export function generateSkirt(params: SkirtParams = DEFAULT_SKIRT_PARAMS, fabric
       hemWidthCm: panelWidthCm,
       lengthCm: params.lengthCm,
       hipWidthCm,
-      drape: { region: 'torso', anchor: 'waist', ...bandArc(i, perHalf) },
+      drape: { region: 'torso', zone: 'front', anchor: 'waist' },
     }));
     back.push(addFlaredPanel(builder, {
       name: `后裙片${i + 1}`,
@@ -61,7 +60,7 @@ export function generateSkirt(params: SkirtParams = DEFAULT_SKIRT_PARAMS, fabric
       hemWidthCm: panelWidthCm,
       lengthCm: params.lengthCm,
       hipWidthCm,
-      drape: { region: 'torso', anchor: 'waist', ...bandArc(i, perHalf, true) },
+      drape: { region: 'torso', zone: 'back', anchor: 'waist' },
     }));
   }
 
@@ -80,14 +79,14 @@ export function generateSkirt(params: SkirtParams = DEFAULT_SKIRT_PARAMS, fabric
     lengthCm: params.waistCm / 2,
     heightCm: BAND_HEIGHT_CM,
     segments: perHalf,
-    drape: { ...bandDrape, ...frontArc(180) },
+    drape: { ...bandDrape, zone: 'front' },
   });
   const backBand = addSplitBand(builder, {
     name: '后腰头',
     lengthCm: params.waistCm / 2,
     heightCm: BAND_HEIGHT_CM,
     segments: perHalf,
-    drape: { ...bandDrape, ...backArc(180) },
+    drape: { ...bandDrape, zone: 'back' },
   });
   frontBand.bottoms.forEach((edge, i) => builder.seam(edge, front[i].waist, { flipB: true, strength: 1 }));
   backBand.bottoms.forEach((edge, i) => builder.seam(edge, back[i].waist, { flipB: true, strength: 1 }));

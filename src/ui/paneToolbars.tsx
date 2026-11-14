@@ -1,10 +1,11 @@
 import { useLayoutEffect, useRef, useState, useMemo, type ReactNode, type MutableRefObject } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  displayModeOf, useProjectStore, useSimStore, useUIStore, usePerfStore, type DisplayMode, type ToolType,
+  displayModeOf, useProjectStore, useSimStore, useUIStore, usePerfStore, toggleWire, toggleProxy,
+  type AuxGroupMode, type ActiveAuxMode, type DisplayMode, type ToolType,
 } from '@/store';
 import type { GarmentEngine, CameraPreset } from '@/runtime';
-import type { CameraProjection, EditPreviewTier, WireMode } from '@/model/types';
+import type { CameraProjection, EditPreviewTier } from '@/model/types';
 import {
   CompositeCommand, CreateFreeSeamCommand, validateGrading,
 } from '@/commands';
@@ -18,7 +19,7 @@ import { elementNodeId, type PatternElementKind } from '@/model';
 import type { DisplayOptions } from '@/ui/viewport2D/render';
 import {
   CAMERA_PRESETS, CAMERA_PROJECTIONS, DISPLAY_LAYER_OPTIONS, DISPLAY_MODES, EDIT_PREVIEW_TIERS,
-  WIRE_MODES,
+  WIRE_AUX_OPTIONS, PROXY_AUX_OPTIONS,
   rayTracingUnavailableReason,
 } from '@/ui/optionTables';
 import { comboOf } from '@/ui/menu/shortcuts';
@@ -98,7 +99,6 @@ const TRANSFORM_ITEMS = [
 ];
 
 const DISPLAY_ITEMS = DISPLAY_MODES.map(m => ({ key: m.value, label: m.label }));
-const WIRE_ITEMS = WIRE_MODES.map(m => ({ key: m.value, label: m.label }));
 
 /** Edit-preview tiers; the coarse entry spells out the re-drape that follows the drag. */
 const EDIT_PREVIEW_ITEMS = EDIT_PREVIEW_TIERS.map(tier => ({ key: tier.value, label: tier.label }));
@@ -335,8 +335,6 @@ export function Toolbar3D({ engineRef }: { engineRef: MutableRefObject<GarmentEn
   const toggleTool = useUIStore(s => s.toggleTool);
   const displayMode = useUIStore(displayModeOf);
   const setDisplayMode = useUIStore(s => s.setDisplayMode);
-  const wire = useUIStore(s => s.wire);
-  const setWire = useUIStore(s => s.setWire);
   const projection = useUIStore(s => s.cameraProjection);
   const setCameraProjection = useUIStore(s => s.setCameraProjection);
   const editPreview = useUIStore(s => s.editPreview);
@@ -391,12 +389,7 @@ export function Toolbar3D({ engineRef }: { engineRef: MutableRefObject<GarmentEn
         value={displayMode}
         onPick={key => setDisplayMode(key as DisplayMode)}
       />
-      <Dropdown
-        label="线框"
-        items={WIRE_ITEMS}
-        value={wire}
-        onPick={key => setWire(key as WireMode)}
-      />
+      <AuxMenu />
       <Dropdown
         label="拖动预览"
         items={EDIT_PREVIEW_ITEMS}
@@ -546,6 +539,76 @@ function Dropdown({ label, items, value, onPick, title }: {
   );
 }
 
+/** Auxiliary display: two independent toggle groups — wireframe for the cloth, proxy for the model. */
+function AuxMenu() {
+  const aux = useUIStore(s => s.aux);
+  const setAux = useUIStore(s => s.setAux);
+  const [open, setOpen] = useState(false);
+  const anchorRef = useRef<HTMLDivElement>(null);
+  const active = aux.wire !== 'off' || aux.proxy !== 'off';
+  const summary = [
+    aux.wire !== 'off' ? `线框：${auxLabel(WIRE_AUX_OPTIONS, aux.wire)}` : null,
+    aux.proxy !== 'off' ? `简模：${auxLabel(PROXY_AUX_OPTIONS, aux.proxy)}` : null,
+  ].filter(Boolean).join(' · ');
+  return (
+    <div ref={anchorRef} style={{ position: 'relative' }}>
+      <button
+        style={{ ...styles.textBtn, ...(active ? styles.textBtnActive : null) }}
+        title={active ? `辅助显示 · ${summary} · 再次单击所选项可关闭` : '辅助显示：版片线框与模特简模，可叠加'}
+        aria-label="辅助"
+        aria-pressed={active}
+        onClick={() => setOpen(o => !o)}
+      >
+        辅助
+        <Icon name="chevron-down" size={11} style={{ marginLeft: 4 }} />
+      </button>
+      <MenuPopup open={open} anchor={anchorRef} onClose={() => setOpen(false)}>
+        <AuxGroup title="线框 · 版片" options={WIRE_AUX_OPTIONS} current={aux.wire}
+          onPick={mode => setAux(toggleWire(aux, mode))} />
+        <div style={styles.menuSep} />
+        <AuxGroup title="简模 · 模特" options={PROXY_AUX_OPTIONS} current={aux.proxy}
+          onPick={mode => setAux(toggleProxy(aux, mode))} />
+        {active && (
+          <>
+            <div style={styles.menuSep} />
+            <div style={styles.menuItem} onClick={() => setAux({ wire: 'off', proxy: 'off' })}>
+              {'　'}全部关闭
+            </div>
+          </>
+        )}
+      </MenuPopup>
+    </div>
+  );
+}
+
+/** One auxiliary group: a heading and its mutually exclusive modes, each toggling on click. */
+function AuxGroup({ title, options, current, onPick }: {
+  title: string;
+  options: Array<{ value: AuxGroupMode; label: string }>;
+  current: AuxGroupMode;
+  onPick: (mode: ActiveAuxMode) => void;
+}) {
+  return (
+    <>
+      <div style={styles.menuGroup}>{title}</div>
+      {options.filter(o => o.value !== 'off').map(o => (
+        <div
+          key={o.value}
+          style={{ ...styles.menuItem, ...(o.value === current ? styles.menuItemActive : null) }}
+          onClick={() => onPick(o.value as ActiveAuxMode)}
+        >
+          {o.value === current ? '✓ ' : '　'}{o.label}
+        </div>
+      ))}
+    </>
+  );
+}
+
+/** Label of a group mode, for the toolbar tooltip. */
+function auxLabel(options: Array<{ value: AuxGroupMode; label: string }>, value: AuxGroupMode): string {
+  return options.find(o => o.value === value)?.label ?? '';
+}
+
 /** Toolbar dropdown panel, portalled to the body so the toolbars' overflow clipping cannot hide it. */
 function MenuPopup({ open, anchor, onClose, children }: {
   open: boolean;
@@ -601,6 +664,7 @@ const styles: Record<string, React.CSSProperties> = {
   toolBtnCounted: { width: 'auto', minWidth: 26, padding: '0 6px', gap: 4 },
   toolCount: { color: '#4da6ff', fontSize: 'var(--oc-fs-note)', fontVariantNumeric: 'tabular-nums' },
   textBtn: { flex: '0 0 auto', whiteSpace: 'nowrap', padding: '3px 6px', background: '#2a2a30', border: '1px solid #3a3a42', borderRadius: 3, color: '#ccc', cursor: 'pointer', fontSize: 'var(--oc-fs-micro)' },
+  textBtnActive: { background: '#2a4a6a', border: '1px solid #4da6ff', color: '#fff' },
   backdrop: { position: 'fixed', inset: 0, zIndex: 900 },
   menuPopup: {
     position: 'fixed', width: 'max-content', minWidth: 140, overflowY: 'auto',
@@ -611,4 +675,6 @@ const styles: Record<string, React.CSSProperties> = {
   menuNote: { padding: '6px 12px', fontSize: 'var(--oc-fs-micro)', color: '#8a93a3', cursor: 'default', whiteSpace: 'normal', lineHeight: 1.5, maxWidth: 340 },
   menuItemDisabled: { color: '#666', cursor: 'default' },
   menuItemActive: { color: '#4da6ff', background: '#2a3a4a' },
+  menuGroup: { padding: '6px 12px 3px', fontSize: 'var(--oc-fs-micro)', color: '#8a93a3', cursor: 'default' },
+  menuSep: { height: 1, background: '#3a3a42', margin: '3px 0' },
 };

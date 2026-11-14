@@ -23,7 +23,7 @@ describe('inferDrape from a panel name', () => {
   });
 
   it('wraps a back panel over the rear half of the torso', () => {
-    expect(inferDrape('后片')).toEqual({ region: 'torso', startDeg: 270, sweepDeg: -180 });
+    expect(inferDrape('后片')).toEqual({ region: 'torso', zone: 'back' });
   });
 
   it('defaults unnamed pieces to the front half of the torso', () => {

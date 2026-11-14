@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Viewport } from '@/runtime';
 import { useRenderHost, type RenderSession } from '@/ui/viewport3D/renderHost';
-import { useProjectStore, useSimStore, useUIStore, usePerfStore, isSplitLayout, type ViewLayout, type ToolType } from '@/store';
+import { useProjectStore, useSimStore, useUIStore, usePerfStore, auxProxyOnly, auxWire, isSplitLayout, type ViewLayout, type ToolType } from '@/store';
 import { EngineSync, fallBackToRaster, syncSelectionOverlay } from '@/ui/viewport3D/engineSync';
 import { useClothPicking } from '@/ui/viewport3D/useClothPicking';
 import { useTransformGizmo } from '@/ui/viewport3D/useTransformGizmo';
@@ -57,13 +57,13 @@ export function Viewport3D({ onEngineReady }: Viewport3DProps) {
   const renderHost = useRenderHost();
 
   const backend = useUIStore(s => s.backend);
-  const wire = useUIStore(s => s.wire);
+  const aux = useUIStore(s => s.aux);
   const layout = useUIStore(s => s.layout);
   const activeTool = useUIStore(s => s.activeTool);
   const measure3d = useUIStore(s => s.measure3d);
   const rayState3D = usePerfStore(s => s.rayState3D);
-  // Wire-only frames never trace, so the badge would describe a pass that did not run.
-  const tracing = backend === 'pathtrace' && wire !== 'only';
+  // Wire-only and simplified-model-only frames never trace.
+  const tracing = backend === 'pathtrace' && auxWire(aux) !== 'only' && !auxProxyOnly(aux);
 
   useEffect(() => {
     let cancelled = false;

@@ -1,8 +1,9 @@
 import { create } from 'zustand';
-import type { CameraProjection, EditPreviewTier, FillMode, Pattern, RenderBackend, TrimKind, Vec2, WireMode } from '@/model/types';
+import type { CameraProjection, EditPreviewTier, FillMode, Pattern, RenderBackend, TrimKind, Vec2 } from '@/model/types';
 import { presetOf, RENDER_PRESETS } from '@/store/renderPresets';
 import type { PatternElementKind } from '@/model';
 import { pickPrefs, readPrefs, writePrefs } from '@/store/prefs';
+import type { AuxState } from '@/store/auxView';
 
 /** 2D drafting and 3D fitting tools; each pane owns a subset. */
 export type ToolType = 'select' | 'point' | 'deletePoint' | 'line' | 'curve' | 'internalLine' | 'dart' | 'seam' | 'pin' | 'unpin' | 'sketch3d' | 'measure3d' | 'rect' | 'circle' | 'ellipse' | 'split' | 'hole' | 'notch' | 'annotation' | 'measure' | 'topstitch' | 'trim';
@@ -109,7 +110,8 @@ interface UIStore {
   /** Outliner rows whose children are shown; empty keeps every collection folded. */
   expandedOutliner: string[];
   fill: FillMode;
-  wire: WireMode;
+  /** Auxiliary groups: cloth wireframe and simplified body proxy, stacked independently. */
+  aux: AuxState;
   backend: RenderBackend;
   /** Projection the 3D viewport renders with; persisted like the render mode. */
   cameraProjection: CameraProjection;
@@ -216,7 +218,7 @@ interface UIStore {
   setPropTab: (t: PropTab) => void;
   setDisplayMode: (m: DisplayMode) => void;
   setFill: (m: FillMode) => void;
-  setWire: (m: WireMode) => void;
+  setAux: (aux: AuxState) => void;
   setBackend: (m: RenderBackend) => void;
 
   setCameraProjection: (p: CameraProjection) => void;
@@ -258,7 +260,7 @@ export const useUIStore = create<UIStore>((set, get) => ({
   rightPanelWidth: prefs.rightPanelWidth,
   expandedOutliner: [],
   fill: prefs.fill,
-  wire: prefs.wire,
+  aux: prefs.aux,
   backend: prefs.backend,
   cameraProjection: prefs.cameraProjection,
   fitToken: 0,
@@ -370,7 +372,7 @@ export const useUIStore = create<UIStore>((set, get) => ({
     });
   },
   setFill: (m) => set({ fill: m }),
-  setWire: (m) => set({ wire: m }),
+  setAux: (m) => set({ aux: m }),
   setBackend: (m) => set({ backend: m }),
   setCameraProjection: (p) => set({ cameraProjection: p }),
   requestFit: () => set(s => ({ fitToken: s.fitToken + 1 })),

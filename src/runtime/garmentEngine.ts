@@ -763,6 +763,11 @@ export class GarmentEngine {
     this.avatarView.applyDisplay(display);
   }
 
+  /** Shows or hides the simplified body proxy derived from the avatar's measurements. */
+  setAvatarSimplifiedBody(visible: boolean, avatar: Project['avatar']): void {
+    this.avatarView.applySimplifiedBody(visible, avatar);
+  }
+
   /** Rewrites the avatar's skin appearance; the body and the cloth keep their state. */
   applyAvatarAppearance(appearance?: SkinAppearance): void {
     this.avatarView.applyAppearance(appearance);

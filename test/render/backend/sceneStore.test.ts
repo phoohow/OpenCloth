@@ -66,6 +66,42 @@ function rasterRoot(store: SceneStore): THREE.Mesh | null {
   return (scene.getObjectByName('entity:1') as THREE.Mesh | undefined) ?? null;
 }
 
+describe('SceneStore wire guides', () => {
+  it('draws a line guide in the wire root', () => {
+    const store = createStore();
+    store.apply({
+      items: [{
+        key: 1,
+        mesh: { kind: 'mesh', id: 1 },
+        transform: IDENTITY_TRANSFORM,
+        rasterStage: 'postTone',
+        bucket: 'overlay',
+        rasterMaterials: [],
+        traceMaterials: [],
+        wire: {
+          technique: 'wire',
+          data: { kind: 'wire', vertexColors: true },
+          source: { kind: 'material', id: -1 },
+        },
+      }],
+      meshes: [{
+        id: 1,
+        revision: 1,
+        topology: 'line',
+        streams: { position: new Float32Array([0, 0, 0, 1, 0, 0]), color: new Float32Array([1, 1, 1, 1, 1, 1]) },
+        index: new Uint32Array([0, 1]),
+      }],
+      lights: [],
+      environment: ENVIRONMENT,
+      versions: VERSIONS,
+    });
+
+    const wire = store.sceneFor(store.wire, 'postTone').getObjectByName('wire:1');
+    expect(wire).toBeInstanceOf(THREE.LineSegments);
+    expect((wire as THREE.LineSegments).material).toBeInstanceOf(THREE.LineBasicMaterial);
+  });
+});
+
 describe('SceneStore grouped meshes', () => {
   it('keeps a material list so three walks the group ranges', () => {
     const store = createStore();

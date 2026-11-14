@@ -10,7 +10,7 @@ export class WirePass implements RenderPass {
   readonly writes = ['color'] as const;
 
   enabled(frame: FrameConditions): boolean {
-    return frame.view.settings.wire !== 'off' && frame.overlays.wire;
+    return frame.overlays.wire;
   }
 
   execute(ctx: PassContext): void {

@@ -8,10 +8,10 @@ import type { SeamPair } from '@/runtime/seamPair';
 import { ParticleLayout, type PanelSlice } from '@/runtime/particleLayout';
 import { fabricForPanel } from '@/model';
 import { panelCollisionLayer, panelThicknessCm } from '@/model';
-import { collapseSeamPairs, drapeReversesWinding, type VertexRef } from '@/pattern/drape';
+import { collapseSeamPairs, drapeReversesWinding, planWraps, type VertexRef } from '@/pattern/drape';
 import { complianceMassScale, seamBreakStretch } from '@/sim';
 import { FALLBACK_PHYSICS } from '@/runtime/clothConstants';
-import { flatRestPositions, initialPositions3D, posedPositions3D, type BodyLandmarkCache } from '@/runtime/initialPose';
+import { flatRestPositions, posedPositions3D, type BodyLandmarkCache } from '@/runtime/initialPose';
 
 /** Compliance of a stitched dart leg pair, as strong as a fully tight seam. */
 const DART_STITCH_STRENGTH = 1;
@@ -26,7 +26,7 @@ export class ClothAssembly {
   input: ClothSimInput | null = null;
   /** Panels and their slices, in merge order. */
   layout: ParticleLayout = ParticleLayout.of([], 0);
-  /** Initial (unsewn) merged particle positions in meters; `input.positions` is the live copy. */
+  /** Unsewn merged particle positions in meters: the wrapped pose on the body proxy. */
   positions: Float32Array = new Float32Array(0);
   /** Wrapped positions with every seam pair collapsed onto one point; the dressing glide aims here. */
   dressPositions: Float32Array = new Float32Array(0);
@@ -36,8 +36,6 @@ export class ClothAssembly {
   trianglePanelIds: (string | null)[] = [];
   /** Seam pairs, in the same order as the simulation's seam constraints. */
   seamPairs: SeamPair[] = [];
-  /** Wrapped (unsewn but posed) merged positions, kept so closing changes can rebuild the dress targets. */
-  private wrappedPositions: Float32Array = new Float32Array(0);
 
   /** Merges the panel meshes into one simulation input and rebuilds every derived map. */
   build(project: Project, panelMeshes: Map<string, PanelMesh>, landmarks: BodyLandmarkCache): ClothSimInput | null {
@@ -52,26 +50,27 @@ export class ClothAssembly {
     if (totalVertices === 0) return null;
 
     const wrapped = new Float32Array(totalVertices * 3);
-    const initial = new Float32Array(totalVertices * 3);
     const indices = new Uint32Array(totalTriangles * 3);
     const uvs = new Float32Array(totalVertices * 2);
     const panels: ClothSimInput['panels'] = [];
     const slices: PanelSlice[] = [];
     const panelIds = Array.from(panelMeshes.keys());
+    // One plan per build: pieces sharing a wrap mode split their sector by pattern order.
+    const wrapSlots = planWraps(project.pattern);
 
     let vertexOffset = 0;
     let indexOffset = 0;
     for (const panelId of panelIds) {
       const mesh = panelMeshes.get(panelId)!;
       const panel = project.pattern.panels[panelId];
-      const posed = posedPositions3D(mesh, panel, landmarks.resolve(project.avatar.params));
-      const start = initialPositions3D(posed, panel);
+      const posed = posedPositions3D(
+        mesh, panel, landmarks.resolve(project.avatar.params), wrapSlots.get(panelId),
+      );
 
       for (let i = 0; i < mesh.vertexCount; i++) {
         const src = i * 3;
         const dst = (vertexOffset + i) * 3;
         wrapped[dst] = posed[src]; wrapped[dst + 1] = posed[src + 1]; wrapped[dst + 2] = posed[src + 2];
-        initial[dst] = start[src]; initial[dst + 1] = start[src + 1]; initial[dst + 2] = start[src + 2];
         mergedUVsFrom(uvs, mesh, i, vertexOffset);
       }
       // Panels whose pose turns the sheet over keep the same vertices but swap two indices, so every
@@ -92,7 +91,7 @@ export class ClothAssembly {
         panelId,
         vertexOffset,
         mesh: triangleMesh,
-        positions3D: start,
+        positions3D: posed,
         restPositions: flatRestPositions(mesh),
         physics: fabricForPanel(project, panelId)?.physics ?? FALLBACK_PHYSICS,
         collisionLayer: panelCollisionLayer(panel),
@@ -106,15 +105,14 @@ export class ClothAssembly {
     }
 
     this.layout = ParticleLayout.of(slices, totalVertices);
-    this.positions = initial;
-    this.wrappedPositions = wrapped;
+    this.positions = wrapped;
     const seamConstraints = this.buildClosingConstraints(project, panelMeshes, panelIds);
     // Sewn pairs share one target point, so the dressing glide and the closed seams agree.
     this.dressPositions = sewnTargets(wrapped, this.seamPairs);
 
     this.input = {
       // Separate array so the solver's live readback never overwrites the initial layout.
-      positions: initial.slice(),
+      positions: wrapped.slice(),
       indices,
       panels,
       seamConstraints,
@@ -145,7 +143,7 @@ export class ClothAssembly {
       else delete panel.creaseEdges;
     }
     input.seamConstraints = this.buildClosingConstraints(project, panelMeshes, panelIds);
-    this.dressPositions = sewnTargets(this.wrappedPositions, this.seamPairs);
+    this.dressPositions = sewnTargets(this.positions, this.seamPairs);
     return true;
   }
 
@@ -174,7 +172,6 @@ export class ClothAssembly {
     this.layout = ParticleLayout.of([], 0);
     this.positions = new Float32Array(0);
     this.dressPositions = new Float32Array(0);
-    this.wrappedPositions = new Float32Array(0);
     this.panelTriangles.clear();
     this.trianglePanelIds = [];
     this.seamPairs = [];

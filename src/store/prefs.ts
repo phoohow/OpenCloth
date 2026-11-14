@@ -1,6 +1,7 @@
 import type { PaneId, PropTab, ViewLayout } from '@/store/types';
-import type { CameraProjection, EditPreviewTier, FillMode, RenderBackend, WireMode } from '@/model/types';
+import type { CameraProjection, EditPreviewTier, FillMode, RenderBackend } from '@/model/types';
 import { clamp } from '@/base/math';
+import { AUX_GROUP_VALUES, DEFAULT_AUX, type AuxGroupMode, type AuxState } from '@/store/auxView';
 
 /** Key holding the persisted UI preferences. */
 export const PREFS_KEY = 'oc-ui-prefs-v2';
@@ -14,8 +15,8 @@ export interface UiPrefs {
   propTab: PropTab;
   /** How the subject surface is filled. */
   fill: FillMode;
-  /** Wire overlay state. */
-  wire: WireMode;
+  /** Auxiliary groups: cloth wireframe and simplified body proxy. */
+  aux: AuxState;
   /** Who computes the lit image. */
   backend: RenderBackend;
   /** Projection the 3D viewport renders with. */
@@ -43,7 +44,7 @@ export const DEFAULT_PREFS: UiPrefs = {
   focus: '3d',
   propTab: 'object',
   fill: 'physical',
-  wire: 'off',
+  aux: { ...DEFAULT_AUX },
   backend: 'raster',
   cameraProjection: 'perspective',
   sceneRatio: 0.5,
@@ -60,7 +61,6 @@ export const DEFAULT_PREFS: UiPrefs = {
 const LAYOUTS: ViewLayout[] = ['split3d2d', 'split2d3d', '2d', '3d'];
 const PANES: PaneId[] = ['2d', '3d'];
 const FILLS: FillMode[] = ['physical', 'uvCheck', 'normal', 'vertexNormal'];
-const WIRES: WireMode[] = ['off', 'only', 'over'];
 const BACKENDS: RenderBackend[] = ['raster', 'pathtrace'];
 const CAMERA_PROJECTIONS: CameraProjection[] = ['perspective', 'orthographic'];
 const PROP_TABS: PropTab[] = ['object', 'material', 'simulator', 'pattern', 'transform', 'render', 'project'];
@@ -112,7 +112,7 @@ export function readPrefs(storage: PreferencesStorage = browserStorage()): UiPre
     focus: PANES.includes(value.focus as PaneId) ? value.focus as PaneId : DEFAULT_PREFS.focus,
     propTab: PROP_TABS.includes(value.propTab as PropTab) ? value.propTab as PropTab : DEFAULT_PREFS.propTab,
     fill: FILLS.includes(value.fill as FillMode) ? value.fill as FillMode : DEFAULT_PREFS.fill,
-    wire: WIRES.includes(value.wire as WireMode) ? value.wire as WireMode : DEFAULT_PREFS.wire,
+    aux: readAux(value),
     backend: BACKENDS.includes(value.backend as RenderBackend)
       ? value.backend as RenderBackend
       : DEFAULT_PREFS.backend,
@@ -131,6 +131,25 @@ export function readPrefs(storage: PreferencesStorage = browserStorage()): UiPre
       : DEFAULT_PREFS.editPreview,
     autoSaveSeconds: seconds,
   };
+}
+
+/** Stored auxiliary groups; legacy single-mode and wire-only preferences map onto the wire group. */
+function readAux(value: Record<string, unknown>): AuxState {
+  const group = (v: unknown): AuxGroupMode =>
+    AUX_GROUP_VALUES.includes(v as AuxGroupMode) ? v as AuxGroupMode : 'off';
+  const stored = value.aux;
+  if (stored && typeof stored === 'object') {
+    const obj = stored as Record<string, unknown>;
+    return { wire: group(obj.wire), proxy: group(obj.proxy) };
+  }
+  switch (stored) {
+    case 'wire-only': return { wire: 'only', proxy: 'off' };
+    case 'wire-over': return { wire: 'over', proxy: 'off' };
+    case 'proxy-only': return { wire: 'off', proxy: 'only' };
+    case 'proxy-over': return { wire: 'off', proxy: 'over' };
+  }
+  if (value.wire === 'only' || value.wire === 'over') return { wire: value.wire, proxy: 'off' };
+  return { ...DEFAULT_AUX };
 }
 
 /** Number inside the persisted range; anything missing or unreadable uses the default. */
@@ -156,7 +175,7 @@ export function pickPrefs(state: UiPrefs): UiPrefs {
     focus: state.focus,
     propTab: state.propTab,
     fill: state.fill,
-    wire: state.wire,
+    aux: state.aux,
     backend: state.backend,
     cameraProjection: state.cameraProjection,
     sceneRatio: state.sceneRatio,

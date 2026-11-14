@@ -1,7 +1,7 @@
-import type { Panel } from '@/model/types';
+import type { Panel, Pattern } from '@/model/types';
 import type { BodyLandmarks } from '@/avatar';
 import type { PanelMesh } from '@/pattern/panel';
-import { drapePositions } from '@/pattern/drape';
+import { drapePositions, planWraps } from '@/pattern/drape';
 
 /** One panel and its mesh, in merged simulation order. */
 export interface FlatPanelInput {
@@ -20,8 +20,12 @@ const FLAT_MAX_REACH_M = 0.10;
  * and y, the group is centered on the body axis, and its height matches the wrapped garment.
  * Preview-only staging; the simulation's initial pose comes from the drape wrap.
  */
-export function flatLayout(panels: FlatPanelInput[], body: BodyLandmarks): Float32Array[] {
-  const extents = measure(panels, body);
+export function flatLayout(
+  panels: FlatPanelInput[],
+  body: BodyLandmarks,
+  pattern?: Pattern,
+): Float32Array[] {
+  const extents = measure(panels, body, pattern ? planWraps(pattern) : new Map());
 
   return panels.map(({ mesh }) => {
     const count = mesh.vertexCount;
@@ -36,7 +40,11 @@ export function flatLayout(panels: FlatPanelInput[], body: BodyLandmarks): Float
 }
 
 /** Horizontal center of the flat group, height shift and the plane in front of the body. */
-function measure(panels: FlatPanelInput[], body: BodyLandmarks): {
+function measure(
+  panels: FlatPanelInput[],
+  body: BodyLandmarks,
+  slots: Map<string, { startRad: number; sweepRad: number }>,
+): {
   flatCenterX: number; yShift: number; frontZ: number; xScale: number;
 } {
   let flatMinX = Infinity;
@@ -58,7 +66,7 @@ function measure(panels: FlatPanelInput[], body: BodyLandmarks): {
   let wrappedMaxY = -Infinity;
   let wrappedFrontZ = 0;
   for (const { panel, mesh } of panels) {
-    const wrapped = drapePositions(mesh, panel, body);
+    const wrapped = drapePositions(mesh, panel, body, slots.get(panel.id));
     for (let i = 0; i < mesh.vertexCount; i++) {
       const y = wrapped[i * 3 + 1];
       const z = wrapped[i * 3 + 2];

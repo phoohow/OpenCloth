@@ -92,27 +92,33 @@ export interface PanelPlacement {
 
 /** Vertical body reference point used to hang a panel. */
 export type BodyLandmark =
-  | 'neckTop' | 'shoulderTop' | 'shoulder' | 'bust' | 'waist'
+  | 'neckTop' | 'shoulderTop' | 'shoulderCap' | 'shoulder' | 'bust' | 'waist'
   | 'hip' | 'crotch' | 'knee' | 'ankle';
+
+/** Sector of a body part a piece covers around it. */
+export type WrapZone = 'front' | 'back' | 'left' | 'right' | 'full';
 
 /**
  * Drape: how a flat panel wraps the body in the pre-simulation placement. A panel
  * without one stays flat at its pattern coordinates.
+ *
+ * The wrap is one measured surface per body part: the panel's cut width decides how far
+ * around the part it reaches, so a piece only has to name the part and the sector it covers.
  */
 export interface PanelDrape {
   /** Body part the panel wraps. */
-  region: 'torso' | 'arm' | 'leg' | 'neck';
+  region: 'torso' | 'arm' | 'leg' | 'neck' | 'head';
+  /** Sector covered around the part; the region's default when absent. */
+  zone?: WrapZone;
+  /** Reverses the direction the piece's left-to-right columns run around the part. */
+  flip?: boolean;
   /** Landmark level of the panel's top edge; the region's default landmark when absent. */
   anchor?: BodyLandmark;
   /** Moves the anchor up or down by this many centimeters. */
   anchorOffsetCm?: number;
-  /** Wrap start angle in degrees: torso angles count from the body front center, limb angles from the body side. */
-  startDeg?: number;
-  /** Angular span in degrees; negative runs the wrap the other way around. Defaults to 180 for a torso half, 360 for a limb. */
-  sweepDeg?: number;
   /** Which side of the body a limb wraps; the body centerline for a neck. */
   side?: 'left' | 'right';
-  /** Adds this many centimeters to the wrap radius. */
+  /** Design ease of the piece, in centimeters; used to order separate garments into layers. */
   easeCm?: number;
 }
 

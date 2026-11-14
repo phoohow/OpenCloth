@@ -2,8 +2,7 @@ import type { AvatarParams, Panel } from '@/model/types';
 import type { PanelMesh } from '@/pattern/panel';
 import { IDENTITY_TRANSFORM } from '@/model';
 import { bodyLandmarks, bodyKey, type BodyLandmarks } from '@/avatar';
-import { drapePositions } from '@/pattern/drape';
-import { explodeOffBody } from '@/pattern/drape';
+import { drapePositions, type WrapSlot } from '@/pattern/drape';
 import { applyObjectTransform } from '@/runtime/objectTransforms';
 import { transformMatrix } from '@/render/world';
 
@@ -24,20 +23,19 @@ export function flatRestPositions(mesh: PanelMesh): Float32Array {
  * Panel's posed 3D positions: wrapped around the body only for a panel with an explicit drape,
  * otherwise laid flat at its pattern coordinates with Z = 0.
  */
-export function posedPositions3D(mesh: PanelMesh, panel: Panel, landmarks: BodyLandmarks): Float32Array {
+export function posedPositions3D(
+  mesh: PanelMesh,
+  panel: Panel,
+  landmarks: BodyLandmarks,
+  slot?: WrapSlot,
+): Float32Array {
   const positions = panel.placement
     ? flatPanelPositions(mesh, panel.placement)
     : panel.drape
-      ? drapePositions(mesh, panel, landmarks)
+      ? drapePositions(mesh, panel, landmarks, slot)
       : flatRestPositions(mesh);
   applyObjectTransform(positions, panel.transform ?? IDENTITY_TRANSFORM);
   return positions;
-}
-
-/** Unsewn start pose: wrapped panels slide off the body, flat panels stay on their coordinates. */
-export function initialPositions3D(positions3D: Float32Array, panel: Panel): Float32Array {
-  if (panel.placement || !panel.drape) return positions3D;
-  return explodeOffBody(positions3D);
 }
 
 /** Lays a flat panel out at its stored placement. */

@@ -41,7 +41,7 @@ export class BuildPipeline {
   private meshes: Map<string, PanelMesh> = new Map();
   /** Merged simulation input, null while the pattern has no cloth. */
   private merged: ClothSimInput | null = null;
-  /** Initial (unsewn, flat) merged particle positions in meters. */
+  /** Unsewn merged particle positions in meters: the wrapped pose on the body proxy. */
   private mergedPositions: Float32Array = new Float32Array(0);
   /** Rest positions of every merged particle on the flat pattern, the strain denominator. */
   private flatRest: Float32Array = new Float32Array(0);

@@ -2,12 +2,12 @@ import { useEffect, useState, type ReactNode } from 'react';
 import type { MenuActions } from '@/ui/menu/actions';
 import { formatSavedAt } from '@/ui/timeFormat';
 import {
-  CAMERA_PRESETS, CAMERA_PROJECTIONS, DISPLAY_MODES, PROP_TAB_OPTIONS, WIRE_MODES,
+  WIRE_AUX_OPTIONS, PROXY_AUX_OPTIONS, CAMERA_PRESETS, CAMERA_PROJECTIONS, DISPLAY_MODES, PROP_TAB_OPTIONS,
   rayTracingUnavailableReason,
 } from '@/ui/optionTables';
 import { usePropsTarget } from '@/ui/panels/propertiesEditor';
 import { Icon } from '@/ui/icons';
-import { displayModeOf, usePerfStore, useProjectStore, useSimStore, useUIStore } from '@/store';
+import { displayModeOf, usePerfStore, useProjectStore, useSimStore, useUIStore, toggleWire, toggleProxy, type ActiveAuxMode } from '@/store';
 import type { PropTab } from '@/store';
 import { DEFAULT_COMPRESSION_LIMIT, DEFAULT_STRETCH_LIMIT, normalizeRayTracing } from '@/model';
 import type { CameraProjection } from '@/model/types';
@@ -138,8 +138,8 @@ function DisplaySheet({ onClose }: { onClose: () => void }) {
   const displayMode = useUIStore(displayModeOf);
   const setDisplayMode = useUIStore(s => s.setDisplayMode);
   const backend = useUIStore(s => s.backend);
-  const wire = useUIStore(s => s.wire);
-  const setWire = useUIStore(s => s.setWire);
+  const aux = useUIStore(s => s.aux);
+  const setAux = useUIStore(s => s.setAux);
   const rayUnavailable = rayTracingUnavailableReason(usePerfStore(s => s.rayUnsupported3D));
   const fitOn = displayMode === 'fitHeatmap';
   const fitTightCm = useUIStore(s => s.fitTightCm);
@@ -183,13 +183,23 @@ function DisplaySheet({ onClose }: { onClose: () => void }) {
           />
         ))}
       </SheetGroup>
-      <SheetGroup title="线框">
-        {WIRE_MODES.map(mode => (
+      <SheetGroup title="线框 · 版片">
+        {WIRE_AUX_OPTIONS.filter(m => m.value !== 'off').map(mode => (
           <SheetButton
             key={mode.value}
             label={mode.label}
-            active={wire === mode.value}
-            onClick={() => setWire(mode.value)}
+            active={aux.wire === mode.value}
+            onClick={() => setAux(toggleWire(aux, mode.value as ActiveAuxMode))}
+          />
+        ))}
+      </SheetGroup>
+      <SheetGroup title="简模 · 模特">
+        {PROXY_AUX_OPTIONS.filter(m => m.value !== 'off').map(mode => (
+          <SheetButton
+            key={mode.value}
+            label={mode.label}
+            active={aux.proxy === mode.value}
+            onClick={() => setAux(toggleProxy(aux, mode.value as ActiveAuxMode))}
           />
         ))}
       </SheetGroup>

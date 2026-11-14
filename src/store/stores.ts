@@ -8,3 +8,4 @@ export {
   displayModeOf, is2DFocus, is3DFocus, isRightPanelShown, isSplitLayout, leftPaneOf, toolPane, useUIStore,
 } from '@/store/uiStore';
 export type { AssetTab, DisplayMode, PaneId, PropTab, ToolType, TransformMode, ViewLayout } from '@/store/uiStore';
+export * from '@/store/auxView';

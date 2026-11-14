@@ -10,9 +10,10 @@ import {
   buildMeshCollider, type AvatarCollider,
 } from '@/avatar/collider';
 import { getModelBlob } from '@/io/storage';
-import { makehumanBody } from '@/avatar';
+import { bodyKey, makehumanBody } from '@/avatar';
 import type { PresenterHost } from '@/runtime/presenters/host';
 import { makehumanAvatarMeshes } from '@/runtime/makehumanAvatar';
+import { SimplifiedBodyStage } from '@/runtime/simplifiedBodyStage';
 
 /** Key the body asset is loaded under and released by. */
 const AVATAR_ASSET_KEY = 'avatar';
@@ -35,6 +36,12 @@ export class AvatarStage {
   private appliedSkin = '';
   /** Whether the selected body is drawn highlighted. */
   private highlighted = false;
+  /** Body measurement key the proxy was built for. */
+  private simplifiedKey = '';
+  /** Whether the simplified body proxy is shown. */
+  private simplifiedVisible = false;
+  /** Low-detail body proxy drawn over the skin, when enabled. */
+  private simplified: SimplifiedBodyStage | null = null;
 
   /** Asset of the current body; null before the first build. */
   get handle(): AssetHandle | null { return this.asset; }
@@ -72,6 +79,33 @@ export class AvatarStage {
     this.applySkin();
     asset.setDisplay(avatar.display);
     this.place(avatar.transform);
+    this.applySimplifiedBody(avatar);
+  }
+
+  /** Shows or hides the simplified body proxy; rebuilds it when the measurements changed. */
+  setSimplifiedBody(visible: boolean, avatar: Avatar): void {
+    this.simplifiedVisible = visible;
+    this.applySimplifiedBody(avatar);
+  }
+
+  /** Builds the simplified model for the current measurements and applies its visibility. */
+  private applySimplifiedBody(avatar: Avatar): void {
+    const host = this.host;
+    if (!host) return;
+    const key = bodyKey(avatar.params);
+    if (this.simplified && this.simplifiedKey === key) {
+      this.simplified.place(avatar.transform);
+      this.simplified.setVisible(this.simplifiedVisible);
+      return;
+    }
+    this.simplified?.dispose();
+    this.simplified = null;
+    this.simplifiedKey = '';
+    // The proxy is measured only while shown; a hidden one costs no body rebuild.
+    if (!this.simplifiedVisible) return;
+    this.simplified = new SimplifiedBodyStage(host, avatar.params, avatar.transform);
+    this.simplified.setVisible(true);
+    this.simplifiedKey = key;
   }
 
   /** Rewrites the body materials for a new skin appearance without rebuilding the body. */
@@ -85,6 +119,7 @@ export class AvatarStage {
   /** Places the body at its stored scene transform. */
   place(transform?: ObjectTransform): void {
     this.asset?.pose(transform ?? IDENTITY_TRANSFORM);
+    this.simplified?.place(transform);
     if (this.entity !== null && this.asset) {
       this.host?.writer.updateEntity(this.entity, { bounds: this.asset.bounds });
     }
@@ -158,6 +193,9 @@ export class AvatarStage {
 
   /** Removes the body entity from the world and releases its asset. */
   detach(host: PresenterHost): void {
+    this.simplified?.dispose();
+    this.simplified = null;
+    this.simplifiedKey = '';
     if (this.entity !== null) {
       host.unbind(this.entity);
       host.writer.destroyEntity(this.entity);

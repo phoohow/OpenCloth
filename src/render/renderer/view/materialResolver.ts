@@ -26,6 +26,9 @@ function isSubjectSurface(entity: RenderEntity): boolean {
 export function resolveMaterials(
   entity: RenderEntity, world: WorldView, view: RenderView,
 ): ResolvedMaterials {
+  if (entity.tags.has('wireGuide')) {
+    return { base: [], trace: [], wire: guideWireVariant(), stage: 'postTone' };
+  }
   const subject = isSubjectSurface(entity);
   const raster = (entity.channels & CHANNEL_RASTER) !== 0;
   const traceable = (entity.channels & CHANNEL_TRACE) !== 0;
@@ -126,6 +129,25 @@ function matchingOverride(entity: RenderEntity, view: RenderView): DisplayOverri
 /** Stage the layer policy gives the entity. */
 function stageOf(entity: RenderEntity): DrawStage {
   return LAYERS[entity.layer].stage;
+}
+
+/** Wire material of a guide line mesh; its colours come from the mesh. */
+function guideWireVariant(): MaterialVariant {
+  return {
+    technique: 'wire',
+    data: {
+      kind: 'wire',
+      name: 'guide-wire',
+      color: '#ffffff',
+      depth: 'tested',
+      side: 'double',
+      blending: 'alpha',
+      opacity: 0.95,
+      vertexColors: true,
+      depthWrite: false,
+    },
+    source: { kind: 'material', id: -1 },
+  };
 }
 
 /** Wire material variant; `only` draws it without a filled surface. */

@@ -12,6 +12,11 @@ export const sub3t = (a: Vec3Tuple, b: Vec3Tuple): [number, number, number] => [
 /** Vector multiplied by a scalar. */
 export const scale3t = (v: Vec3Tuple, s: number): [number, number, number] => [v[0] * s, v[1] * s, v[2] * s];
 
+/** Point between two points at fraction t. */
+export const lerp3t = (a: Vec3Tuple, b: Vec3Tuple, t: number): [number, number, number] => [
+  a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t,
+];
+
 /** Dot product. */
 export const dot3t = (a: Vec3Tuple, b: Vec3Tuple): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 

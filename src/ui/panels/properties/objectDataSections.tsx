@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useProjectStore, useSimStore } from '@/store';
-import type { GarmentLayer, Panel, Project, Vec2 } from '@/model/types';
+import type { BodyLandmark, GarmentLayer, Panel, PanelDrape, Project, Vec2 } from '@/model/types';
 import {
   AddSizeCommand, ApplySizeCommand, FilletCornersCommand, ReorderSizesCommand, RemoveSizeCommand,
   RenameSizeCommand, ScalePanelCommand, SetBaseSizeCommand, SetPanelGrainCommand,
@@ -8,7 +8,10 @@ import {
 } from '@/commands';
 import type { Command } from '@/commands';
 import { GARMENT_LAYERS } from '@/model';
-import { GARMENT_LAYER_LABELS } from '@/ui/optionTables';
+import {
+  anchorOptionsFor, GARMENT_LAYER_LABELS, PANEL_WRAP_MODES,
+} from '@/ui/optionTables';
+import { panelWrapMode, regionAnchor, wrapDrapeForMode, type PanelWrapMode } from '@/pattern/drape';
 import { orderedSizes } from '@/pattern/grading';
 import type { SceneNodeKind } from '@/ui/sceneTree';
 import { panelSizeCm } from '@/pattern/panel';
@@ -241,16 +244,55 @@ export function PanelMeshData({ project, panelId }: { project: Project; panelId:
 export function PanelDrapeData({ project, panelId }: { project: Project; panelId: string }) {
   const panel = project.pattern.panels[panelId];
   if (!panel) return <Hint>版片已删除。</Hint>;
+  const drape = panel.drape;
+  const mode = panelWrapMode(drape);
+  const region = drape?.region;
+
+  /** Writes the whole wrap record, so a mode switch is one undo step. */
+  const setDrape = (next: PanelDrape | undefined, label: string) => {
+    patchValue(
+      label,
+      p => p.pattern.panels[panelId]?.drape,
+      (ctx, value) => {
+        const target = ctx.project.pattern.panels[panelId];
+        if (!target) return;
+        if (value) target.drape = value; else delete target.drape;
+      },
+      next,
+    );
+  };
+
+  const chooseMode = (next: PanelWrapMode) => {
+    if (next === mode) return;
+    setDrape(wrapDrapeForMode(next, drape), '修改环绕方式');
+  };
+  const anchor: BodyLandmark = drape?.anchor ?? (region ? regionAnchor(region) : 'shoulderTop');
+
   return (
     <Section title="环绕">
-      <Row label="方式">{panel.drape ? `环绕 ${drapeRegionLabel(panel.drape.region)}` : '自动推断'}</Row>
+      <SelectRow label="方式" value={mode} options={PANEL_WRAP_MODES} onChange={chooseMode} />
+      {drape && region && (
+        <>
+          {region !== 'head' && (
+            <>
+              <SelectRow label="高度" value={anchor} options={anchorOptionsFor(region)}
+                onChange={value => setDrape({ ...drape, anchor: value }, '调整环绕高度')} />
+              <Row label="偏移(cm)">
+                <NumberField value={drape.anchorOffsetCm ?? 0} step={0.1} precision={2}
+                  title="正数向上，负数向下" onCommit={value => setDrape({ ...drape, anchorOffsetCm: value }, '调整环绕偏移')} />
+              </Row>
+            </>
+          )}
+          {region === 'head' && <Hint>头部从颅顶铺到颈线，高度由头形决定。</Hint>}
+          <CheckRow label="反向环绕" checked={drape.flip ?? false}
+            onChange={value => setDrape({ ...drape, flip: value }, '翻转环绕方向')} />
+        </>
+      )}
       {panel.placement && <Row label="手动放置">平面摆放</Row>}
+      {!drape && <Hint>版片平放在 2D 坐标上，不参与环绕。</Hint>}
     </Section>
   );
 }
-
-const drapeRegionLabel = (region: 'torso' | 'arm' | 'leg' | 'neck'): string =>
-  ({ torso: '躯干', arm: '手臂', leg: '腿', neck: '领口' }[region]);
 
 /** Project size chart rows; edits keep the base flag unique and ids stable. */
 export function SizeChart({ project, engineRef }: { project: Project; engineRef: EngineRef }) {

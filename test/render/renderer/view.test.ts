@@ -152,6 +152,80 @@ describe('draw list', () => {
     expect(item.traceMaterials).toHaveLength(0);
   });
 
+  it('routes the simplified model through the wire pass', () => {
+    const world = makeWorld();
+    const mesh = world.writer().createMesh({
+      topology: 'line',
+      streams: { position: new Float32Array([0, 0, 0, 1, 0, 0]), color: new Float32Array([1, 1, 1, 1, 1, 1]) },
+      index: new Uint32Array([0, 1]),
+    });
+    world.writer().createEntity({
+      layer: 'gizmo',
+      tags: ['simplifiedModel', 'wireGuide'],
+      mesh: { kind: 'mesh', id: mesh },
+      channels: CHANNEL_RASTER,
+    });
+
+    const item = buildDrawList(world.view, view()).items[0]!;
+    expect(item.materials).toHaveLength(0);
+    expect(item.traceMaterials).toHaveLength(0);
+    expect(item.wire?.technique).toBe('wire');
+    expect(item.wire?.data.vertexColors).toBe(true);
+    expect(item.stage).toBe('postTone');
+  });
+
+  it('drops the simplified model when it is not tagged as a guide', () => {
+    const world = makeWorld();
+    const mesh = world.writer().createMesh({
+      topology: 'line',
+      streams: { position: new Float32Array([0, 0, 0, 1, 0, 0]) },
+      index: new Uint32Array([0, 1]),
+    });
+    world.writer().createEntity({
+      layer: 'gizmo',
+      tags: ['simplifiedModel'],
+      mesh: { kind: 'mesh', id: mesh },
+      channels: CHANNEL_RASTER,
+    });
+
+    expect(buildDrawList(world.view, view()).items).toHaveLength(0);
+  });
+
+  it('hides the model but keeps the cloth, floor and guide when simplified-model-only', () => {
+    const { world, mesh, material } = worldWithCloth();
+    // The model: hidden in simplified-model-only.
+    world.writer().createEntity({
+      layer: 'subject',
+      tags: ['avatar'],
+      mesh: { kind: 'mesh', id: mesh },
+      materials: [{ kind: 'material', id: material }],
+      channels: CHANNEL_RASTER,
+    });
+    // The floor: kept as context.
+    world.writer().createEntity({
+      layer: 'underlay',
+      mesh: { kind: 'mesh', id: mesh },
+      materials: [{ kind: 'material', id: material }],
+      channels: CHANNEL_RASTER,
+    });
+    const guideMesh = world.writer().createMesh({
+      topology: 'line',
+      streams: { position: new Float32Array([0, 0, 0, 1, 0, 0]) },
+      index: new Uint32Array([0, 1]),
+    });
+    world.writer().createEntity({
+      layer: 'gizmo',
+      tags: ['simplifiedModel', 'wireGuide'],
+      mesh: { kind: 'mesh', id: guideMesh },
+      channels: CHANNEL_RASTER,
+    });
+
+    const list = buildDrawList(world.view, { ...view(), hideTags: ['avatar'] });
+    // Cloth, floor and guide survive; only the model is hidden.
+    expect(list.items).toHaveLength(3);
+    expect(list.items.some(item => item.wire !== null)).toBe(true);
+  });
+
   it('orders scene before overlay before gizmo and filters channels', () => {
     const world = makeWorld();
     const mesh = meshId(world);

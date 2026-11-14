@@ -2,7 +2,7 @@ import type { Viewport } from '@/runtime';
 import type { GarmentEngine } from '@/runtime';
 import {
   noteDrawnFrame, noteRayTraceState, noteRayTracingSamples, noteRayTracingUnsupported, noteSimSteps,
-  useProjectStore, useSimStore, useUIStore,
+  useProjectStore, useSimStore, useUIStore, auxProxyOnly, auxShowsProxy, auxWire,
 } from '@/store';
 import { ChangeSet } from '@/runtime/change';
 import { frameProfiler } from '@/base/perf';
@@ -130,6 +130,10 @@ export class EngineSync {
         const stats = this.engine.setPressureCheck(state.pressureCheck, state.pressureMaxKpa);
         useSimStore.getState().setPressureStats(stats);
       }
+      if (state.aux.proxy !== previous?.aux.proxy) {
+        const project = useProjectStore.getState().project;
+        this.engine.setAvatarSimplifiedBody(auxShowsProxy(state.aux), project.avatar);
+      }
     }));
 
     this.unsubscribes.push(useSimStore.subscribe((state, previous) => {
@@ -147,6 +151,9 @@ export class EngineSync {
       }
     }));
 
+    this.engine.setAvatarSimplifiedBody(
+      auxShowsProxy(useUIStore.getState().aux), useProjectStore.getState().project.avatar,
+    );
     this.raf = requestAnimationFrame(this.loop);
     // A startup restore can land while the renderer initializes; fold it into the built scene.
     if (state.project !== builtFrom) {
@@ -365,7 +372,9 @@ export class EngineSync {
       if (drawn) {
         const ui = useUIStore.getState();
         this.viewport.applyProject(projState);
-        this.viewport.applyView({ fill: ui.fill, wire: ui.wire, mode: ui.backend });
+        this.viewport.applyView({
+          fill: ui.fill, wire: auxWire(ui.aux), mode: ui.backend, proxyOnly: auxProxyOnly(ui.aux),
+        });
         const stats = frameProfiler.span('render.frame', () => this.viewport.render());
         noteDrawnFrame('3d', performance.now());
         noteRayTraceState(this.viewport.traceStatus());
