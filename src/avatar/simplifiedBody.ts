@@ -180,17 +180,29 @@ function axisDistance(from: Point3, axis: Point3, point: Point3): number {
   return Math.hypot(perp[0], perp[1], perp[2]);
 }
 
+/** Distance from a point to the segment between two joints. */
+function segmentDistance(a: Point3, b: Point3, point: Point3): number {
+  const span = sub3t(b, a);
+  const lengthSq = dot3t(span, span);
+  if (lengthSq < 1e-12) return distance3t(a, point);
+  const t = Math.min(1, Math.max(0, dot3t(sub3t(point, a), span) / lengthSq));
+  return distance3t(add3t(a, scale3t(span, t)), point);
+}
+
 /**
  * One limb bone fitted on its flesh: the axis runs parallel to the bone line through the mean
  * section centre, and the radius stays outside every measured section, so a muscle belly offset
  * from the bone stays inside the shape. A tapered bone carries the cheapest straight taper that
  * clears its sections; a tubular bone carries the widest section at both ends. Sections are cut
- * perpendicular to the axis, so a horizontal arm reads the same as a hanging one.
+ * perpendicular to the axis, so a horizontal arm reads the same as a hanging one, and flesh
+ * nearer the neighbouring bone is left to that bone, so a cut across the joint does not read the
+ * next segment's girth as this one's.
  */
 function fitLimbBone(
   positions: Float32Array, indices: Uint32Array,
   root: Point3, end: Point3, clearance: number,
   shape: 'taper' | 'tube',
+  adjacent: { from: Point3; to: Point3 },
   startPad = 0,
   endTrim = 0.005,
 ): Bone {
@@ -252,6 +264,10 @@ function fitLimbBone(
           if (pointAlong < -0.005 || pointAlong > length + endTrim) continue;
           // Trunk flesh hanging off a shoulder cut is not limb flesh.
           if (axisDistance(start, axis, point) > 0.15) continue;
+          // Flesh nearer the neighbouring bone belongs to that bone.
+          if (segmentDistance(adjacent.from, adjacent.to, point) < segmentDistance(root, end, point)) {
+            continue;
+          }
           points.push(point);
         }
       }
@@ -525,6 +541,7 @@ export function simplifiedBodyShapes(
   const rightLeg = landmarks.legChain(1);
   const upperArm = fitLimbBone(
     body.positions, body.bodyIndices, rightArm.root, rightArm.mid, CLOTH_CLEARANCE, 'taper',
+    { from: rightArm.mid, to: rightArm.end },
     Math.max(JOINT_OVERLAP, landmarks.deltoidR),
   );
   // Sections above the armpit merge into the torso, so the deltoid cap is measured directly
@@ -538,9 +555,18 @@ export function simplifiedBodyShapes(
     capR = Math.max(capR, axisDistance(upperArm.from, capAxis, p));
   }
   upperArm.fromR = Math.max(upperArm.fromR, capR + CLOTH_CLEARANCE);
-  const forearm = fitLimbBone(body.positions, body.bodyIndices, rightArm.mid, rightArm.end, CLOTH_CLEARANCE, 'tube', 0, -0.008);
-  const thigh = fitLimbBone(body.positions, body.bodyIndices, rightLeg.root, rightLeg.mid, CLOTH_CLEARANCE, 'taper');
-  const shin = fitLimbBone(body.positions, body.bodyIndices, rightLeg.mid, rightLeg.end, CLOTH_CLEARANCE, 'tube', 0, -0.008);
+  const forearm = fitLimbBone(
+    body.positions, body.bodyIndices, rightArm.mid, rightArm.end, CLOTH_CLEARANCE, 'tube',
+    { from: rightArm.root, to: rightArm.mid }, 0, -0.008,
+  );
+  const thigh = fitLimbBone(
+    body.positions, body.bodyIndices, rightLeg.root, rightLeg.mid, CLOTH_CLEARANCE, 'taper',
+    { from: rightLeg.mid, to: rightLeg.end },
+  );
+  const shin = fitLimbBone(
+    body.positions, body.bodyIndices, rightLeg.mid, rightLeg.end, CLOTH_CLEARANCE, 'tube',
+    { from: rightLeg.root, to: rightLeg.mid }, 0, -0.008,
+  );
   const bones = { upperArm, forearm, thigh, shin };
   const mirrored = (bone: Bone, side: LimbSide): Bone =>
     side > 0 ? bone : {
@@ -556,11 +582,15 @@ export function simplifiedBodyShapes(
     for (const [part, upperPart, lowerPart] of [
       ['arm', 'upperArm', 'forearm'], ['leg', 'thigh', 'shin'],
     ] as const) {
+      const { path, radii } = limbPath(
+        mirrored(bones[upperPart], side), mirrored(bones[lowerPart], side),
+      );
       shapes.push({
         kind: 'limb',
         part,
         side,
-        ...limbPath(mirrored(bones[upperPart], side), mirrored(bones[lowerPart], side)),
+        path,
+        radii,
       });
     }
 

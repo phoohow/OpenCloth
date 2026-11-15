@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createStarterProject } from '@/pattern/template/starterProject';
 import { bodyLandmarks } from '@/avatar/landmarks';
+import { makehumanBody } from '@/avatar/makehuman/body';
 import {
   simplifiedDepth, type LimbShape, type SimplifiedShape,
 } from '@/avatar/simplifiedBody';
@@ -93,6 +94,24 @@ describe('simplified body', () => {
     }
   });
 
+  it('keeps the sleeve cuff on the forearm girth, not on the elbow cut', () => {
+    for (const gender of [0, 1]) {
+      const params = { ...project.avatar.params, gender };
+      const figure = bodyLandmarks(params);
+      const arm = figure.bodyShapes().find(shape =>
+        shape.kind === 'limb' && shape.part === 'arm' && shape.side === 1);
+      if (!arm || arm.kind !== 'limb') throw new Error('arm proxy missing');
+      const chain = figure.armChain(1);
+      const positions = makehumanBody(params).positions;
+      const cuff = arm.radii[arm.radii.length - 1]!;
+      // The tube carries the forearm's own widest section, which sits below the elbow. A cut
+      // across the joint also meets the upper arm, and reading that as the forearm's girth put
+      // twice the wrist's radius on the cuff.
+      expect(cuff).toBeLessThan(skinRadiusAt(positions, chain.mid, chain.end, 0.1) + 0.015);
+      expect(cuff).toBeGreaterThan(skinRadiusAt(positions, chain.mid, chain.end, 0.5) + 0.005);
+    }
+  });
+
   it('reports depth relative to the proxy surface', () => {
     const torso = shapes.find(shape => shape.kind === 'torso') as SimplifiedShape & { kind: 'torso' };
     expect(simplifiedDepth(torso, [0, (torso.bottomY + torso.topY) / 2, torso.centreZ]))
@@ -102,6 +121,35 @@ describe('simplified body', () => {
       .toBeLessThan(0);
   });
 });
+
+/** Largest skin distance from a bone, cut perpendicular to it at a share along the bone. */
+function skinRadiusAt(
+  positions: Float32Array, from: readonly number[], to: readonly number[], share: number,
+): number {
+  const axis = [to[0]! - from[0]!, to[1]! - from[1]!, to[2]! - from[2]!];
+  const length = Math.hypot(axis[0]!, axis[1]!, axis[2]!) || 1;
+  const centre = [
+    from[0]! + axis[0]! * share,
+    from[1]! + axis[1]! * share,
+    from[2]! + axis[2]! * share,
+  ];
+  let radius = 0;
+  for (let v = 0; v * 3 < positions.length; v++) {
+    const p = [positions[v * 3]!, positions[v * 3 + 1]!, positions[v * 3 + 2]!];
+    if (p[0]! <= 0) continue;
+    const offset = [p[0]! - centre[0]!, p[1]! - centre[1]!, p[2]! - centre[2]!];
+    const along = (offset[0]! * axis[0]! + offset[1]! * axis[1]! + offset[2]! * axis[2]!) / length;
+    if (Math.abs(along) > 0.01) continue;
+    const perp = Math.hypot(
+      offset[0]! - (axis[0]! * along) / length,
+      offset[1]! - (axis[1]! * along) / length,
+      offset[2]! - (axis[2]! * along) / length,
+    );
+    if (perp > 0.12) continue;
+    radius = Math.max(radius, perp);
+  }
+  return radius;
+}
 
 /** Index of the centreline sample closest to a joint. */
 function nearestSample(path: readonly (readonly number[])[], joint: readonly number[]): number {

@@ -7,6 +7,7 @@ import { simplifiedDepth } from '@/avatar/simplifiedBody';
 /** Measurement sets whose proxy must cover the built body. */
 const BODIES = [
   createDefaultAvatar().params,
+  { ...createDefaultAvatar().params, gender: 1, heightCm: 178 },
   { ...createDefaultAvatar().params, gender: 1, weight: 1, muscle: 1, heightCm: 195 },
   { ...createDefaultAvatar().params, gender: 0, weight: 0, muscle: 0, heightCm: 150, ageYears: 10 },
 ];
