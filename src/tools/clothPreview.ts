@@ -41,7 +41,6 @@ interface Options {
   stage: 'flat' | 'wrapped' | 'sewn';
   out: string;
   width: number;
-  chestCm?: number;
 }
 
 function parseArgs(argv: string[]): Options {
@@ -49,11 +48,7 @@ function parseArgs(argv: string[]): Options {
     const hit = argv.find(a => a.startsWith(`--${name}=`));
     return hit ? hit.slice(name.length + 3) : fallback;
   };
-  const chest = get('chestCm', '');
   const stageArg = get('stage', 'flat');
-  if (stageArg === 'exploded') {
-    console.warn('The exploded stage no longer exists; rendering the flat stage instead.');
-  }
   const stage: Options['stage'] =
     stageArg === 'wrapped' || stageArg === 'sewn' ? stageArg : 'flat';
   return {
@@ -61,7 +56,6 @@ function parseArgs(argv: string[]): Options {
     stage,
     out: get('out', `.preview/${get('template', 'tshirt')}-${get('stage', 'flat')}.png`),
     width: Number(get('width', '330')),
-    chestCm: chest ? Number(chest) : undefined,
   };
 }
 
@@ -102,13 +96,7 @@ interface SeamPair {
 function buildScene(opts: Options): Scene {
   const template = GARMENT_TEMPLATES.find(t => t.key === opts.template);
   if (!template) throw new Error(`unknown template ${opts.template}`);
-  const params = { ...template.defaults };
-  if (opts.chestCm) {
-    if ('chestCm' in params) params.chestCm = opts.chestCm;
-    if ('waistCm' in params) params.waistCm = opts.chestCm * 0.82;
-    if ('hemCm' in params) params.hemCm = opts.chestCm * 1.6;
-  }
-  const pattern = template.generate(params, 'fabric_default');
+  const pattern = template.generate('fabric_default');
   const body = bodyLandmarks(AVATAR);
 
   const inputs: Array<{ panelId: string; mesh: PanelMesh }> = [];

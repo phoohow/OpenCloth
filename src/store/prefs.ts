@@ -133,7 +133,7 @@ export function readPrefs(storage: PreferencesStorage = browserStorage()): UiPre
   };
 }
 
-/** Stored auxiliary groups; legacy single-mode and wire-only preferences map onto the wire group. */
+/** Reads the two stored auxiliary groups, defaulting missing or invalid modes to off. */
 function readAux(value: Record<string, unknown>): AuxState {
   const group = (v: unknown): AuxGroupMode =>
     AUX_GROUP_VALUES.includes(v as AuxGroupMode) ? v as AuxGroupMode : 'off';
@@ -142,13 +142,6 @@ function readAux(value: Record<string, unknown>): AuxState {
     const obj = stored as Record<string, unknown>;
     return { wire: group(obj.wire), proxy: group(obj.proxy) };
   }
-  switch (stored) {
-    case 'wire-only': return { wire: 'only', proxy: 'off' };
-    case 'wire-over': return { wire: 'over', proxy: 'off' };
-    case 'proxy-only': return { wire: 'off', proxy: 'only' };
-    case 'proxy-over': return { wire: 'off', proxy: 'over' };
-  }
-  if (value.wire === 'only' || value.wire === 'over') return { wire: value.wire, proxy: 'off' };
   return { ...DEFAULT_AUX };
 }
 

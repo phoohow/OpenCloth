@@ -15,7 +15,6 @@ export interface OpenClothSummary {
 
 /** Browser automation surface installed as `window.opencloth`. */
 export interface OpenClothApi {
-  version: string;
   getProject(): Project;
   getProjectJson(): string;
   loadProjectJson(json: string): void;
@@ -33,7 +32,6 @@ declare global {
 export function installPublicApi(): void {
   if (typeof window === 'undefined') return;
   window.opencloth = {
-    version: '1.0',
     getProject: () => structuredClone(useProjectStore.getState().project),
     getProjectJson: () => projectCodec.encode(useProjectStore.getState().project),
     loadProjectJson: (json: string) => {

@@ -5,7 +5,7 @@ import { getModelBlob } from '@/io/storage/objectStore';
 
 /**
  * Returns a copy of the project with imported models and environment maps embedded as data URLs,
- * so a downloaded `.ocproj.json` opens on another machine without the local object store.
+ * so a downloaded `.ocproj` opens on another machine without the local object store.
  */
 export async function embedProjectAssets(project: Project): Promise<Project> {
   const snapshot = deepClone(project);

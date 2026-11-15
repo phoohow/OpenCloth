@@ -18,20 +18,15 @@ const PROJECT_SCOPED = [VERSION_STORE, COMMENT_STORE, EVENT_STORE] as const;
 /** Index every project-scoped store is read by. */
 const PROJECT_INDEX = 'projectId';
 
-/**
- * Opened by `io/idb.ts`. Version 2 adds the `projectId` index to the three scoped stores;
- * the check per store keeps the upgrade idempotent for databases created at version 1.
- */
+/** Four local stores; project-scoped records are indexed by `projectId`. */
 const SPEC: IdbSpec = {
   name: 'oc-review',
-  version: 2,
   upgrade: (db, tx) => {
     for (const store of [PROJECT_STORE, VERSION_STORE, COMMENT_STORE, EVENT_STORE]) {
-      if (!db.objectStoreNames.contains(store)) db.createObjectStore(store, { keyPath: 'id' });
+      db.createObjectStore(store, { keyPath: 'id' });
     }
     for (const store of PROJECT_SCOPED) {
-      const scoped = tx.objectStore(store);
-      if (!scoped.indexNames.contains(PROJECT_INDEX)) scoped.createIndex(PROJECT_INDEX, PROJECT_INDEX);
+      tx.objectStore(store).createIndex(PROJECT_INDEX, PROJECT_INDEX);
     }
   },
 };
@@ -244,7 +239,6 @@ export async function exportReviewPackage(projectId: string, author: string): Pr
   if (!project || !latest) return null;
   return {
     format: 'opencloth-review',
-    version: 1,
     exportedAt: now(),
     exportedBy: author,
     project,

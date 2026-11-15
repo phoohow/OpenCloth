@@ -1,12 +1,12 @@
 import { createDefaultProject } from '@/model';
 import type { Project } from '@/model/types';
-import { tShirtTemplate } from '@/pattern/template/tShirtTemplate';
+import { presetPattern } from '@/pattern/template/builtinTemplates';
 
 /** Fresh project carrying the default garment so the scene opens dressed. */
 export function createStarterProject(): Project {
   const project = createDefaultProject();
   const fabric = Object.values(project.fabrics)[0];
-  if (fabric) project.pattern = tShirtTemplate.generate(tShirtTemplate.defaults, fabric.id);
+  if (fabric) project.pattern = presetPattern('tshirt', fabric.id);
   return project;
 }
 

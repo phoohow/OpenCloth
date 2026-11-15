@@ -18,11 +18,6 @@ export interface ProjectMeta {
 
 /** Root of the persisted document. */
 export interface Project {
-  /**
-   * `.ocproj.json` format version this project was read or written with. Absent on files
-   * written before the field existed; `projectCodec.decode()` normalizes it to the current one.
-   */
-  formatVersion?: number;
   meta: ProjectMeta;
   pattern: Pattern;
   fabrics: Record<string, Fabric>;

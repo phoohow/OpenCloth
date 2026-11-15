@@ -1,9 +1,6 @@
+import { presetPattern } from '@/pattern/template';
 import { describe, expect, it } from 'vitest';
 import { createStarterProject } from '@/pattern/template/starterProject';
-import { generateShirt } from '@/pattern/template/shirtTemplate';
-import { generateHoodie } from '@/pattern/template/hoodieTemplate';
-import { generateTShirt } from '@/pattern/template/tShirtTemplate';
-import { generateDress } from '@/pattern/template/dressTemplate';
 import { layoutByHeight } from '@/pattern/template/patternLayout';
 import { samplePanelOutline } from '@/pattern/panel';
 import { bodyLandmarks } from '@/avatar/landmarks';
@@ -44,10 +41,10 @@ describe('height layout', () => {
   const body = bodyLandmarks(project.avatar.params);
 
   for (const [label, build] of [
-    ['shirt', () => generateShirt(undefined, 'fabric_default')],
-    ['hoodie', () => generateHoodie(undefined, 'fabric_default')],
-    ['T-shirt', () => generateTShirt(undefined, 'fabric_default')],
-    ['dress', () => generateDress(undefined, 'fabric_default')],
+    ['shirt', () => presetPattern('shirt')],
+    ['hoodie', () => presetPattern('hoodie')],
+    ['T-shirt', () => presetPattern('tshirt')],
+    ['dress', () => presetPattern('dress')],
   ] as const) {
     it(`draws every ${label} piece clear of the others`, () => {
       const pattern = build();
@@ -66,7 +63,7 @@ describe('height layout', () => {
   }
 
   it('stacks a dress bodice over the skirt it is sewn to', () => {
-    const pattern = generateDress(undefined, 'fabric_default');
+    const pattern = presetPattern('dress');
     layoutByHeight(pattern, body);
     const boxes = drawnBoxes(pattern, body);
     expect(stackedOver(find(boxes, '前上身片'), find(boxes, '前裙片'))).toBe(true);
@@ -76,7 +73,7 @@ describe('height layout', () => {
   });
 
   it('keeps a collar over its neckline and a cuff under its sleeve', () => {
-    const pattern = generateShirt(undefined, 'fabric_default');
+    const pattern = presetPattern('shirt');
     layoutByHeight(pattern, body);
     const boxes = drawnBoxes(pattern, body);
     expect(stackedOver(find(boxes, '领座'), find(boxes, '左前片'))).toBe(true);
@@ -90,8 +87,8 @@ describe('height layout', () => {
   });
 
   it('puts the arms outside the body', () => {
-    for (const build of [generateShirt, generateHoodie]) {
-      const pattern = build(undefined, 'fabric_default');
+    for (const key of ['shirt', 'hoodie']) {
+      const pattern = presetPattern(key);
       layoutByHeight(pattern, body);
       const boxes = drawnBoxes(pattern, body);
       const body_ = boxes.filter(box => /前|后|领|过肩|兜帽/.test(box.name));
@@ -103,7 +100,7 @@ describe('height layout', () => {
   });
 
   it('leaves every piece at its wrap height, give or take the stacking gap', () => {
-    const pattern = generateHoodie(undefined, 'fabric_default');
+    const pattern = presetPattern('hoodie');
     const wrapped = new Map<string, number>();
     for (const panel of Object.values(pattern.panels)) {
       if (!panel.drape) continue;

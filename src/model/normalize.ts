@@ -1,4 +1,3 @@
-/** Field-level repair for documents that came from an older build, an importer or a hand edit. */
 import type { Fabric, GarmentLayer, Notch, Pattern, PomPoint } from '@/model/types';
 import { DEFAULT_LAYER_THICKNESS_CM, GARMENT_LAYERS, normalizeFabricPhysics } from '@/model/defaults';
 
@@ -21,7 +20,7 @@ export function normalizeFabrics(fabrics: Record<string, Fabric>): Record<string
   return fabrics;
 }
 
-/** Fills the construction-layer thickness table an old file may omit. */
+/** Fills the construction-layer thickness table from a partial input. */
 export function normalizeLayers(raw: Partial<Record<GarmentLayer, number>> | undefined): Record<GarmentLayer, number> {
   const out: Record<GarmentLayer, number> = { ...DEFAULT_LAYER_THICKNESS_CM };
   for (const layer of GARMENT_LAYERS) {
@@ -31,7 +30,7 @@ export function normalizeLayers(raw: Partial<Record<GarmentLayer, number>> | und
   return out;
 }
 
-/** Drops POM records without a usable value table, filling the fields an old file may omit. */
+/** Drops POM records without a usable value table and fills omitted fields. */
 export function normalizePoms(poms: PomPoint[] | undefined): PomPoint[] {
   if (!Array.isArray(poms)) return [];
   const out: PomPoint[] = [];
@@ -44,16 +43,21 @@ export function normalizePoms(poms: PomPoint[] | undefined): PomPoint[] {
 
 /** Fills collections and panel fields that a parsed or imported pattern may omit. */
 export function normalizePattern(pattern: Pattern): Pattern {
+  pattern.points ??= {};
+  pattern.edges ??= {};
+  pattern.darts ??= {};
+  pattern.internalLines ??= {};
+  pattern.panels ??= {};
+  pattern.seams ??= {};
   pattern.notches ??= {} as Record<string, Notch>;
   pattern.annotations ??= {};
   pattern.measurements ??= {};
   pattern.prints ??= {};
   pattern.topstitches ??= {};
   pattern.trims ??= {};
-  for (const panel of Object.values(pattern.panels ?? {})) {
+  for (const panel of Object.values(pattern.panels)) {
     panel.holes ??= [];
   }
-  // Drop marks whose owner no longer exists.
   for (const [id, print] of Object.entries(pattern.prints)) {
     print.repeat ??= { x: 1, y: 1 };
     print.opacity ??= 1;

@@ -14,6 +14,7 @@ import { PerfPanel } from '@/ui/debug/perfPanel';
 import { createMenuActions, shortcutActions } from '@/ui/menu/actions';
 import type { MenuActions } from '@/ui/menu/actions';
 import { useUIStore, isSplitLayout, leftPaneOf, isRightPanelShown, type PaneId } from '@/store';
+import { PROJECT_FILE_EXTENSION } from '@/model';
 import type { GarmentEngine } from '@/runtime';
 import type { Viewport } from '@/runtime';
 import {
@@ -66,7 +67,7 @@ export function App() {
       <input
         ref={projectInputRef}
         type="file"
-        accept=".json,.ocproj.json"
+        accept={PROJECT_FILE_EXTENSION}
         style={{ display: 'none' }}
         onChange={e => {
           const file = e.target.files?.[0];

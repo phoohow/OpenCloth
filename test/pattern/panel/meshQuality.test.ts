@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { GARMENT_TEMPLATES } from '@/pattern/template';
+import { GARMENT_TEMPLATES, presetPattern } from '@/pattern/template';
 import { sampleEdge } from '@/pattern/panel';
-import { DEFAULT_TSHIRT_PARAMS, generateTShirt } from '@/pattern/template/tShirtTemplate';
 import { buildPanelMesh, samplePanelOutline, type PanelMesh } from '@/pattern/panel/panelBuilder';
 import type { Vec2 } from '@/model/types';
 
@@ -54,7 +53,7 @@ function smallestAngle(mesh: PanelMesh): number {
 }
 
 describe('版片网格质量', () => {
-  const pattern = generateTShirt(DEFAULT_TSHIRT_PARAMS);
+  const pattern = presetPattern('tshirt');
   const panel = Object.values(pattern.panels).find(p => p.name === '前片')!;
 
   for (const resolution of [2.5, 1.5]) {
@@ -89,7 +88,7 @@ describe('edge vertex runs', () => {
   // garment is dressed. Every run therefore has to start and end on the edge's own endpoints.
   for (const template of GARMENT_TEMPLATES) {
     it(`covers both corners of every ${template.key} edge`, () => {
-      const pattern = template.generate(template.defaults, 'fabric_default');
+      const pattern = template.generate('fabric_default');
       for (const panel of Object.values(pattern.panels)) {
         const mesh = buildPanelMesh(pattern, panel.id);
         if (!mesh) continue;

@@ -1,7 +1,7 @@
+import { presetPattern } from '@/pattern/template';
 import { describe, it, expect } from 'vitest';
 import { vec2, type ArcGeom, type Pattern, type Project, type Vec2 } from '@/model/types';
 import { createDefaultProject } from '@/model/defaults';
-import { generateTShirt } from '@/pattern/template/tShirtTemplate';
 import { panelMeshBounds, samplePanelOutline } from '@/pattern/panel/panelBuilder';
 import type { ProjectContext } from '@/commands/command';
 import {
@@ -77,7 +77,7 @@ describe('MovePointsCommand', () => {
   });
 
   it('keeps a draped panel in place when its top vertex moves', () => {
-    const pattern = generateTShirt();
+    const pattern = presetPattern('tshirt');
     const front = Object.values(pattern.panels).find(p => p.name === '前片')!;
     const topId = topVertexOf(pattern, front);
     const topBefore = panelMeshBounds(pattern, front).max.y;
@@ -95,7 +95,7 @@ describe('MovePointsCommand', () => {
   });
 
   it('restores the drape anchor on undo', () => {
-    const pattern = generateTShirt();
+    const pattern = presetPattern('tshirt');
     const front = Object.values(pattern.panels).find(p => p.name === '前片')!;
     const topId = topVertexOf(pattern, front);
     const anchorBefore = front.drape!.anchorOffsetCm;
@@ -110,7 +110,7 @@ describe('MovePointsCommand', () => {
   });
 
   it('previews a point move with the same drape anchor as the commit', () => {
-    const pattern = generateTShirt();
+    const pattern = presetPattern('tshirt');
     const front = Object.values(pattern.panels).find(p => p.name === '前片')!;
     const topId = topVertexOf(pattern, front);
     const ctx = makeCtx(projectWithPattern(pattern));
@@ -125,7 +125,7 @@ describe('MovePointsCommand', () => {
 
 describe('MovePanelsCommand', () => {
   it('translates a curved panel outline as a rigid body', () => {
-    const pattern = generateTShirt();
+    const pattern = presetPattern('tshirt');
     const panel = Object.values(pattern.panels).find(p => p.name === '前片')!;
     const before = samplePanelOutline(pattern, panel);
     const ctx = makeCtx(projectWithPattern(pattern));
@@ -142,7 +142,7 @@ describe('MovePanelsCommand', () => {
   });
 
   it('moves offset bezier handles, dart tips and internal-line vertices', () => {
-    const pattern = generateTShirt();
+    const pattern = presetPattern('tshirt');
     const panel = Object.values(pattern.panels).find(p => p.name === '右袖')!;
     const capEdge = pattern.edges[panel.outlineEdgeIds[3]];
     const capStart = pattern.points[capEdge.startPointId];
@@ -164,7 +164,7 @@ describe('MovePanelsCommand', () => {
   });
 
   it('leaves unselected panels untouched and restores everything on undo', () => {
-    const pattern = generateTShirt();
+    const pattern = presetPattern('tshirt');
     const front = Object.values(pattern.panels).find(p => p.name === '前片')!;
     const back = Object.values(pattern.panels).find(p => p.name === '后片')!;
     const frontBefore = samplePanelOutline(pattern, front);
@@ -181,7 +181,7 @@ describe('MovePanelsCommand', () => {
   });
 
   it('previewMove matches the committed result', () => {
-    const pattern = generateTShirt();
+    const pattern = presetPattern('tshirt');
     const panel = Object.values(pattern.panels).find(p => p.name === '左袖')!;
     const ctx = makeCtx(projectWithPattern(pattern));
     const delta = vec2(-4, 6);
@@ -382,7 +382,7 @@ describe('AddPointOnEdgeCommand', () => {
 
 describe('DeleteSelectionCommand', () => {
   it('deletes an independent panel with its edges and points', () => {
-    const project = projectWithPattern(generateTShirt());
+    const project = projectWithPattern(presetPattern('tshirt'));
     const pattern = project.pattern;
     const panelId = Object.keys(pattern.panels)[0];
     const panel = pattern.panels[panelId];

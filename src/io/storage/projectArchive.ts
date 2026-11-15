@@ -12,10 +12,9 @@ const AUTOSAVE_STORE = 'autosave';
 /** Opened by `io/idb.ts`, which keeps the connection and creates both stores on first use. */
 const SPEC: IdbSpec = {
   name: 'oc-projects',
-  version: 1,
   upgrade: db => {
-    if (!db.objectStoreNames.contains(RECENT_STORE)) db.createObjectStore(RECENT_STORE, { keyPath: 'id' });
-    if (!db.objectStoreNames.contains(AUTOSAVE_STORE)) db.createObjectStore(AUTOSAVE_STORE);
+    db.createObjectStore(RECENT_STORE, { keyPath: 'id' });
+    db.createObjectStore(AUTOSAVE_STORE);
   },
 };
 

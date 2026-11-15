@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 const outDir = process.argv[2] ?? 'dist/site';
 const route = '/functions/v1/app/assets';
-const bundledDirs = ['weights', 'env', 'makehuman'];
+const bundledDirs = ['weights', 'env', 'makehuman', 'patterns'];
 
 const problems = [];
 

@@ -3,21 +3,27 @@ import { dirname, isAbsolute, relative, resolve } from 'node:path';
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 
-/** Directory whose SVG files are imported as raw text through virtual modules. */
-const RAW_SVG_DIR = resolve(__dirname, 'assets/icons');
+/** Directories whose files are imported as raw text through virtual modules. */
+const RAW_ASSET_DIRS = [
+  resolve(__dirname, 'assets/icons'),
+  resolve(__dirname, 'assets/patterns'),
+];
 
-/** Virtual module id prefix for one raw SVG source. */
-const RAW_SVG_PREFIX = '\0raw-svg:';
+/** Virtual module id prefix for one raw asset source. */
+const RAW_ASSET_PREFIX = '\0raw-asset:';
+
+/** Keeps the virtual id on a JS-shaped path so Vite does not re-parse the raw text. */
+const RAW_ASSET_SUFFIX = '.js';
 
 /**
- * Serves `assets/icons/*.svg?raw` from virtual modules.
+ * Serves `assets/icons/*.svg?raw` and `assets/patterns/*.ocpat?raw` from virtual modules.
  *
- * Icons live under publicDir, and Vite refuses to import public files from JavaScript. Resolving
+ * Both live under publicDir, and Vite refuses to import public files from JavaScript. Resolving
  * them to virtual ids keeps them importable while their files stay where the asset tree expects.
  */
-function rawSvgPlugin(): Plugin {
+function rawAssetPlugin(): Plugin {
   return {
-    name: 'opencloth:raw-svg',
+    name: 'opencloth:raw-assets',
     enforce: 'pre',
     resolveId(source, importer) {
       if (!source.endsWith('?raw')) return null;
@@ -27,13 +33,16 @@ function rawSvgPlugin(): Plugin {
         : isAbsolute(specifier)
           ? specifier
           : resolve(importer ? dirname(importer) : __dirname, specifier);
-      const inside = relative(RAW_SVG_DIR, file);
-      if (!inside || inside.startsWith('..') || isAbsolute(inside)) return null;
-      return RAW_SVG_PREFIX + file;
+      const allowed = RAW_ASSET_DIRS.some(dir => {
+        const inside = relative(dir, file);
+        return !!inside && !inside.startsWith('..') && !isAbsolute(inside);
+      });
+      if (!allowed) return null;
+      return RAW_ASSET_PREFIX + file + RAW_ASSET_SUFFIX;
     },
     load(id) {
-      if (!id.startsWith(RAW_SVG_PREFIX)) return null;
-      const file = id.slice(RAW_SVG_PREFIX.length);
+      if (!id.startsWith(RAW_ASSET_PREFIX) || !id.endsWith(RAW_ASSET_SUFFIX)) return null;
+      const file = id.slice(RAW_ASSET_PREFIX.length, -RAW_ASSET_SUFFIX.length);
       this.addWatchFile(file);
       return `export default ${JSON.stringify(readFileSync(file, 'utf-8'))};`;
     },
@@ -45,7 +54,7 @@ export default defineConfig(({ mode }) => {
   // is omitted from the package and no source maps are emitted.
   const storageAssets = mode === 'site';
   return {
-    plugins: [rawSvgPlugin(), react()],
+    plugins: [rawAssetPlugin(), react()],
     // One switch drives both the omitted publicDir and the Storage-backed asset URLs.
     define: { __BUNDLED_ASSETS_FROM_STORAGE__: JSON.stringify(storageAssets) },
     // assets/ holds bundled model files; Vite serves them at the site root and copies them to dist.

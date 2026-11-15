@@ -1,9 +1,8 @@
+import { presetPattern } from '@/pattern/template';
 import { describe, it, expect } from 'vitest';
 import { projectCodec } from '@/io/serialization/codec';
 import { createDefaultProject, createFabric } from '@/model/defaults';
-import { generateTShirt, DEFAULT_TSHIRT_PARAMS } from '@/pattern/template/tShirtTemplate';
 import { samplePanelOutline } from '@/pattern/panel/panelBuilder';
-import { PROJECT_FORMAT_VERSION } from '@/model/format';
 
 describe('projectCodec 往返', () => {
   it('默认工程 encode→decode 深度相等', () => {
@@ -15,7 +14,7 @@ describe('projectCodec 往返', () => {
 
   it('保留版型、面料、人体、场景全部字段', () => {
     const project = createDefaultProject();
-    project.pattern = generateTShirt(DEFAULT_TSHIRT_PARAMS, Object.keys(project.fabrics)[0]);
+    project.pattern = presetPattern('tshirt', Object.keys(project.fabrics)[0]);
     const decoded = projectCodec.decode(projectCodec.encode(project));
 
     expect(Object.keys(decoded.pattern.panels).length).toBeGreaterThan(0);
@@ -45,32 +44,6 @@ describe('projectCodec 往返', () => {
   });
 });
 
-describe('格式版本', () => {
-  it('encode 写入当前格式版本', () => {
-    const project = createDefaultProject();
-    const raw = JSON.parse(projectCodec.encode(project));
-    expect(raw.formatVersion).toBe(PROJECT_FORMAT_VERSION);
-  });
-
-  it('缺少 formatVersion 的文件被拒绝', () => {
-    const raw = JSON.parse(projectCodec.encode(createDefaultProject()));
-    delete raw.formatVersion;
-    expect(() => projectCodec.decode(JSON.stringify(raw))).toThrow(/formatVersion/);
-  });
-
-  it('其它版本的文件被拒绝，而不是半读', () => {
-    const raw = JSON.parse(projectCodec.encode(createDefaultProject()));
-    raw.formatVersion = PROJECT_FORMAT_VERSION + 1;
-    expect(() => projectCodec.decode(JSON.stringify(raw))).toThrow(/formatVersion/);
-  });
-
-  it('版本号不是非负整数时报错', () => {
-    const raw = JSON.parse(projectCodec.encode(createDefaultProject()));
-    raw.formatVersion = 1.5;
-    expect(() => projectCodec.decode(JSON.stringify(raw))).toThrow(/formatVersion/);
-  });
-});
-
 describe('可选字段补全', () => {
   it('decode 为缺少 maps / uvTiling / uvOffset 的面料补默认值', () => {
     const project = createDefaultProject();
@@ -85,38 +58,6 @@ describe('可选字段补全', () => {
     expect(appearance.maps).toEqual({});
     expect(appearance.uvTiling).toEqual({ x: 1, y: 1 });
     expect(appearance.uvOffset).toEqual({ x: 0, y: 0 });
-  });
-});
-
-describe('generateTShirt 模板', () => {
-  it('生成前后片与双袖共 4 个版型片', () => {
-    const pattern = generateTShirt();
-    expect(Object.keys(pattern.panels).length).toBe(4);
-  });
-
-  it('生成缝合关系', () => {
-    const pattern = generateTShirt();
-    expect(Object.keys(pattern.seams).length).toBeGreaterThan(0);
-  });
-
-  it('所有版型片引用的点与边均存在', () => {
-    const pattern = generateTShirt();
-    for (const panel of Object.values(pattern.panels)) {
-      for (const edgeId of panel.outlineEdgeIds) {
-        expect(pattern.edges[edgeId]).toBeDefined();
-        const edge = pattern.edges[edgeId];
-        expect(pattern.points[edge.startPointId]).toBeDefined();
-        expect(pattern.points[edge.endPointId]).toBeDefined();
-      }
-    }
-  });
-
-  it('缝合边引用的边均存在', () => {
-    const pattern = generateTShirt();
-    for (const seam of Object.values(pattern.seams)) {
-      expect(pattern.edges[seam.a.edgeId]).toBeDefined();
-      expect(pattern.edges[seam.b.edgeId]).toBeDefined();
-    }
   });
 });
 
@@ -136,7 +77,7 @@ describe('createFabric 预设', () => {
 describe('工程编辑后往返', () => {
   it('改缝份 → 保存 → 再打开，几何一致', () => {
     const first = createDefaultProject();
-    first.pattern = generateTShirt(DEFAULT_TSHIRT_PARAMS, Object.keys(first.fabrics)[0]);
+    first.pattern = presetPattern('tshirt', Object.keys(first.fabrics)[0]);
     first.pattern.panels[Object.keys(first.pattern.panels)[0]].seamAllowanceCm = 1.5;
     const second = projectCodec.decode(projectCodec.encode(first));
 

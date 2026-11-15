@@ -1,5 +1,4 @@
 import type { Project } from '@/model/types';
-import { PROJECT_FORMAT_VERSION } from '@/model/format';
 import { createFabric } from '@/model/defaults/fabric';
 import { createEmptyPattern } from '@/model/defaults/pattern';
 import { createDefaultAvatar } from '@/model/defaults/avatar';
@@ -9,7 +8,6 @@ import { DEFAULT_LAYER_THICKNESS_CM, createDefaultScene } from '@/model/defaults
 export function createDefaultProject(name = '未命名工程'): Project {
   const fabric = createFabric('cotton');
   return {
-    formatVersion: PROJECT_FORMAT_VERSION,
     meta: {
       name,
       createdAt: new Date().toISOString(),

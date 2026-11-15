@@ -42,27 +42,26 @@ function collectStructuralErrors(raw: Record<string, unknown>, errors: string[])
 }
 
 /**
- * Strict import boundary for AI-generated patterns (FR-13.3): parses JSON text, checks
- * required fields, fills absent collections through `normalizePattern`, then validates
- * topology. Any failure throws an aggregated Chinese error.
+ * Strict import boundary for JSON patterns (FR-13.3): parses JSON text, checks required
+ * fields, fills absent collections through `normalizePattern`, then validates topology.
+ * Any failure throws an aggregated Chinese error prefixed with `label`.
  */
-export function patternFromJson(json: string): Pattern {
+export function patternFromJson(json: string, label = 'AI 版型'): Pattern {
   let raw: unknown;
   try {
     raw = JSON.parse(json);
   } catch (error) {
-    throw new Error(`AI 版型 JSON 解析失败：${(error as Error).message}`);
+    throw new Error(`${label} JSON 解析失败：${(error as Error).message}`);
   }
-  if (!isRecord(raw)) throw new Error('AI 版型 JSON 必须是对象');
+  if (!isRecord(raw)) throw new Error(`${label} JSON 必须是对象`);
 
-  const source = isRecord(raw.pattern) ? raw.pattern : raw;
   const errors: string[] = [];
-  collectStructuralErrors(source, errors);
+  collectStructuralErrors(raw, errors);
   if (errors.length > 0) {
-    throw new Error(`AI 版型数据不合法：${errors.join('；')}`);
+    throw new Error(`${label}数据不合法：${errors.join('；')}`);
   }
 
-  const pattern = normalizePattern(structuredClone(source as unknown as Pattern));
+  const pattern = normalizePattern(structuredClone(raw as unknown as Pattern));
 
   const issues = validatePattern(pattern, { allowOpen: false });
   if (issues.length > 0) {
@@ -73,7 +72,7 @@ export function patternFromJson(json: string): Pattern {
       );
       panels.add(owner?.name ?? issue.targetId);
     }
-    throw new Error(`AI 版型拓扑校验失败（${[...panels].join('、')}）：${issues.map(i => i.message).join('；')}`);
+    throw new Error(`${label}拓扑校验失败（${[...panels].join('、')}）：${issues.map(i => i.message).join('；')}`);
   }
   return pattern;
 }

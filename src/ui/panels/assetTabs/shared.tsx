@@ -142,6 +142,5 @@ export const styles: Record<string, CSSProperties> = {
     borderRadius: 3, color: '#ddd', fontSize: 'var(--oc-fs-note)',
   },
   fieldRow: { display: 'flex', alignItems: 'center', gap: 4 },
-  fieldLabel: { flex: '0 0 auto', color: '#999', fontSize: 'var(--oc-fs-note)' },
   color: { flex: '0 0 auto', width: 26, height: 22, padding: 0, border: '1px solid #3a3a42', background: '#1c1c20' },
 };

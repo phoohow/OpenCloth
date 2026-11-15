@@ -1,14 +1,14 @@
+import { presetPattern } from '@/pattern/template';
 import { describe, it, expect } from 'vitest';
 import { buildRegistry } from '@/pattern/panel';
 import { buildPanelMesh, samplePanelOutline } from '@/pattern/panel/panelBuilder';
-import { DEFAULT_TSHIRT_PARAMS, generateTShirt } from '@/pattern/template/tShirtTemplate';
 import type { Panel, Pattern } from '@/model/types';
 
 const frontPanel = (pattern: Pattern): Panel =>
   Object.values(pattern.panels).find(p => p.name === '前片')!;
 
 describe('BuildRegistry 共享网格缓存', () => {
-  const pattern = generateTShirt(DEFAULT_TSHIRT_PARAMS);
+  const pattern = presetPattern('tshirt');
   const panel = frontPanel(pattern);
   const simulation = { meshResolutionCm: 1.5, meshSampling: 'lattice' as const };
 

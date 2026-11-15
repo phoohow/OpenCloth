@@ -11,7 +11,7 @@ interface Snapshot {
 }
 
 function take(ctx: ProjectContext): Snapshot {
-  return { pattern: ctx.project.pattern, fabrics: ctx.project.fabrics };
+  return { pattern: ctx.project.pattern, fabrics: { ...ctx.project.fabrics } };
 }
 
 function restore(ctx: ProjectContext, saved: Snapshot): void {
@@ -45,6 +45,9 @@ function detachedPattern(pattern: Pattern): Pattern {
     ),
     panels: copy(pattern.panels),
     seams: copy(pattern.seams),
+    notches: copy(pattern.notches),
+    annotations: copy(pattern.annotations),
+    measurements: copy(pattern.measurements),
     prints: copy(pattern.prints),
     topstitches: copy(pattern.topstitches),
     trims: copy(pattern.trims),
@@ -56,14 +59,14 @@ export class ApplyTemplateCommand implements Command {
   readonly label: string;
   private saved: Snapshot | null = null;
 
-  constructor(private readonly template: GarmentTemplate, private readonly params: Record<string, number>) {
+  constructor(private readonly template: GarmentTemplate) {
     this.label = `替换版型（${template.name}）`;
   }
 
   execute(ctx: ProjectContext): void {
     this.saved = take(ctx);
     const fabric = templateFabric(ctx);
-    const pattern = this.template.generate(this.params, fabric.id);
+    const pattern = this.template.generate(fabric.id);
     // The 2D pane draws each piece at its body height, so the sheet is laid out in that view.
     layoutByHeight(pattern, bodyLandmarks(ctx.project.avatar.params));
     ctx.project.pattern = pattern;
@@ -79,7 +82,7 @@ export class AppendTemplateCommand implements Command {
   readonly label: string;
   private saved: Snapshot | null = null;
 
-  constructor(private readonly template: GarmentTemplate, private readonly params: Record<string, number>) {
+  constructor(private readonly template: GarmentTemplate) {
     this.label = `追加版型（${template.name}）`;
   }
 
@@ -91,7 +94,7 @@ export class AppendTemplateCommand implements Command {
     // Both sheets are laid out in the height view on their own, then the new garment is carried to
     // the right of the old one: two garments never share a column, so neither lands on the other.
     layoutByHeight(pattern, body);
-    const incoming = this.template.generate(this.params, fabric.id);
+    const incoming = this.template.generate(fabric.id);
     layoutByHeight(incoming, body);
     appendPattern(pattern, incoming);
     ctx.project.pattern = pattern;

@@ -6,7 +6,7 @@ import { drapeHeightOffsetCm } from '@/pattern/drape';
 import type { BodyLandmarks } from '@/avatar';
 
 /** Shifts a panel's outline points, their curve handles, arc centers and the marks it carries. */
-export function offsetPanel(pattern: Pattern, panel: Panel, dx: number, dy: number): void {
+function offsetPanel(pattern: Pattern, panel: Panel, dx: number, dy: number): void {
   const moved = new Set<string>();
   const shiftIds = [...panel.outlineEdgeIds, ...(panel.holes ?? []).flat()];
   for (const edgeId of shiftIds) {
@@ -157,26 +157,6 @@ export function layoutByHeight(pattern: Pattern, body: BodyLandmarks, gapCm = 6)
       }
     }
     left += column.width + gapCm;
-  }
-}
-
-/**
- * Rows panels side by side and stacks the rows downward with a gap, centering every row on
- * the pattern origin so panels never overlap in the 2D view.
- */
-export function layoutRows(pattern: Pattern, rows: Panel[][], gapCm = 4): void {
-  let top = 0;
-  for (const row of rows) {
-    if (row.length === 0) continue;
-    const boxes = row.map(panel => panelBBox(pattern, panel));
-    const widths = boxes.map(box => box.max.x - box.min.x);
-    const heights = boxes.map(box => box.max.y - box.min.y);
-    let x = -widths.reduce((a, b) => a + b, 0) / 2 - gapCm * (row.length - 1) / 2;
-    row.forEach((panel, i) => {
-      offsetPanel(pattern, panel, x - boxes[i].min.x, top - boxes[i].max.y);
-      x += widths[i] + gapCm;
-    });
-    top -= Math.max(...heights) + gapCm;
   }
 }
 

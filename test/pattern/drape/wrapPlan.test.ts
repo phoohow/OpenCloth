@@ -1,5 +1,5 @@
+import { presetPattern } from '@/pattern/template';
 import { describe, expect, it } from 'vitest';
-import { generateSkirt } from '@/pattern/template/skirtTemplate';
 import { createStarterProject } from '@/pattern/template/starterProject';
 import { planWraps, resolveWrap, zoneSweep } from '@/pattern/drape/wrapPlan';
 
@@ -13,7 +13,7 @@ describe('wrap plan', () => {
   });
 
   it('splits the gores of a skirt across the half they name', () => {
-    const pattern = generateSkirt(undefined, 'fabric_default');
+    const pattern = presetPattern('skirt');
     const slots = planWraps(pattern);
     const front = Object.values(pattern.panels).filter(panel => panel.name.startsWith('前裙片'));
     const frontSlots = front.map(panel => slots.get(panel.id)!).sort((a, b) => a.startRad - b.startRad);

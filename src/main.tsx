@@ -10,6 +10,7 @@ import { createRenderWorld } from '@/render/world';
 import { createViewport } from '@/runtime';
 import { RenderHostContext, type RenderHostFactory } from '@/ui/viewport3D/renderHost';
 import { registerAssetPreviews } from '@/ui/assets/assetPreviews';
+import { hydrateTemplates } from '@/store';
 import { loadMakehumanBody } from '@/avatar/makehuman/data';
 import { makehumanBody } from '@/avatar';
 import { makehumanAvatarMeshes } from '@/runtime/makehumanAvatar';
@@ -96,6 +97,7 @@ const createRenderSession: RenderHostFactory = async (canvas, callbacks) => {
  */
 async function start(): Promise<void> {
   const root = createRoot(document.getElementById('root')!);
+  void hydrateTemplates();
   try {
     await loadMakehumanBody();
   } catch (err) {

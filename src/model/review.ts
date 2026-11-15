@@ -73,7 +73,7 @@ export interface ReviewVersionRecord {
   label: string;
   author: string;
   createdAt: string;
-  /** Encoded `.ocproj.json` payload. */
+  /** Encoded `.ocproj` payload. */
   json: string;
 }
 
@@ -131,11 +131,10 @@ export interface ReviewEventRecord {
 /** Cross-device transfer format for one cloud project and its review data. */
 export interface ReviewPackage {
   format: 'opencloth-review';
-  version: 1;
   exportedAt: string;
   exportedBy: string;
   project: CloudProjectRecord;
-  /** Current project snapshot, encoded as `.ocproj.json`. */
+  /** Current project snapshot, encoded as `.ocproj`. */
   snapshot: string;
   comments: ReviewCommentRecord[];
   events: ReviewEventRecord[];
@@ -150,7 +149,7 @@ export function reviewShareLink(origin: string, pathname: string, projectId: str
 export function isReviewPackage(value: unknown): value is ReviewPackage {
   if (!value || typeof value !== 'object') return false;
   const record = value as Partial<ReviewPackage>;
-  if (record.format !== 'opencloth-review' || record.version !== 1) return false;
+  if (record.format !== 'opencloth-review') return false;
   if (typeof record.snapshot !== 'string' || !record.project || typeof record.project !== 'object') return false;
   return Array.isArray(record.comments) && Array.isArray(record.events);
 }

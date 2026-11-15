@@ -1,4 +1,5 @@
 import type { Pattern, Project } from '@/model/types';
+import { PROJECT_FILE_EXTENSION } from '@/model';
 import type { Command } from '@/commands';
 import { createBlankProject } from '@/pattern/template';
 import { projectCodec, downloadTextFile, readFileAsText } from '@/io/serialization';
@@ -81,7 +82,7 @@ export function createProjectService(ports: ProjectServicePorts): ProjectService
     void (async () => {
       const plain = ports.project();
       const snapshot = await embedProjectAssets(plain);
-      downloadTextFile(`${name}.ocproj.json`, projectCodec.encode(snapshot));
+      downloadTextFile(`${name}${PROJECT_FILE_EXTENSION}`, projectCodec.encode(snapshot));
       await pushRecent(plain);
       service.refreshRecent();
     })().catch(err => ports.alert('保存工程失败：' + (err as Error).message));

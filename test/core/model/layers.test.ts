@@ -47,7 +47,7 @@ describe('construction layer collision order', () => {
     expect(panelCollisionLayer(panel('shell'))).toBe(2);
   });
 
-  it('keeps the legacy layer 0 for a panel without a construction layer', () => {
+  it('defaults a panel without a construction layer to layer 0', () => {
     expect(panelCollisionLayer(panel())).toBe(0);
   });
 

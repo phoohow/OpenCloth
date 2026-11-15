@@ -8,12 +8,12 @@ export const ICON_NAMES = [
   // 3D fitting tools
   'pin', 'unpin', 'move', 'pen', 'ruler',
   // Properties tabs
-  'cube', 'swatch', 'waves', 'sparkles', 'image', 'briefcase', 'scene',
+  'cube', 'swatch', 'waves', 'image', 'briefcase', 'scene',
   // Outliner nodes
   'folder', 'panel', 'avatar', 'reference', 'environment', 'camera',
   'light-directional', 'light-point', 'light-spot', 'light-area',
   // Mobile shell
-  'atom', 'aperture',
+  'aperture',
   // Shared controls
   'chevron-down', 'chevron-right', 'eye', 'eye-off', 'plus', 'minus', 'check', 'refresh',
   'collapse-all', 'expand-all', 'status-dot', 'menu', 'close',

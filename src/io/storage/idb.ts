@@ -1,24 +1,23 @@
 /**
  * Shared IndexedDB plumbing for the four local stores (`oc-projects`, `oc-objects`,
- * `oc-review`, `oc-assets`). One cached connection per database, one place that knows
- * how a transaction resolves, and one naming rule for schema upgrades.
+ * `oc-review`, `oc-assets`). One cached connection per database and one place that knows
+ * how a transaction resolves.
  */
 
-/** One database: name, schema version and the schema work that runs on upgrade. */
+/** One database: its name and the stores created when it is first opened. */
 export interface IdbSpec {
   name: string;
-  version: number;
   /**
-   * Creates the stores and indexes this version needs. Runs inside the upgrade
-   * transaction, so existing stores must be reached through `tx`, not `db.transaction`.
+   * Creates the stores and indexes. Runs inside the upgrade transaction, so the stores
+   * it creates must be reached through `tx`, not `db.transaction`.
    */
   upgrade: (db: IDBDatabase, tx: IDBTransaction) => void;
 }
 
-/** Cached connections, keyed by `name@version` so two specs never share a stale handle. */
+/** Cached connections, keyed by database name. */
 const connections = new Map<string, Promise<IDBDatabase>>();
 
-const cacheKey = (spec: IdbSpec): string => `${spec.name}@${spec.version}`;
+const cacheKey = (spec: IdbSpec): string => spec.name;
 
 /** True when the browser exposes IndexedDB; every store checks this before touching it. */
 export function storageAvailable(): boolean {
@@ -27,7 +26,7 @@ export function storageAvailable(): boolean {
 
 /**
  * Opens a database and keeps the connection for later calls. A `versionchange` from
- * another tab closes and forgets it, so the next call reopens at the new version.
+ * another tab closes and forgets it, so the next call reopens it.
  */
 export function openIdb(spec: IdbSpec): Promise<IDBDatabase> {
   const key = cacheKey(spec);
@@ -35,7 +34,7 @@ export function openIdb(spec: IdbSpec): Promise<IDBDatabase> {
   if (cached) return cached;
 
   const opening = new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(spec.name, spec.version);
+    const request = indexedDB.open(spec.name);
     request.onupgradeneeded = () => {
       const tx = request.transaction;
       if (!tx) throw new Error(`数据库 ${spec.name} 升级时没有事务`);

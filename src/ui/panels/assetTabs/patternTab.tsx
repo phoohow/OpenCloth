@@ -1,96 +1,102 @@
-import { useState } from 'react';
-import { useProjectStore, useUIStore } from '@/store';
-import { AppendTemplateCommand, ApplyTemplateCommand, GARMENT_TEMPLATES } from '@/pattern/template';
-import type { GarmentTemplate, ParamField } from '@/pattern/template';
+import { useEffect, useSyncExternalStore } from 'react';
+import {
+  getTemplates, hydrateTemplates, removeUserTemplate, subscribeTemplates,
+  useProjectStore, useUIStore,
+} from '@/store';
+import { AppendTemplateCommand, ApplyTemplateCommand } from '@/pattern/template';
+import type { GarmentTemplate } from '@/pattern/template';
 import { Icon } from '@/ui/icons';
-import { Section, styles } from '@/ui/panels/assetTabs/shared';
+import {
+  importTemplatesViaPicker, saveCurrentPatternAsTemplate,
+} from '@/ui/patternTemplateIo';
+import { Section, notify, styles } from '@/ui/panels/assetTabs/shared';
 
-/** Built-in garment templates: a glyph, then the measurements and the two build actions. */
+/** Templates read from the default folder and templates imported by the user. */
 export function PatternAssets() {
-  return (
-    <Section title="内置版型">
-      {GARMENT_TEMPLATES.map(template => (
-        <TemplateRow key={template.key} template={template} />
-      ))}
-    </Section>
-  );
-}
+  const templates = useSyncExternalStore(subscribeTemplates, getTemplates);
+  useEffect(() => { void hydrateTemplates(); }, []);
 
-/** Keeps a typed measurement inside its template range. */
-function clampField(value: number, field: ParamField, fallback: number): number {
-  if (Number.isNaN(value)) return fallback;
-  return Math.min(Math.max(value, field.min), field.max);
-}
+  const bundled = templates.filter(template => template.source !== 'user');
+  const saved = templates.filter(template => template.source === 'user');
 
-function TemplateRow({ template }: { template: GarmentTemplate }) {
-  const [open, setOpen] = useState(false);
-  const [params, setParams] = useState<Record<string, number>>({ ...template.defaults });
-  const executeCommand = useProjectStore(s => s.executeCommand);
-  const toggle = () => setOpen(value => !value);
+  const remove = (template: GarmentTemplate) => {
+    if (!template.assetId) return;
+    void removeUserTemplate(template.assetId)
+      .then(() => notify(`已移除「${template.name}」`))
+      .catch(() => notify('移除失败：本机存储不可用'));
+  };
 
   return (
     <>
-      <div
-        role="button"
-        tabIndex={0}
-        style={{ ...styles.row, ...styles.rowPickable }}
-        title={`${template.summary} · 展开调整尺寸`}
-        onClick={toggle}
-        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } }}
+      <Section title={`版型库（${bundled.length}）`}>
+        {bundled.map(template => <TemplateRow key={template.key} template={template} />)}
+      </Section>
+      <Section
+        title={`我的版型（${saved.length}）`}
+        action={
+          <button
+            style={styles.iconBtn}
+            title="导入 .ocpat 版型文件"
+            onClick={() => void importTemplatesViaPicker()}
+          >导入版型</button>
+        }
       >
-        <span style={styles.glyph}>
-          <Icon name={template.icon} size={22} style={{ color: '#c3c9d4' }} />
-        </span>
-        <span style={styles.text}>
-          <span style={styles.name}>{template.name}</span>
-        </span>
-        {/* The two build actions sit on the row itself, so they act without opening the sizes. */}
-        <button
-          style={styles.glyphBtn}
-          title={`替换：清空当前版型，按「${template.name}」重新生成`}
-          aria-label={`替换为${template.name}`}
-          onClick={e => {
-            e.stopPropagation();
-            executeCommand(new ApplyTemplateCommand(template, params));
-            // A new sheet is a different size, so frame all of it in the 2D pane.
-            useUIStore.getState().requestFit();
-          }}
-        ><Icon name="refresh" size={11} /></button>
-        <button
-          style={styles.glyphBtn}
-          title={`添加：保留已有版片，把「${template.name}」的片排在右侧`}
-          aria-label={`添加${template.name}`}
-          onClick={e => {
-            e.stopPropagation();
-            executeCommand(new AppendTemplateCommand(template, params));
-            useUIStore.getState().requestFit();
-          }}
-        ><Icon name="plus" size={11} /></button>
-        <Icon name={open ? 'chevron-down' : 'chevron-right'} size={10} style={{ color: '#666' }} />
-      </div>
-
-      {open && (
-        <div style={styles.body}>
-          {template.fields.map(field => (
-            <label key={field.key} style={styles.fieldRow}>
-              <span style={styles.fieldLabel}>{field.label}</span>
-              <input
-                type="number"
-                style={styles.field}
-                min={field.min}
-                max={field.max}
-                step={field.step}
-                value={params[field.key] ?? template.defaults[field.key]}
-                onChange={e => setParams(current => ({
-                  ...current,
-                  [field.key]: clampField(Number(e.target.value), field, template.defaults[field.key]),
-                }))}
-              />
-              <span style={styles.fieldLabel}>{field.unit}</span>
-            </label>
+        {saved.length === 0
+          ? <div style={styles.note}>还没有导入的版型；默认文件夹里的版型显示在上方</div>
+          : saved.map(template => (
+            <TemplateRow key={template.key} template={template} onDelete={() => remove(template)} />
           ))}
-        </div>
-      )}
+      </Section>
+      <button
+        style={{ ...styles.iconBtn, height: 24, alignSelf: 'stretch', justifyContent: 'center' }}
+        title="把当前工程的版片导出成 .ocpat 模板文件"
+        onClick={saveCurrentPatternAsTemplate}
+      >另存当前版型</button>
     </>
+  );
+}
+
+function TemplateRow({ template, onDelete }: { template: GarmentTemplate; onDelete?: () => void }) {
+  const executeCommand = useProjectStore(s => s.executeCommand);
+
+  return (
+    <div
+      style={styles.row}
+      title={template.summary}
+    >
+      <span style={styles.glyph}>
+        <Icon name={template.icon} size={22} style={{ color: '#c3c9d4' }} />
+      </span>
+      <span style={styles.text}>
+        <span style={styles.name}>{template.name}</span>
+      </span>
+      <button
+        style={styles.glyphBtn}
+        title={`替换：清空当前版型，按「${template.name}」重新生成`}
+        aria-label={`替换为${template.name}`}
+        onClick={() => {
+          executeCommand(new ApplyTemplateCommand(template));
+          // A new sheet is a different size, so frame all of it in the 2D pane.
+          useUIStore.getState().requestFit();
+        }}
+      ><Icon name="refresh" size={11} /></button>
+      <button
+        style={styles.glyphBtn}
+        title={`添加：保留已有版片，把「${template.name}」的片排在右侧`}
+        aria-label={`添加${template.name}`}
+        onClick={() => {
+          executeCommand(new AppendTemplateCommand(template));
+          useUIStore.getState().requestFit();
+        }}
+      ><Icon name="plus" size={11} /></button>
+      {onDelete && (
+        <button
+          style={styles.deleteBtn}
+          title="移除导入的版型"
+          aria-label={`移除${template.name}`}
+          onClick={onDelete}
+        ><Icon name="close" size={9} /></button>
+      )}
+    </div>
   );
 }

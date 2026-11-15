@@ -77,7 +77,6 @@ describe('review sharing', () => {
   it('accepts only well-formed review packages', () => {
     const valid = {
       format: 'opencloth-review',
-      version: 1,
       exportedAt: '2026-01-01T00:00:00.000Z',
       exportedBy: 'tester',
       project: {
@@ -90,7 +89,6 @@ describe('review sharing', () => {
     };
     expect(isReviewPackage(valid)).toBe(true);
     expect(isReviewPackage({ ...valid, format: 'other' })).toBe(false);
-    expect(isReviewPackage({ ...valid, version: 2 })).toBe(false);
     expect(isReviewPackage({ ...valid, snapshot: 3 })).toBe(false);
     expect(isReviewPackage({ ...valid, comments: 'x' })).toBe(false);
     expect(isReviewPackage(null)).toBe(false);

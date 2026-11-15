@@ -1,20 +1,16 @@
+import { presetPattern } from '@/pattern/template';
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_TSHIRT_PARAMS, generateTShirt } from '@/pattern/template/tShirtTemplate';
-import { generateShirt } from '@/pattern/template/shirtTemplate';
-import { generateHoodie } from '@/pattern/template/hoodieTemplate';
-import { generateSkirt } from '@/pattern/template/skirtTemplate';
-import { generateDress } from '@/pattern/template/dressTemplate';
 import { edgeLength } from '@/pattern/geom/edgeSample';
 import type { Pattern } from '@/model/types';
 
 /** Seam sides have to be the same length, or the stitches gather or stretch one of them. */
 describe('template seam lengths', () => {
   const cases: Array<[string, () => Pattern]> = [
-    ['T-shirt', () => generateTShirt(DEFAULT_TSHIRT_PARAMS)],
-    ['shirt', () => generateShirt()],
-    ['hoodie', () => generateHoodie()],
-    ['skirt', () => generateSkirt()],
-    ['dress', () => generateDress()],
+    ['T-shirt', () => presetPattern('tshirt')],
+    ['shirt', () => presetPattern('shirt')],
+    ['hoodie', () => presetPattern('hoodie')],
+    ['skirt', () => presetPattern('skirt')],
+    ['dress', () => presetPattern('dress')],
   ];
 
   for (const [name, build] of cases) {

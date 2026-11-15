@@ -1,7 +1,2 @@
-/**
- * Version of the `.ocproj.json` format, kept next to the model types because the
- * document schema and this number change together.
- */
-
-/** Version written and read by this build. */
-export const PROJECT_FORMAT_VERSION = 1;
+/** File extension of a saved project document; the contents are JSON text. */
+export const PROJECT_FILE_EXTENSION = '.ocproj';

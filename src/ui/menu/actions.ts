@@ -15,6 +15,7 @@ import type { GarmentEngine, CameraPreset } from '@/runtime';
 import type { Viewport } from '@/runtime';
 import type { CameraProjection, EditPreviewTier, Project } from '@/model/types';
 import { reportActionError } from '@/ui/widgets/toast';
+import { importTemplatesViaPicker, saveCurrentPatternAsTemplate } from '@/ui/patternTemplateIo';
 import { exportDebugScreenshot, type ScreenshotRequest } from '@/ui/debug/screenshot';
 import { createProjectService } from '@/runtime';
 
@@ -47,6 +48,8 @@ export interface MenuActions {
   importHpgl: () => void;
   importPdf: () => void;
   importPatternJson: () => void;
+  importTemplateFile: () => void;
+  saveTemplateFile: () => void;
   openReview: () => void;
   openAssets: (tab: AssetTab) => void;
   openIntegration: () => void;
@@ -184,6 +187,8 @@ export function createMenuActions(refs: MenuActionContext): MenuActions {
     importHpgl: projectService.importHpgl,
     importPdf: projectService.importPdf,
     importPatternJson: projectService.importPatternJson,
+    importTemplateFile: () => void importTemplatesViaPicker(),
+    saveTemplateFile: saveCurrentPatternAsTemplate,
     openReview: () => useMenuStore.getState().openDialog('review'),
     openAssets: (tab) => {
       const ui = useUIStore.getState();

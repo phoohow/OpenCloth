@@ -78,7 +78,7 @@ describe('projectService', () => {
   it('打开工程文件解析 JSON 后替换当前工程', async () => {
     const fileProject = createBlankProject();
     fileProject.meta.name = '来自文件';
-    const file = new File([projectCodec.encode(fileProject)], 'p.ocproj.json', { type: 'application/json' });
+    const file = new File([projectCodec.encode(fileProject)], 'p.ocproj', { type: 'application/json' });
 
     const { service, ports } = makeService();
     service.openProjectFile(file);
@@ -93,7 +93,7 @@ describe('projectService', () => {
 
     expect(ports.project().meta.name).toBe('改名工程');
     await vi.waitFor(() => expect(downloadTextFile).toHaveBeenCalled());
-    expect(vi.mocked(downloadTextFile).mock.calls[0]![0]).toBe('改名工程.ocproj.json');
+    expect(vi.mocked(downloadTextFile).mock.calls[0]![0]).toBe('改名工程.ocproj');
     expect(vi.mocked(projectPackage.embedProjectAssets)).toHaveBeenCalled();
   });
 

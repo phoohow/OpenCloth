@@ -109,8 +109,8 @@ test('打开工程文件替换当前工程', async ({ page }) => {
   const project = JSON.parse(json) as { meta: { name: string } };
   project.meta.name = 'E2E 载入工程';
 
-  await page.locator('input[accept=".json,.ocproj.json"]').setInputFiles({
-    name: 'e2e.ocproj.json',
+  await page.locator('input[accept=".ocproj"]').setInputFiles({
+    name: 'e2e.ocproj',
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(project)),
   });

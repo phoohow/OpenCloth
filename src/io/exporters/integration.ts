@@ -6,7 +6,6 @@ import { projectCounts } from '@/io/projectSummary';
 /** Cross-tool delivery bundle for a PLM / ERP import. */
 export interface PlmPackage {
   format: 'opencloth-plm';
-  version: 1;
   exportedAt: string;
   style: {
     name: string;
@@ -28,7 +27,6 @@ export function buildPlmPackage(project: Project, options: TechPackOptions = {})
   const data = buildTechPackData(project, options);
   return {
     format: 'opencloth-plm',
-    version: 1,
     exportedAt: new Date().toISOString(),
     style: {
       name: data.projectName,
@@ -49,7 +47,6 @@ export function buildPlmPackage(project: Project, options: TechPackOptions = {})
 /** Compact event sent to a webhook endpoint. */
 export interface WebhookPayload {
   format: 'opencloth-webhook';
-  version: 1;
   event: 'project.updated';
   exportedAt: string;
   project: {
@@ -68,7 +65,6 @@ export interface WebhookPayload {
 export function buildWebhookPayload(project: Project): WebhookPayload {
   return {
     format: 'opencloth-webhook',
-    version: 1,
     event: 'project.updated',
     exportedAt: new Date().toISOString(),
     project: {

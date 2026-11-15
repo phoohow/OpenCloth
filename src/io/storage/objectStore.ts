@@ -7,9 +7,8 @@ const STORE_NAME = 'blobs';
 /** Opened by `io/idb.ts`, which keeps the connection and creates `blobs` on first use. */
 const SPEC: IdbSpec = {
   name: 'oc-objects',
-  version: 1,
   upgrade: db => {
-    if (!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME);
+    db.createObjectStore(STORE_NAME);
   },
 };
 

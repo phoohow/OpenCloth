@@ -1,10 +1,6 @@
+import { presetPattern } from '@/pattern/template';
 import { describe, expect, it } from 'vitest';
 import { createStarterProject } from '@/pattern/template/starterProject';
-import { generateTShirt } from '@/pattern/template/tShirtTemplate';
-import { generateShirt } from '@/pattern/template/shirtTemplate';
-import { generateHoodie } from '@/pattern/template/hoodieTemplate';
-import { generateSkirt } from '@/pattern/template/skirtTemplate';
-import { generateDress } from '@/pattern/template/dressTemplate';
 import { buildPanelMesh, type PanelMesh } from '@/pattern/panel';
 import { drapePositions } from '@/pattern/drape';
 import { bodyLandmarks } from '@/avatar/landmarks';
@@ -28,7 +24,7 @@ describe('wrap enclosure', () => {
     const shapes = body.bodyShapes();
     const elbowY = body.armChain(1).mid[1];
     let lowerChecked = 0;
-    for (const pattern of [generateTShirt(undefined, 'fabric_default'), generateShirt(undefined, 'fabric_default')]) {
+    for (const pattern of [presetPattern('tshirt'), presetPattern('shirt')]) {
       const sleeve = panelNamed(pattern, '右袖');
       const mesh = buildPanelMesh(pattern, sleeve.id)!;
       const draped = drapePositions(mesh, sleeve, body);
@@ -54,7 +50,7 @@ describe('wrap enclosure', () => {
   // A frame that jumps at the elbow fillet swings a whole column sideways between two rows; the
   // long shirt sleeve spans the fillet, so every column must stay continuous down the arm.
   it('keeps the sleeve columns continuous across the elbow', () => {
-    const pattern = generateShirt(undefined, 'fabric_default');
+    const pattern = presetPattern('shirt');
     const sleeve = panelNamed(pattern, '右袖');
     const mesh = buildPanelMesh(pattern, sleeve.id)!;
     const draped = drapePositions(mesh, sleeve, body);
@@ -89,11 +85,11 @@ describe('wrap enclosure', () => {
   it('keeps the cut area of every draped panel', () => {
     const patterns = [
       project.pattern,
-      generateTShirt(undefined, 'fabric_default'),
-      generateShirt(undefined, 'fabric_default'),
-      generateHoodie(undefined, 'fabric_default'),
-      generateSkirt(undefined, 'fabric_default'),
-      generateDress(undefined, 'fabric_default'),
+      presetPattern('tshirt'),
+      presetPattern('shirt'),
+      presetPattern('hoodie'),
+      presetPattern('skirt'),
+      presetPattern('dress'),
     ];
     for (const pattern of patterns) {
       for (const panel of Object.values(pattern.panels)) {
@@ -133,7 +129,7 @@ describe('wrap enclosure', () => {
   // The hood halves read the head proxy, not the neck ring: they crown at the skull top, reach the
   // neckline and stay on the head and neck surfaces.
   it('covers the head with the hood halves', () => {
-    const pattern = generateHoodie(undefined, 'fabric_default');
+    const pattern = presetPattern('hoodie');
     const shapes = body.bodyShapes();
     const targets = shapes.filter(shape =>
       shape.kind === 'ellipsoid' || (shape.kind === 'tube' && shape.part === 'neck'));

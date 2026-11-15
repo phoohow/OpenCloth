@@ -1,13 +1,10 @@
+import { presetPattern } from '@/pattern/template';
 import { describe, expect, it } from 'vitest';
 import type { Panel, PanelDrape, Seam } from '@/model/types';
 import { buildPanelMesh, type PanelMesh } from '@/pattern/panel';
 import { drapeReversesWinding } from '@/pattern/drape';
 import { simplifiedDepth, type SimplifiedShape } from '@/avatar/simplifiedBody';
 import { createStarterProject } from '@/pattern/template/starterProject';
-import { generateShirt } from '@/pattern/template/shirtTemplate';
-import { generateHoodie } from '@/pattern/template/hoodieTemplate';
-import { generateSkirt } from '@/pattern/template/skirtTemplate';
-import { generateDress } from '@/pattern/template/dressTemplate';
 import { ClothAssembly } from '@/runtime/clothAssembly';
 import { BodyLandmarkCache } from '@/runtime/initialPose';
 import type { SeamPair } from '@/runtime/seamPair';
@@ -141,10 +138,10 @@ describe('unsewn layout', () => {
     const cache = new BodyLandmarkCache();
     for (const pattern of [
       starter.pattern,
-      generateShirt(undefined, 'fabric_default'),
-      generateHoodie(undefined, 'fabric_default'),
-      generateSkirt(undefined, 'fabric_default'),
-      generateDress(undefined, 'fabric_default'),
+      presetPattern('shirt'),
+      presetPattern('hoodie'),
+      presetPattern('skirt'),
+      presetPattern('dress'),
     ]) {
       const project = { ...starter, pattern };
       const meshes = new Map<string, PanelMesh>();
@@ -259,8 +256,8 @@ describe('template winding', () => {
   // Every piece of a drafted garment has to face the same way once sewn; a mirrored half whose
   // outline was not reversed wraps inside out.
   for (const [label, build] of [
-    ['shirt', () => generateShirt(undefined, 'fabric_default')],
-    ['hoodie', () => generateHoodie(undefined, 'fabric_default')],
+    ['shirt', () => presetPattern('shirt')],
+    ['hoodie', () => presetPattern('hoodie')],
   ] as const) {
     it(`turns every sewn ${label} side the same way`, () => {
       const project = { ...createStarterProject(), pattern: build() };
@@ -327,8 +324,8 @@ describe('sleeve cap seams', () => {
   // The shirt and the hoodie are drafted from the templates rather than the starter block, and the
   // shirt seams its cap to a back armhole the yoke cuts in two.
   for (const [label, build] of [
-    ['shirt', () => generateShirt(undefined, 'fabric_default')],
-    ['hoodie', () => generateHoodie(undefined, 'fabric_default')],
+    ['shirt', () => presetPattern('shirt')],
+    ['hoodie', () => presetPattern('hoodie')],
   ] as const) {
     it(`pairs every ${label} cap end with the same end of its armhole`, () => {
       const project = { ...createStarterProject(), pattern: build() };
@@ -399,8 +396,8 @@ describe('seam closure', () => {
   // or two pairs whose edges bow apart between them, is the gap a dressed garment must not show.
   for (const [label, build] of [
     ['starter', () => createStarterProject().pattern],
-    ['shirt', () => generateShirt(undefined, 'fabric_default')],
-    ['hoodie', () => generateHoodie(undefined, 'fabric_default')],
+    ['shirt', () => presetPattern('shirt')],
+    ['hoodie', () => presetPattern('hoodie')],
   ] as const) {
     it(`closes every ${label} stitch pair and the seam line between them`, () => {
       const project = { ...createStarterProject(), pattern: build() };
@@ -443,8 +440,8 @@ describe('seam junctions', () => {
   // Only the shirt splits an edge (the yoke cuts the armhole and the neckline into stretches).
   for (const [label, build, splitsEdge] of [
     ['starter', () => createStarterProject().pattern, false],
-    ['shirt', () => generateShirt(undefined, 'fabric_default'), true],
-    ['hoodie', () => generateHoodie(undefined, 'fabric_default'), false],
+    ['shirt', () => presetPattern('shirt'), true],
+    ['hoodie', () => presetPattern('hoodie'), false],
   ] as const) {
     it(`stitches the ${label} split corner of an edge to one vertex`, () => {
       const project = { ...createStarterProject(), pattern: build() };

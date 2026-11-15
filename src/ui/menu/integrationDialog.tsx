@@ -31,11 +31,10 @@ const ITEMS: Array<{ kind: IntegrationKind; label: string; format: string }> = [
 
 const API_DOC = {
   format: 'opencloth-api',
-  version: '1.0',
   global: 'window.opencloth',
   methods: [
     { name: 'getProject', returns: 'Project', description: '当前工程的深拷贝' },
-    { name: 'getProjectJson', returns: 'string', description: '.ocproj.json 文本' },
+    { name: 'getProjectJson', returns: 'string', description: '.ocproj 文本' },
     { name: 'loadProjectJson', returns: 'void', description: '校验并载入工程 JSON' },
     { name: 'getSummary', returns: 'OpenClothSummary', description: '片数、缝数、材质数与尺码数' },
     { name: 'getPlmPackage', returns: 'PlmPackage', description: '与【导出 PLM 包】同一份数据' },

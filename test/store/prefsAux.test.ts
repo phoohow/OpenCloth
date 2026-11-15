@@ -7,7 +7,7 @@ function storageWith(value: unknown): PreferencesStorage {
   return { getItem: key => (key === PREFS_KEY ? text : null), setItem: () => { } };
 }
 
-describe('auxiliary prefs migration', () => {
+describe('auxiliary prefs', () => {
   it('reads the two-group shape', () => {
     expect(readPrefs(storageWith({ aux: { wire: 'over', proxy: 'only' } })).aux)
       .toEqual({ wire: 'over', proxy: 'only' });
@@ -19,15 +19,8 @@ describe('auxiliary prefs migration', () => {
     expect(readPrefs(storageWith({})).aux).toEqual(DEFAULT_PREFS.aux);
   });
 
-  it('maps the legacy single-mode preference onto its group', () => {
-    expect(readPrefs(storageWith({ aux: 'wire-only' })).aux).toEqual({ wire: 'only', proxy: 'off' });
-    expect(readPrefs(storageWith({ aux: 'wire-over' })).aux).toEqual({ wire: 'over', proxy: 'off' });
-    expect(readPrefs(storageWith({ aux: 'proxy-only' })).aux).toEqual({ wire: 'off', proxy: 'only' });
-    expect(readPrefs(storageWith({ aux: 'proxy-over' })).aux).toEqual({ wire: 'off', proxy: 'over' });
-  });
-
-  it('maps the older wire preference onto the wire group', () => {
-    expect(readPrefs(storageWith({ wire: 'over' })).aux).toEqual({ wire: 'over', proxy: 'off' });
-    expect(readPrefs(storageWith({ wire: 'only' })).aux).toEqual({ wire: 'only', proxy: 'off' });
+  it('defaults a non-object aux value to the default groups', () => {
+    expect(readPrefs(storageWith({ aux: 'wire-only' })).aux).toEqual(DEFAULT_PREFS.aux);
+    expect(readPrefs(storageWith({ wire: 'over' })).aux).toEqual(DEFAULT_PREFS.aux);
   });
 });

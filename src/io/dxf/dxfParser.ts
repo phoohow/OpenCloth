@@ -121,7 +121,7 @@ export function parseDxf(text: string): DxfDocument {
   let blockHeader = false;
   let blockName = '';
   let blockBase: Vec2 = { x: 0, y: 0 };
-  // Legacy POLYLINE collects its VERTEX entities here.
+  // POLYLINE collects its following VERTEX entities here.
   let openPoly: Builder | null = null;
   let vertexRef: DxfVertex | null = null;
 

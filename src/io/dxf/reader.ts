@@ -236,7 +236,7 @@ interface GroupLine {
 }
 
 /**
- * Parses a garment pattern DXF (R12 ASCII) into the v2 pattern model. `\U+XXXX` escapes in text and
+ * Parses a garment pattern DXF (R12 ASCII) into the pattern model. `\U+XXXX` escapes in text and
  * block names are decoded, so ASCII files keep their original strings; a multi-size file yields one
  * panel per block, named `<panel>-<size label>`.
  */

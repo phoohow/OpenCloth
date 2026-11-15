@@ -1,6 +1,5 @@
+import { presetPattern, PRESET_PARAMS } from '@/pattern/template';
 import { describe, expect, it } from 'vitest';
-import { generateSkirt, DEFAULT_SKIRT_PARAMS } from '@/pattern/template/skirtTemplate';
-import { generateDress, DEFAULT_DRESS_PARAMS } from '@/pattern/template/dressTemplate';
 import { samplePanelOutline } from '@/pattern/panel/panelBuilder';
 import type { Panel, Pattern } from '@/model/types';
 
@@ -32,19 +31,19 @@ function hipGirth(pattern: Pattern, panels: Panel[], hipDepthCm: number): number
 
 describe('skirt hip clearance', () => {
   it('keeps each gore wide enough at the hip that the skirt cannot slide over it', () => {
-    const pattern = generateSkirt();
+    const pattern = presetPattern('skirt');
     const front = Object.values(pattern.panels).filter(panel => panel.name.startsWith('前裙片'));
     const girth = hipGirth(pattern, front, 18) * 2;
-    expect(girth).toBeGreaterThanOrEqual(DEFAULT_SKIRT_PARAMS.hipCm);
+    expect(girth).toBeGreaterThanOrEqual(PRESET_PARAMS.skirt.hipCm);
   });
 });
 
 describe('dress hip clearance', () => {
   it('keeps the skirt wide enough at the hip line', () => {
-    const pattern = generateDress();
+    const pattern = presetPattern('dress');
     const front = Object.values(pattern.panels).find(panel => panel.name === '前裙片');
     expect(front).toBeTruthy();
     const girth = hipGirth(pattern, [front!], 18) * 2;
-    expect(girth).toBeGreaterThanOrEqual(DEFAULT_DRESS_PARAMS.hipCm);
+    expect(girth).toBeGreaterThanOrEqual(PRESET_PARAMS.dress.hipCm);
   });
 });
