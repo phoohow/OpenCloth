@@ -71,6 +71,24 @@ describe('simplified body', () => {
     }
   });
 
+  it('follows the calf instead of the shin bone', () => {
+    for (const gender of [0, 1]) {
+      const figure = bodyLandmarks({ ...project.avatar.params, gender });
+      const chain = figure.legChain(1);
+      const leg = figure.bodyShapes().find(shape =>
+        shape.kind === 'limb' && shape.part === 'leg' && shape.side === 1);
+      if (!leg || leg.kind !== 'limb') throw new Error('leg proxy missing');
+      // The calf sits behind the shin, so the sweep leaves the bone there, and comes back to it
+      // at the ankle, where no muscle is left to follow.
+      const calf = leg.path
+        .filter(point => point[1] < (chain.mid[1] + chain.end[1]) * 0.55)
+        .map(point => lineDistance(chain.mid, chain.end, point));
+      expect(Math.max(...calf)).toBeGreaterThan(0.01);
+      const ankle = leg.path[nearestSample(leg.path, chain.end)]!;
+      expect(lineDistance(chain.mid, chain.end, ankle)).toBeLessThan(0.012);
+    }
+  });
+
   it('rounds the elbow instead of breaking it', () => {
     const arm = shapes.find(shape => shape.kind === 'limb' && shape.part === 'arm' && shape.side === 1);
     if (!arm || arm.kind !== 'limb') throw new Error('arm proxy missing');
@@ -121,6 +139,19 @@ describe('simplified body', () => {
       .toBeLessThan(0);
   });
 });
+
+/** Distance from a point to the line through two joints. */
+function lineDistance(a: readonly number[], b: readonly number[], point: readonly number[]): number {
+  const span = [b[0]! - a[0]!, b[1]! - a[1]!, b[2]! - a[2]!];
+  const lengthSq = span[0]! ** 2 + span[1]! ** 2 + span[2]! ** 2 || 1e-9;
+  const offset = [point[0]! - a[0]!, point[1]! - a[1]!, point[2]! - a[2]!];
+  const along = (offset[0]! * span[0]! + offset[1]! * span[1]! + offset[2]! * span[2]!) / lengthSq;
+  return Math.hypot(
+    offset[0]! - span[0]! * along,
+    offset[1]! - span[1]! * along,
+    offset[2]! - span[2]! * along,
+  );
+}
 
 /** Largest skin distance from a bone, cut perpendicular to it at a share along the bone. */
 function skinRadiusAt(

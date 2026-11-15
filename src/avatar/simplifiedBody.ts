@@ -1,5 +1,5 @@
 /**
- * Low-detail body proxy: one ellipsoid, a set of straight conical sections and a foot box per side.
+ * Low-detail body proxy: one ellipsoid, a swept tube per limb and a foot box per side.
  *
  * Every number is measured on the built MakeHuman mesh, so the proxy follows the current figure
  * and pose. The drape lays panels on these same shapes, so the visible proxy and the panel surface
@@ -35,6 +35,8 @@ interface Bone {
   to: Point3;
   fromR: number;
   toR: number;
+  /** Offset of the flesh centre from the bone line at each station, `from` to `to`. */
+  offsets: Point3[];
 }
 
 /** Fields shared by every proxy shape. */
@@ -190,11 +192,11 @@ function segmentDistance(a: Point3, b: Point3, point: Point3): number {
 }
 
 /**
- * One limb bone fitted on its flesh: the axis runs parallel to the bone line through the mean
- * section centre, and the radius stays outside every measured section, so a muscle belly offset
- * from the bone stays inside the shape. A tapered bone carries the cheapest straight taper that
- * clears its sections; a tubular bone carries the widest section at both ends. Sections are cut
- * perpendicular to the axis, so a horizontal arm reads the same as a hanging one, and flesh
+ * One limb bone fitted on its flesh: each station is centred on its own section, so a muscle
+ * belly that sits to one side of the bone carries the surface with it, and the radius is the
+ * half extent of that section. A tapered bone carries the cheapest straight taper that clears
+ * its sections; a tubular bone carries the widest section at both ends. Sections are cut
+ * perpendicular to the bone, so a horizontal arm reads the same as a hanging one, and flesh
  * nearer the neighbouring bone is left to that bone, so a cut across the joint does not read the
  * next segment's girth as this one's.
  */
@@ -275,31 +277,52 @@ function fitLimbBone(
     sections.push(points);
   }
 
-  let shift: Point3 = [0, 0, 0];
-  let measured = 0;
+  // Each station is centred on its own section, so the surface follows a muscle belly instead of
+  // only growing around the bone. A cut across the joint covers part of the turn, and its
+  // centroid sits toward the arc it kept, so such a station borrows the nearest whole ring's centre.
+  const offsets: Point3[] = [];
+  const whole: boolean[] = [];
   for (let i = 0; i < LIMB_STATIONS; i++) {
     const points = sections[i]!;
-    if (points.length === 0) continue;
+    const centre = centres[i]!;
+    if (points.length === 0) {
+      offsets.push([0, 0, 0]);
+      whole.push(false);
+      continue;
+    }
     let cx = 0;
     let cz = 0;
     for (const p of points) {
       cx += p[0];
       cz += p[2];
     }
-    const offset = sub3t([cx / points.length, centres[i]![1], cz / points.length], centres[i]!);
-    shift = add3t(shift, sub3t(offset, scale3t(axis, dot3t(offset, axis))));
-    measured++;
+    const centroid: Point3 = [cx / points.length, centre[1], cz / points.length];
+    const middle = enclosingCentre(points, centroid);
+    const offset = sub3t(middle, centre);
+    offsets.push(sub3t(offset, scale3t(axis, dot3t(offset, axis))));
+    whole.push(ringCoverage(points, centroid, u, v) >= SECTION_COVERAGE_MIN);
   }
-  if (measured > 0) shift = scale3t(shift, 1 / measured);
-  const from = add3t(start, shift);
-  const to = add3t(end, shift);
 
-  const radii = sections.map(points => {
-    if (points.length === 0) return 0;
+  const radii: number[] = [];
+  for (let i = 0; i < LIMB_STATIONS; i++) {
+    const points = sections[i]!;
+    if (points.length === 0) {
+      radii.push(0);
+      continue;
+    }
+    if (!whole[i]) {
+      let nearest = -1;
+      for (let j = 0; j < LIMB_STATIONS; j++) {
+        if (!whole[j]) continue;
+        if (nearest < 0 || Math.abs(j - i) < Math.abs(nearest - i)) nearest = j;
+      }
+      if (nearest >= 0) offsets[i] = offsets[nearest]!;
+    }
+    const station = add3t(centres[i]!, offsets[i]!);
     let radius = 0;
-    for (const point of points) radius = Math.max(radius, axisDistance(from, axis, point));
-    return radius + clearance;
-  });
+    for (const point of points) radius = Math.max(radius, axisDistance(station, axis, point));
+    radii.push(radius + clearance);
+  }
   // Sections merged into the pelvis or shoulder read as their nearest measured station.
   for (let i = 0; i < LIMB_STATIONS; i++) {
     if (radii[i]! > 0) continue;
@@ -309,10 +332,11 @@ function fitLimbBone(
       if (nearest < 0 || Math.abs(j - i) < Math.abs(nearest - i)) nearest = j;
     }
     radii[i] = nearest < 0 ? clearance : radii[nearest]!;
+    offsets[i] = nearest < 0 ? [0, 0, 0] : offsets[nearest]!;
   }
 
   const maxR = Math.max(...radii);
-  if (shape === 'tube') return { from, to, fromR: maxR, toR: maxR };
+  if (shape === 'tube') return { from: start, to: end, fromR: maxR, toR: maxR, offsets };
 
   // Cheapest enclosing taper: the line through two stations that clears all of them without
   // extrapolating past the widest measured section.
@@ -339,7 +363,7 @@ function fitLimbBone(
       }
     }
   }
-  return { from, to, fromR, toR };
+  return { from: start, to: end, fromR, toR, offsets };
 }
 
 /** Spacing the limb centreline is sampled at, in meters. */
@@ -363,12 +387,66 @@ const JOINT_BEND_MIN = 0.03;
 /** Half width of the window the section radius eases across the joint, in meters. */
 const JOINT_RADIUS_BLEND = 0.06;
 
+/** Share of the full turn a station must cover before its centroid counts as the section centre. */
+const SECTION_COVERAGE_MIN = 0.75;
+
+/** Share of the full turn a station's points cover around their centroid. */
+function ringCoverage(points: Point3[], centroid: Point3, u: Point3, v: Point3): number {
+  if (points.length < 3) return 0;
+  const angles = points
+    .map(point => {
+      const offset = sub3t(point, centroid);
+      return Math.atan2(dot3t(v, offset), dot3t(u, offset));
+    })
+    .sort((a, b) => a - b);
+  let gap = angles[0]! + 2 * Math.PI - angles[angles.length - 1]!;
+  for (let i = 1; i < angles.length; i++) gap = Math.max(gap, angles[i]! - angles[i - 1]!);
+  return 1 - gap / (2 * Math.PI);
+}
+
+/**
+ * Centre of the smallest circle around a station's points, walked toward the farthest point from
+ * a starting centre. A mesh carries more vertices where the surface bends than where it is
+ * smooth, so the share-weighted centroid sits off the middle of the flesh; this centre does not.
+ */
+function enclosingCentre(points: Point3[], start: Point3): Point3 {
+  let centre = start;
+  for (let i = 1; i <= 60; i++) {
+    let farthest = points[0]!;
+    let farthestDistance = 0;
+    for (const point of points) {
+      const distance = distance3t(point, centre);
+      if (distance > farthestDistance) {
+        farthestDistance = distance;
+        farthest = point;
+      }
+    }
+    centre = add3t(centre, scale3t(sub3t(farthest, centre), 1 / (i + 1)));
+  }
+  return centre;
+}
+
 /** Section radius a cone carries at a point along its axis. */
 function boneRadiusAt(bone: { from: Point3; to: Point3; fromR: number; toR: number }, point: Point3): number {
   const span = sub3t(bone.to, bone.from);
   const length = Math.hypot(span[0], span[1], span[2]) || 1e-6;
   const along = dot3t(sub3t(point, bone.from), span) / (length * length);
   return bone.fromR + (bone.toR - bone.fromR) * Math.min(1, Math.max(0, along));
+}
+
+/** Offset of a bone's flesh centre at a point, interpolated between its stations. */
+function boneOffsetAt(bone: Bone, point: Point3): Point3 {
+  const span = sub3t(bone.to, bone.from);
+  const lengthSq = dot3t(span, span) || 1e-9;
+  const along = Math.min(1, Math.max(0, dot3t(sub3t(point, bone.from), span) / lengthSq));
+  const last = bone.offsets.length - 1;
+  const index = along * last;
+  const i = Math.min(last - 1, Math.floor(index));
+  const share = index - i;
+  return add3t(
+    scale3t(bone.offsets[i]!, 1 - share),
+    scale3t(bone.offsets[i + 1]!, share),
+  );
 }
 
 /** Moves a point off the joint until it sits one fillet tangent back along a bone. */
@@ -383,10 +461,7 @@ function backAlong(point: Point3, axis: Point3, distance: number): Point3 {
  * taper onto the second's over a window wider than the fillet, so the sleeve narrows the way a
  * real one does instead of pinching to a waist at the joint.
  */
-function limbPath(
-  upper: { from: Point3; to: Point3; fromR: number; toR: number },
-  lower: { from: Point3; to: Point3; fromR: number; toR: number },
-): { path: Point3[]; radii: number[] } {
+function limbPath(upper: Bone, lower: Bone): { path: Point3[]; radii: number[] } {
   const axis0 = normalize3t(sub3t(upper.to, upper.from));
   const axis1 = normalize3t(sub3t(lower.to, lower.from));
   const joint = upper.to;
@@ -448,16 +523,30 @@ function limbPath(
     run(arcEnd, tip, true);
   }
 
-  // Radius: both bones' tapers, eased into one another across the joint so no ring stands out.
+  // Radius and flesh centre: both bones, eased into one another across the joint so no ring
+  // stands out and the centreline crosses over without a kink.
   const arcs: number[] = [0];
   for (let i = 1; i < path.length; i++) arcs.push(arcs[i - 1]! + distance3t(path[i - 1]!, path[i]!));
   const window = Math.max(JOINT_RADIUS_BLEND, distance3t(root, tip) * 0.12);
-  const radii = path.map((point, i) => {
+  const eased = path.map((_, i) => {
     const t = Math.min(1, Math.max(0, (arcs[i]! - jointArc + window) / (2 * window)));
-    const eased = t * t * (3 - 2 * t);
-    return boneRadiusAt(upper, point) * (1 - eased) + boneRadiusAt(lower, point) * eased;
+    return t * t * (3 - 2 * t);
   });
-  return { path, radii };
+  const radii = path.map((point, i) =>
+    boneRadiusAt(upper, point) * (1 - eased[i]!) + boneRadiusAt(lower, point) * eased[i]!);
+  // The sweep follows the flesh centre its sections were measured on, so a muscle belly carries
+  // the surface with it instead of only growing around the bone.
+  const centreline = path.map((point, i) => {
+    const offset = add3t(
+      scale3t(boneOffsetAt(upper, point), 1 - eased[i]!),
+      scale3t(boneOffsetAt(lower, point), eased[i]!),
+    );
+    const a = path[Math.max(0, i - 1)]!;
+    const b = path[Math.min(path.length - 1, i + 1)]!;
+    const tangent = normalize3t(sub3t(b, a));
+    return add3t(point, sub3t(offset, scale3t(tangent, dot3t(offset, tangent))));
+  });
+  return { path: centreline, radii };
 }
 
 /** Proxy shapes of the current body: head, neck, torso, two arms, two legs, feet. */
@@ -574,6 +663,7 @@ export function simplifiedBodyShapes(
       to: [-bone.to[0], bone.to[1], bone.to[2]] as Point3,
       fromR: bone.fromR,
       toR: bone.toR,
+      offsets: bone.offsets.map(offset => [-offset[0], offset[1], offset[2]] as Point3),
     };
 
   for (const side of [-1, 1] as LimbSide[]) {
