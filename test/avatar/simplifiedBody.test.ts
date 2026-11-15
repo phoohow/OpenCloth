@@ -71,24 +71,6 @@ describe('simplified body', () => {
     }
   });
 
-  it('follows the calf instead of the shin bone', () => {
-    for (const gender of [0, 1]) {
-      const figure = bodyLandmarks({ ...project.avatar.params, gender });
-      const chain = figure.legChain(1);
-      const leg = figure.bodyShapes().find(shape =>
-        shape.kind === 'limb' && shape.part === 'leg' && shape.side === 1);
-      if (!leg || leg.kind !== 'limb') throw new Error('leg proxy missing');
-      // The calf sits behind the shin, so the sweep leaves the bone there, and comes back to it
-      // at the ankle, where no muscle is left to follow.
-      const calf = leg.path
-        .filter(point => point[1] < (chain.mid[1] + chain.end[1]) * 0.55)
-        .map(point => lineDistance(chain.mid, chain.end, point));
-      expect(Math.max(...calf)).toBeGreaterThan(0.01);
-      const ankle = leg.path[nearestSample(leg.path, chain.end)]!;
-      expect(lineDistance(chain.mid, chain.end, ankle)).toBeLessThan(0.012);
-    }
-  });
-
   it('rounds the elbow instead of breaking it', () => {
     const arm = shapes.find(shape => shape.kind === 'limb' && shape.part === 'arm' && shape.side === 1);
     if (!arm || arm.kind !== 'limb') throw new Error('arm proxy missing');
@@ -130,6 +112,26 @@ describe('simplified body', () => {
     }
   });
 
+  it('keeps each bone straight', () => {
+    for (const part of ['arm', 'leg'] as const) {
+      const limb = shapes.find(shape => shape.kind === 'limb' && shape.part === part && shape.side === 1);
+      if (!limb || limb.kind !== 'limb') throw new Error(`${part} proxy missing`);
+      const joint = part === 'arm' ? body.armChain(1).mid : body.legChain(1).mid;
+      const jointIndex = nearestSample(limb.path, joint);
+      // Away from the joint both bones stay the straight run the proxy is cut from; only the
+      // joint eases one bone's line onto the other's.
+      for (const [start, end] of [[0, jointIndex - 6], [jointIndex + 6, limb.path.length - 1]]) {
+        const a = limb.path[start]!;
+        const b = limb.path[end]!;
+        let widest = 0;
+        for (let i = start; i <= end; i++) {
+          widest = Math.max(widest, lineDistance(a, b, limb.path[i]!));
+        }
+        expect(widest).toBeLessThan(0.004);
+      }
+    }
+  });
+
   it('reports depth relative to the proxy surface', () => {
     const torso = shapes.find(shape => shape.kind === 'torso') as SimplifiedShape & { kind: 'torso' };
     expect(simplifiedDepth(torso, [0, (torso.bottomY + torso.topY) / 2, torso.centreZ]))
@@ -140,7 +142,7 @@ describe('simplified body', () => {
   });
 });
 
-/** Distance from a point to the line through two joints. */
+/** Distance from a point to the line through two samples. */
 function lineDistance(a: readonly number[], b: readonly number[], point: readonly number[]): number {
   const span = [b[0]! - a[0]!, b[1]! - a[1]!, b[2]! - a[2]!];
   const lengthSq = span[0]! ** 2 + span[1]! ** 2 + span[2]! ** 2 || 1e-9;
