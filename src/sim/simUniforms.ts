@@ -64,9 +64,15 @@ export interface CollideBody {
   gridDims: [number, number, number];
 }
 
+/** Friction multiplier the COLLIDE pass applies to the per-particle coefficient; absent means 1. */
+function contactFrictionScale(config: SimulationConfig): number {
+  const value = config.contactFrictionScale;
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, value) : 1;
+}
+
 /**
  * COLLIDE SimParams block: 64 bytes. `triangleCount` is 0 without body collision; the friction
- * coefficient of every particle rides in its own storage buffer.
+ * coefficient of every particle rides in its own storage buffer, scaled by the config multiplier.
  */
 export function packCollideParams(
   config: SimulationConfig,
@@ -81,6 +87,7 @@ export function packCollideParams(
   data[0] = config.dt;
   u32[1] = particleCount;
   data[2] = SURFACE_OFFSET;
+  data[3] = contactFrictionScale(config);
   data[4] = floorY;
   // Global value kept for the uniform layout; COLLIDE reads the per-particle thickness buffer.
   data[5] = clothThicknessMeters(config);

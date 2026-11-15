@@ -117,8 +117,8 @@ struct SimParams {
   dt: f32,
   particleCount: u32,
   surfaceOffset: f32,
-  // Reserved: keeps the grid block 16-byte aligned.
-  _p0: f32,
+  // Multiplier on the per-particle friction coefficient; 0 slides freely.
+  contactFrictionScale: f32,
   floorY: f32,
   clothThickness: f32,
   triangleCount: u32,
@@ -269,7 +269,7 @@ fn collide(@builtin(global_invocation_id) gid: vec3<u32>) {
   // Per-particle thickness adds to the clearance kept against every collision surface.
   let clearance = params.surfaceOffset + thickness[i];
   let prev = prevPos[i].xyz;
-  let mu = friction[i];
+  let mu = friction[i] * params.contactFrictionScale;
 
   if (params.triangleCount > 0u) {
     // The body mesh is the collider: project onto the surface plus the clearance. A point inside

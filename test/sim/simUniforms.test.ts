@@ -59,4 +59,11 @@ describe('collide params', () => {
     const config = { ...createDefaultProject().scene.simulation, avatarCollision: false };
     expect(new Uint32Array(packCollideParams(config, 32, body, 0).buffer)[6]).toBe(0);
   });
+
+  it('scales the per-particle friction by the config, defaulting to full strength', () => {
+    const base = createDefaultProject().scene.simulation;
+    expect(packCollideParams(base, 32, body, 0)[3]).toBe(1);
+    expect(packCollideParams({ ...base, contactFrictionScale: 0 }, 32, body, 0)[3]).toBe(0);
+    expect(packCollideParams({ ...base, contactFrictionScale: 0.25 }, 32, body, 0)[3]).toBeCloseTo(0.25, 6);
+  });
 });

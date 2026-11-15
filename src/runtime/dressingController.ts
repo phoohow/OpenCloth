@@ -101,7 +101,7 @@ export class DressingController {
       run.frame++;
       if (run.frame >= DRESS_FRAMES) { run.stage = 'settle'; run.frame = 0; }
     } else {
-      // Zero-gravity relaxation converges the structural, shear and seam constraints.
+      // Zero-gravity, friction-free relaxation converges the structural, shear and seam constraints.
       await this.host.step(stageConfig(run.base, SETTLE_ITERATIONS), run.physics);
       run.frame++;
       if (run.frame >= RELAX_FRAMES) {

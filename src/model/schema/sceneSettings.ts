@@ -87,6 +87,11 @@ export interface SimulationConfig {
   meshSampling?: MeshSampling;
   /** Cloth thickness in cm; the minimum clearance against the body and the floor. */
   clothThicknessCm?: number;
+  /**
+   * Multiplier on each panel's contact friction against the body and the floor; absent means 1.
+   * The dressing stages drop it to 0 so the cloth slides onto the body without sticking.
+   */
+  contactFrictionScale?: number;
   /** CPU self-collision pass after each readback; absent or false skips it entirely. */
   selfCollision?: boolean;
   /** Extra separation per collision-layer step, in cm. */

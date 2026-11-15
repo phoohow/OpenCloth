@@ -1,13 +1,13 @@
 import type { SimulationConfig } from '@/model/types';
 
 /** Frames the seams spend closing from the flat layout to the sewn garment. */
-export const SEW_FRAMES = 26;
+export const SEW_FRAMES = 20;
 
 /** Frames the sewn piece spends gliding toward its pose wrapped around the body. */
-export const DRESS_FRAMES = 34;
+export const DRESS_FRAMES = 20;
 
 /** Frames of free relaxation after the piece is on the body. */
-export const RELAX_FRAMES = 12;
+export const RELAX_FRAMES = 20;
 
 /** Fraction of the remaining distance covered per dress frame. */
 export const DRESS_GLIDE = 0.16;
@@ -21,11 +21,15 @@ export const GLIDE_ITERATIONS = 6;
 /** Constraint iterations the post-dressing relaxation solves with. */
 export const SETTLE_ITERATIONS = 15;
 
-/** Simulation config for one dressing stage: gravity-free so the seams and the guided glide drive the motion. */
+/**
+ * Simulation config for one dressing stage: gravity- and friction-free so the seams and the guided
+ * glide drive the motion instead of the cloth catching on the body.
+ */
 export function stageConfig(simulation: SimulationConfig, iterations: number): SimulationConfig {
   return {
     ...simulation,
     gravity: { x: 0, y: 0, z: 0 },
+    contactFrictionScale: 0,
     dt: 1 / 60,
     constraintIterations: iterations,
     avatarCollision: true,
