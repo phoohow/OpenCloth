@@ -125,7 +125,10 @@ export class SolverHost {
     this.stepping = true;
     try {
       frameProfiler.span('sim.submit', () => simulator.step(config, fabric));
-      const { positions, normals } = await frameProfiler.spanAsync('sim.readback', () => simulator.readback());
+      const frame = await frameProfiler.spanAsync('sim.readback', () => simulator.readback());
+      // The first step of a run leaves its copy in flight for a frame; the views keep drawing.
+      if (!frame) return;
+      const { positions, normals } = frame;
       const badParticle = firstNonFinite(positions);
       // A non-finite frame makes every triangle degenerate, so the last good frame stays drawn.
       if (badParticle >= 0) {

@@ -31,14 +31,16 @@ import {
   collideBodyForMesh, createMeshColliderBuffers, refreshMeshColliderBuffers, type MeshColliderBuffers,
 } from '@/sim/meshColliderBuffers';
 import { seamProgressWrites, tearStretchedSeams } from '@/sim/seamConstraints';
+import { ReadbackSlots, type SolverFrame } from '@/sim/readbackSlots';
 
 export type { ClothSimInput } from '@/sim/simTypes';
+export type { SolverFrame } from '@/sim/readbackSlots';
 
 /**
  * GPU PBD cloth simulator running compute shaders on the viewport's GPUDevice and reading
  * positions back each frame into the merged input's live position array, which the render mesh,
  * picking and highlights share. Runtime particle pinning and CPU ray picking work against the
- * latest readback.
+ * latest readback. A copy stays unread for a frame, so the frame drawn is the previous one.
  */
 export class ClothSimulator {
   constructor(private device: GPUDevice) { }
@@ -106,9 +108,8 @@ export class ClothSimulator {
   /** Constraint count per solve batch, one-to-one with solveBGs. */
   private solveBatchCounts: number[] = [];
 
-  private readbackBuf!: GPUBuffer;
-  private readbackNormalsBuf!: GPUBuffer;
-  private readbackContactBuf!: GPUBuffer;
+  /** Copies of the frames in flight, read one frame after they were submitted. */
+  private readSlots!: ReadbackSlots;
   /** Latest CPU positions; aliases the merged input's live position array. */
   private readPositions!: Float32Array;
   private readNormals!: Float32Array;
@@ -245,15 +246,7 @@ export class ClothSimulator {
     this.installGroup('seam', input.seamConstraints);
     this.seamOpenLengths = this.group('seam').batched.batches.map(batch => batch.map(c => c.restLength));
 
-    this.readbackBuf = dev.createBuffer({
-      size: pc * 16, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
-    });
-    this.readbackNormalsBuf = dev.createBuffer({
-      size: pc * 16, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
-    });
-    this.readbackContactBuf = dev.createBuffer({
-      size: Math.max(pc * 4, 4), usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
-    });
+    this.readSlots = new ReadbackSlots(dev, pc);
     this.readPositions = input.positions;
     this.readNormals = new Float32Array(pc * 3);
     this.readContact = new Float32Array(pc);
@@ -575,9 +568,9 @@ export class ClothSimulator {
     }
 
     // Read back positions, normals and the contact move of the frame
-    encoder.copyBufferToBuffer(this.posInvMassBuf, 0, this.readbackBuf, 0, pc * 16);
-    encoder.copyBufferToBuffer(this.normalsBuf, 0, this.readbackNormalsBuf, 0, pc * 16);
-    encoder.copyBufferToBuffer(this.contactMoveBuf, 0, this.readbackContactBuf, 0, pc * 4);
+    this.readSlots.record(encoder, pc, {
+      positions: this.posInvMassBuf, normals: this.normalsBuf, contact: this.contactMoveBuf,
+    });
 
     dev.queue.submit([encoder.finish()]);
   }
@@ -653,41 +646,34 @@ export class ClothSimulator {
   }
 
   /**
-   * Reads positions and normals back to the CPU asynchronously. Buffers destroyed mid-wait by
-   * a simulator rebuild fall back to the CPU cache instead of rejecting.
+   * Reads the frame whose copy has been in flight for a full frame, so the map finds the data
+   * already written. Null while the first copy of a run is still the only one, that is, until a
+   * second step has been submitted; the caller keeps drawing what it has.
    */
-  async readback(): Promise<{ positions: Float32Array; normals: Float32Array }> {
-    const pc = this.particleCount;
-    try {
-      await frameProfiler.spanAsync('sim.map', () => Promise.all([
-        this.readbackBuf.mapAsync(GPUMapMode.READ),
-        this.readbackNormalsBuf.mapAsync(GPUMapMode.READ),
-        this.readbackContactBuf.mapAsync(GPUMapMode.READ),
-      ]));
-      const posData = new Float32Array(this.readbackBuf.getMappedRange());
-      const normData = new Float32Array(this.readbackNormalsBuf.getMappedRange());
-      const contactData = new Float32Array(this.readbackContactBuf.getMappedRange());
+  async readback(): Promise<SolverFrame | null> {
+    const index = this.readSlots.oldest();
+    return index === null ? null : this.mapSlot(index);
+  }
 
-      frameProfiler.span('sim.unpack', () => {
-        for (let i = 0; i < pc; i++) {
-          this.readPositions[i * 3] = posData[i * 4];
-          this.readPositions[i * 3 + 1] = posData[i * 4 + 1];
-          this.readPositions[i * 3 + 2] = posData[i * 4 + 2];
-          this.readNormals[i * 3] = normData[i * 4];
-          this.readNormals[i * 3 + 1] = normData[i * 4 + 1];
-          this.readNormals[i * 3 + 2] = normData[i * 4 + 2];
-          this.readContact[i] = contactData[i];
-        }
-        this.readbackBuf.unmap();
-        this.readbackNormalsBuf.unmap();
-        this.readbackContactBuf.unmap();
-      });
+  /**
+   * Reads the newest copied frame, waiting for its copy and dropping older unread ones. For
+   * callers that drive the solver themselves and need the result of the step they just made.
+   */
+  async readbackLatest(): Promise<SolverFrame> {
+    const index = this.readSlots.newest();
+    if (index === null) return { positions: this.readPositions, normals: this.readNormals };
+    return this.mapSlot(index);
+  }
+
+  /** Reads one slot into the CPU arrays and settles the seams the frame moved. */
+  private async mapSlot(index: number): Promise<SolverFrame> {
+    try {
+      await this.readSlots.read(index, this.readPositions, this.readNormals, this.readContact);
       frameProfiler.span('sim.seams', () => this.resolveSeamTears());
       this.positionsVersion++;
     } catch {
-      // Destroyed readback buffers: the caller's generation is gone; serve the last cache.
+      // A rebuild destroyed the buffers mid-wait; what the CPU cache holds stands in for the frame.
     }
-
     return { positions: this.readPositions, normals: this.readNormals };
   }
 
@@ -713,6 +699,8 @@ export class ClothSimulator {
     this.device.queue.writeBuffer(this.velocityBuf, 0, new Float32Array(pc * 4));
     this.device.queue.writeBuffer(this.contactMoveBuf, 0, this.contactZeros);
     this.readContact.fill(0);
+    // Copies of the layout being abandoned must not be drawn after the reset.
+    this.readSlots.clear();
     this.cachePositions(restored);
     this.time = 0;
     this.setSeamProgress(0);
@@ -760,6 +748,8 @@ export class ClothSimulator {
     }
     // The rebased layout replaces the previous merged input, so the cache follows its array.
     this.readPositions = input.positions;
+    // Copies of the layout just replaced must not be unpacked into the new one.
+    this.readSlots.clear();
     this.cachePositions(xyz);
     this.time = 0;
   }
@@ -956,11 +946,11 @@ export class ClothSimulator {
       this.meshBuffers.triangle, this.meshBuffers.cellStart, this.meshBuffers.cellTriangles,
       this.integrateParamsBuf, this.collideParamsBuf, this.updateParamsBuf, this.normalsParamsBuf,
       this.pinIndicesBuf, this.pinInvMassBuf, this.pinParamsBuf,
-      this.readbackBuf, this.readbackNormalsBuf, this.readbackContactBuf,
     ];
     for (const group of this.groups.values()) buffers.push(...group.batched.buffers, ...group.paramBufs);
     this.groups.clear();
     for (const buffer of buffers) buffer?.destroy();
+    this.readSlots.destroy();
     this.selfCollision?.destroy();
     this.selfCollision = null;
   }

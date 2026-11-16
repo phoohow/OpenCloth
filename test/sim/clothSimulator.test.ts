@@ -9,6 +9,7 @@ import { FABRIC_PHYSICS_PRESETS, createDefaultProject } from '@/model/defaults';
 const globals = globalThis as unknown as Record<string, unknown>;
 globals.GPUBufferUsage ??= { STORAGE: 1, COPY_DST: 2, COPY_SRC: 4, UNIFORM: 8, MAP_READ: 16 };
 globals.GPUShaderStage ??= { COMPUTE: 4 };
+globals.GPUMapMode ??= { READ: 1 };
 
 /** Device stand-in: every buffer records its own destroy, other resources are inert. */
 function fakeDevice(): { device: GPUDevice; submits: () => number; destroyedBuffers: () => number } {
@@ -70,6 +71,55 @@ function makeInput(options: { creaseEdges?: number[]; seamConstraints?: Constrai
     particleCount: 4,
     triangleCount: 2,
   };
+}
+
+/**
+ * Device stand-in that stamps every copied frame with the ordinal of the submit it rode in on,
+ * and hands that number back through the mapped range. A test can then tell which frame a
+ * readback returned instead of only that it returned something.
+ */
+function taggingDevice(): { device: GPUDevice; submits: () => number } {
+  let submitted = 0;
+  const makeBuffer = (options: { size: number }) => {
+    const bytes = new Float32Array(Math.max(4, options.size) / 4);
+    let tag = -1;
+    return {
+      destroy: () => {},
+      mapAsync: async () => { bytes.fill(tag); },
+      getMappedRange: () => bytes.buffer,
+      unmap: () => {},
+      setTag: (value: number) => { tag = value; },
+    };
+  };
+  const resource = {};
+  const computePass = {
+    setPipeline: () => {},
+    setBindGroup: () => {},
+    dispatchWorkgroups: () => {},
+    end: () => {},
+  };
+  const device = {
+    createBuffer: makeBuffer,
+    createShaderModule: () => resource,
+    createBindGroupLayout: () => resource,
+    createPipelineLayout: () => resource,
+    createComputePipeline: () => resource,
+    createBindGroup: () => resource,
+    createCommandEncoder: () => ({
+      beginComputePass: () => computePass,
+      // Every copy lands in the frame of the submit that carries it.
+      copyBufferToBuffer: (_src: unknown, _srcOffset: number, dst: { setTag: (v: number) => void }) => {
+        if (dst.setTag) dst.setTag(submitted);
+      },
+      finish: () => resource,
+    }),
+    queue: {
+      writeBuffer: () => {},
+      submit: () => { submitted++; },
+      onSubmittedWorkDone: async () => {},
+    },
+  } as unknown as GPUDevice;
+  return { device, submits: () => submitted };
 }
 
 /** Simulator running on the fake device, with a count of the work it submitted. */
@@ -272,6 +322,49 @@ describe('live seam constraint sets', () => {
   });
 });
 
+describe('readback pipeline', () => {
+  const config = createDefaultProject().scene.simulation;
+  const fabric = FABRIC_PHYSICS_PRESETS.cotton;
+
+  it('draws the frame of the previous step and leaves the newest copy in flight', async () => {
+    const device = taggingDevice();
+    const sim = new ClothSimulator(device.device);
+    await sim.setup(makeInput(), null, config);
+
+    sim.step(config, fabric);
+    const firstTag = device.submits() - 1;
+    // The only copy of the run has had no frame to settle in; the caller keeps drawing.
+    expect(await sim.readback()).toBeNull();
+
+    sim.step(config, fabric);
+    const secondTag = device.submits() - 1;
+    expect((await sim.readback())?.positions[0]).toBe(firstTag);
+
+    sim.step(config, fabric);
+    expect((await sim.readback())?.positions[0]).toBe(secondTag);
+  });
+
+  it('serves the frame just stepped to a caller that drives the solver itself', async () => {
+    const device = taggingDevice();
+    const sim = new ClothSimulator(device.device);
+    await sim.setup(makeInput(), null, config);
+
+    sim.step(config, fabric);
+    expect((await sim.readbackLatest()).positions[0]).toBe(device.submits() - 1);
+  });
+
+  it('drops the copies of the layout a reset abandoned', async () => {
+    const device = taggingDevice();
+    const sim = new ClothSimulator(device.device);
+    await sim.setup(makeInput(), null, config);
+
+    sim.step(config, fabric);
+    sim.step(config, fabric);
+    sim.reset(makeInput().positions);
+    expect(await sim.readback()).toBeNull();
+  });
+});
+
 describe('simulator teardown', () => {  it('destroy releases every buffer and stops the solver', async () => {
     const { device, destroyedBuffers } = fakeDevice();
     const sim = new ClothSimulator(device);
@@ -282,7 +375,7 @@ describe('simulator teardown', () => {  it('destroy releases every buffer and st
 
     // Destroyed simulators step nothing and serve the CPU cache.
     sim.step(createDefaultProject().scene.simulation, FABRIC_PHYSICS_PRESETS.cotton);
-    const { positions } = await sim.readback();
+    const { positions } = await sim.readbackLatest();
     expect(positions.length).toBe(makeInput().particleCount * 3);
     sim.destroy();
     expect(destroyedBuffers()).toBe(released);

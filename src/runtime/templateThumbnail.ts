@@ -103,10 +103,10 @@ async function settle(template: GarmentTemplate, device: GPUDevice): Promise<Set
     // self-collision keeps up, then once more for the frame that becomes the thumbnail.
     for (let frame = frames; frame < SETTLE_FRAMES; frame++) {
       simulator.step(project.scene.simulation, FALLBACK_PHYSICS);
-      if ((frame + 1) % READBACK_STRIDE === 0) await simulator.readback();
+      if ((frame + 1) % READBACK_STRIDE === 0) await simulator.readbackLatest();
     }
 
-    const { positions } = await simulator.readback();
+    const { positions } = await simulator.readbackLatest();
     const resting = new Float32Array(input.particleCount * 3);
     resting.set(positions.subarray(0, resting.length));
     if (!hasFinitePositions(resting)) return null;
@@ -132,7 +132,7 @@ function dressingController(
     ensureSimulator: async () => undefined,
     step: async (config: SimulationConfig, fabric) => {
       simulator.step(config, fabric);
-      positions = (await simulator.readback()).positions;
+      positions = (await simulator.readbackLatest()).positions;
     },
     resetPositions: () => {
       simulator.reset(initial);
