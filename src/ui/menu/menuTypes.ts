@@ -29,6 +29,8 @@ export interface TopMenu {
   /** Alt mnemonic letter. */
   mnemonic: string;
   entries: MenuEntry[];
+  /** Clicking the label runs this on the spot; such a menu opens no dropdown. */
+  run?: () => void;
 }
 
 /** Separator row between menu groups. */

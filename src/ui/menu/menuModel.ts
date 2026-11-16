@@ -305,7 +305,8 @@ export function buildMenus(state: MenuState, actions: MenuActions): TopMenu[] {
       id: 'production',
       label: '生产',
       mnemonic: 'M',
-      entries: productionEntries(actions),
+      entries: [],
+      run: () => actions.openProduction(),
     },
     {
       id: 'help',
@@ -315,16 +316,10 @@ export function buildMenus(state: MenuState, actions: MenuActions): TopMenu[] {
         leaf('shortcuts', '快捷键总览', actions.showShortcuts, { accel: comboOf('shortcuts') }),
         leaf('about', '关于 OpenCloth', actions.showAbout),
         menuSep(),
-        group('debug', '调试', [
-          leaf('perfPanel', '一帧耗时', actions.togglePerfPanel, { checked: state.showPerfPanel }),
-          leaf('debugScreenshot', '导出截图…', actions.openDebugScreenshot),
-        ]),
+        leaf('perfPanel', '调试：性能监测', actions.togglePerfPanel, { checked: state.showPerfPanel }),
+        leaf('debug3d', '调试：3D截帧', () => actions.openDebugScreenshot('3d')),
+        leaf('debug2d', '调试：2D截帧', () => actions.openDebugScreenshot('2d')),
       ],
     },
   ];
-}
-
-/** Rows of the 生产 menu: one entry that opens the preview window, whose rail holds every output. */
-function productionEntries(actions: MenuActions): MenuEntry[] {
-  return [leaf('productionPreview', '生产输出', () => actions.openProduction())];
 }

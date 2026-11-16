@@ -430,7 +430,7 @@ function MenuSheet({ actions, onClose }: { actions: MenuActions; onClose: () => 
         <SheetButton label="动画 WebM" onClick={actions.exportAnimation} />
       </SheetGroup>
       <SheetGroup title="帮助">
-        <SheetButton label="调试截图" onClick={() => { actions.openDebugScreenshot(); onClose(); }} />
+        <SheetButton label="调试截图" onClick={() => { actions.openDebugScreenshot('3d'); onClose(); }} />
         <SheetButton label="关于" onClick={() => { actions.showAbout(); onClose(); }} />
       </SheetGroup>
       <SheetNote>改版与工程管理请用电脑端</SheetNote>

@@ -137,7 +137,11 @@ function AboutDialog() {
 /** Debug screenshot: pick the pane and the subject, then export one PNG. */
 function ScreenshotDialog({ actions }: { actions: MenuActions }) {
   const closeDialog = useMenuStore(s => s.closeDialog);
-  const [request, setRequest] = useState<ScreenshotRequest>({ viewport: '3d', content: 'full' });
+  const dialogParam = useMenuStore(s => s.dialogParam);
+  const [request, setRequest] = useState<ScreenshotRequest>({
+    viewport: dialogParam === '2d' ? '2d' : '3d',
+    content: 'full',
+  });
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 

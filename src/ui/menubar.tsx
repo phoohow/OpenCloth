@@ -4,7 +4,7 @@ import { buildMenus, type MenuState } from '@/ui/menu/menuModel';
 import type { MenuActions } from '@/ui/menu/actions';
 import type { MenuEntry, TopMenu } from '@/ui/menu/menuTypes';
 import {
-  CLOSED_NAV, activeLeaf, menuByMnemonic, reduceMenuNav, type MenuNavState, type MenuNavStep,
+  CLOSED_NAV, activeLeaf, menuByMnemonic, opensDropdown, reduceMenuNav, type MenuNavState, type MenuNavStep,
 } from '@/ui/menu/nav';
 import { MenuDialogs } from '@/ui/menu/menuDialogs';
 import { formatClockTime } from '@/ui/timeFormat';
@@ -121,12 +121,18 @@ export function Menubar({ actions }: { actions: MenuActions }) {
       if (index === null) return;
       e.preventDefault();
       e.stopPropagation();
+      const menu = menus[index];
+      if (!opensDropdown(menu)) {
+        menu.run?.();
+        closeMenus();
+        return;
+      }
       const alreadyOpen = nav.open === index && nav.sub === null;
       setNav(alreadyOpen ? CLOSED_NAV : reduceMenuNav(CLOSED_NAV, menus, { type: 'openMenu', index }));
     };
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [menus, nav.open, nav.sub, setNav]);
+  }, [menus, nav.open, nav.sub, setNav, closeMenus]);
 
   const openAt = (index: number) => setNav(reduceMenuNav(CLOSED_NAV, menus, { type: 'openMenu', index }));
 
@@ -136,17 +142,25 @@ export function Menubar({ actions }: { actions: MenuActions }) {
         <div style={styles.logo}>OpenCloth</div>
         {menus.map((menu, index) => {
           const open = nav.open === index;
+          const direct = !opensDropdown(menu);
           return (
             <div
               key={menu.id}
-              style={{ ...styles.menu, ...(open ? styles.menuOpen : null) }}
-              onPointerEnter={() => { if (nav.open !== null && !open) openAt(index); }}
-              onClick={() => (open ? closeMenus() : openAt(index))}
+              style={{ ...styles.menu, ...(open && !direct ? styles.menuOpen : null) }}
+              onPointerEnter={() => { if (nav.open !== null && !open && !direct) openAt(index); }}
+              onClick={() => {
+                if (direct) {
+                  menu.run?.();
+                  closeMenus();
+                  return;
+                }
+                if (open) closeMenus(); else openAt(index);
+              }}
             >
-              <span style={{ ...styles.menuLabel, ...(open ? styles.menuLabelActive : null) }} title={`Alt+${menu.mnemonic}`}>
+              <span style={{ ...styles.menuLabel, ...(open && !direct ? styles.menuLabelActive : null) }} title={`Alt+${menu.mnemonic}`}>
                 {menu.label}
               </span>
-              {open && (
+              {open && !direct && (
                 <div style={styles.dropdown} onClick={e => e.stopPropagation()}>
                   {renderEntries(menu.entries, nav, 0, setNav, closeMenus, menus)}
                 </div>

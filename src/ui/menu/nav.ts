@@ -60,6 +60,11 @@ export function moveFocus(entries: MenuEntry[], from: number, delta: 1 | -1): nu
   return from;
 }
 
+/** Whether the menu bar shows a dropdown for this menu; action menus run on the spot instead. */
+export function opensDropdown(menu: TopMenu): boolean {
+  return menu.entries.length > 0;
+}
+
 /** Applies one navigation step; opening a submenu and running an item stay with the caller. */
 export function reduceMenuNav(state: MenuNavState, menus: TopMenu[], step: MenuNavStep): MenuNavState {
   switch (step.type) {
@@ -72,8 +77,14 @@ export function reduceMenuNav(state: MenuNavState, menus: TopMenu[], step: MenuN
       return CLOSED_NAV;
     case 'cycleMenu': {
       if (state.open === null || menus.length === 0) return state;
-      const index = (((state.open + step.delta) % menus.length) + menus.length) % menus.length;
-      return { open: index, sub: null, active: firstNavigable(menus[index].entries) };
+      // Action menus have no rows to land on, so step past them.
+      for (let hops = 1; hops <= menus.length; hops++) {
+        const index = (((state.open + step.delta * hops) % menus.length) + menus.length) % menus.length;
+        if (opensDropdown(menus[index])) {
+          return { open: index, sub: null, active: firstNavigable(menus[index].entries) };
+        }
+      }
+      return state;
     }
     case 'step': {
       if (state.open === null) return state;
