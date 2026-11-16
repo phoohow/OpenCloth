@@ -14,7 +14,7 @@ import { BomTable } from '@/ui/menu/bomTable';
 import { OutputRail } from '@/ui/menu/outputRail';
 import {
   MARKER_ANGLE_MODES, PRODUCTION_ITEMS, markerAngles, productionItem,
-  type MarkerAngleMode, type ProductionKind,
+  type MarkerAngleMode, type ProductionOutputKind,
 } from '@/ui/menu/production';
 
 /** Points per centimetre at 1:1, used to turn the layout scale into a 1:N ratio. */
@@ -42,10 +42,10 @@ interface ProductionPreview {
 const EMPTY_PREVIEW: ProductionPreview = { svg: null, pdf: null, stats: [], problem: null };
 
 /** Options, live preview and download button for every production output. */
-export function ProductionDialog({ initialKind }: { initialKind: ProductionKind | null }) {
+export function ProductionDialog({ initialKind }: { initialKind: ProductionOutputKind | null }) {
   const closeDialog = useMenuStore(s => s.closeDialog);
   const project = useProjectStore(s => s.project);
-  const [kind, setKind] = useState<ProductionKind>(initialKind ?? 'exportMarker');
+  const [kind, setKind] = useState<ProductionOutputKind>(initialKind ?? 'exportMarker');
 
   const [withAllowance, setWithAllowance] = useState(true);
   const [fabricWidth, setFabricWidth] = useState('150');
@@ -334,7 +334,7 @@ export function ProductionDialog({ initialKind }: { initialKind: ProductionKind 
         <OutputRail
           items={PRODUCTION_ITEMS.map(entry => ({ key: entry.kind, label: entry.label }))}
           active={kind}
-          onSelect={key => setKind(key as ProductionKind)}
+          onSelect={key => setKind(key as ProductionOutputKind)}
         />
         <section style={styles.previewPane}>
           <div style={styles.canvas}>

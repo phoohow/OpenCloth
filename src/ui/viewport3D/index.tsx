@@ -106,7 +106,7 @@ export function Viewport3D({ onEngineReady }: Viewport3DProps) {
       engineRef.current = engine;
       viewport.resize(Math.max(1, container.clientWidth), Math.max(1, container.clientHeight));
       viewport.applyProject(initial);
-      await viewport.applyEnvironment(initial);
+      await viewport.applyLighting(initial);
 
       await engine.buildFromProject(initial);
       await engine.initSimulator(initial);

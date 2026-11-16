@@ -173,9 +173,9 @@ export class SolverHost {
     this.live?.setTimeStep(dt);
   }
 
-  /** Pushes the per-particle clearance of the construction layers. */
-  setLayerThickness(values: Float32Array): void {
-    this.live?.setParticleThickness(values);
+  /** Pushes each particle's collision clearance and layer the CPU passes read. */
+  setCollisionFields(thickness: Float32Array, layers: Uint8Array): void {
+    this.live?.setCollisionFields(thickness, layers);
   }
 
   /** Pushes each panel's material physics; false when the solver has to be rebuilt instead. */

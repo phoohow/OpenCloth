@@ -8,6 +8,7 @@ import type { Project } from '@/model/types';
 import type { Renderer } from '@/render/renderer';
 import type { WorldPorts } from '@/render/world';
 import { GarmentEngine } from '@/runtime/garmentEngine';
+import type { ChangeSet } from '@/runtime/change';
 import { DomainBindings } from '@/runtime/domainBindings';
 import { ExportService, type ExportOptions } from '@/runtime/exportService';
 import { PickingService, type PickResult } from '@/runtime/picking';
@@ -78,9 +79,9 @@ export class Viewport {
     this.prefs = prefs;
   }
 
-  /** Applies the project's environment image and lights as one scene update. */
-  applyEnvironment(project: Project): Promise<void> {
-    return this.engine.applyEnvironment(project);
+  /** Applies the project's environment image and the lights the change touched. */
+  applyLighting(project: Project, change?: ChangeSet): Promise<void> {
+    return this.engine.applyLighting(project, change);
   }
 
   /** Renders one frame of the last applied project. */

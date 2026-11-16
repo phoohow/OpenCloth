@@ -1,16 +1,16 @@
 import type { Project, Seam, SeamType } from '@/model/types';
-import { SEAM_TYPES, SEAM_TYPE_LABELS } from '@/model';
-import { seamJoint, type SeamJointEnd } from '@/pattern/seam';
-import { seamNumber } from '@/pattern/seam';
+import { SEAM_TYPES, SEAM_TYPE_LABELS, parseSceneRef } from '@/model';
+import { seamJoint, seamNumber, type SeamJointEnd } from '@/pattern/seam';
 import { patchValue } from '@/ui/sceneCommands';
-import { seamObjectId } from '@/model';
 import { seamPanelNames } from '@/ui/sceneTree';
 import {
   CheckRow, ColorRow, Hint, Row, Section, SelectRow, SliderRow,
 } from '@/ui/widgets/propertyRows';
 
 export function SeamData({ project, nodeId }: { project: Project; nodeId: string }) {
-  const seamId = seamObjectId(nodeId);
+  const nodeRef = parseSceneRef(nodeId);
+  if (nodeRef.kind !== 'seam') return <Hint>缝纫线已删除。</Hint>;
+  const seamId = nodeRef.id;
   const seam = project.pattern.seams[seamId];
   if (!seam) return <Hint>缝纫线已删除。</Hint>;
   const [nameA, nameB] = seamPanelNames(project, seam);

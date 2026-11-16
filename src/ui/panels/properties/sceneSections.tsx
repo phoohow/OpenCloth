@@ -16,12 +16,14 @@ import {
 import { Vec3Field } from '@/ui/widgets/numberField';
 import { CAMERA_PROJECTIONS } from '@/ui/optionTables';
 import { styles } from '@/ui/panels/properties/styles';
-import { lightObjectId, referenceObjectId } from '@/model';
+import { parseSceneRef } from '@/model';
 
 export function ReferenceData({ project, nodeId, engineRef }: {
   project: Project; nodeId: string; engineRef: EngineRef;
 }) {
-  const refId = referenceObjectId(nodeId);
+  const nodeRef = parseSceneRef(nodeId);
+  if (nodeRef.kind !== 'reference') return <Hint>参考物体已删除。</Hint>;
+  const refId = nodeRef.id;
   const ref = (project.scene.referenceObjects ?? []).find(r => r.id === refId);
   if (!ref) return <Hint>参考物体已删除。</Hint>;
   return (
@@ -46,7 +48,9 @@ const INTENSITY_RANGE: Record<LightType, { max: number; step: number }> = {
 
 /** Light record addressed by an outliner row id. */
 function lightOf(project: Project, nodeId: string): SceneLight | null {
-  return normalizeLights(project.scene.lights).find(l => l.id === lightObjectId(nodeId)) ?? null;
+  const nodeRef = parseSceneRef(nodeId);
+  if (nodeRef.kind !== 'light') return null;
+  return normalizeLights(project.scene.lights).find(l => l.id === nodeRef.id) ?? null;
 }
 
 /** Direction or position and aim of one light; the 变换 tab shows it. */

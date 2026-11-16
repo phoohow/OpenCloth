@@ -13,12 +13,32 @@ export function avatarBodySignature(avatar: Avatar): string {
 }
 
 /** panelId → geometry signature across the whole pattern. */
+const geometryCache = new WeakMap<Project, Map<string, string>>();
+
+/**
+ * Signature map for one project revision. A revision object is immutable, so a cached map stays
+ * valid while the revision is reachable: consecutive edits only pay for the new one.
+ */
 export function geometrySignatures(project: Project): Map<string, string> {
+  const cached = geometryCache.get(project);
+  if (cached) return cached;
   const map = new Map<string, string>();
   for (const panelId of Object.keys(project.pattern.panels)) {
     map.set(panelId, panelGeometrySignature(project.pattern, project.scene.simulation, panelId));
   }
+  geometryCache.set(project, map);
   return map;
+}
+
+/** Panels whose geometry differs between two revisions, and the ones that disappeared. */
+export function changedPanels(prev: Project, next: Project): { changed: string[]; removed: string[] } {
+  const before = geometrySignatures(prev);
+  const after = geometrySignatures(next);
+  const changed: string[] = [];
+  for (const [panelId, signature] of after) {
+    if (before.get(panelId) !== signature) changed.push(panelId);
+  }
+  return { changed, removed: [...before.keys()].filter(panelId => !after.has(panelId)) };
 }
 
 /** Identity of the merged particle/triangle/seam layout a live solver was built for. */

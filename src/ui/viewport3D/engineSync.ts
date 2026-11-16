@@ -221,7 +221,8 @@ export class EngineSync {
 
   /** Applies one project revision to the runtime, touching only the concerns it changed. */
   private applyChange(project: Project, change: ChangeSet): void {
-    if (change.has('cloth.geometry') || change.has('cloth.constraints')) {
+    // The body and the seam pairs are part of the merged cloth input, so both rebuild it.
+    if (change.has('cloth.geometry') || change.has('cloth.constraints') || change.has('avatar.body')) {
       // The committed pattern supersedes any drag preview still queued.
       this.previewQueued = false;
       this.previewApplied = false;
@@ -231,7 +232,10 @@ export class EngineSync {
     if (change.has('scene.simulation')) this.engine.applyTimeStep(project);
     if (change.has('scene.camera')) this.engine.setCameraAnimation(project.scene.cameraAnimation);
     if (change.has('avatar.look')) this.engine.applyAvatarDisplay(project.avatar.display);
-    if (change.has('scene.environment') || change.has('scene.light')) void this.viewport.applyEnvironment(project);
+    if (change.has('avatar.transform')) this.engine.applyAvatarTransform(project.avatar);
+    if (change.has('scene.environment') || change.has('scene.light')) {
+      void this.viewport.applyLighting(project, change);
+    }
     if (change.has('scene.references')) {
       void this.engine.reconcileReferences(project).then(() => {
         if (!this.cancelled) useUIStore.getState().bumpRefObjects();
@@ -249,7 +253,7 @@ export class EngineSync {
       this.engine.applyAvatarAppearance(project.avatar.appearance);
       this.engine.applyAvatarSoftness(project);
     }
-    if (change.has('cloth.layer')) this.engine.applyLayerThickness(project);
+    if (change.has('cloth.layer')) this.engine.applyConstructionLayers(project);
     if (change.has('cloth.visibility') || change.has('cloth.geometry') || change.has('cloth.fabric')) {
       this.engine.applyPanelVisibility(project);
     }

@@ -1,19 +1,15 @@
 import type { Panel, Pattern, Project, SceneLight, Seam } from '@/model/types';
-import { PATTERN_ELEMENT_KINDS } from '@/model';
-import { elementNodeId } from '@/model';
+import {
+  AVATAR_NODE_ID, CAMERA_NODE_ID, EDGE_SEMANTIC_LABELS, ENVIRONMENT_NODE_ID, GARMENT_COLLECTION_ID,
+  LIGHT_COLLECTION_ID, LIGHT_TYPE_LABELS, PATTERN_ELEMENT_KINDS, PRINT_COLLECTION_ID,
+  REFERENCE_COLLECTION_ID, SCENE_ROOT_ID, SEAM_COLLECTION_ID, SEAM_TYPE_LABELS,
+  TOPSTITCH_COLLECTION_ID, TRIM_COLLECTION_ID, TRIM_KIND_LABELS, elementNodeId, lightNodeId,
+  matchAvatarPreset, normalizeLights, referenceNodeId, seamNodeId,
+} from '@/model';
 import { seamNumbers } from '@/pattern/seam';
-import {
-  EDGE_SEMANTIC_LABELS, LIGHT_TYPE_LABELS, SEAM_TYPE_LABELS,
-  TRIM_KIND_LABELS, matchAvatarPreset, normalizeLights,
-} from '@/model';
-import {
-  AVATAR_NODE_ID, CAMERA_NODE_ID, ENVIRONMENT_NODE_ID, GARMENT_COLLECTION_ID, LIGHT_COLLECTION_ID,
-  PRINT_COLLECTION_ID, REFERENCE_COLLECTION_ID, SCENE_ROOT_ID, SEAM_COLLECTION_ID,
-  TOPSTITCH_COLLECTION_ID, TRIM_COLLECTION_ID, lightNodeId, referenceNodeId, seamNodeId,
-} from '@/model';
 import type { IconName } from '@/ui/icons';
 
-/** Row categories shown in the outliner; element kinds come from 2D drafting picks. */
+/** Row categories shown in the outliner; `collection` is a group, only some carry a flag. */
 export type SceneNodeKind =
   | 'scene' | 'collection' | 'panel' | 'avatar' | 'reference'
   | 'light' | 'environment' | 'camera' | 'seam'
@@ -91,28 +87,21 @@ export function elementLabel(project: Project, kind: SceneNodeKind, id: string):
   }
 }
 
-/** Whether every child of a collection row is visible. */
-export function isCollectionVisible(node: SceneNode): boolean {
-  return node.children.length > 0 && node.children.every(c => c.visible);
-}
-
-/** Depth-first lookup of an outliner row by id. */
-export function findSceneNode(node: SceneNode, id: string): SceneNode | null {
-  if (node.id === id) return node;
-  for (const child of node.children) {
-    const hit = findSceneNode(child, id);
-    if (hit) return hit;
-  }
-  return null;
+/** Drafting records grouped by the panel they belong to, built once per revision. */
+interface ElementBuckets {
+  notchesByEdge: Map<string, SceneNode[]>;
+  annotationsByPanel: Map<string, SceneNode[]>;
+  measurementsByPanel: Map<string, SceneNode[]>;
 }
 
 /** Drafting elements owned by a panel, as outliner rows. */
-export function patternElementChildren(project: Project, panelId: string): SceneNode[] {
+export function patternElementChildren(
+  project: Project, panelId: string, buckets = elementBuckets(project),
+): SceneNode[] {
   const panel = project.pattern.panels[panelId];
   if (!panel) return [];
   const pattern = project.pattern;
   const rows: SceneNode[] = [];
-  const outlineEdges = new Set(panel.outlineEdgeIds);
   for (const edgeId of panel.outlineEdgeIds) {
     if (!pattern.edges[edgeId]) continue;
     rows.push({
@@ -150,28 +139,47 @@ export function patternElementChildren(project: Project, panelId: string): Scene
       icon: 'dart', hideable: false, visible: true, children: [],
     });
   }
+  for (const edgeId of panel.outlineEdgeIds) {
+    rows.push(...buckets.notchesByEdge.get(edgeId) ?? []);
+  }
+  rows.push(...buckets.annotationsByPanel.get(panelId) ?? []);
+  rows.push(...buckets.measurementsByPanel.get(panelId) ?? []);
+  return rows;
+}
+
+/** Groups the pattern's drafting records by the panel row that lists them. */
+function elementBuckets(project: Project): ElementBuckets {
+  const pattern = project.pattern;
+  const notchesByEdge = new Map<string, SceneNode[]>();
   for (const notch of Object.values(pattern.notches ?? {})) {
-    if (!outlineEdges.has(notch.edgeId)) continue;
-    rows.push({
+    const row: SceneNode = {
       id: elementNodeId('notch', notch.id), kind: 'notch', label: elementLabel(project, 'notch', notch.id),
       icon: 'add-point', hideable: false, visible: true, children: [],
-    });
+    };
+    const list = notchesByEdge.get(notch.edgeId);
+    if (list) list.push(row);
+    else notchesByEdge.set(notch.edgeId, [row]);
   }
-  for (const note of Object.values(pattern.annotations ?? {})) {
-    if (note.panelId !== panelId) continue;
-    rows.push({
-      id: elementNodeId('annotation', note.id), kind: 'annotation', label: elementLabel(project, 'annotation', note.id),
-      icon: 'panel', hideable: false, visible: true, children: [],
-    });
-  }
-  for (const measurement of Object.values(pattern.measurements ?? {})) {
-    if (measurement.panelId !== panelId) continue;
-    rows.push({
-      id: elementNodeId('measurement', measurement.id), kind: 'measurement', label: elementLabel(project, 'measurement', measurement.id),
-      icon: 'internal-line', hideable: false, visible: true, children: [],
-    });
-  }
-  return rows;
+  const byPanel = (
+    records: Array<{ id: string; panelId: string }>, kind: 'annotation' | 'measurement', icon: IconName,
+  ): Map<string, SceneNode[]> => {
+    const map = new Map<string, SceneNode[]>();
+    for (const record of records) {
+      const row: SceneNode = {
+        id: elementNodeId(kind, record.id), kind, label: elementLabel(project, kind, record.id),
+        icon, hideable: false, visible: true, children: [],
+      };
+      const list = map.get(record.panelId);
+      if (list) list.push(row);
+      else map.set(record.panelId, [row]);
+    }
+    return map;
+  };
+  return {
+    notchesByEdge,
+    annotationsByPanel: byPanel(Object.values(pattern.annotations ?? {}), 'annotation', 'panel'),
+    measurementsByPanel: byPanel(Object.values(pattern.measurements ?? {}), 'measurement', 'internal-line'),
+  };
 }
 
 /** One top-level collection of production objects; each row notes the panel it sits on. */
@@ -205,12 +213,47 @@ function panelPointIds(pattern: Pattern, panel: Panel): string[] {
   return out;
 }
 
+/** The outliner hierarchy plus a lookup table for every row it holds. */
+export interface SceneIndex {
+  root: SceneNode;
+  byId: ReadonlyMap<string, SceneNode>;
+}
+
+const indexCache = new WeakMap<Project, SceneIndex>();
+
 /** Builds the outliner hierarchy from the project's scene contents. */
 export function buildSceneTree(project: Project): SceneNode {
+  return buildSceneIndex(project).root;
+}
+
+/**
+ * Hierarchy and row lookup for one revision. A revision object is immutable, so the index is
+ * cached while it is reachable: the outliner and the properties panel share one build.
+ */
+export function buildSceneIndex(project: Project): SceneIndex {
+  const cached = indexCache.get(project);
+  if (cached) return cached;
+  const root = buildTree(project);
+  const byId = new Map<string, SceneNode>();
+  collectRows(root, byId);
+  const index = { root, byId };
+  indexCache.set(project, index);
+  return index;
+}
+
+/** Every row of the hierarchy, keyed by id. */
+function collectRows(node: SceneNode, out: Map<string, SceneNode>): void {
+  out.set(node.id, node);
+  for (const child of node.children) collectRows(child, out);
+}
+
+/** Builds the outliner hierarchy without caching. */
+function buildTree(project: Project): SceneNode {
   const panels = Object.values(project.pattern.panels);
   const refs = project.scene.referenceObjects ?? [];
   const lights = normalizeLights(project.scene.lights);
   const seams = Object.values(project.pattern.seams) as Seam[];
+  const buckets = elementBuckets(project);
 
   const garment: SceneNode = {
     id: GARMENT_COLLECTION_ID,
@@ -226,7 +269,7 @@ export function buildSceneTree(project: Project): SceneNode {
       icon: 'panel',
       hideable: true,
       visible: p.visible,
-      children: patternElementChildren(project, p.id),
+      children: patternElementChildren(project, p.id, buckets),
     })),
   };
 

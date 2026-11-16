@@ -1,6 +1,6 @@
-import type { Project, SimulationConfig, FabricPhysics, ObjectTransform, Vec3, CameraProjection, CameraAnimationConfig, ReferenceObjectRef, EditPreviewTier, SkinAppearance } from '@/model/types';
+import type { Project, SimulationConfig, FabricPhysics, ObjectTransform, Vec3, CameraProjection, CameraAnimationConfig, ReferenceObjectRef, EditPreviewTier, SkinAppearance, SceneLight } from '@/model/types';
 import { fabricForPanel } from '@/model';
-import { particleThicknessMeters } from '@/model';
+import { particleCollisionLayers, particleThicknessMeters } from '@/model';
 import type { ParticlePickHit } from '@/sim';
 import type { Bounds } from '@/render/common';
 import type { DevicePort } from '@/render/common';
@@ -20,6 +20,7 @@ import type { ClothSurfacePoint, MeasureReading } from '@/runtime/interactionVie
 export type { ClothSurfacePoint, MeasureReading } from '@/runtime/interactionView';
 export type { CameraState } from '@/runtime/cameraRig';
 import { EnvironmentStage } from '@/runtime/environmentStage';
+import type { ChangeSet } from '@/runtime/change';
 import { ReferenceStage, type ReferenceObject } from '@/runtime/referenceStage';
 import { OverlayKit } from '@/runtime/overlayKit';
 import { DressingController } from '@/runtime/dressingController';
@@ -118,7 +119,7 @@ export class GarmentEngine {
       collider: () => this.avatarView.collider,
       carriedPins: count => this.interactionView.carriedPinIndices(count),
       beforeInit: () => this.endClothDrag(),
-      afterInit: project => this.applyLayerThickness(project),
+      afterInit: project => this.applyConstructionLayers(project),
       present: (positions, normals, contact) => this.presentFrame(positions, normals, contact),
       presentRest: positions => this.presentRest(positions),
     });
@@ -282,19 +283,22 @@ export class GarmentEngine {
     return this.avatarView.dynamicSampleCount;
   }
 
-  /** Writes the per-particle clearance of the construction layers into the running solver. */
-  applyLayerThickness(project: Project): void {
+  /**
+   * Writes the per-particle clearance and collision layer of the construction layers into the
+   * running solver, so a layer edit needs no re-merge of the cloth.
+   */
+  applyConstructionLayers(project: Project): void {
     const input = this.build.input;
     if (!input || !this.solver.simulator) return;
-    this.solver.setLayerThickness(particleThicknessMeters(
-      project,
-      input.panels.map(panel => ({
-        panelId: panel.panelId,
-        vertexOffset: panel.vertexOffset,
-        vertexCount: panel.mesh.vertexCount,
-      })),
-      input.particleCount,
-    ));
+    const panels = input.panels.map(panel => ({
+      panelId: panel.panelId,
+      vertexOffset: panel.vertexOffset,
+      vertexCount: panel.mesh.vertexCount,
+    }));
+    this.solver.setCollisionFields(
+      particleThicknessMeters(project, panels, input.particleCount),
+      particleCollisionLayers(project, panels, input.particleCount),
+    );
   }
 
   /** Builds the merged cloth render mesh, then the overlays that ride on it. */
@@ -777,8 +781,11 @@ export class GarmentEngine {
   }
 
   /** Places the avatar at its stored scene transform. */
-  applyAvatarTransform(avatar: { transform?: ObjectTransform }): void {
-    this.avatarView.applyTransform(avatar);
+  /**
+   * Moves the body; a drag preview skips the collision refit, which the commit then performs.
+   */
+  applyAvatarTransform(avatar: { transform?: ObjectTransform }, refitCollider = true): void {
+    this.avatarView.applyTransform(avatar, refitCollider);
   }
 
   /** Shows, hides or fades the avatar body. */
@@ -824,9 +831,24 @@ export class GarmentEngine {
     this.references.place(id, transform);
   }
 
-  /** Applies the project's environment image as the scene backdrop and lighting source. */
-  async applyEnvironment(project: Project): Promise<void> {
-    await this.environment.apply(this.host, project.scene.lights);
+  /** Moves one light in the live scene without changing project data. */
+  setLightPosition(light: SceneLight): void {
+    this.environment.moveLight(this.host, light);
+  }
+
+  /** Applies the lighting rig: environment image plus the lights the change touched. */
+  async applyLighting(project: Project, change?: ChangeSet): Promise<void> {
+    const lights = project.scene.lights;
+    if (!change) {
+      await this.environment.applyAll(this.host, lights);
+      return;
+    }
+    if (change.has('scene.environment')) await this.environment.applyEnvironment(this.host, lights);
+    if (change.has('scene.light')) {
+      this.environment.applyLights(this.host, lights, {
+        ids: change.lightIds, structure: change.lightStructure,
+      });
+    }
   }
   /** Removes and disposes the cloth meshes, seam threads, simulator and dressing run. */
   private clearCloth(): void {

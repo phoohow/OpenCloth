@@ -5,7 +5,7 @@ import { detectWebGPU } from '@/render/common';
 import { ReviewDialog } from '@/ui/menu/reviewDialog';
 import { IntegrationDialog } from '@/ui/menu/integrationDialog';
 import { ProductionDialog } from '@/ui/menu/productionDialog';
-import type { ProductionKind } from '@/ui/menu/production';
+import type { ProductionOutputKind } from '@/ui/menu/production';
 import type { MenuActions } from '@/ui/menu/actions';
 import { reportActionError } from '@/ui/widgets/toast';
 import { DISPLAY_LAYER_OPTIONS } from '@/ui/optionTables';
@@ -64,7 +64,7 @@ export function MenuDialogs({ actions }: { actions: MenuActions }) {
           )
           : dialog === 'review' ? <ReviewDialog initialProjectId={dialogParam} />
           : dialog === 'integration' ? <IntegrationDialog />
-          : <ProductionDialog initialKind={dialogParam as ProductionKind | null} />}
+          : <ProductionDialog initialKind={dialogParam as ProductionOutputKind | null} />}
         {dialog !== 'production' && dialog !== 'integration' && dialog !== 'screenshot' && (
           <div style={styles.footer}>
             <button style={styles.closeBtn} onClick={closeDialog}>关闭</button>

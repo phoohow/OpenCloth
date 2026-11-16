@@ -15,14 +15,19 @@ export type Aspect =
   | 'cloth.visibility'
   /** Construction-layer clearance and collision layers. */
   | 'cloth.layer'
-  /** Body shape, pose and soft-body deformation. */
+  /** Body shape and pose the collision mesh and the drape wrap are built from. */
   | 'avatar.body'
-  /** Skin appearance, display name and scene transform. */
+  /** Skin appearance, display name and the soft-body switch; placement has its own aspect. */
   | 'avatar.look'
+  /** Scene placement of the body, which the collision mesh follows. */
+  | 'avatar.transform'
+  /** Punctual lights. */
   | 'scene.light'
-  | 'scene.render'
-  | 'scene.simulation'
+  /** Environment image, its backdrop and its strength. */
   | 'scene.environment'
+  /** Cloth and drape parameters that drive the simulation. */
+  | 'scene.simulation'
+  /** Reference objects in the scene and where they sit. */
   | 'scene.references'
   /** Looping camera move played in the viewport. */
   | 'scene.camera';
@@ -30,39 +35,51 @@ export type Aspect =
 /** Every aspect, used when the previous state is unknown. */
 const ALL_ASPECTS: readonly Aspect[] = [
   'cloth.geometry', 'cloth.constraints', 'cloth.fabric', 'cloth.marking', 'cloth.visibility',
-  'cloth.layer', 'avatar.body', 'avatar.look', 'scene.light', 'scene.render', 'scene.simulation',
-  'scene.environment', 'scene.references', 'scene.camera',
+  'cloth.layer', 'avatar.body', 'avatar.look', 'avatar.transform', 'scene.light',
+  'scene.environment', 'scene.simulation', 'scene.references', 'scene.camera',
 ];
 
-/** What one project revision changed, and which panels it touched. */
+/** Per-object detail a change carries beside its aspects. */
+export interface ChangeDetail {
+  /** Lights whose own fields changed; empty together with `lightStructure` means "every light". */
+  lightIds?: Iterable<string>;
+  /** True when a light was added, removed or changed type, so its slot has to be rebuilt. */
+  lightStructure?: boolean;
+}
+
+/** What one project revision changed, and which objects it touched. */
 export class ChangeSet {
   private constructor(
     private readonly aspects: ReadonlySet<Aspect>,
     /** Panels the change is about; empty means the aspect is not panel-scoped. */
     readonly panelIds: ReadonlySet<string>,
+    /** Lights the change is about. */
+    readonly lightIds: ReadonlySet<string>,
+    /** Whether a light was added, removed or changed type. */
+    readonly lightStructure: boolean,
   ) { }
 
   static empty(): ChangeSet {
-    return new ChangeSet(new Set(), new Set());
+    return new ChangeSet(new Set(), new Set(), new Set(), false);
   }
 
   /** Every aspect, for a load or any change whose diff is unknown. */
   static all(panelIds: Iterable<string> = []): ChangeSet {
-    return new ChangeSet(new Set(ALL_ASPECTS), new Set(panelIds));
+    return new ChangeSet(new Set(ALL_ASPECTS), new Set(panelIds), new Set(), true);
   }
 
-  static of(aspects: Iterable<Aspect>, panelIds: Iterable<string> = []): ChangeSet {
-    return new ChangeSet(new Set(aspects), new Set(panelIds));
+  static of(
+    aspects: Iterable<Aspect>,
+    panelIds: Iterable<string> = [],
+    detail: ChangeDetail = {},
+  ): ChangeSet {
+    return new ChangeSet(
+      new Set(aspects), new Set(panelIds), new Set(detail.lightIds ?? []), detail.lightStructure ?? false,
+    );
   }
 
   has(aspect: Aspect): boolean {
     return this.aspects.has(aspect);
-  }
-
-  /** True when the aspect changed and, for a panel-scoped aspect, the panel is among those touched. */
-  affects(aspect: Aspect, panelId: string): boolean {
-    if (!this.aspects.has(aspect)) return false;
-    return this.panelIds.size === 0 || this.panelIds.has(panelId);
   }
 
   /** Aspects of this change, for logging and tests. */

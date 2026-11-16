@@ -21,6 +21,12 @@ export interface ReferenceObject {
 export class ReferenceStage {
   private readonly objects = new Map<string, ReferenceObject>();
   private readonly handles = new Map<string, AssetHandle>();
+  /** Bumped by every reconcile, so a load that lost the race adds nothing to the new list. */
+  private generation = 0;
+  /** Ids the current reconcile wants, so a stale load knows whether its slot is still claimed. */
+  private wanted = new Set<string>();
+  /** Loads already in flight, so two reconciles never read the same model twice. */
+  private readonly pending = new Map<string, Promise<AssetHandle | null>>();
 
   /** Reference objects currently in the scene. */
   list(): ReferenceObject[] {
@@ -28,24 +34,41 @@ export class ReferenceStage {
   }
 
   /** Loads stored models that are not in the scene yet. */
-  async ensure(host: PresenterHost, references: ReferenceObjectRef[]): Promise<void> {
+  async ensure(host: PresenterHost, references: ReferenceObjectRef[], generation = this.generation): Promise<void> {
     for (const ref of references) {
+      if (generation !== this.generation) return;
       if (this.objects.has(ref.id) || (!ref.objectKey && !ref.objectUrl)) continue;
-      const handle = ref.objectUrl
-        ? await host.assets.load(ref.id, { kind: 'model', url: ref.objectUrl, targetHeight: 0 })
-        : await this.loadStored(host, ref);
+      const handle = await this.loadOnce(host, ref);
       if (!handle) continue;
+      // A newer reconcile may have started while this model was loading; it owns the slot now.
+      if (generation !== this.generation) {
+        if (!this.wanted.has(ref.id)) host.assets.release(ref.id);
+        return;
+      }
       this.add(host, handle, ref);
     }
   }
 
   /** Keeps scene entities in sync with the project list: drops strays, loads missing entries. */
   async reconcile(host: PresenterHost, references: ReferenceObjectRef[]): Promise<void> {
-    const wanted = new Set(references.map(ref => ref.id));
+    const generation = ++this.generation;
+    this.wanted = new Set(references.map(ref => ref.id));
     for (const held of this.list()) {
-      if (!wanted.has(held.id)) this.remove(host, held.id);
+      if (!this.wanted.has(held.id)) this.remove(host, held.id);
     }
-    await this.ensure(host, references);
+    await this.ensure(host, references, generation);
+  }
+
+  /** Reads one model once, even when two reconciles ask for it before it lands. */
+  private loadOnce(host: PresenterHost, ref: ReferenceObjectRef): Promise<AssetHandle | null> {
+    const running = this.pending.get(ref.id);
+    if (running) return running;
+    const run = (ref.objectUrl
+      ? host.assets.load(ref.id, { kind: 'model', url: ref.objectUrl, targetHeight: 0 })
+      : this.loadStored(host, ref)
+    ).finally(() => { this.pending.delete(ref.id); });
+    this.pending.set(ref.id, run);
+    return run;
   }
 
   /** Stores a model file and adds it to the scene; returns the project record for the list. */
@@ -127,6 +150,9 @@ export class ReferenceStage {
 
   /** Removes every reference object, used when the viewport tears the scene down. */
   clear(host: PresenterHost): void {
+    // A load still in flight must not add an entity to the torn-down scene.
+    this.generation += 1;
+    this.wanted.clear();
     for (const id of Array.from(this.objects.keys())) this.remove(host, id);
   }
 

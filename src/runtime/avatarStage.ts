@@ -32,6 +32,8 @@ export class AvatarStage {
   private entity: EntityId | null = null;
   private display: AssetDisplay = 'visible';
   private appearance: SkinAppearance | undefined;
+  /** Slack around the collision grid, in meters, so animated limbs stay inside it. */
+  private margin = 0;
   /** Appearance key the body materials were last written for. */
   private appliedSkin = '';
   /** Whether the selected body is drawn highlighted. */
@@ -61,16 +63,11 @@ export class AvatarStage {
   async build(avatar: Avatar, host: PresenterHost): Promise<void> {
     this.detach(host);
     const asset = await this.load(avatar, host);
-    const collision = asset.collision();
     // Animated bodies need slack around the rest grid for limbs that move outside it.
-    const margin = asset.animations().length > 0 ? ANIMATION_COLLIDER_MARGIN_M : 0;
-    const mesh = collision ? buildMeshCollider(collision.vertices, undefined, margin) : null;
-    const collider = mesh ? { mesh } : null;
-    if (!collision) console.warn('Avatar has no collision mesh; cloth will not collide with the body');
+    this.margin = asset.animations().length > 0 ? ANIMATION_COLLIDER_MARGIN_M : 0;
 
     this.host = host;
     this.asset = asset;
-    this.collider = collider;
     this.display = avatar.display;
     this.appearance = avatar.appearance;
     this.entity = host.writer.createEntity({
@@ -84,6 +81,7 @@ export class AvatarStage {
     this.applySkin();
     asset.setDisplay(avatar.display);
     this.place(avatar.transform);
+    if (!this.collider) console.warn('Avatar has no collision mesh; cloth will not collide with the body');
     this.applySimplifiedBody(avatar);
   }
 
@@ -121,14 +119,31 @@ export class AvatarStage {
     this.host?.writer.touch('material');
   }
 
-  /** Places the body at its stored scene transform. */
-  place(transform?: ObjectTransform): void {
+  /** Places the body at its stored transform without re-fitting the collision mesh. */
+  pose(transform?: ObjectTransform): void {
     this.asset?.pose(transform ?? IDENTITY_TRANSFORM);
     this.simplified?.place(transform);
     if (this.entity !== null && this.asset) {
       this.host?.writer.updateEntity(this.entity, { bounds: this.asset.bounds });
     }
     this.host?.writer.touch('transform');
+  }
+
+  /**
+   * Places the body at its stored scene transform and re-fits the collision mesh to it, so the
+   * cloth collides with the body where it is drawn.
+   */
+  place(transform?: ObjectTransform): void {
+    this.pose(transform);
+    this.collider = this.fitCollider();
+  }
+
+  /** Collision body of the asset at its current pose and placement. */
+  private fitCollider(): AvatarCollider | null {
+    const collision = this.asset?.collision();
+    if (!collision) return null;
+    const mesh = buildMeshCollider(collision.vertices, undefined, this.margin);
+    return mesh ? { mesh } : null;
   }
 
   /** Motion clips the current body carries, in file order. */

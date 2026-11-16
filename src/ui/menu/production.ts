@@ -1,5 +1,5 @@
 /** Production outputs offered by the 生产 menu and the preview window rail. */
-export type ProductionKind =
+export type ProductionOutputKind =
   | 'exportMarker'
   | 'exportCutGerber'
   | 'exportCutHpgl'
@@ -11,7 +11,7 @@ export type ProductionKind =
 
 /** One production output: rail label and the format badge shown in the window header. */
 export interface ProductionItem {
-  kind: ProductionKind;
+  kind: ProductionOutputKind;
   label: string;
   format: string;
 }
@@ -55,6 +55,6 @@ export function markerAngles(mode: MarkerAngleMode, freeText: string): number[] 
 }
 
 /** Rail entry of a production kind. */
-export function productionItem(kind: ProductionKind): ProductionItem {
+export function productionItem(kind: ProductionOutputKind): ProductionItem {
   return PRODUCTION_ITEMS.find(item => item.kind === kind) ?? PRODUCTION_ITEMS[0]!;
 }

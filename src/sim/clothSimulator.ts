@@ -850,15 +850,15 @@ export class ClothSimulator {
     );
   }
 
-  /** Replaces the per-particle collision clearance, e.g. after construction-layer thickness changes. */
-  setParticleThickness(values: Float32Array): boolean {
-    if (!this.initialized || values.length !== this.particleCount) return false;
-    this.thicknessByParticle = new Float32Array(values);
+  /** Replaces the per-particle collision clearance and layer the CPU passes read. */
+  setCollisionFields(thickness: Float32Array, layers: Uint8Array): void {
+    if (!this.initialized || thickness.length !== this.particleCount) return;
+    this.thicknessByParticle = new Float32Array(thickness);
+    this.layerByParticle = new Uint8Array(layers);
     this.device.queue.writeBuffer(
       this.thicknessBuf, 0, this.thicknessByParticle.buffer as ArrayBuffer,
       this.thicknessByParticle.byteOffset, this.thicknessByParticle.byteLength,
     );
-    return true;
   }
 
   /**

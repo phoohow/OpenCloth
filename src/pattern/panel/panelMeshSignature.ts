@@ -10,8 +10,9 @@ export interface PanelMeshSettings {
 
 /**
  * Everything one panel's mesh build reads: outline and hole geometry, per-edge and panel
- * seam allowance, mesh density and the points the panel owns. The solver-side collision layer
- * rides along, so a layer edit re-merges the input the running solver reads it from.
+ * seam allowance, mesh density and the points the panel owns. Flags the solver re-reads through
+ * its own setters — visibility, construction layer and collision layer — stay out, so editing
+ * one never rebuilds a mesh.
  */
 export function panelGeometrySignature(
   pattern: Pattern, settings: PanelMeshSettings, panelId: string,
@@ -37,8 +38,7 @@ export function panelGeometrySignature(
   }))].map(pointId => JSON.stringify(pattern.points[pointId] ?? pointId));
   return JSON.stringify([
     panel.outlineEdgeIds, panel.holes ?? [], panel.meshResolutionCm,
-    panel.visible, panel.layer ?? null, panel.collisionLayer ?? null, panel.placement ?? null,
-    panel.drape ?? null, panel.transform ?? null, edges, points,
+    panel.placement ?? null, panel.drape ?? null, panel.transform ?? null, edges, points,
     settings.meshResolutionCm ?? null, settings.meshSampling ?? null,
   ]);
 }

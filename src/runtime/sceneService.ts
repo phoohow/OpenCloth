@@ -5,12 +5,13 @@ import type {
 } from '@/model/types';
 import type { Command, ProjectContext } from '@/commands';
 import {
-  LIGHT_TYPE_LABELS, createLight, normalizeLights, normalizeRayTracing,
+  LIGHT_TYPE_LABELS, convertLightIntensity, createLight, normalizeLights, normalizeRayTracing,
 } from '@/model';
 import { SetGlobalMeshResolutionCommand } from '@/commands';
 import type { GarmentEngine } from '@/runtime/garmentEngine';
 import {
-  AVATAR_NODE_ID, lightNodeId, readTransform, referenceObjectId, writeTransform,
+  collectionMemberRows, isNodeVisibleWritable, lightAtPosition, lightNodeId, parseSceneRef,
+  readNodeTransform, readNodeVisible, writeNodeTransform, writeNodeVisible,
 } from '@/model';
 
 /** Live engine of the 3D viewport, null before the first render. */
@@ -38,9 +39,12 @@ export interface SceneService {
   commitTransform(nodeId: string, transform: ObjectTransform, engineRef: EngineRef, label?: string): void;
   /** Writes several panel transforms as one undoable step. */
   commitPanelTransforms(entries: readonly { panelId: string; transform: ObjectTransform }[], label?: string): void;
+  /** Sets viewport visibility of one node, collection nodes included. */
+  setNodeVisible(nodeId: string, visible: boolean, engineRef?: EngineRef): void;
+  /** Sets viewport visibility of several nodes as one undoable step. */
+  setNodesVisible(nodeIds: readonly string[], visible: boolean, engineRef?: EngineRef): void;
+  /** Shows or hides a set of panels by id, the addressing the 2D viewport's selection uses. */
   setPanelsVisible(panelIds: string[], visible: boolean): void;
-  setReferencesVisible(refIds: string[], visible: boolean, engineRef: EngineRef): void;
-  setAvatarVisible(visible: boolean, engineRef: EngineRef): void;
   setAvatarDisplay(display: AvatarDisplay, engineRef: EngineRef, label?: string): void;
   patchValue<T>(
     label: string,
@@ -62,43 +66,42 @@ export interface SceneService {
   addLight(type: LightType): void;
   removeLight(id: string): void;
   patchLight(id: string, label: string, patch: Partial<SceneLight>): void;
-  setLightsEnabled(ids: string[], enabled: boolean): void;
-  setEnvironmentEnabled(enabled: boolean): void;
-  setSeamsStitchVisible(seamIds: string[], visible: boolean): void;
-  setProductionVisible(kind: ProductionKind, ids: string[], visible: boolean): void;
 }
-
-/** Production object kinds that carry their own visibility flag. */
-export type ProductionKind = 'print' | 'topstitch' | 'trim';
 
 /** Builds the scene service over the host's project, history and selection. */
 export function createSceneService(ports: SceneServicePorts): SceneService {
   const project = () => ports.project();
 
-  /** Places an avatar or reference object on the live scene without changing project data. */
+  /** Places a scene object on the live scene without changing project data. */
   const previewTransform: SceneService['previewTransform'] = (nodeId, transform, engineRef) => {
-    if (nodeId === AVATAR_NODE_ID) {
-      engineRef.current?.applyAvatarTransform({ ...project().avatar, transform });
+    const ref = parseSceneRef(nodeId);
+    if (ref.kind === 'avatar') {
+      engineRef.current?.applyAvatarTransform({ ...project().avatar, transform }, false);
       return;
     }
-    if (nodeId.startsWith('@ref:')) {
-      engineRef.current?.setReferenceTransform(referenceObjectId(nodeId), transform);
+    if (ref.kind === 'reference') {
+      engineRef.current?.setReferenceTransform(ref.id, transform);
+      return;
+    }
+    if (ref.kind === 'light') {
+      const moved = lightAtPosition(project().scene.lights, ref.id, transform.position);
+      if (moved) engineRef.current?.setLightPosition(moved);
     }
   };
 
   /** Writes a scene transform; panel edits rebuild the cloth, other edits only move the object. */
   const commitTransform: SceneService['commitTransform'] = (nodeId, transform, engineRef, label = '修改变换') => {
-    const before = readTransform(project(), nodeId);
+    const before = readNodeTransform(project(), nodeId);
     if (!before) return;
-
+    const nodeRef = parseSceneRef(nodeId);
     const apply = (ctx: ProjectContext, value: ObjectTransform) => {
-      writeTransform(ctx.project, nodeId, value);
-      if (nodeId === AVATAR_NODE_ID) {
+      if (!writeNodeTransform(ctx.project, nodeId, value)) return;
+      if (nodeRef.kind === 'avatar') {
         engineRef.current?.applyAvatarTransform(ctx.project.avatar);
         return;
       }
-      if (nodeId.startsWith('@ref:')) {
-        engineRef.current?.setReferenceTransform(referenceObjectId(nodeId), value);
+      if (nodeRef.kind === 'reference') {
+        engineRef.current?.setReferenceTransform(nodeRef.id, value);
         ctx.project.scene = { ...ctx.project.scene };
         ports.notifyRefObjectsChanged();
       }
@@ -114,10 +117,10 @@ export function createSceneService(ports: SceneServicePorts): SceneService {
   /** Writes every selected panel transform in one command, so one undo restores the whole drag. */
   const commitPanelTransforms: SceneService['commitPanelTransforms'] = (entries, label = '3D 变换') => {
     if (entries.length === 0) return;
-    const before = entries.map(entry => readTransform(project(), entry.panelId));
+    const before = entries.map(entry => readNodeTransform(project(), entry.panelId));
     if (before.some(value => value === null)) return;
     const apply = (ctx: ProjectContext, values: readonly ObjectTransform[]) => {
-      entries.forEach((entry, i) => writeTransform(ctx.project, entry.panelId, values[i]!));
+      entries.forEach((entry, i) => writeNodeTransform(ctx.project, entry.panelId, values[i]!));
     };
     ports.execute({
       label,
@@ -137,45 +140,67 @@ export function createSceneService(ports: SceneServicePorts): SceneService {
     });
   };
 
-  function applyPanelVisibility(ctx: ProjectContext, ids: string[], values: boolean[]): void {
-    ids.forEach((id, i) => {
-      const panel = ctx.project.pattern.panels[id];
-      if (panel) panel.visible = values[i];
+  /** Noun used in a visibility command's undo label, per row kind. */
+  const VISIBILITY_NOUN: Record<string, string> = {
+    panel: '版片', seam: '缝纫线', print: '印花', topstitch: '明线', trim: '辅料',
+    avatar: '模特', reference: '参考物体', light: '光源', environment: '环境光',
+  };
+
+  /** Mirrors a visibility write onto the live scene for the rows the renderer cannot re-read. */
+  function applyLiveVisibility(nodeIds: readonly string[], values: boolean[], engineRef?: EngineRef): void {
+    const engine = engineRef?.current;
+    if (!engine) return;
+    nodeIds.forEach((nodeId, i) => {
+      const ref = parseSceneRef(nodeId);
+      if (ref.kind === 'reference') engine.setReferenceVisible(ref.id, values[i]!);
     });
-    // Visibility is a draw-only flag, so the cloth keeps simulating.
   }
 
-  /** Sets viewport visibility for a set of panels as one undoable step. */
-  const setPanelsVisible: SceneService['setPanelsVisible'] = (panelIds, visible) => {
-    const before = panelIds.map(id => project().pattern.panels[id]?.visible ?? true);
+  /** Nodes a visibility write lands on; a collection expands to its members, deduped. */
+  function expandCollections(current: Project, nodeIds: readonly string[]): string[] {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const nodeId of nodeIds) {
+      const members = parseSceneRef(nodeId).kind === 'collection' ? collectionMemberRows(current, nodeId) : [nodeId];
+      for (const member of members) {
+        if (seen.has(member) || !isNodeVisibleWritable(current, member)) continue;
+        seen.add(member);
+        out.push(member);
+      }
+    }
+    return out;
+  }
+
+  /** Whether any of the nodes is a reference object, whose list the outliner mirrors. */
+  function touchesReferences(nodeIds: readonly string[]): boolean {
+    return nodeIds.some(nodeId => parseSceneRef(nodeId).kind === 'reference');
+  }
+
+  /** Sets viewport visibility of several nodes as one undoable step; unsupported nodes are skipped. */
+  const setNodesVisible: SceneService['setNodesVisible'] = (nodeIds, visible, engineRef) => {
+    const current = project();
+    const writable = nodeIds.filter(nodeId => isNodeVisibleWritable(current, nodeId));
+    const targets = expandCollections(current, writable);
+    if (targets.length === 0) return;
+    const before = targets.map(nodeId => readNodeVisible(current, nodeId) === true);
+    if (before.every(value => value === visible)) return;
+    // The noun follows the members a collection expands to, so "服装" still reads as 版片.
+    const noun = VISIBILITY_NOUN[parseSceneRef(targets[0]!).kind] ?? '对象';
+    const apply = (ctx: ProjectContext, values: boolean[]): void => {
+      targets.forEach((nodeId, i) => writeNodeVisible(ctx.project, nodeId, values[i]!));
+      applyLiveVisibility(targets, values, engineRef);
+      if (touchesReferences(targets)) ports.notifyRefObjectsChanged();
+    };
     ports.execute({
-      label: visible ? '显示版片' : '隐藏版片',
-      execute: ctx => applyPanelVisibility(ctx, panelIds, panelIds.map(() => visible)),
-      undo: ctx => applyPanelVisibility(ctx, panelIds, before),
+      label: `${visible ? '显示' : '隐藏'}${noun}`,
+      execute: ctx => apply(ctx, targets.map(() => visible)),
+      undo: ctx => apply(ctx, before),
     });
   };
 
-  function applyReferenceVisibility(
-    ctx: ProjectContext, ids: string[], values: boolean[], engineRef: EngineRef,
-  ): void {
-    ids.forEach((id, i) => {
-      const ref = (ctx.project.scene.referenceObjects ?? []).find(r => r.id === id);
-      if (ref) ref.visible = values[i];
-      engineRef.current?.setReferenceVisible(id, values[i]);
-    });
-    ctx.project.scene = { ...ctx.project.scene };
-    ports.notifyRefObjectsChanged();
-  }
-
-  /** Sets viewport visibility for a set of reference objects as one undoable step. */
-  const setReferencesVisible: SceneService['setReferencesVisible'] = (refIds, visible, engineRef) => {
-    const refs = project().scene.referenceObjects ?? [];
-    const before = refIds.map(id => refs.find(r => r.id === id)?.visible ?? true);
-    ports.execute({
-      label: visible ? '显示参考物体' : '隐藏参考物体',
-      execute: ctx => applyReferenceVisibility(ctx, refIds, refIds.map(() => visible), engineRef),
-      undo: ctx => applyReferenceVisibility(ctx, refIds, before, engineRef),
-    });
+  /** Sets viewport visibility of one node. */
+  const setNodeVisible: SceneService['setNodeVisible'] = (nodeId, visible, engineRef) => {
+    setNodesVisible([nodeId], visible, engineRef);
   };
 
   function applyAvatarDisplay(ctx: ProjectContext, display: AvatarDisplay, engineRef: EngineRef): void {
@@ -193,9 +218,9 @@ export function createSceneService(ports: SceneServicePorts): SceneService {
     );
   };
 
-  /** Switches the avatar between shown and hidden in the viewport. */
-  const setAvatarVisible: SceneService['setAvatarVisible'] = (visible, engineRef) => {
-    setAvatarDisplay(visible ? 'visible' : 'hidden', engineRef, visible ? '显示模特' : '隐藏模特');
+  /** Shows or hides a set of panels in the viewport as one undoable step. */
+  const setPanelsVisible: SceneService['setPanelsVisible'] = (panelIds, visible) => {
+    setNodesVisible(panelIds, visible);
   };
 
   /** Sets a reference object's opacity on the live scene and in the project. */
@@ -355,88 +380,31 @@ export function createSceneService(ports: SceneServicePorts): SceneService {
     if (ports.selection().includes(lightNodeId(id))) ports.clearSelection();
   };
 
-  /** Edits the listed fields of one light. */
+  /** Edits the listed fields of one light; a type switch restates the brightness in the new unit. */
   const patchLight: SceneService['patchLight'] = (id, label, patch) => {
     patchValue(
       label,
       p => normalizeLights(p.scene.lights),
       (ctx, value) => writeLights(ctx, value),
-      normalizeLights(project().scene.lights).map(light => light.id === id ? { ...light, ...patch } : light),
+      normalizeLights(project().scene.lights).map(light => {
+        if (light.id !== id) return light;
+        if (!patch.type || patch.type === light.type) return { ...light, ...patch };
+        return {
+          ...light,
+          ...patch,
+          intensity: convertLightIntensity(light.type, patch.type, patch.intensity ?? light.intensity),
+        };
+      }),
     );
-  };
-
-  /** Turns the listed lights on or off in the viewport. */
-  const setLightsEnabled: SceneService['setLightsEnabled'] = (ids, enabled) => {
-    patchValue(
-      enabled ? '开启光源' : '关闭光源',
-      p => normalizeLights(p.scene.lights),
-      (ctx, value) => writeLights(ctx, value),
-      normalizeLights(project().scene.lights).map(light => ids.includes(light.id) ? { ...light, enabled } : light),
-    );
-  };
-
-  /** Turns the environment light on or off, keeping its image and strength. */
-  const setEnvironmentEnabled: SceneService['setEnvironmentEnabled'] = enabled => {
-    patchValue(
-      enabled ? '开启环境光' : '关闭环境光',
-      p => p.scene.lights.iblEnabled,
-      (ctx, value) => {
-        ctx.project.scene = { ...ctx.project.scene, lights: { ...ctx.project.scene.lights, iblEnabled: value } };
-      },
-      enabled,
-    );
-  };
-
-  function applySeamStitch(ctx: ProjectContext, seamIds: string[], values: boolean[]): void {
-    seamIds.forEach((id, i) => {
-      const seam = ctx.project.pattern.seams[id];
-      if (seam) seam.stitchVisible = values[i];
-    });
-  }
-
-  /** Shows or hides the stitched thread of the listed seams in the 3D viewport. */
-  const setSeamsStitchVisible: SceneService['setSeamsStitchVisible'] = (seamIds, visible) => {
-    const before = seamIds.map(id => project().pattern.seams[id]?.stitchVisible ?? true);
-    ports.execute({
-      label: visible ? '显示缝纫线' : '隐藏缝纫线',
-      execute: ctx => applySeamStitch(ctx, seamIds, seamIds.map(() => visible)),
-      undo: ctx => applySeamStitch(ctx, seamIds, before),
-    });
-  };
-
-  /** Pattern collection backing one production object kind. */
-  function productionRecords(
-    pattern: Project['pattern'], kind: ProductionKind,
-  ): Record<string, { visible: boolean }> {
-    return kind === 'print' ? pattern.prints : kind === 'topstitch' ? pattern.topstitches : pattern.trims;
-  }
-
-  function applyProductionVisibility(
-    ctx: ProjectContext, kind: ProductionKind, ids: string[], values: boolean[],
-  ): void {
-    const records = productionRecords(ctx.project.pattern, kind);
-    ids.forEach((id, i) => { records[id].visible = values[i]; });
-  }
-
-  /** Sets viewport visibility of print, topstitch and trim records as one undoable step. */
-  const setProductionVisible: SceneService['setProductionVisible'] = (kind, ids, visible) => {
-    if (ids.length === 0) return;
-    const records = productionRecords(project().pattern, kind);
-    const before = ids.map(id => records[id]?.visible ?? true);
-    ports.execute({
-      label: visible ? '显示生产物件' : '隐藏生产物件',
-      execute: ctx => applyProductionVisibility(ctx, kind, ids, ids.map(() => visible)),
-      undo: ctx => applyProductionVisibility(ctx, kind, ids, before),
-    });
   };
 
   return {
     previewTransform,
     commitTransform,
     commitPanelTransforms,
+    setNodeVisible,
+    setNodesVisible,
     setPanelsVisible,
-    setReferencesVisible,
-    setAvatarVisible,
     setAvatarDisplay,
     patchValue,
     commitReferenceOpacity,
@@ -453,9 +421,5 @@ export function createSceneService(ports: SceneServicePorts): SceneService {
     addLight,
     removeLight,
     patchLight,
-    setLightsEnabled,
-    setEnvironmentEnabled,
-    setSeamsStitchVisible,
-    setProductionVisible,
   };
 }

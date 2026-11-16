@@ -52,3 +52,19 @@ export function particleThicknessMeters(
   }
   return out;
 }
+
+/** Per-particle collision layer, re-read from the panels so a layer edit needs no re-merge. */
+export function particleCollisionLayers(
+  project: Project,
+  panels: readonly { panelId: string; vertexOffset: number; vertexCount: number }[],
+  particleCount: number,
+): Uint8Array {
+  const out = new Uint8Array(particleCount);
+  for (const panel of panels) {
+    const record = project.pattern.panels[panel.panelId];
+    const layer = record ? panelCollisionLayer(record) : 0;
+    const end = Math.min(panel.vertexOffset + panel.vertexCount, particleCount);
+    for (let i = panel.vertexOffset; i < end; i++) out[i] = layer;
+  }
+  return out;
+}

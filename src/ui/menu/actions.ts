@@ -10,7 +10,7 @@ import type { Command } from '@/commands';
 import { setPanelsVisible, commitClearReferences, commitEnvironmentReset } from '@/ui/sceneCommands';
 import { importAvatarViaPicker, importEnvironmentViaPicker, importReferenceViaPicker, openFilePicker } from '@/ui/modelImport';
 import { useMenuStore } from '@/ui/menu/menuStore';
-import type { ProductionKind } from '@/ui/menu/production';
+import type { ProductionOutputKind } from '@/ui/menu/production';
 import type { GarmentEngine, CameraPreset } from '@/runtime';
 import type { Viewport } from '@/runtime';
 import type { CameraProjection, EditPreviewTier, Project } from '@/model/types';
@@ -65,7 +65,7 @@ export interface MenuActions {
   debugFrame: (request: CaptureRequest) => Promise<Blob | null>;
   exportAnimation: () => void;
   exportSequence: () => void;
-  openProduction: (kind?: ProductionKind) => void;
+  openProduction: (kind?: ProductionOutputKind) => void;
   undo: () => void;
   redo: () => void;
   copySelection: () => void;

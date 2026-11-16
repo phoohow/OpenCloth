@@ -1,7 +1,7 @@
 import { createSceneService } from '@/runtime';
 import { useProjectStore, useUIStore } from '@/store';
 
-export type { EngineRef, ProductionKind, SceneService } from '@/runtime';
+export type { EngineRef, SceneService } from '@/runtime';
 
 /** Scene service bound to the project store's history and the UI store's selection. */
 const service = createSceneService({
@@ -17,9 +17,9 @@ export const {
   previewTransform,
   commitTransform,
   commitPanelTransforms,
+  setNodeVisible,
+  setNodesVisible,
   setPanelsVisible,
-  setReferencesVisible,
-  setAvatarVisible,
   setAvatarDisplay,
   patchValue,
   commitReferenceOpacity,
@@ -36,8 +36,4 @@ export const {
   addLight,
   removeLight,
   patchLight,
-  setLightsEnabled,
-  setEnvironmentEnabled,
-  setSeamsStitchVisible,
-  setProductionVisible,
 } = service;

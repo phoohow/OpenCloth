@@ -85,8 +85,8 @@ const LIGHT_PLACEMENT = {
   area: { position: vec3(1.5, 1.8, 1.5), target: vec3(0, 1, 0) },
 };
 
-/** Brightness a new light of this type starts at. */
-const LIGHT_INTENSITY: Record<LightType, number> = {
+/** Brightness a new light of this type starts at; each type reads intensity in its own unit. */
+export const LIGHT_INTENSITY: Record<LightType, number> = {
   directional: 3,
   point: 60,
   spot: 80,

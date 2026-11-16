@@ -1,19 +1,20 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import type { ObjectTransform, Vec3 } from '@/model/types';
-import { IDENTITY_TRANSFORM, readTransform } from '@/model';
+import { parseSceneRef } from '@/model';
 import type { GarmentEngine, Viewport } from '@/runtime';
-import { composeTransforms, identityDelta, isIdentityDelta, type GizmoDelta } from '@/runtime';
+import { composeTransforms, identityDelta, isIdentityDelta, type GizmoDelta, type GizmoFrame } from '@/runtime';
 import { add3, cross3, dot3, length3, normalize3, scale3, sub3, radToDeg, wrapAngleSigned } from '@/base/math';
 import {
   applyMatrix3, axisRotationMatrix3, axisScaleMatrix3, identityMatrix3, rotationAxes3,
 } from '@/base/math';
 import { intersectRayPlane3 } from '@/base/geom';
 import { useProjectStore, useUIStore, type TransformMode } from '@/store';
-import { commitPanelTransforms } from '@/ui/sceneCommands';
+import { commitPanelTransforms, commitTransform, previewTransform } from '@/ui/sceneCommands';
 import { reportActionError } from '@/ui/widgets/toast';
 import {
   buildGizmoLayout, hitTestHandle, sameHandle, type GizmoHandle, type GizmoLayout,
 } from '@/ui/viewport3D/gizmoLayout';
+import { gizmoTargets, type GizmoTarget } from '@/ui/viewport3D/gizmoTargets';
 
 /** Live overlay state of the 3D transform gizmo. */
 export interface TransformGizmoState {
@@ -29,7 +30,9 @@ interface DragState {
   pointerId: number;
   mode: TransformMode;
   handle: GizmoHandle;
-  ids: string[];
+  /** Rows being dragged, in the order their base transforms are held. */
+  rows: string[];
+  kind: 'panel' | 'object';
   bases: ObjectTransform[];
   /** World axes of the primary panel, kept for local-space scaling. */
   worldAxes: [Vec3, Vec3, Vec3];
@@ -42,12 +45,39 @@ interface DragState {
   delta: GizmoDelta;
 }
 
-/** Chinese command label of one gizmo mode. */
+/** Chinese command label of one gizmo mode on a panel. */
 const MODE_LABEL: Record<TransformMode, string> = {
   translate: '3D 平移版片',
   rotate: '3D 旋转版片',
   scale: '3D 缩放版片',
 };
+
+/** Command label of one gizmo mode on a scene object. */
+const OBJECT_MODE_LABEL: Record<TransformMode, string> = {
+  translate: '3D 平移对象',
+  rotate: '3D 旋转对象',
+  scale: '3D 缩放对象',
+};
+
+/** Frame a single scene object's gizmo is drawn around. */
+const OBJECT_FRAME_RADIUS_M = 0.06;
+
+/** Panel id behind a panel row: a 2D pick spells it `@panel:`, a 3D pick leaves it bare. */
+function panelIdOf(row: string): string {
+  const ref = parseSceneRef(row);
+  return ref.kind === 'panel' ? ref.id : row;
+}
+
+/** Frame a single scene object's gizmo is drawn around: its own world position. */
+function objectFrame(targets: GizmoTarget[]): GizmoFrame {
+  const centers: Record<string, Vec3> = {};
+  for (const target of targets) centers[target.row] = { ...target.transform.position };
+  return {
+    center: { ...targets[0]!.transform.position },
+    radius: OBJECT_FRAME_RADIUS_M,
+    centers,
+  };
+}
 
 /**
  * Pointer interaction of the 3D transform gizmo. A press on a handle owns the gesture until
@@ -73,10 +103,14 @@ export function useTransformGizmo(
     const container = containerRef.current;
     if (!canvas || !container) return;
 
-    /** Panel ids among the selection that have a visible cloth surface. */
-    const selectedPanelIds = (selection: string[]): string[] => {
-      const pattern = useProjectStore.getState().project.pattern;
-      return selection.filter(id => !!pattern.panels[id] && pattern.panels[id]!.visible !== false);
+    /** Whether the gizmo is shown for this tool, selection and mode. */
+    const draggableTargets = (): GizmoTarget[] => {
+      const ui = useUIStore.getState();
+      if (ui.activeTool !== 'select') return [];
+      const targets = gizmoTargets(useProjectStore.getState().project, ui.selection);
+      // A light has no orientation of its own, so only translation applies to it.
+      if (targets[0]?.translateOnly && ui.transformMode !== 'translate') return [];
+      return targets;
     };
 
     /** Pointer position relative to the pane, in CSS pixels. */
@@ -100,8 +134,8 @@ export function useTransformGizmo(
       const viewport = viewportRef.current;
       if (!engine || !viewport) return;
       const ui = useUIStore.getState();
-      const ids = selectedPanelIds(ui.selection);
-      if (ui.activeTool !== 'select' || ids.length === 0) {
+      const targets = draggableTargets();
+      if (targets.length === 0) {
         if (layoutRef.current) {
           layoutRef.current = null;
           lastKeyRef.current = '';
@@ -110,12 +144,13 @@ export function useTransformGizmo(
         }
         return;
       }
-      const frame = engine.panelGizmoFrame(ids);
+      const rows = targets.map(target => target.row);
+      const panelDrag = targets[0]!.kind === 'panel';
+      const frame = panelDrag ? engine.panelGizmoFrame(rows.map(panelIdOf)) : objectFrame(targets);
       if (!frame) return;
       const width = container.clientWidth, height = container.clientHeight;
       const camera = viewport.camera.snapshot(width / Math.max(1, height));
-      const project = useProjectStore.getState().project;
-      const bases = ids.map(id => readTransform(project, id) ?? IDENTITY_TRANSFORM);
+      const bases = targets.map(target => target.transform);
       const delta = previewRef.current;
       const pivot = delta ? add3(frame.center, delta.translation) : frame.center;
       const axes = rotationAxes3(bases[0]!.rotationEuler)
@@ -124,7 +159,7 @@ export function useTransformGizmo(
       if (!layout) return;
 
       const key = [
-        ui.transformMode, ids.join(','), width, height,
+        ui.transformMode, rows.join(','), width, height,
         round(camera.position.x), round(camera.position.y), round(camera.position.z),
         round(camera.target.x), round(camera.target.y), round(camera.target.z),
         round(camera.up.x), round(camera.up.y), round(camera.up.z),
@@ -207,15 +242,24 @@ export function useTransformGizmo(
       if (!drag) return;
       dragRef.current = null;
       previewRef.current = null;
-      engineRef.current?.endPanelTransformPreview();
+      if (drag.kind === 'panel') {
+        engineRef.current?.endPanelTransformPreview();
+      } else if (!commit) {
+        // A scene object has no engine-side preview to unwind, so put it back where it started.
+        drag.rows.forEach((row, i) => previewTransform(row, drag.bases[i]!, engineRef));
+      }
       if (canvas.hasPointerCapture(drag.pointerId)) canvas.releasePointerCapture(drag.pointerId);
       if (commit && !isIdentityDelta(drag.delta)) {
         const next = composeTransforms(drag.bases, drag.delta);
         try {
-          commitPanelTransforms(
-            drag.ids.map((id, i) => ({ panelId: id, transform: next[i]! })),
-            MODE_LABEL[drag.mode],
-          );
+          if (drag.kind === 'panel') {
+            commitPanelTransforms(
+              drag.rows.map((row, i) => ({ panelId: panelIdOf(row), transform: next[i]! })),
+              MODE_LABEL[drag.mode],
+            );
+          } else {
+            commitTransform(drag.rows[0]!, next[0]!, engineRef, OBJECT_MODE_LABEL[drag.mode]);
+          }
         } catch (err) {
           reportActionError(err);
         }
@@ -234,18 +278,20 @@ export function useTransformGizmo(
       const hit = hitTestHandle(layout, point.x, point.y, e.pointerType === 'touch' ? 14 : 8);
       if (!hit) return;
       const ui = useUIStore.getState();
-      const ids = selectedPanelIds(ui.selection);
-      if (ui.activeTool !== 'select' || ids.length === 0) return;
+      const targets = draggableTargets();
+      if (targets.length === 0) return;
+      const rows = targets.map(target => target.row);
+      const kind = targets[0]!.kind;
       const engine = engineRef.current;
-      if (!engine?.beginPanelTransformPreview(ids)) return;
-      const project = useProjectStore.getState().project;
-      const bases = ids.map(id => readTransform(project, id) ?? IDENTITY_TRANSFORM);
+      if (kind === 'panel' && !engine?.beginPanelTransformPreview(rows.map(panelIdOf))) return;
+      const bases = targets.map(target => target.transform);
       const worldAxes = rotationAxes3(bases[0]!.rotationEuler);
       const drag: DragState = {
         pointerId: e.pointerId,
         mode: ui.transformMode,
         handle: hit.handle,
-        ids,
+        rows,
+        kind,
         bases,
         worldAxes,
         layout,
@@ -284,7 +330,12 @@ export function useTransformGizmo(
         if (result) {
           drag.delta = result.delta;
           previewRef.current = result.delta;
-          engineRef.current?.updatePanelTransformPreview(result.delta);
+          if (drag.kind === 'panel') {
+            engineRef.current?.updatePanelTransformPreview(result.delta);
+          } else {
+            const next = composeTransforms(drag.bases, result.delta)[0];
+            if (next) previewTransform(drag.rows[0]!, next, engineRef);
+          }
           setState(s => ({ ...s, readout: result.readout }));
           refresh();
         }

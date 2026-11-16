@@ -132,9 +132,20 @@ export class AvatarView {
   get dynamicSamples(): readonly DynamicPressureFrame[] { return this.dynamicFit.samples; }
   get dynamicSampleCount(): number { return this.dynamicFit.count; }
 
-  /** Moves and rotates the body in the scene. */
-  applyTransform(avatar: { transform?: ObjectTransform }): void {
+  /**
+   * Moves the body and, unless this is a drag preview, re-installs the collision mesh the cloth
+   * reads, so a placement change collides where it is drawn. The motion driver re-reads the new
+   * grid, whose cell layout follows the pose the body was refitted at.
+   */
+  applyTransform(avatar: { transform?: ObjectTransform }, refitCollider = true): void {
+    if (!refitCollider) {
+      this.stage.pose(avatar.transform);
+      return;
+    }
     this.stage.place(avatar.transform);
+    const mesh = this.stage.collider?.mesh;
+    if (mesh) this.deps.installCollider(mesh);
+    this.motion.reset();
   }
 
   applyDisplay(display: 'visible' | 'hidden' | 'translucent'): void {

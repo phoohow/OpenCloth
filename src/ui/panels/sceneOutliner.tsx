@@ -6,26 +6,12 @@ import {
 } from '@/model';
 import { AddPrintCommand } from '@/commands';
 import { readImageAsPngDataUrl } from '@/io/serialization';
-import {
-  GARMENT_COLLECTION_ID, LIGHT_COLLECTION_ID, PRINT_COLLECTION_ID, REFERENCE_COLLECTION_ID,
-  SEAM_COLLECTION_ID, TOPSTITCH_COLLECTION_ID, TRIM_COLLECTION_ID,
-  lightObjectId, referenceObjectId, seamObjectId,
-} from '@/model';
-import { buildSceneTree, isCollectionVisible, type SceneNode } from '@/ui/sceneTree';
-import {
-  addLight, setAvatarVisible, setEnvironmentEnabled, setLightsEnabled, setPanelsVisible,
-  setProductionVisible, setReferencesVisible, setSeamsStitchVisible, type EngineRef,
-} from '@/ui/sceneCommands';
-import { idsOfKind, parseElementNodeId } from '@/model';
+import { LIGHT_COLLECTION_ID, PRINT_COLLECTION_ID } from '@/model';
+import { buildSceneTree, type SceneNode } from '@/ui/sceneTree';
+import { addLight, setNodeVisible, type EngineRef } from '@/ui/sceneCommands';
+import { idsOfKind, isNodeVisibleWritable } from '@/model';
 import { Icon } from '@/ui/icons';
 import { reportActionError } from '@/ui/widgets/toast';
-
-/** Collections that group one kind of production object. */
-const PRODUCTION_COLLECTION_KINDS: Record<string, 'print' | 'topstitch' | 'trim'> = {
-  [PRINT_COLLECTION_ID]: 'print',
-  [TOPSTITCH_COLLECTION_ID]: 'topstitch',
-  [TRIM_COLLECTION_ID]: 'trim',
-};
 
 /** Hierarchical scene list: collections, objects, viewport visibility and selection. */
 export function SceneOutliner({ engineRef }: { engineRef: EngineRef }) {
@@ -35,7 +21,6 @@ export function SceneOutliner({ engineRef }: { engineRef: EngineRef }) {
   const expanded = useUIStore(s => s.expandedOutliner);
   const toggleOutliner = useUIStore(s => s.toggleOutliner);
   const setExpandedOutliner = useUIStore(s => s.setExpandedOutliner);
-  const refVersion = useUIStore(s => s.refObjectsVersion);
   const [newLightType, setNewLightType] = useState<LightType>('directional');
   const [printPanelId, setPrintPanelId] = useState<string | null>(null);
   const printInputRef = useRef<HTMLInputElement>(null);
@@ -67,34 +52,9 @@ export function SceneOutliner({ engineRef }: { engineRef: EngineRef }) {
     }
   };
 
+  /** Flips one row's viewport visibility; collection rows fan out to their members. */
   const toggleNode = (node: SceneNode) => {
-    if (node.kind === 'panel') { setPanelsVisible([node.id], !node.visible); return; }
-    if (node.kind === 'reference') { setReferencesVisible([referenceObjectId(node.id)], !node.visible, engineRef); return; }
-    if (node.kind === 'avatar') { setAvatarVisible(!node.visible, engineRef); return; }
-    if (node.kind === 'light') { setLightsEnabled([lightObjectId(node.id)], !node.visible); return; }
-    if (node.kind === 'environment') { setEnvironmentEnabled(!node.visible); return; }
-    if (node.kind === 'seam') { setSeamsStitchVisible([seamObjectId(node.id)], !node.visible); return; }
-    if (node.kind === 'print' || node.kind === 'topstitch' || node.kind === 'trim') {
-      const element = parseElementNodeId(node.id);
-      if (element) setProductionVisible(node.kind, [element.id], !node.visible);
-      return;
-    }
-    if (node.kind === 'collection') {
-      const next = !isCollectionVisible(node);
-      if (node.id === GARMENT_COLLECTION_ID) {
-        setPanelsVisible(node.children.map(c => c.id), next);
-      } else if (node.id === REFERENCE_COLLECTION_ID) {
-        setReferencesVisible(node.children.map(c => referenceObjectId(c.id)), next, engineRef);
-      } else if (node.id === SEAM_COLLECTION_ID) {
-        setSeamsStitchVisible(node.children.map(c => seamObjectId(c.id)), next);
-      } else {
-        const kind = PRODUCTION_COLLECTION_KINDS[node.id];
-        if (kind) {
-          const ids = node.children.flatMap(c => parseElementNodeId(c.id)?.id ?? []);
-          setProductionVisible(kind, ids, next);
-        }
-      }
-    }
+    setNodeVisible(node.id, !node.visible, engineRef);
   };
 
   /** Picks the object a row stands for; collections only expand or collapse. */
@@ -110,6 +70,7 @@ export function SceneOutliner({ engineRef }: { engineRef: EngineRef }) {
 
   const renderNode = (node: SceneNode, depth: number): React.ReactNode[] => {
     const isExpanded = node.children.length === 0 || expanded.includes(node.id);
+    const canToggle = node.hideable && isNodeVisibleWritable(project, node.id);
     const rows: React.ReactNode[] = [
       <div
         key={node.id}
@@ -123,9 +84,10 @@ export function SceneOutliner({ engineRef }: { engineRef: EngineRef }) {
         </span>
         {node.hideable && (
           <button
-            style={styles.eye}
-            title={node.visible ? '在视口中隐藏' : '在视口中显示'}
-            onClick={e => { e.stopPropagation(); toggleNode(node); }}
+            style={{ ...styles.eye, ...(canToggle ? null : styles.eyeDisabled) }}
+            disabled={!canToggle}
+            title={canToggle ? (node.visible ? '在视口中隐藏' : '在视口中显示') : '没有可切换的对象'}
+            onClick={e => { e.stopPropagation(); if (canToggle) toggleNode(node); }}
           >
             <Icon name={node.visible ? 'eye' : 'eye-off'} size={13} />
           </button>
@@ -180,7 +142,7 @@ export function SceneOutliner({ engineRef }: { engineRef: EngineRef }) {
           <Icon name={expanded.length > 0 ? 'collapse-all' : 'expand-all'} size={12} />
         </button>
       </div>
-      <div style={styles.body} key={`tree${refVersion}`}>{tree.children.flatMap(child => renderNode(child, 0))}</div>
+      <div style={styles.body}>{tree.children.flatMap(child => renderNode(child, 0))}</div>
       <input ref={printInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={onPrintFile} />
     </div>
   );
@@ -202,6 +164,7 @@ const styles: Record<string, React.CSSProperties> = {
   rowActive: { background: '#2a4a6a', color: '#fff', boxShadow: 'inset 0 0 0 1px #4da6ff' },
   chevron: { width: 12, height: 22, flex: '0 0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888' },
   eye: { width: 18, height: 22, flex: '0 0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', padding: 0 },
+  eyeDisabled: { color: '#4a4a52', cursor: 'default' },
   label: { flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   note: { flex: '0 0 auto', fontSize: 'var(--oc-fs-note)', color: '#7a8496', padding: '0 2px' },
   addRow: { flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 2 },

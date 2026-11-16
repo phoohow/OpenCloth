@@ -1,5 +1,5 @@
 import { useProjectStore, useUIStore, type PropTab } from '@/store';
-import { buildSceneTree, elementLabel, findSceneNode, type SceneNode } from '@/ui/sceneTree';
+import { buildSceneIndex, elementLabel, type SceneNode } from '@/ui/sceneTree';
 import { parseElementNodeId } from '@/model';
 import { PROP_TAB_OPTIONS } from '@/ui/optionTables';
 import type { EngineRef } from '@/ui/sceneCommands';
@@ -43,7 +43,7 @@ export function usePropsTarget(engineRef: EngineRef, visibleTabs: readonly PropT
         id: nodeId!, kind: element.kind, label: elementLabel(project, element.kind, element.id),
         icon: 'panel', hideable: false, visible: true, children: [],
       }
-    : nodeId ? findSceneNode(buildSceneTree(project), nodeId) : null;
+    : nodeId ? buildSceneIndex(project).byId.get(nodeId) ?? null : null;
   const kind = node?.kind ?? null;
   const allowedTabs = tabsForKind(kind);
   // With no object selected the editor opens on the project overview, not on the first rail tab.
