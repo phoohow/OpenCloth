@@ -7,7 +7,7 @@ import {
   SetPanelMeshResolutionCommand,
 } from '@/commands';
 import type { Command } from '@/commands';
-import { GARMENT_LAYERS } from '@/model';
+import { GARMENT_LAYERS, MESH_RESOLUTION_MAX_CM, MESH_RESOLUTION_MIN_CM } from '@/model';
 import {
   anchorOptionsFor, GARMENT_LAYER_LABELS, PANEL_WRAP_MODES,
 } from '@/ui/optionTables';
@@ -210,8 +210,9 @@ export function PanelMeshData({ project, panelId }: { project: Project; panelId:
   return (
     <>
       <Section title="布料网格">
-        <Row label="网格密度(cm)">
-          <NumberField value={panel.meshResolutionCm} step={0.5} precision={2} min={0.5} max={10} title="逐片网格密度；修改只重建当前片"
+        <Row label="网格边长(cm)">
+          <NumberField value={panel.meshResolutionCm} step={0.1} precision={2}
+            min={MESH_RESOLUTION_MIN_CM} max={MESH_RESOLUTION_MAX_CM} title="逐片网格边长；修改只重建当前片"
             onCommit={v => {
               try {
                 useProjectStore.getState().executeCommand(new SetPanelMeshResolutionCommand(panelId, v));

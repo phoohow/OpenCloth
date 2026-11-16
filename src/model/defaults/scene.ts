@@ -8,8 +8,12 @@ import { genId } from '@/base/id';
 /** Wire overlay the viewport starts with. */
 export const DEFAULT_WIRE_OPTIONS: WireOptions = { color: 0x66ccff, depth: 'tested' };
 
-/** Default simulation mesh edge length in cm; finer than the per-panel pattern value. */
-export const DEFAULT_MESH_RESOLUTION_CM = 1.5;
+/** Default mesh edge length in cm. */
+export const DEFAULT_MESH_RESOLUTION_CM = 1;
+
+/** Shortest and longest mesh edge length the editors accept, in cm. */
+export const MESH_RESOLUTION_MIN_CM = 0.2;
+export const MESH_RESOLUTION_MAX_CM = 5;
 
 /** Default interior mesh point distribution. */
 export const DEFAULT_MESH_SAMPLING: MeshSampling = 'lattice';

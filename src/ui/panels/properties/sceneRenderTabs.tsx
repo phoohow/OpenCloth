@@ -2,7 +2,8 @@ import { displayModeOf, usePerfStore, useProjectStore, useSimStore, useUIStore }
 import type { Project } from '@/model/types';
 import {
   DEFAULT_CLOTH_THICKNESS_CM, DEFAULT_COMPRESSION_LIMIT, DEFAULT_LAYER_SPACING_CM,
-  DEFAULT_MESH_RESOLUTION_CM, DEFAULT_MESH_SAMPLING, DEFAULT_STRETCH_LIMIT, normalizeRayTracing,
+  DEFAULT_MESH_RESOLUTION_CM, DEFAULT_MESH_SAMPLING, DEFAULT_STRETCH_LIMIT, MESH_RESOLUTION_MAX_CM,
+  MESH_RESOLUTION_MIN_CM, normalizeRayTracing,
 } from '@/model';
 import { AutoAssignCollisionLayersCommand } from '@/commands';
 import { patchValue, setGlobalMeshResolution, setRayTracingConfig, setSimulationConfig, setToneMapping, type EngineRef } from '@/ui/sceneCommands';
@@ -65,7 +66,7 @@ export function ProjectTab({ project, engineRef }: { project: Project; engineRef
         <SelectRow label="生成方式" value={sim.meshSampling ?? DEFAULT_MESH_SAMPLING}
           options={MESH_SAMPLINGS}
           onChange={v => setSimulationConfig('修改网格生成方式', { meshSampling: v })} />
-        <SliderRow label="网格边长" min={0.5} max={10} step={0.5} unit="cm"
+        <SliderRow label="网格边长" min={MESH_RESOLUTION_MIN_CM} max={MESH_RESOLUTION_MAX_CM} step={0.1} unit="cm"
           value={sim.meshResolutionCm ?? DEFAULT_MESH_RESOLUTION_CM} commitOnRelease
           onChange={v => setGlobalMeshResolution(v)} />
       </Section>

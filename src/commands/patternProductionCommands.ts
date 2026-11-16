@@ -4,9 +4,17 @@ import type {
   Annotation, Measurement, MeasurementRefs, Notch, Pattern, Print, Project, SeamAllowanceCorner,
   SimulationConfig, SizeDef, Topstitch, Trim, TrimKind, Vec2,
 } from '@/model/types';
+import { MESH_RESOLUTION_MAX_CM, MESH_RESOLUTION_MIN_CM } from '@/model';
 
 import { inferCollisionLayers } from '@/pattern/auto';
 import { SnapshotCommand } from '@/commands/patternSnapshot';
+
+/** Rejects a mesh edge length outside the accepted range, in cm. */
+function checkMeshResolution(cm: number): void {
+  if (!Number.isFinite(cm) || cm < MESH_RESOLUTION_MIN_CM || cm > MESH_RESOLUTION_MAX_CM) {
+    throw new Error(`网格边长需在 ${MESH_RESOLUTION_MIN_CM}~${MESH_RESOLUTION_MAX_CM} cm 之间`);
+  }
+}
 
 /** Sets a panel's default seam allowance, in cm. */
 export class SetPanelSeamAllowanceCommand extends SnapshotCommand {
@@ -23,13 +31,13 @@ export class SetPanelSeamAllowanceCommand extends SnapshotCommand {
 
 /** Sets one panel's mesh edge length, in cm. */
 export class SetPanelMeshResolutionCommand extends SnapshotCommand {
-  readonly label = '设置网格密度';
+  readonly label = '设置网格边长';
   constructor(private panelId: string, private cm: number) { super(); }
 
   protected apply(pattern: Pattern, _ctx: ProjectContext): void {
     const panel = pattern.panels[this.panelId];
     if (!panel) throw new Error('版片不存在');
-    if (!Number.isFinite(this.cm) || this.cm <= 0) throw new Error('网格密度需为正数');
+    checkMeshResolution(this.cm);
     panel.meshResolutionCm = this.cm;
   }
 }
@@ -55,7 +63,7 @@ export class SetGlobalMeshResolutionCommand extends SnapshotCommand {
   constructor(private cm: number) { super(); }
 
   protected apply(pattern: Pattern, ctx: ProjectContext): void {
-    if (!Number.isFinite(this.cm) || this.cm <= 0) throw new Error('网格边长需为正数');
+    checkMeshResolution(this.cm);
     this.beforeSimulation = structuredClone(ctx.project.scene.simulation);
     for (const panel of Object.values(pattern.panels)) panel.meshResolutionCm = this.cm;
     ctx.project.scene = {
