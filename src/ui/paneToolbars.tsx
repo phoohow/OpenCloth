@@ -34,10 +34,10 @@ type ToolSpec = { key: ToolType; label: string; icon: IconName; hint?: string };
 
 /** Slot-wide 2D tools; the line and shape groups sit between these two blocks. */
 const TOOLS_2D: ToolSpec[] = [
-  { key: 'select', label: '选择', icon: 'select', hint: '单击选中，Ctrl 加选' },
-  { key: 'internalLine', label: '内部线', icon: 'internal-line', hint: '单击版片后逐点单击，Enter 结束' },
-  { key: 'dart', label: '省道', icon: 'dart', hint: '依次单击两条相邻轮廓边与省尖' },
-  { key: 'seam', label: '缝合', icon: 'seam', hint: '依次单击两条边，再各点一个端点定缝纫方向' },
+  { key: 'select', label: '选择', icon: 'select', hint: '单击选中 · Ctrl 加选' },
+  { key: 'internalLine', label: '内部线', icon: 'internal-line', hint: '逐点单击 · Enter 结束' },
+  { key: 'dart', label: '省道', icon: 'dart', hint: '点两条边与省尖' },
+  { key: 'seam', label: '缝合', icon: 'seam', hint: '点两条边与端点' },
   { key: 'topstitch', label: '明线', icon: 'topstitch', hint: '单击轮廓边' },
 ];
 
@@ -49,15 +49,15 @@ const POINT_TOOLS: ToolSpec[] = [
 
 /** Line tools sharing one toolbar slot. */
 const LINE_TOOLS: ToolSpec[] = [
-  { key: 'line', label: '直线', icon: 'line', hint: '逐点单击，Enter 闭合，Esc 取消，Backspace 退点' },
-  { key: 'curve', label: '曲线', icon: 'curve', hint: '逐点单击，Enter 闭合，Esc 取消' },
+  { key: 'line', label: '直线', icon: 'line', hint: '逐点单击 · Enter 闭合' },
+  { key: 'curve', label: '曲线', icon: 'curve', hint: '逐点单击 · Enter 闭合' },
 ];
 
 /** Shape tools sharing one toolbar slot. */
 const SHAPE_TOOLS: ToolSpec[] = [
-  { key: 'rect', label: '矩形', icon: 'rect', hint: '按住拖动绘制' },
-  { key: 'circle', label: '圆', icon: 'circle', hint: '按住拖动绘制' },
-  { key: 'ellipse', label: '椭圆', icon: 'ellipse', hint: '按住拖动绘制' },
+  { key: 'rect', label: '矩形', icon: 'rect', hint: '拖动绘制' },
+  { key: 'circle', label: '圆', icon: 'circle', hint: '拖动绘制' },
+  { key: 'ellipse', label: '椭圆', icon: 'ellipse', hint: '拖动绘制' },
 ];
 
 /** Element kinds a marquee rectangle can collect, with their row labels. */
@@ -77,10 +77,10 @@ const MARQUEE_KINDS: Array<{ kind: PatternElementKind; label: string }> = [
 ];
 
 const TOOLS_3D: Array<{ key: ToolType; label: string; icon: IconName; hint?: string }> = [
-  { key: 'pin', label: '打PIN', icon: 'pin', hint: '悬停布料出现圆圈时单击' },
+  { key: 'pin', label: '打PIN', icon: 'pin', hint: '悬停布料单击' },
   { key: 'unpin', label: '拔PIN', icon: 'unpin', hint: '单击已有 PIN' },
-  { key: 'sketch3d', label: '3D 线稿笔', icon: 'pen', hint: '在布料上拖动，松手后落到所属版片的内部线' },
-  { key: 'measure3d', label: '3D 测量', icon: 'ruler', hint: '依次单击布料表面两点' },
+  { key: 'sketch3d', label: '线稿笔', icon: 'pen', hint: '在布料上拖动画线' },
+  { key: 'measure3d', label: '测量', icon: 'ruler', hint: '点选布料两点' },
 ];
 
 /** View preset entries shown in the 3D toolbar, each labelled with its keypad combo. */
@@ -164,7 +164,7 @@ export function Toolbar2D() {
       <ToggleMenu
         icon="marquee"
         label="框选"
-        title={marqueeKinds.length === 0 ? '框选：拖框不收集对象' : `框选对象 · ${marqueeLabels(marqueeKinds)}`}
+        title={marqueeKinds.length === 0 ? '框选：不收集对象' : `框选 · ${marqueeLabels(marqueeKinds)}`}
         items={MARQUEE_KINDS.map(({ kind, label }) => ({ key: kind, label, checked: marqueeKinds.includes(kind) }))}
         onToggle={key => {
           const kind = key as PatternElementKind;
@@ -175,8 +175,8 @@ export function Toolbar2D() {
       />
       <ToggleMenu
         icon="eye"
-        label="显示"
-        title={hiddenLayers.length === 0 ? '显示图层 · 全部显示' : `显示图层 · 已隐藏：${hiddenLayers.map(l => l.label).join('、')}`}
+        label="图层"
+        title={hiddenLayers.length === 0 ? '图层 · 全部显示' : `图层 · 已隐藏：${hiddenLayers.map(l => l.label).join('、')}`}
         items={DISPLAY_LAYER_OPTIONS.map(l => ({ key: l.key, label: l.label, checked: displayOptions[l.key] }))}
         onToggle={key => setDisplayOption(key as keyof DisplayOptions, !displayOptions[key as keyof DisplayOptions])}
       />
@@ -221,7 +221,7 @@ function ProblemMenu() {
 
   return (
     <div ref={anchorRef} style={{ position: 'relative' }}>
-      <button style={styles.textBtn} title="单击展开问题列表" onClick={() => (issues === null ? open() : setIssues(null))}>
+      <button style={styles.textBtn} title="检查问题" onClick={() => (issues === null ? open() : setIssues(null))}>
         问题<Icon name="chevron-down" size={11} style={{ marginLeft: 4 }} />
       </button>
       <MenuPopup open={issues !== null} anchor={anchorRef} onClose={() => setIssues(null)}>
@@ -294,7 +294,7 @@ function AutoMenu() {
 
   return (
     <div ref={anchorRef} style={{ position: 'relative' }}>
-      <button style={styles.textBtn} title="自动排位与缝合建议" onClick={toggle}>
+      <button style={styles.textBtn} title="自动排位与缝合" onClick={toggle}>
         自动<Icon name="chevron-down" size={11} style={{ marginLeft: 4 }} />
       </button>
       <MenuPopup open={scan !== null} anchor={anchorRef} onClose={() => setScan(null)}>
@@ -322,8 +322,8 @@ function AutoMenu() {
 function seamSkippedNote(skipped: SeamScanSkipped): string | null {
   const parts: string[] = [];
   if (skipped.alreadySeamed > 0) parts.push(`${skipped.alreadySeamed} 条已有缝口的边`);
-  if (skipped.unlabeled > 0) parts.push(`${skipped.unlabeled} 条未标注语义的边`);
-  if (skipped.multiEdge > 0) parts.push(`${skipped.multiEdge} 组配对因保留最高分未纳入`);
+  if (skipped.unlabeled > 0) parts.push(`${skipped.unlabeled} 条无语义标注的边`);
+  if (skipped.multiEdge > 0) parts.push(`${skipped.multiEdge} 组配对仅取最高分`);
   return parts.length > 0 ? `已跳过：${parts.join('、')}` : null;
 }
 
@@ -361,7 +361,7 @@ export function Toolbar3D({ engineRef }: { engineRef: MutableRefObject<GarmentEn
       <ToolMenu
         icon="move"
         label="变换"
-        title={`变换 · ${TRANSFORM_ITEMS.find(item => item.key === transformMode)?.label ?? ''}（选中版片后显示手柄）`}
+        title={`变换 · ${TRANSFORM_ITEMS.find(item => item.key === transformMode)?.label ?? ''}`}
         options={TRANSFORM_ITEMS.map(item => ({ key: item.key, label: item.label }))}
         current={transformMode}
         onPick={key => setTransformMode(key as typeof transformMode)}
@@ -396,7 +396,7 @@ export function Toolbar3D({ engineRef }: { engineRef: MutableRefObject<GarmentEn
       />
       <AuxMenu />
       <Dropdown
-        label="拖动预览"
+        label="预览"
         items={EDIT_PREVIEW_ITEMS}
         value={editPreview}
         onPick={key => setEditPreview(key as EditPreviewTier)}
@@ -422,7 +422,7 @@ function ToolButton({ tool, active, onPick, badge, toggle }: {
         ...(badge ? styles.toolBtnCounted : null),
         ...(active ? styles.toolBtnActive : null),
       }}
-      title={toggle && active ? `${hover} · 再次单击取消` : hover}
+      title={toggle && active ? `${hover} · 再点取消` : hover}
       aria-label={tool.label}
       aria-pressed={active}
       onClick={() => onPick(tool.key)}
@@ -460,7 +460,7 @@ function TrimTool({ active, kind, onPick }: {
   return (
     <ToolMenu
       icon="trim"
-      title={`${TRIM_KIND_LABELS[kind]} · 单击版片放置`}
+      title={`${TRIM_KIND_LABELS[kind]} · 单击版片`}
       options={TRIM_KINDS.map(k => ({ key: k, label: TRIM_KIND_LABELS[k] }))}
       current={active ? kind : ''}
       onPick={key => onPick(key as TrimKind)}
@@ -596,7 +596,7 @@ function AuxMenu() {
     <div ref={anchorRef} style={{ position: 'relative' }}>
       <button
         style={{ ...styles.textBtn, ...(active ? styles.textBtnActive : null) }}
-        title={active ? `辅助显示 · ${summary} · 再次单击所选项可关闭` : '辅助显示：版片线框与模特简模，可叠加'}
+        title={active ? `辅助 · ${summary}` : '辅助：版片线框与模特简模'}
         aria-label="辅助"
         aria-pressed={active}
         onClick={() => setOpen(o => !o)}

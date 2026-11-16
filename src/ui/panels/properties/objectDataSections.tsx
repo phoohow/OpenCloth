@@ -126,14 +126,14 @@ function PanelData({ project, panelId }: { project: Project; panelId: string }) 
         <Row label="轮廓边">{panel.outlineEdgeIds.length}</Row>
         <Row label="省道">{panel.dartIds.length}</Row>
         <Row label="内部线">{panel.internalLineIds.length}</Row>
-        <SliderRow label="缝份量（本片默认）" min={0} max={2} step={0.05} unit="cm" value={panel.seamAllowanceCm} commitOnRelease
+        <SliderRow label="缝份量" min={0} max={2} step={0.05} unit="cm" value={panel.seamAllowanceCm} commitOnRelease
           onChange={v => setPanel('修改缝份量', { seamAllowanceCm: v })} />
         <Row label="对称">{panel.symmetry ? `轴 ${panel.symmetry.axisEdgeId}` : '无'}</Row>
         <Row label="镂空">{(panel.holes ?? []).length}</Row>
       </Section>
       <Section title="尺寸">
-        <Row label="轮廓(cm)">{size ? `${size.width.toFixed(2)} × ${size.height.toFixed(2)}` : '—'}</Row>
-        <Row label="目标尺寸(cm)">
+        <Row label="轮廓">{size ? `${size.width.toFixed(2)} × ${size.height.toFixed(2)}` : '—'}</Row>
+        <Row label="目标">
           <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <NumberField value={size?.width ?? 0} step={0.5} precision={2} title="版片宽"
               onCommit={v => resize(v, null)} />
@@ -144,27 +144,27 @@ function PanelData({ project, panelId }: { project: Project; panelId: string }) 
         <CheckRow label="等比缩放" checked={keepRatio} onChange={setKeepRatio} />
       </Section>
       <Section title="倒圆角">
-        <Row label="半径(cm)">
+        <Row label="半径">
           <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <NumberField value={cornerRadius} step={0.5} precision={2} title="圆角半径"
               onCommit={v => setCornerRadius(v)} />
-            <SmallButton onClick={roundCorners} title="给该片当前所有尖角倒成切弧">倒圆角</SmallButton>
+            <SmallButton onClick={roundCorners} title="给当前所有尖角倒圆">倒圆角</SmallButton>
           </span>
         </Row>
       </Section>
       <Section title="生产">
-        <SliderRow label="布纹线角度" min={-180} max={180} step={1} unit="°" value={panel.grainAngleDeg ?? 0} commitOnRelease
+        <SliderRow label="布纹角度" min={-180} max={180} step={1} unit="°" value={panel.grainAngleDeg ?? 0} commitOnRelease
           onChange={v => setGrain({ angleDeg: v })} />
-        <Row label="布纹线位置(cm)">
+        <Row label="布纹位置">
           <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <NumberField value={panel.grainOffset?.x ?? 0} step={0.5} precision={2} title="横向偏离包围盒中心"
+            <NumberField value={panel.grainOffset?.x ?? 0} step={0.5} precision={2} title="相对版片中心"
               onCommit={v => setGrain({ offset: { x: v, y: panel.grainOffset?.y ?? 0 } })} />
-            <NumberField value={panel.grainOffset?.y ?? 0} step={0.5} precision={2} title="纵向偏离包围盒中心"
+            <NumberField value={panel.grainOffset?.y ?? 0} step={0.5} precision={2} title="相对版片中心"
               onCommit={v => setGrain({ offset: { x: panel.grainOffset?.x ?? 0, y: v } })} />
           </span>
         </Row>
-        <Row label="布纹线长度(cm)">
-          <NumberField value={panel.grainLengthCm ?? 0} step={0.5} precision={2} title="0 为按轮廓自动"
+        <Row label="布纹长度">
+          <NumberField value={panel.grainLengthCm ?? 0} step={0.5} precision={2} title="0 为自动"
             onCommit={v => setGrain({ lengthCm: v })} />
         </Row>
       </Section>
@@ -209,10 +209,10 @@ export function PanelMeshData({ project, panelId }: { project: Project; panelId:
 
   return (
     <>
-      <Section title="布料网格">
-        <Row label="网格边长(cm)">
+      <Section title="网格">
+        <Row label="网格边长">
           <NumberField value={panel.meshResolutionCm} step={0.1} precision={2}
-            min={MESH_RESOLUTION_MIN_CM} max={MESH_RESOLUTION_MAX_CM} title="逐片网格边长；修改只重建当前片"
+            min={MESH_RESOLUTION_MIN_CM} max={MESH_RESOLUTION_MAX_CM} title="修改只重建当前片"
             onCommit={v => {
               try {
                 useProjectStore.getState().executeCommand(new SetPanelMeshResolutionCommand(panelId, v));
@@ -233,7 +233,7 @@ export function PanelMeshData({ project, panelId }: { project: Project; panelId:
             v ? { layer: v as GarmentLayer, collisionLayer: undefined } : { layer: undefined },
           )} />
         <Row label="碰撞层">
-          <NumberField value={panelCollisionLayer(panel)} step={1} precision={0} min={0} max={9} title="0 为最内层；层差越大，自碰撞把外层推得越远"
+          <NumberField value={panelCollisionLayer(panel)} step={1} precision={0} min={0} max={9} title="0 为最内层"
             onCommit={v => setPanel('修改碰撞层', { collisionLayer: Math.round(v) })} />
         </Row>
       </Section>
@@ -278,19 +278,19 @@ export function PanelDrapeData({ project, panelId }: { project: Project; panelId
             <>
               <SelectRow label="高度" value={anchor} options={anchorOptionsFor(region)}
                 onChange={value => setDrape({ ...drape, anchor: value }, '调整环绕高度')} />
-              <Row label="偏移(cm)">
+              <Row label="偏移">
                 <NumberField value={drape.anchorOffsetCm ?? 0} step={0.1} precision={2}
-                  title="正数向上，负数向下" onCommit={value => setDrape({ ...drape, anchorOffsetCm: value }, '调整环绕偏移')} />
+                  title="正数向上" onCommit={value => setDrape({ ...drape, anchorOffsetCm: value }, '调整环绕偏移')} />
               </Row>
             </>
           )}
-          {region === 'head' && <Hint>头部从颅顶铺到颈线，高度由头形决定。</Hint>}
-          <CheckRow label="反向环绕" checked={drape.flip ?? false}
+          {region === 'head' && <Hint>头部高度由头形决定。</Hint>}
+          <CheckRow label="反向" checked={drape.flip ?? false}
             onChange={value => setDrape({ ...drape, flip: value }, '翻转环绕方向')} />
         </>
       )}
       {panel.placement && <Row label="手动放置">平面摆放</Row>}
-      {!drape && <Hint>版片平放在 2D 坐标上，不参与环绕。</Hint>}
+      {!drape && <Hint>版片平放，不参与环绕。</Hint>}
     </Section>
   );
 }
@@ -342,10 +342,10 @@ export function SizeChart({ project, engineRef }: { project: Project; engineRef:
           {order.map(s => (
             <div key={s.id} style={styles.sizeRow}>
               <span style={styles.sizeLabel}>名称</span>
-              <InlineText value={s.label} onChange={v => rename(s.id, v)} title="尺码名，回车或失焦提交" />
-              <SmallButton compact onClick={() => move(s.id, -1)} title="上移一位，档差方向随顺序变">↑</SmallButton>
-              <SmallButton compact onClick={() => move(s.id, 1)} title="下移一位">↓</SmallButton>
-              <SmallButton compact onClick={() => exec(new RemoveSizeCommand(s.id))} title="删除这一码">−</SmallButton>
+              <InlineText value={s.label} onChange={v => rename(s.id, v)} title="回车提交" />
+              <SmallButton compact onClick={() => move(s.id, -1)} title="上移">↑</SmallButton>
+              <SmallButton compact onClick={() => move(s.id, 1)} title="下移">↓</SmallButton>
+              <SmallButton compact onClick={() => exec(new RemoveSizeCommand(s.id))} title="删除">−</SmallButton>
             </div>
           ))}
         </>

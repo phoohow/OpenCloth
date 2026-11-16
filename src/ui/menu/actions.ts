@@ -362,6 +362,8 @@ export function shortcutActions(actions: MenuActions): ShortcutActions {
     cameraBackLeft: () => actions.camera('backLeft'),
     cameraBackRight: () => actions.camera('backRight'),
     shortcuts: actions.showShortcuts,
+    perfPanel: actions.togglePerfPanel,
+    debug3d: () => actions.openDebugScreenshot('3d'),
   };
 }
 

@@ -34,19 +34,19 @@ export function EnvironmentAssets() {
         />
         {custom && (
           <AssetRow
-            name={lights.iblName ?? '外链环境图'}
-            meta="导入的环境贴图"
+            name={lights.iblName ?? '外链环境'}
+            meta="导入贴图"
             icon="environment"
             {...(customPreview ? { image: customPreview } : {})}
             active
-            title="当前使用的环境贴图"
+            title="正在使用"
           />
         )}
       </Section>
       <button
         style={{ ...styles.iconBtn, height: 24, alignSelf: 'stretch', justifyContent: 'center' }}
         onClick={() => void importEnvironmentViaPicker()}
-      >导入环境贴图</button>
+      >导入环境</button>
     </>
   );
 }

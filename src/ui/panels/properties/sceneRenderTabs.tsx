@@ -62,22 +62,22 @@ export function ProjectTab({ project, engineRef }: { project: Project; engineRef
         <Row label="面料">{Object.keys(project.fabrics).length}</Row>
         <Row label="参考物">{refs.length}</Row>
       </Section>
-      <Section title="网格生成">
-        <SelectRow label="生成方式" value={sim.meshSampling ?? DEFAULT_MESH_SAMPLING}
+      <Section title="网格">
+        <SelectRow label="采样" value={sim.meshSampling ?? DEFAULT_MESH_SAMPLING}
           options={MESH_SAMPLINGS}
           onChange={v => setSimulationConfig('修改网格生成方式', { meshSampling: v })} />
         <SliderRow label="网格边长" min={MESH_RESOLUTION_MIN_CM} max={MESH_RESOLUTION_MAX_CM} step={0.1} unit="cm"
           value={sim.meshResolutionCm ?? DEFAULT_MESH_RESOLUTION_CM} commitOnRelease
           onChange={v => setGlobalMeshResolution(v)} />
       </Section>
-      <Section title="全局模拟">
+      <Section title="模拟">
         <SliderRow label="重力" min={-20} max={0} step={0.1} unit="m/s²" value={sim.gravity.y}
           onChange={v => setSimulationConfig('修改重力', { gravity: { ...sim.gravity, y: v } })} />
         <SliderRow label="风速" min={0} max={20} step={0.5} value={sim.wind.speed}
           onChange={v => setSimulationConfig('修改风速', { wind: { ...sim.wind, speed: v } })} />
-        <SliderRow label="迭代次数" min={1} max={15} step={1} value={sim.constraintIterations}
+        <SliderRow label="迭代" min={1} max={15} step={1} value={sim.constraintIterations}
           onChange={v => setSimulationConfig('修改迭代次数', { constraintIterations: Math.round(v) })} />
-        <CheckRow label="布料自碰撞" checked={sim.selfCollision !== false}
+        <CheckRow label="自碰撞" checked={sim.selfCollision !== false}
           onChange={v => setSimulationConfig('修改布料自碰撞', { selfCollision: v })} />
         <CheckRow label="缝合断裂" checked={sim.seamTearing === true}
           onChange={v => setSimulationConfig(v ? '开启缝合断裂' : '关闭缝合断裂', { seamTearing: v })} />
@@ -88,7 +88,7 @@ export function ProjectTab({ project, engineRef }: { project: Project; engineRef
           value={sim.layerSpacingCm ?? DEFAULT_LAYER_SPACING_CM}
           onChange={v => setSimulationConfig('修改层间距', { layerSpacingCm: v })} />
         <ButtonRow>
-          <SmallButton onClick={autoAssignLayers} title="按缝合连通性与平均松量推断每片的碰撞层">自动识别碰撞层</SmallButton>
+          <SmallButton onClick={autoAssignLayers} title="按缝合关系推断每片碰撞层">自动分层</SmallButton>
         </ButtonRow>
       </Section>
       <LayerSection project={project} />
@@ -142,7 +142,7 @@ export function RenderTab({ project }: { project: Project }) {
         <SelectRow label="简模" value={aux.proxy}
           options={PROXY_AUX_OPTIONS}
           onChange={v => setAux({ ...aux, proxy: v })} />
-        {rayUnavailable && <div style={styles.note}>本机 WebGPU 跑不了光线追踪：{rayUnavailable}。</div>}
+        {rayUnavailable && <div style={styles.note}>本机不支持光追：{rayUnavailable}</div>}
       </Section>
       {fitCheck && (
         <Section title="合身热图">
@@ -166,7 +166,7 @@ export function RenderTab({ project }: { project: Project }) {
                   '\ufeff' + fitReportCsv(project.meta.name, fitStats, { tightCm: fitTightCm, looseCm: fitLooseCm }),
                   'text/csv;charset=utf-8',
                 )}
-              >导出合身报告 CSV</button>
+              >导出 CSV</button>
             </>
           )}
         </Section>
@@ -205,7 +205,7 @@ export function RenderTab({ project }: { project: Project }) {
                   ),
                   'text/csv;charset=utf-8',
                 )}
-              >导出应变报告 CSV</button>
+              >导出 CSV</button>
             </>
           )}
         </Section>
@@ -233,7 +233,7 @@ export function RenderTab({ project }: { project: Project }) {
                   }),
                   'text/csv;charset=utf-8',
                 )}
-              >导出压力报告 CSV</button>
+              >导出 CSV</button>
             </>
           )}
         </Section>
@@ -241,12 +241,12 @@ export function RenderTab({ project }: { project: Project }) {
       {backend === 'pathtrace' && (
         <>
           <Section title="光线追踪">
-            <SliderRow label="最大弹射次数" min={1} max={16} step={1} value={ray.maxBounces}
+            <SliderRow label="弹射次数" min={1} max={16} step={1} value={ray.maxBounces}
               onChange={v => setRayTracingConfig('修改光追弹射次数', { maxBounces: v })} />
-            <SliderRow label="每帧路径预算" min={50} max={1000} step={10} unit="k"
+            <SliderRow label="路径预算" min={50} max={1000} step={10} unit="k"
               value={ray.frameBudget / 1000}
               onChange={v => setRayTracingConfig('修改光追每帧预算', { frameBudget: Math.round(v * 1000) })} />
-            <SliderRow label="最大采样数" min={8} max={1024} step={1} value={ray.maxSamples}
+            <SliderRow label="采样数" min={8} max={1024} step={1} value={ray.maxSamples}
               onChange={v => setRayTracingConfig('修改光追最大采样数', { maxSamples: v })} />
             <SliderRow label="渲染比例" min={0.5} max={1} step={0.05} value={ray.renderScale}
               onChange={v => setRayTracingConfig('修改光追渲染比例', { renderScale: v })} />
@@ -260,14 +260,14 @@ export function RenderTab({ project }: { project: Project }) {
                 onChange={v => setRayTracingConfig('修改降噪模型', { denoiseModel: v })} />
             )}
           </Section>
-          <Section title="画质调节">
+          <Section title="画质">
             <SliderRow label="光泽滤波" min={0} max={1} step={0.05} value={ray.filterGlossyFactor}
               onChange={v => setRayTracingConfig('修改光追光泽滤波', { filterGlossyFactor: v })} />
-            <SliderRow label="直接光钳制" min={0} max={10} step={0.5} value={ray.clampDirect}
+            <SliderRow label="直射钳制" min={0} max={10} step={0.5} value={ray.clampDirect}
               onChange={v => setRayTracingConfig('修改直接光钳制', { clampDirect: v })} />
-            <SliderRow label="间接光钳制" min={0} max={20} step={0.5} value={ray.clampIndirect}
+            <SliderRow label="间接钳制" min={0} max={20} step={0.5} value={ray.clampIndirect}
               onChange={v => setRayTracingConfig('修改间接光钳制', { clampIndirect: v })} />
-            <div style={styles.note}>钳制值越低越能抑制火噪，但会压暗高光。</div>
+            <div style={styles.note}>钳制越低噪点越少，但高光会变暗</div>
           </Section>
         </>
       )}

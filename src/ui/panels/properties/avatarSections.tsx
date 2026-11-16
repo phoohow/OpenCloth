@@ -39,7 +39,7 @@ export function AvatarData({ project, engineRef }: { project: Project; engineRef
   const modelOptions: Array<{ value: string; label: string; disabled?: boolean }> = [
     ...AVATAR_PRESETS.map(item => ({ value: item.id, label: item.label })),
     ...(preset || imported ? [] : [{ value: TAILORED_MODEL, label: '自定义', disabled: true }]),
-    ...(imported ? [{ value: CUSTOM_MODEL, label: '导入的模特' }] : []),
+    ...(imported ? [{ value: CUSTOM_MODEL, label: '导入模型' }] : []),
   ];
 
   /** Switches the figure, or brings an imported model back to a generated one. */
@@ -57,8 +57,8 @@ export function AvatarData({ project, engineRef }: { project: Project; engineRef
 
   return (
     <>
-      <Section title="模型来源">
-        <SelectRow label="模特" value={imported ? CUSTOM_MODEL : preset ?? TAILORED_MODEL}
+      <Section title="来源">
+        <SelectRow label="形体" value={imported ? CUSTOM_MODEL : preset ?? TAILORED_MODEL}
           options={modelOptions} onChange={chooseModel}
           trailing={
             <IconButton title="导入模特" disabled={!engineRef.current}
@@ -66,7 +66,7 @@ export function AvatarData({ project, engineRef }: { project: Project; engineRef
           } />
         {imported && (
           <Row label="">
-            <div style={styles.note}>导入模型仅用于显示</div>
+            <div style={styles.note}>仅用于显示</div>
           </Row>
         )}
       </Section>

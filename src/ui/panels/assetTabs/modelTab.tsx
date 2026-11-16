@@ -27,7 +27,7 @@ export function ModelAssets() {
         params: { ...preset.params, pose: avatar.params.pose },
       },
     );
-    notify(`已切换到${preset.label}，布料将重建`);
+    notify(`已切换到${preset.label}`);
   };
 
   return (
@@ -46,14 +46,14 @@ export function ModelAssets() {
       {imported ? (
         <AssetRow
           name={avatar.modelName ?? '导入模型'}
-          meta="导入的模型文件"
+          meta="导入模型"
           icon="avatar"
           {...(importedPreview ? { image: importedPreview } : {})}
           active
-          title="当前使用导入的模型"
+          title="正在使用"
         />
       ) : null}
-      {!imported && !current ? <div style={styles.note}>当前为自定义体型，选择模特后按预设重建</div> : null}
+      {!imported && !current ? <div style={styles.note}>自定义体型</div> : null}
     </Section>
   );
 }
@@ -72,7 +72,7 @@ function PresetRow({ preset, active, onUse }: {
       icon="avatar"
       {...(preview ? { image: preview } : {})}
       active={active}
-      title={onUse ? `切换到${preset.label}，布料将重建` : '正在使用'}
+      title={onUse ? `切换到${preset.label}` : '正在使用'}
       {...(onUse ? { onClick: onUse } : {})}
     />
   );

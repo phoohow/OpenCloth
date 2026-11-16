@@ -27,7 +27,7 @@ const EDGE_SEMANTIC_OPTIONS = [
 export function EdgeData({ project, nodeId }: { project: Project; nodeId: string }) {
   const el = useElement(project, nodeId);
   const edge = el?.kind === 'edge' ? project.pattern.edges[el.id] : null;
-  if (!edge) return <Hint>边已删除。</Hint>;
+  if (!edge) return <Hint>轮廓边已删除。</Hint>;
   const pattern = project.pattern;
   const length = edgeLength(pattern, edge.id);
 
@@ -50,35 +50,35 @@ export function EdgeData({ project, nodeId }: { project: Project; nodeId: string
   };
 
   return (
-    <Section title="边">
+    <Section title="轮廓边">
       <Row label="边类型">{EDGE_TYPE_LABELS[edge.type]}</Row>
-      <Row label="长度(cm)">
+      <Row label="长度">
         <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          <NumberField value={length} step={0.1} precision={2} min={0.01} title="目标边长；只移动终点"
+          <NumberField value={length} step={0.1} precision={2} min={0.01} title="只移动终点"
             onCommit={v => execute(new SetEdgeLengthCommand(edge.id, v))} />
         </span>
       </Row>
       {edge.type === 'arc' && edge.arc && (
         <>
-          <Row label="半径(cm)">
-            <NumberField value={edge.arc.radius} step={0.1} precision={2} min={0.01} title="圆弧半径；两端点保持不动"
+          <Row label="半径">
+            <NumberField value={edge.arc.radius} step={0.1} precision={2} min={0.01} title="两端点不动"
               onCommit={v => execute(new SetArcParamsCommand(edge.id, { radiusCm: v }))} />
           </Row>
-          <Row label="圆心角(°)">
-            <NumberField value={radToDeg(Math.abs(arcSpan(edge.arc)))} step={0.5} precision={1} min={1} max={359} title="圆心角；两端点保持不动"
+          <Row label="圆心角">
+            <NumberField value={radToDeg(Math.abs(arcSpan(edge.arc)))} step={0.5} precision={1} min={1} max={359} title="两端点不动"
               onCommit={v => execute(new SetArcParamsCommand(edge.id, { sweepDeg: v }))} />
           </Row>
         </>
       )}
       {neighbours.length > 0 && (
-        <Row label="与邻边夹角(°)">
+        <Row label="邻边夹角">
           <AngleRow pattern={pattern} edge={edge} neighbours={neighbours} onCommit={execute} />
         </Row>
       )}
       <SelectRow label="语义" value={edge.semantic ?? 'free'}
         options={EDGE_SEMANTIC_OPTIONS as { value: EdgeSemantic; label: string }[]}
         onChange={v => setEdge('修改边语义', { semantic: v })} />
-      <SliderRow label="缝份（此边）" min={0} max={2} step={0.05} unit="cm"
+      <SliderRow label="缝份" min={0} max={2} step={0.05} unit="cm"
         value={edge.seamAllowanceCm ?? 0}
         commitOnRelease
         onChange={v => setEdge('修改边缝份', { seamAllowanceCm: v })} />
@@ -124,9 +124,9 @@ function AngleRow({ pattern, edge, neighbours, onCommit }: {
         value={referenceId}
         options={neighbours.map(e => ({ value: e.id, label: edgeLabel(pattern, e.id) }))}
         onChange={setReferenceId}
-        title="作为角度参照的邻边"
+        title="角度参照边"
       />
-      <NumberField value={current} step={0.5} precision={1} min={1} max={179} title="输入目标夹角"
+      <NumberField value={current} step={0.5} precision={1} min={1} max={179} title="目标夹角"
         onCommit={v => onCommit(new SetEdgeAngleCommand(edge.id, referenceId, v))} />
     </span>
   );

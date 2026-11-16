@@ -27,8 +27,8 @@ export interface StructureItem {
 
 /** Structure operations in workflow order: shape first, then topology, then seams. */
 export const STRUCTURE_ITEMS: StructureItem[] = [
-  { key: 'split', label: '轮廓分割', hint: '选中版片后逐点单击画线，Enter 执行' },
-  { key: 'hole', label: '开内孔', hint: '选中版片后逐点单击画闭合环，Enter 执行' },
+  { key: 'split', label: '轮廓分割', hint: '逐点单击画线 · Enter 执行' },
+  { key: 'hole', label: '开内孔', hint: '逐点单击画闭合环 · Enter 执行' },
   { key: 'mirror-y', label: '纵向镜像', hint: '选中一个版片' },
   { key: 'mirror-x', label: '横向镜像', hint: '选中一个版片' },
   { key: 'mirror-edge', label: '沿边镜像', hint: '选中一个版片和一条轴边' },
@@ -41,21 +41,21 @@ export const STRUCTURE_ITEMS: StructureItem[] = [
   { key: 'fillet', label: '倒圆角', hint: '选中角点后输入半径' },
   { key: 'break', label: '断开顶点', hint: '选中一个顶点' },
   { key: 'connect', label: '连接端点', hint: '选中两个自由端点' },
-  { key: 'merge-collinear', label: '合并共线边', hint: '选中两条以上共线相邻边' },
+  { key: 'merge-collinear', label: '共线合并', hint: '选中两条以上共线边' },
   { key: 'simplify', label: '简化曲线', hint: '选中曲线边后输入容差' },
-  { key: 'offset-line', label: '等距内部线', hint: '选中一条基准边后输入距离' },
-  { key: 'loop-panel', label: '内部线成片', hint: '选中一条闭合内部线' },
+  { key: 'offset-line', label: '等距内线', hint: '选中基准边后输入距离' },
+  { key: 'loop-panel', label: '内线成片', hint: '选中一条闭合内部线' },
   { key: 'rhombus-dart', label: '菱形省', hint: '选中一条边后输入省量与省长' },
   { key: 'multi-seam', label: '多段缝合', hint: '按顺序选中一条基准边和多条目标边' },
-  { key: 'blend-start', label: '接角圆顺（起）', hint: '选中一条缝合' },
-  { key: 'blend-end', label: '接角圆顺（终）', hint: '选中一条缝合' },
+  { key: 'blend-start', label: '起点圆顺', hint: '选中一条缝合' },
+  { key: 'blend-end', label: '终点圆顺', hint: '选中一条缝合' },
 ];
 
 /** Production marks placed with a tool, shared by the 标记 menu and the 2D toolbar slot. */
 export const MARK_ITEMS: Array<{ key: ToolType; label: string; hint: string }> = [
   { key: 'notch', label: '刀口', hint: '单击轮廓边' },
-  { key: 'annotation', label: '文字注释', hint: '单击版片' },
-  { key: 'measure', label: '标注尺寸', hint: '依次单击两个顶点' },
+  { key: 'annotation', label: '注释', hint: '单击版片' },
+  { key: 'measure', label: '尺寸线', hint: '依次单击两个顶点' },
   { key: 'topstitch', label: '明线', hint: '单击轮廓边' },
   { key: 'trim', label: '辅料', hint: '选中版片后放一个辅料' },
 ];

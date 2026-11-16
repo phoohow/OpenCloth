@@ -42,15 +42,15 @@ export type SeamStep = 'pick' | 'start' | 'second' | 'startB';
 export const statusHint = (layout: ViewLayout, scale: number, tool: ToolType, seamStep: SeamStep): string => {
   if (tool === 'seam') {
     switch (seamStep) {
-      case 'start': return '2D 制版 · 缝合 · 单击 A 边的端点，确定缝纫方向（从该端缝向另一端）';
-      case 'second': return '2D 制版 · 缝合 · 单击第二条边（B），再点它的端点确定方向 · Esc 取消';
-      case 'startB': return '2D 制版 · 缝合 · 单击 B 边的端点，随即完成缝合 · Esc 取消';
-      default: return '2D 制版 · 缝合 · 单击轮廓边取整条边，按住拖动可只取一段 · 点空白或 Esc 取消';
+      case 'start': return '2D 制版 · 缝合 · 点 A 边端点定方向';
+      case 'second': return '2D 制版 · 缝合 · 点第二边与端点 · Esc 取消';
+      case 'startB': return '2D 制版 · 缝合 · 点 B 边端点完成 · Esc 取消';
+      default: return '2D 制版 · 缝合 · 单击轮廓边 · 拖动取一段 · Esc 取消';
     }
   }
   return isSplitLayout(layout)
-    ? `2D 制版 · 缩放 ${scale.toFixed(1)}x · 单击选片/拖点移动 · F适应 · 快捷键需点击聚焦本窗格`
-    : `2D 制版 · 缩放 ${scale.toFixed(1)}x · 单击选片/Ctrl加选/空白拖框选 · 拖点、拖边或拖动版片（0.5cm吸附，Alt自由）· 右键输入长度角度或精确位移 · Delete删除/方向键微调 · 点工具：增加顶点单击轮廓边，删除顶点单击顶点（相邻点相连）· 滚轮定点缩放 · F或双击空白适应 · 中键或空格平移`;
+    ? `2D 制版 · 缩放 ${scale.toFixed(1)}x · 单击选片 · 拖点移动 · F 适应`
+    : `2D 制版 · 缩放 ${scale.toFixed(1)}x · 单击选片 · Ctrl 加选 · 拖框选（0.5cm 吸附）· 滚轮缩放 · 空格平移`;
 };
 
 /** Pattern copy with one notch slid along its edge, for the drag preview. */

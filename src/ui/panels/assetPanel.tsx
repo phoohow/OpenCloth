@@ -18,7 +18,7 @@ export function AssetPanel() {
     <div style={{ ...styles.panel, width }}>
       <div style={styles.header}>
         <span style={{ flex: 1 }}>素材库</span>
-        <button style={styles.collapseBtn} onClick={toggle} title="收起素材库" aria-label="收起素材库">
+        <button style={styles.collapseBtn} onClick={toggle} title="收起" aria-label="收起素材库">
           <Icon name="chevron-right" size={11} style={{ color: '#888', transform: 'rotate(180deg)' }} />
         </button>
       </div>
@@ -54,7 +54,7 @@ export function AssetPanel() {
 export function AssetRail() {
   const toggle = useUIStore(s => s.toggleAssetPanel);
   return (
-    <button style={styles.railEdge} onClick={toggle} title="展开素材库">
+    <button style={styles.railEdge} onClick={toggle} title="展开">
       <Icon name="chevron-right" size={11} style={{ color: '#4da6ff' }} />
       <span style={styles.railLabel}>素材库</span>
     </button>

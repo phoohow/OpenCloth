@@ -28,8 +28,8 @@ export function PointData({ project, nodeId }: { project: Project; nodeId: strin
     .executeCommand(new MovePointsCommand(new Map([[point.id, delta]])));
 
   return (
-    <Section title="点">
-      <Row label="坐标(cm)">
+    <Section title="顶点">
+      <Row label="坐标">
         <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           <NumberField value={point.pos.x} step={0.1} precision={2} title="X 坐标"
             onCommit={v => move({ x: v - point.pos.x, y: 0 })} />
@@ -37,7 +37,7 @@ export function PointData({ project, nodeId }: { project: Project; nodeId: strin
             onCommit={v => move({ x: 0, y: v - heightCm - point.pos.y })} />
         </span>
       </Row>
-      <SelectRow label="点类型" value={point.kind ?? 'corner'}
+      <SelectRow label="类型" value={point.kind ?? 'corner'}
         options={[{ value: 'corner', label: '角点' }, { value: 'smooth', label: '曲线点' }]}
         onChange={v => setPoint('修改点类型', { kind: v as 'corner' | 'smooth' })} />
       <Row label="手柄">{point.handleIn || point.handleOut ? '有' : '无'}</Row>
@@ -79,9 +79,9 @@ function GradingRows({ project, point }: { project: Project; point: PatternPoint
                 onCommit={v => setGrade(size.id, 'x', v)} />
               <NumberField value={delta.y} step={0.05} precision={2} title={`${size.label} Y 放缩量`}
                 onCommit={v => setGrade(size.id, 'y', v)} />
-              <SmallButton onClick={() => setClipboard({ ...delta })} title="把这一码的放缩量放进剪贴板">复制</SmallButton>
+              <SmallButton onClick={() => setClipboard({ ...delta })} title="复制这一码的放缩量">复制</SmallButton>
               <SmallButton disabled={!clipboard} onClick={() => paste(size.id)}
-                title="把剪贴板的放缩量写给所有选中点">粘贴</SmallButton>
+                title="粘贴到所有选中点">粘贴</SmallButton>
             </span>
           </Row>
         );

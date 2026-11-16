@@ -86,7 +86,7 @@ export function SceneOutliner({ engineRef }: { engineRef: EngineRef }) {
           <button
             style={{ ...styles.eye, ...(canToggle ? null : styles.eyeDisabled) }}
             disabled={!canToggle}
-            title={canToggle ? (node.visible ? '在视口中隐藏' : '在视口中显示') : '没有可切换的对象'}
+            title={canToggle ? (node.visible ? '隐藏' : '显示') : '不可隐藏'}
             onClick={e => { e.stopPropagation(); if (canToggle) toggleNode(node); }}
           >
             <Icon name={node.visible ? 'eye' : 'eye-off'} size={13} />
@@ -115,9 +115,7 @@ export function SceneOutliner({ engineRef }: { engineRef: EngineRef }) {
             <button
               style={{ ...styles.addBtn, ...(selectedPanelId ? null : styles.addBtnDisabled) }}
               disabled={!selectedPanelId}
-              title={selectedPanelId
-                ? `在「${project.pattern.panels[selectedPanelId]?.name}」中心添加印花`
-                : '先在场景树选中一个版片'}
+              title={selectedPanelId ? '在选中版片加印花' : '先选中版片'}
               onClick={e => {
                 e.stopPropagation();
                 if (!selectedPanelId) return;

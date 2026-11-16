@@ -108,7 +108,7 @@ export async function importReferenceViaPicker(engine: GarmentEngine): Promise<v
     const record = await engine.importReferenceObject(file, genId('ref'));
     commitReferenceImport(record);
   } catch (err) {
-    alert('导入参考物体失败：' + (err as Error).message);
+    alert('导入参考物失败：' + (err as Error).message);
   }
 }
 

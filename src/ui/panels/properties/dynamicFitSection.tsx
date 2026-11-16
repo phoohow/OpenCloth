@@ -47,7 +47,7 @@ export function DynamicFitSection({ project, engineRef }: { project: Project; en
   return (
     <Section title="动态合身">
       {hasClips ? (
-        <SelectRow label="动画片段" value={String(clipIndex)}
+        <SelectRow label="片段" value={String(clipIndex)}
           options={animation.clips.map((name, index) => ({ value: String(index), label: name }))}
           onChange={chooseClip} />
       ) : null}
@@ -66,10 +66,10 @@ export function DynamicFitSection({ project, engineRef }: { project: Project; en
       )}
       {hasClips && (
         <>
-          <CheckRow label="逐帧采样压力" checked={dynamicSampling} onChange={setDynamicSampling} />
+          <CheckRow label="采样压力" checked={dynamicSampling} onChange={setDynamicSampling} />
           <Row label="采样帧数">{samples}</Row>
           {samples > 0 && (
-            <button style={styles.action} onClick={exportCsv}>导出动态压力 CSV</button>
+            <button style={styles.action} onClick={exportCsv}>导出 CSV</button>
           )}
         </>
       )}

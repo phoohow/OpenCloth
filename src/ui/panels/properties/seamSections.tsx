@@ -9,10 +9,10 @@ import {
 
 export function SeamData({ project, nodeId }: { project: Project; nodeId: string }) {
   const nodeRef = parseSceneRef(nodeId);
-  if (nodeRef.kind !== 'seam') return <Hint>缝纫线已删除。</Hint>;
+  if (nodeRef.kind !== 'seam') return <Hint>缝合线已删除。</Hint>;
   const seamId = nodeRef.id;
   const seam = project.pattern.seams[seamId];
-  if (!seam) return <Hint>缝纫线已删除。</Hint>;
+  if (!seam) return <Hint>缝合线已删除。</Hint>;
   const [nameA, nameB] = seamPanelNames(project, seam);
   const seamNo = seamNumber(project.pattern, seam.id);
 
@@ -29,7 +29,7 @@ export function SeamData({ project, nodeId }: { project: Project; nodeId: string
   return (
     <>
       {/* The section heading carries the number, so it reads as the same seam the canvas labels. */}
-      <Section title={seamNo === null ? '缝纫线' : `缝纫线 ${seamNo}`}>
+      <Section title={seamNo === null ? '缝合线' : `缝合线 ${seamNo}`}>
         <Row label="甲边">{nameA}</Row>
         <Row label="乙边">{nameB}</Row>
       </Section>
@@ -37,7 +37,7 @@ export function SeamData({ project, nodeId }: { project: Project; nodeId: string
         <SelectRow label="缝型" value={seam.type}
           options={SEAM_TYPES.map(t => ({ value: t, label: SEAM_TYPE_LABELS[t] }))}
           onChange={v => setSeam('修改缝型', { type: v as SeamType })} />
-        <SliderRow label="缝合强度" min={0.05} max={1} step={0.05} value={seam.strength} commitOnRelease
+        <SliderRow label="强度" min={0.05} max={1} step={0.05} value={seam.strength} commitOnRelease
           onChange={v => setSeam('修改缝合强度', { strength: v })} />
         <CheckRow label="乙边反向" checked={seam.flip}
           onChange={v => setSeam(v ? '反转乙边配对' : '恢复乙边配对', { flip: v })} />
@@ -82,7 +82,7 @@ export function SeamData({ project, nodeId }: { project: Project; nodeId: string
 function JointRow({ project, seamId, end }: { project: Project; seamId: string; end: SeamJointEnd }) {
   const joint = seamJoint(project.pattern, seamId, end);
   const label = end === 'start' ? '起点' : '终点';
-  if (!joint) return <Row label={label}>缝合端不在角点</Row>;
+  if (!joint) return <Row label={label}>不在角点</Row>;
   const note = joint.bendDeg < 0.1 ? (joint.overlap ? '重叠' : '顺直')
     : joint.overlap ? `重叠 ${joint.bendDeg.toFixed(1)}°` : `弯折 ${joint.bendDeg.toFixed(1)}°`;
   return <Row label={label}>{`${joint.angleDeg.toFixed(1)}° ${note}`}</Row>;

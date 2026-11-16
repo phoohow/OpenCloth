@@ -68,7 +68,7 @@ function ObjectTab({ project, nodeId, kind, label, note, engineRef }: {
 
   /** Command label of a rename, following the object kind. */
   const renameLabel = kind === 'panel' ? '重命名版片'
-    : kind === 'reference' ? '重命名参考物体'
+    : kind === 'reference' ? '重命名参考物'
     : kind === 'avatar' ? '重命名模特'
     : `重命名${SCENE_KIND_LABELS[kind]}`;
 

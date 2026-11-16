@@ -15,10 +15,10 @@ export interface AvatarPreset {
 
 /** Figures the model library offers: adults and children of both genders. */
 export const AVATAR_PRESETS: readonly AvatarPreset[] = [
-  { id: 'woman', label: '女装模特', params: { ...DEFAULT_PARAMS } },
-  { id: 'man', label: '男装模特', params: { heightCm: 182, chestCm: 102, waistCm: 84, hipCm: 102, gender: 1, ageYears: 30 } },
-  { id: 'girl', label: '女童', params: { heightCm: 130, chestCm: 64, waistCm: 58, hipCm: 70, gender: 0, ageYears: 8 } },
-  { id: 'boy', label: '男童', params: { heightCm: 128, chestCm: 64, waistCm: 58, hipCm: 68, gender: 1, ageYears: 8 } },
+  { id: 'woman', label: '女性', params: { ...DEFAULT_PARAMS } },
+  { id: 'man', label: '男性', params: { heightCm: 182, chestCm: 102, waistCm: 84, hipCm: 102, gender: 1, ageYears: 30 } },
+  { id: 'girl', label: '女孩', params: { heightCm: 130, chestCm: 64, waistCm: 58, hipCm: 70, gender: 0, ageYears: 8 } },
+  { id: 'boy', label: '男孩', params: { heightCm: 128, chestCm: 64, waistCm: 58, hipCm: 68, gender: 1, ageYears: 8 } },
 ];
 
 /** Preset whose measurements the figure matches exactly; undefined for a tailored body. */

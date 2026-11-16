@@ -142,8 +142,8 @@ export function createSceneService(ports: SceneServicePorts): SceneService {
 
   /** Noun used in a visibility command's undo label, per row kind. */
   const VISIBILITY_NOUN: Record<string, string> = {
-    panel: '版片', seam: '缝纫线', print: '印花', topstitch: '明线', trim: '辅料',
-    avatar: '模特', reference: '参考物体', light: '光源', environment: '环境光',
+    panel: '版片', seam: '缝合线', print: '印花', topstitch: '明线', trim: '辅料',
+    avatar: '模特', reference: '参考物', light: '光源', environment: '环境光',
   };
 
   /** Mirrors a visibility write onto the live scene for the rows the renderer cannot re-read. */
@@ -226,7 +226,7 @@ export function createSceneService(ports: SceneServicePorts): SceneService {
   /** Sets a reference object's opacity on the live scene and in the project. */
   const commitReferenceOpacity: SceneService['commitReferenceOpacity'] = (refId, opacity, engineRef) => {
     patchValue(
-      '修改参考物体透明度',
+      '修改参考物透明度',
       p => (p.scene.referenceObjects ?? []).find(r => r.id === refId)?.opacity ?? 1,
       (ctx, v) => {
         const ref = (ctx.project.scene.referenceObjects ?? []).find(r => r.id === refId);
@@ -243,7 +243,7 @@ export function createSceneService(ports: SceneServicePorts): SceneService {
   const removeReference: SceneService['removeReference'] = refId => {
     const current = project().scene.referenceObjects ?? [];
     patchValue(
-      '删除参考物体',
+      '删除参考物',
       p => p.scene.referenceObjects ?? [],
       (ctx, v) => { ctx.project.scene = { ...ctx.project.scene, referenceObjects: v }; },
       current.filter(r => r.id !== refId),
@@ -254,7 +254,7 @@ export function createSceneService(ports: SceneServicePorts): SceneService {
   /** Adds an imported reference object record; the viewport keeps its scene meshes in sync. */
   const commitReferenceImport: SceneService['commitReferenceImport'] = record => {
     patchValue(
-      '导入参考物体',
+      '导入参考物',
       p => p.scene.referenceObjects ?? [],
       (ctx, v) => { ctx.project.scene = { ...ctx.project.scene, referenceObjects: v }; },
       [...(project().scene.referenceObjects ?? []), record],
@@ -265,7 +265,7 @@ export function createSceneService(ports: SceneServicePorts): SceneService {
   /** Removes every reference object record from the scene list. */
   const commitClearReferences: SceneService['commitClearReferences'] = () => {
     patchValue(
-      '清除全部参考物体',
+      '清除参考物',
       p => p.scene.referenceObjects ?? [],
       (ctx, v) => { ctx.project.scene = { ...ctx.project.scene, referenceObjects: v }; },
       [],

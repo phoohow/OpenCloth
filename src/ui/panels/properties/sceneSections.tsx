@@ -15,24 +15,23 @@ import {
 } from '@/ui/widgets/propertyRows';
 import { Vec3Field } from '@/ui/widgets/numberField';
 import { CAMERA_PROJECTIONS } from '@/ui/optionTables';
-import { styles } from '@/ui/panels/properties/styles';
 import { parseSceneRef } from '@/model';
 
 export function ReferenceData({ project, nodeId, engineRef }: {
   project: Project; nodeId: string; engineRef: EngineRef;
 }) {
   const nodeRef = parseSceneRef(nodeId);
-  if (nodeRef.kind !== 'reference') return <Hint>参考物体已删除。</Hint>;
+  if (nodeRef.kind !== 'reference') return <Hint>参考物已删除。</Hint>;
   const refId = nodeRef.id;
   const ref = (project.scene.referenceObjects ?? []).find(r => r.id === refId);
-  if (!ref) return <Hint>参考物体已删除。</Hint>;
+  if (!ref) return <Hint>参考物已删除。</Hint>;
   return (
     <Section title="参考物">
-      <Row label="模型">{ref.objectKey ? '已存入本地' : '文件已失效'}</Row>
+      <Row label="模型">{ref.objectKey ? '已存入' : '已失效'}</Row>
       <SliderRow label="透明度" min={0.05} max={1} step={0.05} value={ref.opacity} commitOnRelease
         onChange={v => commitReferenceOpacity(refId, v, engineRef)} />
       <ButtonRow>
-        <SmallButton disabled={!engineRef.current} onClick={() => removeReference(refId)}>删除参考物体</SmallButton>
+        <SmallButton disabled={!engineRef.current} onClick={() => removeReference(refId)}>删除</SmallButton>
       </ButtonRow>
     </Section>
   );
@@ -83,7 +82,7 @@ export function LightData({ project, nodeId }: { project: Project; nodeId: strin
   return (
     <>
       <Section title="光源">
-        <SelectRow label="光源类型" value={light.type}
+        <SelectRow label="类型" value={light.type}
           options={LIGHT_TYPES.map(t => ({ value: t, label: LIGHT_TYPE_LABELS[t] }))}
           onChange={v => set('修改光源类型', { type: v })} />
         <SliderRow label="强度" min={0} max={INTENSITY_RANGE[light.type].max} step={INTENSITY_RANGE[light.type].step}
@@ -91,20 +90,20 @@ export function LightData({ project, nodeId }: { project: Project; nodeId: strin
           onChange={v => set('修改光源强度', { intensity: v })} />
         <ColorRow label="颜色" value={light.color} onChange={v => set('修改光源颜色', { color: v })} />
         <ButtonRow>
-          <SmallButton onClick={() => removeLight(light.id)}>删除光源</SmallButton>
+          <SmallButton onClick={() => removeLight(light.id)}>删除</SmallButton>
         </ButtonRow>
       </Section>
       {light.type !== 'directional' && (
-        <Section title="照射范围">
+        <Section title="范围">
           {punctual && (
-            <SliderRow label="照射距离" min={0} max={20} step={0.5} unit="m" value={light.distance} commitOnRelease
+            <SliderRow label="距离" min={0} max={20} step={0.5} unit="m" value={light.distance} commitOnRelease
               onChange={v => set('修改光源距离', { distance: v })} />
           )}
           {light.type === 'spot' && (
             <>
               <SliderRow label="锥角" min={1} max={120} step={1} unit="°" value={light.coneAngleDeg} commitOnRelease
                 onChange={v => set('修改聚光灯锥角', { coneAngleDeg: v })} />
-              <SliderRow label="边缘柔化" min={0} max={1} step={0.05} value={light.penumbra} commitOnRelease
+              <SliderRow label="柔边" min={0} max={1} step={0.05} value={light.penumbra} commitOnRelease
                 onChange={v => set('修改聚光灯边缘', { penumbra: v })} />
             </>
           )}
@@ -116,9 +115,6 @@ export function LightData({ project, nodeId }: { project: Project; nodeId: strin
                 onChange={v => set('修改面积光高度', { height: v })} />
             </>
           )}
-          <div style={styles.note}>
-            按平方反比衰减
-          </div>
         </Section>
       )}
     </>
@@ -146,8 +142,8 @@ export function EnvironmentData({ project, engineRef }: { project: Project; engi
         onChange={setIntensity} />
       <ButtonRow>
         <SmallButton disabled={!engineRef.current}
-          onClick={() => engineRef.current && void importEnvironmentViaPicker()}>导入环境图</SmallButton>
-        <SmallButton disabled={!engineRef.current || !isCustomEnv} onClick={commitEnvironmentReset}>内置环境图</SmallButton>
+          onClick={() => engineRef.current && void importEnvironmentViaPicker()}>导入</SmallButton>
+        <SmallButton disabled={!engineRef.current || !isCustomEnv} onClick={commitEnvironmentReset}>内置</SmallButton>
       </ButtonRow>
     </Section>
   );
@@ -186,8 +182,8 @@ export function CameraData({ project, engineRef }: { project: Project; engineRef
 
   return (
     <>
-      <Section title="相机参数">
-        <SelectRow label="相机类型" value={projection} options={CAMERA_PROJECTIONS}
+      <Section title="相机">
+        <SelectRow label="类型" value={projection} options={CAMERA_PROJECTIONS}
           onChange={v => { setCameraProjection(v); refresh(); }} />
         <Vec3Field label="位置" value={camera.position} step={0.05} precision={2} unit="m"
           onCommit={v => { engine.setCameraState({ position: v }); refresh(); }} />
@@ -201,7 +197,7 @@ export function CameraData({ project, engineRef }: { project: Project; engineRef
             onChange={v => { engine.setCameraState({ fovDeg: v }); }} commitOnRelease={false} />
         )}
       </Section>
-      <Section title="相机动画">
+      <Section title="动画">
         <CheckRow label="播放" checked={animation.enabled} onChange={v => patchAnimation({ enabled: v })} />
         <SelectRow label="运镜" value={animation.kind}
           options={CAMERA_ANIMATION_KINDS.map(kind => ({ value: kind, label: CAMERA_ANIMATION_LABELS[kind] }))}

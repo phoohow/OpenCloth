@@ -52,9 +52,9 @@ export function DartData({ project, nodeId }: { project: Project; nodeId: string
     <Section title="省道">
       <SliderRow label="省量" min={0.5} max={6} step={0.1} unit="cm" value={dart.intakeCm} commitOnRelease
         onChange={v => setDart('修改省量', { intakeCm: v })} />
-      <CheckRow label="收省（模拟时缝合省边）" checked={!!dart.closing}
+      <CheckRow label="收省" checked={!!dart.closing}
         onChange={v => setDart(v ? '闭合省道' : '打开省道', { closing: v })} />
-      <Row label="省尖(cm)">{(() => {
+      <Row label="省尖">{(() => {
         const tip = project.pattern.points[dart.tipId];
         if (!tip) return '—';
         const y = tip.pos.y + pointHeightOffsetCm(project.pattern, tip.id, offsets);
@@ -62,7 +62,7 @@ export function DartData({ project, nodeId }: { project: Project; nodeId: string
       })()}</Row>
       <ButtonRow>
         <SmallButton
-          title="先选中一条轮廓边，再把省道转移到该边"
+          title="转移到选中的轮廓边"
           onClick={() => {
             const target = idsOfKind(useUIStore.getState().selection, 'edge')[0];
             if (!target || !project.pattern.edges[target]) {
@@ -71,7 +71,7 @@ export function DartData({ project, nodeId }: { project: Project; nodeId: string
             }
             useProjectStore.getState().executeCommand(new TransferDartCommand(dart.id, target, 0.5));
           }}
-        >转移到选中边</SmallButton>
+        >转移省道</SmallButton>
       </ButtonRow>
     </Section>
   );
@@ -105,7 +105,7 @@ export function NotchData({ project, nodeId }: { project: Project; nodeId: strin
         options={[{ value: 'v', label: 'V 形' }, { value: 't', label: 'T 形' }, { value: 'drill', label: '钻孔' }]}
         onChange={v => setNotch('修改刀口样式', { style: v as Notch['style'] })} />
       <ButtonRow>
-        <SmallButton onClick={() => useProjectStore.getState().executeCommand(new DeleteNotchCommand(notch.id))}>删除刀口</SmallButton>
+        <SmallButton onClick={() => useProjectStore.getState().executeCommand(new DeleteNotchCommand(notch.id))}>删除</SmallButton>
       </ButtonRow>
     </Section>
   );
@@ -135,9 +135,9 @@ export function AnnotationData({ project, nodeId }: { project: Project; nodeId: 
         onChange={v => setNote('修改注释角度', { angleDeg: v })} />
       <SliderRow label="字号" min={2} max={12} step={0.5} unit="mm" value={note.sizeMm ?? 4} commitOnRelease
         onChange={v => setNote('修改注释字号', { sizeMm: v })} />
-      <Row label="坐标(cm)">{`${note.pos.x.toFixed(2)}, ${(note.pos.y + panelOffsetCm(offsets, note.panelId)).toFixed(2)}`}</Row>
+      <Row label="坐标">{`${note.pos.x.toFixed(2)}, ${(note.pos.y + panelOffsetCm(offsets, note.panelId)).toFixed(2)}`}</Row>
       <ButtonRow>
-        <SmallButton onClick={() => useProjectStore.getState().executeCommand(new DeleteAnnotationCommand(note.id))}>删除注释</SmallButton>
+        <SmallButton onClick={() => useProjectStore.getState().executeCommand(new DeleteAnnotationCommand(note.id))}>删除</SmallButton>
       </ButtonRow>
     </Section>
   );

@@ -71,13 +71,13 @@ export function AxisIndicator({ viewportRef, engineRef }: AxisIndicatorProps) {
 
   return (
     <div
-      title="坐标轴 · 单击轴端切换到对应视角"
+      title="坐标轴 · 单击切换视角"
       style={{
         position: 'absolute', left: 8, bottom: 26, width: SIZE, height: SIZE,
         pointerEvents: 'auto', userSelect: 'none', zIndex: 2,
       }}
     >
-      <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} aria-label="坐标轴方向">
+      <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} aria-label="坐标轴">
         <circle cx={CENTER} cy={CENTER} r={CENTER - 2} fill="rgba(20,22,28,0.62)" stroke="#3a3a42" strokeWidth={1} />
         {ends.map(end => {
           const near = end.depth >= 0;

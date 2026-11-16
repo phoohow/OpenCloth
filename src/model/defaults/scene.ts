@@ -50,9 +50,9 @@ export const LIGHT_TYPES: LightType[] = ['directional', 'point', 'spot', 'area']
 
 /** Display names of the seam types, in select order. */
 export const SEAM_TYPE_LABELS: Record<SeamType, string> = {
-  normal: '普通缝合',
+  normal: '普通',
   gather: '缩缝',
-  free: '开放边',
+  free: '开放',
 };
 
 /** Every seam type, in select order. */

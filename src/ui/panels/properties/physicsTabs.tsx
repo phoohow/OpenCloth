@@ -14,7 +14,7 @@ export function FabricPhysics({ fabric }: { fabric: Fabric }) {
   );
 
   return (
-    <Section title={`面料物理（${fabric.name}）`}>
+    <Section title="面料物理">
       <SliderRow label="拉伸刚度" min={0} max={1} step={0.01} value={fabric.physics.stretchStiffness} commitOnRelease
         onChange={v => setPhysics('修改拉伸刚度', { stretchStiffness: v })} />
       <SliderRow label="弯曲刚度" min={0} max={1} step={0.01} value={fabric.physics.bendingStiffness} commitOnRelease
@@ -30,10 +30,10 @@ export function FabricPhysics({ fabric }: { fabric: Fabric }) {
       <SliderRow label="接触摩擦" min={0} max={1} step={0.01}
         value={fabric.physics.contactFriction ?? DEFAULT_CONTACT_FRICTION} commitOnRelease
         onChange={v => setPhysics('修改接触摩擦', { contactFriction: v })} />
-      <SliderRow label="拉伸上限(%)" min={1} max={100} step={1}
+      <SliderRow label="拉伸上限" min={1} max={100} step={1}
         value={(fabric.physics.stretchLimit ?? DEFAULT_STRETCH_LIMIT) * 100} commitOnRelease
         onChange={v => setPhysics('修改拉伸上限', { stretchLimit: v / 100 })} />
-      <SliderRow label="压缩上限(%)" min={1} max={100} step={1}
+      <SliderRow label="压缩上限" min={1} max={100} step={1}
         value={(fabric.physics.compressionLimit ?? DEFAULT_COMPRESSION_LIMIT) * 100} commitOnRelease
         onChange={v => setPhysics('修改压缩上限', { compressionLimit: v / 100 })} />
     </Section>
@@ -45,7 +45,7 @@ export function AvatarPhysics({ project }: { project: Project }) {
   const sim = project.scene.simulation;
   return (
     <Section title="碰撞">
-      <CheckRow label="布料与模特碰撞" checked={sim.avatarCollision}
+      <CheckRow label="布料碰撞" checked={sim.avatarCollision}
         onChange={v => setSimulationConfig('修改模特碰撞', { avatarCollision: v })} />
       <CheckRow label="软体胸腹" checked={project.avatar.softBody === true}
         onChange={v => patchValue(

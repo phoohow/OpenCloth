@@ -107,7 +107,7 @@ export function ProductionDialog({ initialKind }: { initialKind: ProductionOutpu
     try {
       if (kind === 'exportBom') {
         const rows = buildBom(project);
-        if (rows.length === 0) return { ...EMPTY_PREVIEW, problem: '当前工程没有可见的物料，请先添加版片或生产物件。' };
+        if (rows.length === 0) return { ...EMPTY_PREVIEW, problem: '没有可见的物料，请先添加版片或物件。' };
         const totals = bomTotals(rows);
         return {
           ...EMPTY_PREVIEW,
@@ -119,7 +119,7 @@ export function ProductionDialog({ initialKind }: { initialKind: ProductionOutpu
       }
 
       if (kind === 'exportMarker' || kind === 'exportCutGerber' || kind === 'exportCutHpgl') {
-        if (!markerOptions) return { ...EMPTY_PREVIEW, problem: '请输入有效的面料幅宽（cm）后查看排料预览。' };
+        if (!markerOptions) return { ...EMPTY_PREVIEW, problem: '请输入面料幅宽后预览。' };
         const layout = buildMarkerLayout(pattern, markerOptions);
         const report = buildMarkerReport(layout, { pricePerMeter });
         const svg = exportMarkerSvg(pattern, markerOptions);
@@ -227,7 +227,7 @@ export function ProductionDialog({ initialKind }: { initialKind: ProductionOutpu
     try {
       if (kind === 'exportBom') {
         const rows = buildBom(project);
-        if (rows.length === 0) { alert('当前工程没有可导出的物料。'); return; }
+        if (rows.length === 0) { alert('没有可导出的物料。'); return; }
         downloadTextFile(`${name}-物料清单.csv`, bomCsv(rows), 'text/csv;charset=utf-8');
       } else if (kind === 'exportMarker' || kind === 'exportCutGerber' || kind === 'exportCutHpgl') {
         if (!markerOptions) { alert('请输入有效的面料幅宽(cm)'); return; }

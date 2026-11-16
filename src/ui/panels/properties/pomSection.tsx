@@ -67,7 +67,7 @@ export function PomSection({ project }: { project: Project }) {
       }));
       return;
     }
-    useUIStore.getState().showToast('在 2D 窗格里选中两个点或一条边，再加测量点');
+    useUIStore.getState().showToast('先在 2D 选中两点或一条边');
   };
 
   const addBody = () => {
@@ -79,8 +79,8 @@ export function PomSection({ project }: { project: Project }) {
     const cmd = new GeneratePomGradingCommand();
     if (!exec(cmd)) return;
     const message = cmd.issues.length > 0
-      ? `已生成全部尺码；${cmd.issues.length} 项提示：${cmd.issues[0]!.message}`
-      : '已生成全部尺码的放码';
+      ? `已生成放码；${cmd.issues.length} 项提示：${cmd.issues[0]!.message}`
+      : '已生成放码';
     useUIStore.getState().showToast(message);
   };
 
@@ -116,7 +116,7 @@ export function PomSection({ project }: { project: Project }) {
   };
 
   return (
-    <Section title="POM 尺寸表">
+    <Section title="POM">
       {poms.length === 0 ? (
         <Row label="测量点">未建立</Row>
       ) : (
@@ -127,7 +127,7 @@ export function PomSection({ project }: { project: Project }) {
             <div key={pom.id} style={styles.sizeRow}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <Row label="名称">
-                  <InlineText value={pom.name} title="测量点名称，公式按名称引用"
+                  <InlineText value={pom.name} title="公式按名称引用"
                     onChange={name => exec(new UpdatePomPointCommand(pom.id, { name }))} />
                   <SmallButton compact title="删除测量点"
                     onClick={() => exec(new DeletePomPointCommand(pom.id))}>−</SmallButton>
@@ -138,13 +138,13 @@ export function PomSection({ project }: { project: Project }) {
                 </Row>
                 <Row label="方式">{KIND_LABELS[pom.kind]}</Row>
                 <Row label="基码">{baseValue === null ? '—' : `${baseValue.toFixed(2)} cm`}</Row>
-                <Row label="档差(cm/码)">
-                  <NumberField value={pom.stepCm ?? 0} step={0.1} precision={2} title="每个尺码序号增加或减少的数值"
+                <Row label="档差">
+                  <NumberField value={pom.stepCm ?? 0} step={0.1} precision={2} title="每码增减的数值"
                     onCommit={stepCm => exec(new UpdatePomPointCommand(pom.id, { stepCm }))} />
                 </Row>
                 <Row label="公式">
                   <InlineText value={pom.formula ?? ''} placeholder="留空按档差"
-                    title="引用其它测量点名称的四则运算，例如 胸围 / 4 + 2"
+                    title="可引用其它测量点，如 胸围 / 4 + 2"
                     onChange={formula => exec(new UpdatePomPointCommand(pom.id, { formula }))} />
                   {pom.formula?.trim() && (
                     <SmallButton compact title="清除公式"
@@ -179,17 +179,17 @@ export function PomSection({ project }: { project: Project }) {
         })
       )}
       <ButtonRow>
-        <SmallButton onClick={addFromSelection}>由选中两点 / 边加测量点</SmallButton>
-        <SmallButton onClick={generate}>生成全部尺码放码</SmallButton>
+        <SmallButton onClick={addFromSelection}>加测量点</SmallButton>
+        <SmallButton onClick={generate}>生成放码</SmallButton>
       </ButtonRow>
-      <Row label="加人体围度">
+      <Row label="人体围度">
         <FlexSelect<PomBodyKey> value={bodyKey} options={BODY_OPTIONS} onChange={setBodyKey} />
-        <SmallButton compact onClick={addBody} title="从模特参数读取该围度">＋</SmallButton>
+        <SmallButton compact onClick={addBody} title="读取模特围度">＋</SmallButton>
       </Row>
       <ButtonRow>
-        <SmallButton onClick={exportMatrix}>导出尺码表 CSV</SmallButton>
-        <SmallButton onClick={exportReport}>导出 POM 报告 CSV</SmallButton>
-        <SmallButton onClick={() => void importCsv()}>导入尺码表 CSV</SmallButton>
+        <SmallButton onClick={exportMatrix}>导出尺码表</SmallButton>
+        <SmallButton onClick={exportReport}>导出报告</SmallButton>
+        <SmallButton onClick={() => void importCsv()}>导入尺码表</SmallButton>
       </ButtonRow>
       {table.issues.length > 0 && (
         <div style={styles.note}>POM 提示：{table.issues.slice(0, 2).join('；')}</div>

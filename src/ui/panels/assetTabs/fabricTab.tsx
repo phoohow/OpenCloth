@@ -14,7 +14,7 @@ export function FabricAssets() {
     try {
       setSaved(await listFabricAssets());
     } catch {
-      notify('本机存储不可用，收藏只在当前会话内有效');
+      notify('存储不可用，收藏仅在本次会话有效');
     }
   }, []);
 
@@ -49,7 +49,7 @@ export function FabricAssets() {
       name={asset.name}
       swatch={asset.fabric.appearance.baseColor}
       meta={`${asset.fabric.physics.massPerArea} g/m²`}
-      title={`拖到版片上应用 · ${fabricAssetSummary(asset)}`}
+      title={`拖到版片应用 · ${fabricAssetSummary(asset)}`}
       dragPayload={{ kind: 'fabric', asset }}
       {...(onDelete ? { onDelete } : {})}
     />
@@ -62,7 +62,7 @@ export function FabricAssets() {
       </Section>
       <Section
         title={`我的面料（${saved.length}）`}
-        action={<button style={styles.iconBtn} title="收藏选中版片的面料" onClick={collectCurrent}>收藏当前</button>}
+        action={<button style={styles.iconBtn} title="收藏当前面料" onClick={collectCurrent}>收藏</button>}
       >
         {saved.length === 0
           ? <div style={styles.note}>还没有收藏</div>

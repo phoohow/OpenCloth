@@ -37,22 +37,22 @@ export function PatternAssets() {
         action={
           <button
             style={styles.iconBtn}
-            title="导入 .ocpat 版型文件"
+            title="导入 .ocpat 文件"
             onClick={() => void importTemplatesViaPicker()}
           >导入版型</button>
         }
       >
         {saved.length === 0
-          ? <div style={styles.note}>还没有导入的版型；默认文件夹里的版型显示在上方</div>
+          ? <div style={styles.note}>还没有导入的版型</div>
           : saved.map(template => (
             <TemplateRow key={template.key} template={template} onDelete={() => remove(template)} />
           ))}
       </Section>
       <button
         style={{ ...styles.iconBtn, height: 24, alignSelf: 'stretch', justifyContent: 'center' }}
-        title="把当前工程的版片导出成 .ocpat 模板文件"
+        title="导出为 .ocpat 模板"
         onClick={saveCurrentPatternAsTemplate}
-      >另存当前版型</button>
+      >另存版型</button>
     </>
   );
 }
@@ -77,7 +77,7 @@ function TemplateRow({ template, onDelete }: { template: GarmentTemplate; onDele
       </span>
       <button
         style={styles.glyphBtn}
-        title={`替换：清空当前版型，按「${template.name}」重新生成`}
+        title={`替换为「${template.name}」`}
         aria-label={`替换为${template.name}`}
         onClick={() => {
           executeCommand(new ApplyTemplateCommand(template));
@@ -87,7 +87,7 @@ function TemplateRow({ template, onDelete }: { template: GarmentTemplate; onDele
       ><Icon name="refresh" size={11} /></button>
       <button
         style={styles.glyphBtn}
-        title={`添加：保留已有版片，把「${template.name}」的片排在右侧`}
+        title={`追加「${template.name}」`}
         aria-label={`添加${template.name}`}
         onClick={() => {
           executeCommand(new AppendTemplateCommand(template));
@@ -97,7 +97,7 @@ function TemplateRow({ template, onDelete }: { template: GarmentTemplate; onDele
       {onDelete && (
         <button
           style={styles.deleteBtn}
-          title="移除导入的版型"
+          title="移除"
           aria-label={`移除${template.name}`}
           onClick={onDelete}
         ><Icon name="close" size={9} /></button>

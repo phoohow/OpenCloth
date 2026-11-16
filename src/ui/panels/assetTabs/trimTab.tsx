@@ -19,7 +19,7 @@ export function TrimAssets() {
     try {
       setSaved(await listTrimAssets());
     } catch {
-      notify('本机存储不可用，收藏只在当前会话内有效');
+      notify('存储不可用，收藏仅在本次会话有效');
     }
   }, []);
 
@@ -57,7 +57,7 @@ export function TrimAssets() {
       name={label}
       swatch={asset.color}
       meta={`${asset.sizeMm} mm${asset.qty > 1 ? ` · ×${asset.qty}` : ''}`}
-      title="拖到版片上的目标位置即可放置"
+      title="拖到版片上放置"
       dragPayload={{ kind: 'trim', asset }}
       {...(onDelete ? { onDelete } : {})}
     />
@@ -71,7 +71,7 @@ export function TrimAssets() {
       <Section
         title={`我的辅料（${saved.length}）`}
         action={(
-          <button style={styles.iconBtn} title="收藏一组辅料规格" onClick={() => setComposing(value => !value)}>
+          <button style={styles.iconBtn} title="收藏一组规格" onClick={() => setComposing(value => !value)}>
             {composing ? '取消' : '收藏规格'}
           </button>
         )}
@@ -91,7 +91,7 @@ export function TrimAssets() {
               <input style={styles.field} type="number" min="1" step="1" value={qty}
                 title="数量" placeholder="数量" onChange={e => setQty(e.target.value)} />
             </div>
-            <button style={styles.iconBtn} onClick={save}>收藏这组规格</button>
+            <button style={styles.iconBtn} onClick={save}>收藏</button>
           </div>
         )}
         {saved.length === 0

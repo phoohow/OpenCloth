@@ -53,11 +53,11 @@ export const DISPLAY_LAYER_OPTIONS: Array<{ key: keyof DisplayOptions; label: st
   { key: 'notches', label: '刀口' },
   { key: 'grain', label: '布纹线' },
   { key: 'annotations', label: '注释' },
-  { key: 'measurements', label: '标注尺寸' },
+  { key: 'measurements', label: '尺寸线' },
   { key: 'prints', label: '印花' },
   { key: 'topstitches', label: '明线' },
   { key: 'trims', label: '辅料' },
-  { key: 'gradingOverlay', label: '齐码套叠' },
+  { key: 'gradingOverlay', label: '放码预览' },
   { key: 'seamJoin', label: '拼接预览' },
   { key: 'wireframe', label: '网格线' },
 ];
@@ -78,8 +78,8 @@ export const CAMERA_PRESETS: CameraPresetOption[] = [
   { value: 'right', menuId: 'cameraRight', label: '右视' },
   { value: 'bottom', menuId: 'cameraBottom', label: '仰视' },
   { value: 'top', menuId: 'cameraTop', label: '俯视' },
-  { value: 'frontLeft', menuId: 'cameraFrontLeft', label: '正左' },
-  { value: 'frontRight', menuId: 'cameraFrontRight', label: '正右' },
+  { value: 'frontLeft', menuId: 'cameraFrontLeft', label: '前左' },
+  { value: 'frontRight', menuId: 'cameraFrontRight', label: '前右' },
   { value: 'backLeft', menuId: 'cameraBackLeft', label: '后左' },
   { value: 'backRight', menuId: 'cameraBackRight', label: '后右' },
 ];
@@ -132,7 +132,7 @@ export const EDIT_PREVIEW_TIERS: Array<{ value: EditPreviewTier; label: string }
 
 /** Interior point distributions offered by the project tab's mesh generation block. */
 export const MESH_SAMPLINGS: Array<{ value: MeshSampling; label: string }> = [
-  { value: 'lattice', label: '六边形晶格' },
+  { value: 'lattice', label: '六边晶格' },
   { value: 'blueNoise', label: '蓝噪声' },
 ];
 
@@ -153,18 +153,18 @@ export const DENOISE_MODELS: Array<{ value: DenoiseModel; label: string }> = [
 /** Short readout for each ray tracing gate, shown beside the sample count. */
 const RAY_STATE_LABELS: Record<RayTraceState, string> = {
   inactive: '',
-  building: '光追内核加载中',
-  deforming: '布料每帧在变',
-  moving: '视角未静止',
-  blending: '光栅过渡中',
+  building: '内核加载中',
+  deforming: '布料在变',
+  moving: '视角在动',
+  blending: '光栅过渡',
   traced: '',
   unsupported: '本机不支持',
 };
 
 /** Plain-language reading of why the first ray-traced frames rejected this GPU. */
 const RAY_FAILURE_LABELS: Record<RayTraceFailure, string> = {
-  'gpu-error': 'GPU 报出 WebGPU 错误',
-  'setup-failed': '内核初始化失败',
+  'gpu-error': 'GPU 错误',
+  'setup-failed': '初始化失败',
 };
 
 /** Readout for one ray tracing gate; empty for the modes that never trace. */
@@ -201,19 +201,19 @@ export const GARMENT_LAYER_LABELS: Record<GarmentLayer, string> = {
 /** Wrap modes in editor order: flat first, then the body parts. */
 export const PANEL_WRAP_MODES: Array<{ value: PanelWrapMode; label: string }> = [
   { value: 'flat', label: '扁平' },
-  { value: 'torso-front', label: '躯干 · 前' },
-  { value: 'torso-back', label: '躯干 · 后' },
-  { value: 'torso-full', label: '躯干 · 整圈' },
+  { value: 'torso-front', label: '躯干前' },
+  { value: 'torso-back', label: '躯干后' },
+  { value: 'torso-full', label: '躯干整圈' },
   { value: 'arm-left', label: '左臂' },
   { value: 'arm-right', label: '右臂' },
   { value: 'leg-left', label: '左腿' },
   { value: 'leg-right', label: '右腿' },
   { value: 'neck', label: '领口' },
-  { value: 'neck-left', label: '领口 · 左半' },
-  { value: 'neck-right', label: '领口 · 右半' },
-  { value: 'head', label: '头部 · 整圈' },
-  { value: 'head-left', label: '头部 · 左半' },
-  { value: 'head-right', label: '头部 · 右半' },
+  { value: 'neck-left', label: '领口左' },
+  { value: 'neck-right', label: '领口右' },
+  { value: 'head', label: '头部整圈' },
+  { value: 'head-left', label: '头部左' },
+  { value: 'head-right', label: '头部右' },
 ];
 
 /** Body landmarks offered as the top-edge level of each part. */
@@ -240,7 +240,7 @@ export function anchorOptionsFor(region: PanelDrape['region']): Array<{ value: B
 /** Skin tones offered as one-click presets, light to deep. */
 export const SKIN_TONES: Array<{ key: string; label: string; color: string }> = [
   { key: 'light', label: '浅肤', color: '#ecd3b9' },
-  { key: 'asian', label: '亚洲', color: DEFAULT_SKIN_APPEARANCE.color },
+  { key: 'asian', label: '自然', color: DEFAULT_SKIN_APPEARANCE.color },
   { key: 'warm', label: '暖棕', color: '#c89873' },
   { key: 'deep', label: '深肤', color: '#8d5c3c' },
 ];

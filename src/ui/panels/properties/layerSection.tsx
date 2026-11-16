@@ -22,13 +22,13 @@ export function LayerSection({ project }: { project: Project }) {
   );
 
   return (
-    <Section title="多层结构">
+    <Section title="多层">
       {GARMENT_LAYERS.map(layer => (
         <SliderRow key={layer} label={`${GARMENT_LAYER_LABELS[layer]}厚度`} min={0} max={2} step={0.05} unit="cm"
           value={thickness[layer]} commitOnRelease
           onChange={v => setThickness(layer, `修改${GARMENT_LAYER_LABELS[layer]}厚度`, v)} />
       ))}
-      <Row label="版片 里布 / 填充 / 外壳">
+      <Row label="各层片数">
         {counts.lining} / {counts.padding} / {counts.shell}
       </Row>
     </Section>

@@ -126,7 +126,7 @@ function ViewSheet({ actions, engineRef, onClose }: {
         ))}
       </SheetGroup>
       <SheetGroup title="构图">
-        <SheetButton label="适应当前视角" onClick={pick(() => engineRef.current?.frameScene())} />
+        <SheetButton label="适应视角" onClick={pick(() => engineRef.current?.frameScene())} />
       </SheetGroup>
       <SheetNote>单指旋转，双指缩放与平移</SheetNote>
     </>
@@ -248,7 +248,7 @@ function DisplaySheet({ onClose }: { onClose: () => void }) {
                 ；间隙 {fitStats.minCm.toFixed(2)} / {fitStats.meanCm.toFixed(2)} / {fitStats.maxCm.toFixed(2)} cm。
               </SheetNote>
               <WideAction
-                label="导出合身报告 CSV"
+                label="导出 CSV"
                 onClick={() => downloadTextFile(
                   `${project.meta.name}-合身报告.csv`,
                   '\ufeff' + fitReportCsv(project.meta.name, fitStats, { tightCm: fitTightCm, looseCm: fitLooseCm }),
@@ -286,7 +286,7 @@ function DisplaySheet({ onClose }: { onClose: () => void }) {
                 {strainByFabric && `；超限 拉伸/压缩 ${strainStats.overStretch} / ${strainStats.overCompression}`}
               </SheetNote>
               <WideAction
-                label="导出应变报告 CSV"
+                label="导出 CSV"
                 onClick={() => downloadTextFile(
                   `${project.meta.name}-应变报告.csv`,
                   '\ufeff' + strainReportCsv(
@@ -314,7 +314,7 @@ function DisplaySheet({ onClose }: { onClose: () => void }) {
                 ；压力 最小/平均/最大 {pressureStats.minKpa.toFixed(2)} / {pressureStats.meanKpa.toFixed(2)} / {pressureStats.maxKpa.toFixed(2)} kPa。
               </SheetNote>
               <WideAction
-                label="导出压力报告 CSV"
+                label="导出 CSV"
                 onClick={() => downloadTextFile(
                   `${project.meta.name}-压力报告.csv`,
                   '\ufeff' + pressureReportCsv(project.meta.name, pressureStats, {
@@ -405,8 +405,8 @@ function MenuSheet({ actions, onClose }: { actions: MenuActions; onClose: () => 
         </SheetGroup>
       )}
       <SheetGroup title="场景">
-        <SheetButton label="模特模型" onClick={actions.importAvatar} />
-        <SheetButton label="参考物体" onClick={actions.importReference} />
+        <SheetButton label="模特" onClick={actions.importAvatar} />
+        <SheetButton label="参考物" onClick={actions.importReference} />
         <SheetButton label="环境贴图" onClick={actions.importEnvironment} />
       </SheetGroup>
       <SheetGroup title="选择 · 编辑">

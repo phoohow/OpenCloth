@@ -12,7 +12,7 @@ import { getCloudProject } from '@/io/storage';
 /** Global keyboard shortcuts, dispatched through the shared shortcut table. */
 export function useGlobalShortcuts(run: Record<string, () => void>): void {
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
+    const dispatch = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') return;
       if (menuOwnsKeyboard()) return;
@@ -29,8 +29,8 @@ export function useGlobalShortcuts(run: Record<string, () => void>): void {
       e.preventDefault();
       action();
     };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
+    window.addEventListener('keydown', dispatch);
+    return () => window.removeEventListener('keydown', dispatch);
   }, [run]);
 }
 
@@ -46,7 +46,7 @@ export function useReviewHashRoute(): void {
       if (menu.dialog === 'review' && menu.dialogParam === projectId) return;
       void getCloudProject(projectId).then(project => {
         if (project) menu.openDialog('review', projectId);
-        else useUIStore.getState().showToast('本机没有该共享项目，请让分享者导出审版包后导入');
+        else useUIStore.getState().showToast('本机没有该项目，请导入审版包');
       });
     };
     openFromHash();

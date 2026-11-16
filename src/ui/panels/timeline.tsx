@@ -60,7 +60,7 @@ export function Timeline() {
       {raytraced ? (
         <div
           style={styles.spp}
-          title={`3D 窗格每像素累计采样 ${samples3D} / ${maxSamples}，耗时 ${formatElapsed(costMs3D)}${rayNote ? `，${rayNote}` : ''}`}
+          title={`每像素采样 ${samples3D} / ${maxSamples} · ${formatElapsed(costMs3D)}${rayNote ? ` · ${rayNote}` : ''}`}
         >
           <span style={styles.sppLabel}>SPP:</span>
           <div style={styles.fps}>
@@ -72,14 +72,14 @@ export function Timeline() {
           {rayNote && <span style={styles.sppNote}>{rayNote}</span>}
         </div>
       ) : (
-        <div style={styles.fps} title="3D 窗格每秒绘制帧数">
+        <div style={styles.fps} title="3D 每秒帧数">
           {`FPS(3D): ${fps3D}`}
         </div>
       )}
 
       <div style={styles.status}>
-        {isDressing && <span style={{ color: '#4da6ff' }}><Icon name="status-dot" size={8} style={{ marginRight: 5 }} />缝合着装中</span>}
-        {!isDressing && !isDressed && <span style={{ color: '#e0a040' }}><Icon name="status-dot" size={8} style={{ marginRight: 5 }} />未着装 — 播放或执行「自动着装」开始缝合</span>}
+        {isDressing && <span style={{ color: '#4da6ff' }}><Icon name="status-dot" size={8} style={{ marginRight: 5 }} />着装中</span>}
+        {!isDressing && !isDressed && <span style={{ color: '#e0a040' }}><Icon name="status-dot" size={8} style={{ marginRight: 5 }} />未着装</span>}
         {!isDressing && isDressed && isPlaying && <span style={{ color: '#50c878' }}><Icon name="status-dot" size={8} style={{ marginRight: 5 }} />模拟中</span>}
         {!isDressing && isDressed && !isPlaying && <span style={{ color: '#888' }}><Icon name="status-dot" size={8} style={{ marginRight: 5 }} />已暂停</span>}
       </div>
@@ -89,7 +89,7 @@ export function Timeline() {
         <button
           style={{ ...styles.btn, ...styles.playBtn }}
           onClick={togglePlay}
-          title={atStopFrame ? '已到达截至帧，先提高或取消截至帧再播放' : '播放/暂停 (空格)'}
+          title={atStopFrame ? '已到截至帧，请先取消' : '播放/暂停 (空格)'}
         >
           <Icon name={isPlaying ? 'pause' : 'play'} size={12} />
         </button>
@@ -97,7 +97,7 @@ export function Timeline() {
           style={{ ...styles.btn, ...(atStopFrame ? styles.btnDisabled : null) }}
           onClick={step}
           disabled={atStopFrame}
-          title={atStopFrame ? '已到达截至帧，先提高或取消截至帧' : '单步 (.)'}
+          title={atStopFrame ? '已到截至帧，请先取消' : '单步 (.)'}
         >
           <Icon name="step" size={12} />
         </button>
@@ -112,7 +112,7 @@ export function Timeline() {
 
         <div
           style={styles.stepControl}
-          title={`每帧跑一个物理步，每步推进 ${simStepLabel(dt)} 模拟时间；步长越小求解越稳、播放越慢`}
+          title={`每帧一步，每步 ${simStepLabel(dt)}；步长越小越稳、播放越慢`}
         >
           <span style={styles.stopLabel}>步长</span>
           <select
@@ -126,7 +126,7 @@ export function Timeline() {
           </select>
         </div>
 
-        <div style={styles.stopControl} title={`播放到第 ${stopFrame ?? '—'} 帧后自动暂停，不可小于当前帧`}>
+        <div style={styles.stopControl} title={`播到第 ${stopFrame ?? '—'} 帧暂停，不可小于当前帧`}>
           <span style={styles.stopLabel}>截至帧</span>
           <input
             style={styles.stopInput}
@@ -143,7 +143,7 @@ export function Timeline() {
             }}
           />
           {stopFrame !== null && (
-            <button style={styles.clearBtn} onClick={() => setStopFrame(null)} title="取消截至帧">×</button>
+            <button style={styles.clearBtn} onClick={() => setStopFrame(null)} title="取消">×</button>
           )}
         </div>
       </div>

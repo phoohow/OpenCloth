@@ -47,13 +47,13 @@ export function MeasurementData({ project, nodeId }: { project: Project; nodeId:
 
   return (
     <Section title="尺寸标注">
-      <SelectRow label="尺寸线类型" value={measurement.kind}
+      <SelectRow label="类型" value={measurement.kind}
         options={[{ value: 'distance', label: '两点距离' }, { value: 'edgeLength', label: '边长' }, { value: 'angle', label: '角度' }]}
         onChange={v => setKind(v as Measurement['kind'])} />
       <Row label="数值">{current === null ? '参照已删除' : `${current.toFixed(digits)}${suffix}`}</Row>
       {perSize.length > 1 && perSize.map(s => <Row key={s.label} label={`各码 ${s.label}`}>{s.text}</Row>)}
       <ButtonRow>
-        <SmallButton onClick={() => useProjectStore.getState().executeCommand(new DeleteMeasurementCommand(measurement.id))}>删除标注</SmallButton>
+        <SmallButton onClick={() => useProjectStore.getState().executeCommand(new DeleteMeasurementCommand(measurement.id))}>删除</SmallButton>
       </ButtonRow>
     </Section>
   );
@@ -79,7 +79,7 @@ export function PrintData({ project, nodeId }: { project: Project; nodeId: strin
     <Section title="印花">
       <Row label="版片">{panelName}</Row>
       <Row label="图片">{print.imageName ?? '已载入'}</Row>
-      <Row label="宽 × 高(cm)">
+      <Row label="宽 × 高">
         <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           <NumberField value={print.widthCm} step={0.5} precision={2} min={0.1} max={1000} title="印花宽度"
             onCommit={v => set({ widthCm: v })} />
@@ -91,7 +91,7 @@ export function PrintData({ project, nodeId }: { project: Project; nodeId: strin
         onChange={v => set({ angleDeg: v })} />
       <SliderRow label="不透明度" min={0} max={1} step={0.01} value={print.opacity} commitOnRelease
         onChange={v => set({ opacity: v })} />
-      <Row label="平铺(次)">
+      <Row label="平铺">
         <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           <NumberField value={print.repeat.x} step={1} precision={0} min={1} max={50} title="横向平铺次数"
             onCommit={v => set({ repeat: { ...print.repeat, x: v } })} />
@@ -99,16 +99,16 @@ export function PrintData({ project, nodeId }: { project: Project; nodeId: strin
             onCommit={v => set({ repeat: { ...print.repeat, y: v } })} />
         </span>
       </Row>
-      <Row label="位置(cm)">
+      <Row label="位置">
         <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          <NumberField value={print.center.x} step={0.5} precision={2} title="相对版片外接框中心的横向偏移"
+          <NumberField value={print.center.x} step={0.5} precision={2} title="相对版片中心"
             onCommit={v => set({ center: { ...print.center, x: v } })} />
-          <NumberField value={print.center.y} step={0.5} precision={2} title="相对版片外接框中心的纵向偏移"
+          <NumberField value={print.center.y} step={0.5} precision={2} title="相对版片中心"
             onCommit={v => set({ center: { ...print.center, y: v } })} />
         </span>
       </Row>
       <ButtonRow>
-        <SmallButton onClick={() => run(new DeleteElementsCommand([elementNodeId('print', print.id)]))}>删除印花</SmallButton>
+        <SmallButton onClick={() => run(new DeleteElementsCommand([elementNodeId('print', print.id)]))}>删除</SmallButton>
       </ButtonRow>
     </Section>
   );
@@ -143,7 +143,7 @@ export function TopstitchData({ project, nodeId }: { project: Project; nodeId: s
       <SliderRow label="偏移" min={0} max={20} step={0.5} unit="mm" value={stitch.offsetMm} commitOnRelease
         onChange={v => set({ offsetMm: v })} />
       <Row label="行数">
-        <NumberField value={stitch.rows} step={1} precision={0} min={1} max={5} title="平行行数，逐行向版片内侧递增"
+        <NumberField value={stitch.rows} step={1} precision={0} min={1} max={5} title="逐行向内递增"
           onCommit={v => set({ rows: Math.round(v) })} />
       </Row>
       <SliderRow label="行距" min={0.5} max={20} step={0.5} unit="mm" value={stitch.spacingMm} commitOnRelease
@@ -154,7 +154,7 @@ export function TopstitchData({ project, nodeId }: { project: Project; nodeId: s
       <SliderRow label="空距" min={0.5} max={20} step={0.5} unit="mm" value={stitch.gapMm} commitOnRelease
         onChange={v => set({ gapMm: v })} />
       <ButtonRow>
-        <SmallButton onClick={() => run(new DeleteElementsCommand([elementNodeId('topstitch', stitch.id)]))}>删除明线</SmallButton>
+        <SmallButton onClick={() => run(new DeleteElementsCommand([elementNodeId('topstitch', stitch.id)]))}>删除</SmallButton>
       </ButtonRow>
     </Section>
   );
@@ -183,20 +183,20 @@ export function TrimData({ project, nodeId }: { project: Project; nodeId: string
       <SelectRow label="类型" value={trim.kind}
         options={TRIM_KINDS.map(kind => ({ value: kind, label: TRIM_KIND_LABELS[kind] }))}
         onChange={v => set({ kind: v as TrimKind })} />
-      <Row label="直径(mm)">
+      <Row label="直径">
         <NumberField value={trim.sizeMm} step={0.5} precision={1} min={0.5} max={200} title="辅料直径"
           onCommit={v => set({ sizeMm: v })} />
       </Row>
       <ColorRow label="颜色" value={trim.color} onChange={v => set({ color: v })} />
       <Row label="数量">
-        <NumberField value={trim.qty} step={1} precision={0} min={1} max={9999} title="这个标记代表的件数"
+        <NumberField value={trim.qty} step={1} precision={0} min={1} max={9999} title="代表的件数"
           onCommit={v => set({ qty: Math.round(v) })} />
       </Row>
-      <Row label="单价(元)">
+      <Row label="单价">
         <NumberField value={trim.unitPrice ?? 0} step={0.1} precision={2} min={0} title="填 0 表示不计价"
           onCommit={v => set({ unitPrice: v > 0 ? v : undefined })} />
       </Row>
-      <Row label="位置(cm)">
+      <Row label="位置">
         <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           <NumberField value={trim.pos.x} step={0.5} precision={2} title="X 坐标"
             onCommit={v => set({ pos: { ...trim.pos, x: v } })} />
@@ -206,7 +206,7 @@ export function TrimData({ project, nodeId }: { project: Project; nodeId: string
         </span>
       </Row>
       <ButtonRow>
-        <SmallButton onClick={() => run(new DeleteElementsCommand([elementNodeId('trim', trim.id)]))}>删除辅料</SmallButton>
+        <SmallButton onClick={() => run(new DeleteElementsCommand([elementNodeId('trim', trim.id)]))}>删除</SmallButton>
       </ButtonRow>
     </Section>
   );

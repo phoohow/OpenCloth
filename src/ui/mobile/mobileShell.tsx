@@ -70,7 +70,7 @@ function TopBar({ onOpenMenu, onOpenProps }: { onOpenMenu: () => void; onOpenPro
   const rayNote = samples3D === 0 ? rayTraceStateLabel(rayState3D) : '';
 
   const status = isDressing
-    ? { text: '缝合着装中', color: '#4da6ff' }
+    ? { text: '着装中', color: '#4da6ff' }
     : !isDressed
       ? { text: '未着装', color: '#e0a040' }
       : isPlaying

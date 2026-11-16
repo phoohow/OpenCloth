@@ -1,8 +1,8 @@
 import { readFile } from 'node:fs/promises';
 import { test, expect } from '@playwright/test';
 
-/** Smoke path: boot the built app, auto-dress the starter garment and export the screenshot PNG. */
-test('自动着装并导出截图', async ({ page }) => {
+/** Smoke path: boot the built app, auto-dress the starter garment and export a captured frame. */
+test('自动着装并导出截帧', async ({ page }) => {
   const pageErrors: string[] = [];
   page.on('pageerror', error => pageErrors.push(error.message));
 
@@ -15,17 +15,18 @@ test('自动着装并导出截图', async ({ page }) => {
   });
   expect(gpuMissing, 'WebGPU 不可用，检查浏览器与显卡驱动').toBe(false);
 
-  await expect(page.getByText('未着装 — 播放或执行「自动着装」开始缝合')).toBeVisible();
+  await expect(page.getByText('未着装', { exact: true })).toBeVisible();
   // The global shortcut listener mounts with the app shell, so give the first frame time to settle
   // before driving the keyboard: pressing in the same tick as the first paint reaches nobody.
   await page.getByTestId('viewport-3d').click();
   await page.keyboard.press('Control+d');
   await expect(page.getByText('模拟中')).toBeVisible();
 
+  await page.keyboard.press('F9');
+  await expect(page.getByText('3D 截帧预览')).toBeVisible();
+
   const downloadPromise = page.waitForEvent('download');
-  await page.getByText('文件', { exact: true }).click();
-  await page.getByText('导出', { exact: true }).click();
-  await page.getByText('图像：截图 PNG', { exact: true }).click();
+  await page.getByRole('button', { name: '导出 PNG' }).click();
   const download = await downloadPromise;
 
   expect(download.suggestedFilename()).toMatch(/\.png$/);

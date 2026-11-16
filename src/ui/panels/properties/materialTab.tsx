@@ -26,10 +26,10 @@ import { knitTextureDataUrl } from '@/runtime';
 
 /** Texture slots of the appearance block. */
 const MAP_SLOT_LABELS: Record<FabricMapSlot, string> = {
-  albedo: '基础色贴图',
-  normal: '法线贴图',
-  roughness: '粗糙度贴图',
-  metallic: '金属度贴图',
+  albedo: '基础色图',
+  normal: '法线图',
+  roughness: '粗糙度图',
+  metallic: '金属度图',
 };
 
 /** Fabric assigned to a panel row. */
@@ -142,10 +142,10 @@ export function MaterialTab({ project, panelId, engineRef }: {
 
   return (
     <>
-      <Section title="材质槽">
+      <Section title="材质">
         <SlotRow label="名称">
           {fabric
-            ? <InlineText value={fabric.name} title="改名对所有使用此材质的版片生效" onChange={rename} />
+            ? <InlineText value={fabric.name} title="改名对共用此材质的版片生效" onChange={rename} />
             : <InlineText value="" disabled placeholder="未指定" onChange={() => {}} />}
           <PopupSelect
             title="换用其他材质"
@@ -174,7 +174,7 @@ export function MaterialTab({ project, panelId, engineRef }: {
             title="新建材质使用的面料类型"
           />
           <IconButton
-            title="按所选面料新建独立材质并赋给当前版片"
+            title="新建独立材质"
             onClick={() => run(new AddFabricCommand([panelId], project, newPreset))}
           ><Icon name="plus" size={12} /></IconButton>
         </SlotRow>
@@ -196,7 +196,7 @@ export function MaterialTab({ project, panelId, engineRef }: {
             <SliderRow label="光泽强度" min={0} max={1} step={0.01} value={fabric.appearance.sheenIntensity}
               onChange={v => appearance({ sheenIntensity: v })} />
             <ColorRow label="光泽色" value={fabric.appearance.sheenColor} onChange={v => appearance({ sheenColor: v })} />
-            <SliderRow label="光泽粗糙度" min={0} max={1} step={0.01} value={fabric.appearance.sheenRoughness}
+            <SliderRow label="光泽粗糙" min={0} max={1} step={0.01} value={fabric.appearance.sheenRoughness}
               onChange={v => appearance({ sheenRoughness: v })} />
             <SliderRow label="透光" min={0} max={1} step={0.01} value={fabric.appearance.transmission}
               onChange={v => appearance({ transmission: v })} />
@@ -204,18 +204,18 @@ export function MaterialTab({ project, panelId, engineRef }: {
               onChange={v => appearance({ thickness: v })} />
             <SliderRow label="清漆" min={0} max={1} step={0.01} value={fabric.appearance.clearcoat}
               onChange={v => appearance({ clearcoat: v })} />
-            <SliderRow label="清漆粗糙度" min={0} max={1} step={0.01} value={fabric.appearance.clearcoatRoughness}
+            <SliderRow label="清漆粗糙" min={0} max={1} step={0.01} value={fabric.appearance.clearcoatRoughness}
               onChange={v => appearance({ clearcoatRoughness: v })} />
             <SliderRow label="各向异性" min={0} max={1} step={0.01} value={fabric.appearance.anisotropy}
               onChange={v => appearance({ anisotropy: v })} />
             <SliderRow label="虹彩" min={0} max={1} step={0.01} value={fabric.appearance.iridescence}
               onChange={v => appearance({ iridescence: v })} />
             <Vec2Field label="平铺" value={fabric.appearance.uvTiling} step={0.1} precision={2} min={0.01}
-              title="UV 平铺次数，最小 0.01" onCommit={v => appearance({ uvTiling: v })} />
+              title="最小 0.01" onCommit={v => appearance({ uvTiling: v })} />
             <Vec2Field label="偏移" value={fabric.appearance.uvOffset} step={0.1} precision={2}
               title="UV 偏移" onCommit={v => appearance({ uvOffset: v })} />
           </Section>
-          <Section title="针织组织">
+          <Section title="针织">
             <SelectRow label="组织" value={knit.stitch}
               options={KNIT_STITCHES.map(stitch => ({ value: stitch, label: KNIT_STITCH_LABELS[stitch] }))}
               onChange={v => setKnit({ stitch: v as KnitStitch })} />
@@ -225,13 +225,13 @@ export function MaterialTab({ project, panelId, engineRef }: {
               value={knit.rowGauge} commitOnRelease onChange={v => setKnit({ rowGauge: v })} />
             <Row label="本片针数">{`${knitNeedles} 针 × ${knitRows} 行`}</Row>
             <Row label="">
-              <SmallButton onClick={makeKnitTexture} title="按组织与密度生成灰度针织贴图并写入基础色贴图槽">生成针织贴图</SmallButton>
-              <SmallButton onClick={exportKnitChart} title="按本片尺寸与密度导出组织图 CSV">导出组织图 CSV</SmallButton>
+              <SmallButton onClick={makeKnitTexture} title="按组织与密度生成贴图并写入基础色图">生成贴图</SmallButton>
+              <SmallButton onClick={exportKnitChart} title="按本片尺寸与密度导出">导出组织图</SmallButton>
             </Row>
           </Section>
         </>
       ) : (
-        <Hint>还没有材质</Hint>
+        <Hint>未指定材质</Hint>
       )}
     </>
   );
@@ -259,7 +259,7 @@ export function AvatarMaterialTab({ project }: { project: Project }) {
   return (
     <Section title="皮肤">
       <ColorRow label="肤色" value={skin.color} onChange={v => write('修改肤色', { color: v })} />
-      <SelectRow label="肤色预设" value={preset?.color ?? CUSTOM_TONE}
+      <SelectRow label="预设" value={preset?.color ?? CUSTOM_TONE}
         options={toneOptions.map(tone => ({ value: tone.color, label: tone.label }))}
         onChange={v => {
           if (v !== CUSTOM_TONE) write('套用肤色预设', { color: v });

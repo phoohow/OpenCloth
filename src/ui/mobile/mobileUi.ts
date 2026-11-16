@@ -40,7 +40,7 @@ export function isTapGesture(dx: number, dy: number, elapsedMs: number): boolean
 }
 
 /** Touch gestures the phone shell supports, shown as the 3D viewport hint. */
-export const MOBILE_VIEWPORT_HINT = '3D 试衣 · 单指拖拽旋转 · 双指捏合缩放 · 双指拖拽平移 · 轻点选片 · 轻点空白取消';
+export const MOBILE_VIEWPORT_HINT = '3D 试衣 · 单指旋转 · 双指缩放/平移 · 轻点选片';
 
 let cachedUiMode: UiMode | null = null;
 

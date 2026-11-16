@@ -21,9 +21,9 @@ export const ELEMENT_NODE_KINDS: SceneNodeKind[] = PATTERN_ELEMENT_KINDS.filter(
 
 /** Chinese name of each row kind, shared by the outliner and the properties panel. */
 export const SCENE_KIND_LABELS: Record<SceneNodeKind, string> = {
-  scene: '场景', collection: '集合', panel: '版片', avatar: '模特', reference: '参考物体',
-  light: '光源', environment: '环境光', camera: '相机', seam: '缝纫线',
-  point: '点', edge: '边', internal: '内部线', dart: '省道',
+  scene: '场景', collection: '组', panel: '版片', avatar: '模特', reference: '参考物',
+  light: '光源', environment: '环境光', camera: '相机', seam: '缝合线',
+  point: '顶点', edge: '轮廓边', internal: '内部线', dart: '省道',
   notch: '刀口', annotation: '注释', measurement: '尺寸线',
   print: '印花', topstitch: '明线', trim: '辅料',
 };
@@ -53,7 +53,7 @@ export { EDGE_SEMANTIC_LABELS };
 /** Short Chinese description of one outline edge. */
 export function edgeLabel(pattern: Pattern, edgeId: string): string {
   const edge = pattern.edges[edgeId];
-  if (!edge) return '边';
+  if (!edge) return '轮廓边';
   const kind = edge.type === 'arc' ? '圆弧边' : edge.type === 'bezier' ? '曲线边' : '直线边';
   return edge.semantic ? EDGE_SEMANTIC_LABELS[edge.semantic] : kind;
 }
@@ -276,7 +276,7 @@ function buildTree(project: Project): SceneNode {
   const stitchLines: SceneNode = {
     id: SEAM_COLLECTION_ID,
     kind: 'collection',
-    label: '缝纫线',
+    label: '缝合线',
     icon: 'folder',
     hideable: true,
     visible: seams.length > 0 && seams.every(s => s.stitchVisible),
@@ -366,7 +366,7 @@ function buildTree(project: Project): SceneNode {
       })),
       {
         id: ENVIRONMENT_NODE_ID, kind: 'environment',
-        label: project.scene.lights.iblLabel ?? '环境光', note: '环境光',
+        label: project.scene.lights.iblLabel ?? '环境光',
         icon: 'environment', hideable: true, visible: project.scene.lights.iblEnabled, children: [],
       },
     ],

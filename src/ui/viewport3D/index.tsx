@@ -24,22 +24,13 @@ interface Viewport3DProps {
 /** Gestures the current layout allows. */
 const statusHint = (layout: ViewLayout, tool: ToolType): string => {
   if (isMobileUi()) return MOBILE_VIEWPORT_HINT;
-  if (tool === 'pin') {
-    return '3D 试衣 · 悬停到布料上出现「圆圈+红点」时点击即打PIN · 其余位置照常旋转缩放（拖动旋转 · 滚轮缩放 · 右键平移）· 双击选择版片';
-  }
-  if (tool === 'unpin') {
-    return '3D 试衣 · 悬停到已有 PIN 上出现叉号时点击即拔PIN，该点会同时高亮 · 其余位置照常旋转缩放 · 滚轮缩放 · 右键平移';
-  }
-  if (tool === 'sketch3d') {
-    return '3D 试衣 · 在布料表面按住拖动画线，松手后落到所属版片的内部线 · 其余位置照常旋转缩放';
-  }
-  if (tool === 'measure3d') {
-    return '3D 试衣 · 单击布料表面两点测量直线距离，第三次单击重新开始，Esc 清除 · 其余位置照常旋转缩放';
-  }
-  const gizmo = '选中版片后拖动辅助轴变换（W 平移 / E 旋转 / S 缩放，Esc 取消拖动）';
+  if (tool === 'pin') return '3D 试衣 · 打PIN · 悬停布料单击';
+  if (tool === 'unpin') return '3D 试衣 · 拔PIN · 单击已有 PIN';
+  if (tool === 'sketch3d') return '3D 试衣 · 线稿笔 · 在布料上拖画';
+  if (tool === 'measure3d') return '3D 试衣 · 测量 · 点选布料两点';
   return isSplitLayout(layout)
-    ? `3D 试衣 · 移动中悬停布料可用夹子拖拽 · 拖拽旋转 · 滚轮缩放 · 双击选片 · ${gizmo} · 快捷键需点击聚焦本窗格`
-    : `3D 试衣 · 模拟中夹住布料可拖拽 · 拖拽旋转 · 滚轮缩放 · 右键平移 · Alt+点击打PIN · Alt+Shift+点击取消PIN · 双击选择版片 · ${gizmo} · 左下角坐标轴可点击切换视角 · 小键盘 2/8/4/6/0/5 正视/后视/左视/右视/仰视/俯视，1/3/7/9 四个 45° 侧视 · Esc取消选中`;
+    ? '3D 试衣 · 拖拽旋转 · 滚轮缩放 · 双击选片 · W/E/S 变换'
+    : '3D 试衣 · 拖拽旋转 · 滚轮缩放 · 右键平移 · 双击选片 · Alt 打PIN · W/E/S 变换';
 };
 
 /** 3D fitting viewport: owns the renderer context, the garment engine and their store sync. */

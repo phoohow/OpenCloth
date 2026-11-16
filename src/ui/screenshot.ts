@@ -21,10 +21,10 @@ export type Capture3DSubject = 'avatar' | 'panels' | 'seams' | 'topstitches' | '
 export const CAPTURE_3D_SUBJECTS: ReadonlyArray<{ key: Capture3DSubject; label: string }> = [
   { key: 'avatar', label: '模特' },
   { key: 'panels', label: '版片' },
-  { key: 'seams', label: '缝线' },
+  { key: 'seams', label: '缝合线' },
   { key: 'topstitches', label: '明线' },
   { key: 'trims', label: '辅料' },
-  { key: 'references', label: '参考对象' },
+  { key: 'references', label: '参考物' },
 ];
 
 /** What the 2D frame draws: the panels plus the pane's display layers. */

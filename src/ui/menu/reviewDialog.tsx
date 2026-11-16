@@ -286,7 +286,7 @@ export function ReviewDialog({ initialProjectId }: { initialProjectId: string | 
           style={styles.userInput}
           value={user}
           onChange={e => { setUser(e.target.value); setLocalReviewUser(e.target.value); }}
-          title="用于版本作者与评论署名；只保存在本机"
+          title="署名用，只存本机"
         />
         {message && <span style={styles.message}>{message}</span>}
       </div>
@@ -361,7 +361,7 @@ export function ReviewDialog({ initialProjectId }: { initialProjectId: string | 
                   value={active.sharedRole}
                   disabled={role !== 'owner'}
                   onChange={e => void changeRole(e.target.value as ReviewRole)}
-                  title="打开共享链接或导入审版包的人获得的角色"
+                  title="共享链接打开者的角色"
                 >
                   <option value="reviewer">审版人（可评论与通过/退回）</option>
                   <option value="viewer">只读</option>

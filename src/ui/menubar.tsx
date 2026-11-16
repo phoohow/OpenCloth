@@ -175,7 +175,7 @@ export function Menubar({ actions }: { actions: MenuActions }) {
         <div style={styles.status}>
           {autoSaveSeconds > 0
             ? `自动保存 ${autoSaveSeconds}s${lastAutosaveAt ? ` · ${formatClockTime(lastAutosaveAt)}` : ''}`
-            : '自动保存 关闭'}
+            : '自动保存 关'}
         </div>
       </div>
       <MenuDialogs actions={actions} />

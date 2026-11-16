@@ -200,7 +200,7 @@ export function PerfPanel({ engineRef }: { engineRef: MutableRefObject<GarmentEn
           <>
             <div
               style={styles.summary}
-              title="CPU 提交耗时，不含 GPU 执行与呈现等待；帧率由 CPU、GPU 与呈现中最慢的一段决定"
+              title="CPU 提交耗时（不含 GPU 与呈现）；帧率取最慢一段"
             >
               CPU 工作 <b style={styles.value}>{snapshot.lastWorkMs.toFixed(1)}</b> ms
               · 平均 {snapshot.avgWorkMs.toFixed(1)}
