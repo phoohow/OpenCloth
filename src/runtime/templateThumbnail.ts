@@ -16,6 +16,7 @@ import { ClothSimulator } from '@/sim';
 import { FALLBACK_PHYSICS } from '@/runtime/clothConstants';
 import { ClothAssembly } from '@/runtime/clothAssembly';
 import { DressingController } from '@/runtime/dressingController';
+import { SEW_FRAMES } from '@/runtime/dressingStages';
 import { BodyLandmarkCache } from '@/runtime/initialPose';
 
 /** Density the preview mesh is built at, in centimetres; the icon is 128 px, so it stays coarse. */
@@ -23,9 +24,6 @@ const PREVIEW_RESOLUTION_CM = 3;
 
 /** Frames a settle runs in total: the sixty dressing frames plus sixty of free relaxation. */
 const SETTLE_FRAMES = 120;
-
-/** One read-back every few free frames keeps self-collision current without stalling the GPU. */
-const READBACK_STRIDE = 5;
 
 /** Fabric surface of a settled garment. */
 const GARMENT_MATERIAL: MaterialData = {
@@ -99,11 +97,10 @@ async function settle(template: GarmentTemplate, device: GPUDevice): Promise<Set
       frames += 1;
       if (!(await controller.stepDressingFrame())) break;
     }
-    // Free physics carries the garment the rest of the way; read back now and then so
-    // self-collision keeps up, then once more for the frame that becomes the thumbnail.
+    // Free physics carries the garment the rest of the way, on the GPU alone: no frame in here
+    // looks at the CPU positions, so they queue up and the run waits once, at the end.
     for (let frame = frames; frame < SETTLE_FRAMES; frame++) {
       simulator.step(project.scene.simulation, FALLBACK_PHYSICS);
-      if ((frame + 1) % READBACK_STRIDE === 0) await simulator.readbackLatest();
     }
 
     const { positions } = await simulator.readbackLatest();
@@ -125,20 +122,20 @@ function dressingController(
   assembly: ClothAssembly,
   initial: Float32Array,
 ): DressingController {
-  let positions: Float32Array = initial.slice();
+  let steps = 0;
   return new DressingController({
     simulator: () => simulator,
     simReady: () => true,
     ensureSimulator: async () => undefined,
     step: async (config: SimulationConfig, fabric) => {
       simulator.step(config, fabric);
-      positions = (await simulator.readbackLatest()).positions;
+      // Only the glide steers from the CPU positions; the sewn layout reaches them once, when the
+      // sew stage hands over. Everything after that runs on the GPU until the final read.
+      if (++steps === SEW_FRAMES) await simulator.readbackLatest();
     },
-    resetPositions: () => {
-      simulator.reset(initial);
-      positions = initial.slice();
-    },
-    currentPositions: () => positions,
+    resetPositions: () => simulator.reset(initial),
+    // setPositions and reset mirror what they write, so this is the glide's own last command.
+    currentPositions: () => simulator.getReadbackPositions(),
     dressTargets: () => assembly.dressPositions,
   });
 }
