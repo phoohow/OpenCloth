@@ -1,4 +1,4 @@
-import { presetPattern } from '@/pattern/template';
+import { templatePattern } from '@/pattern/template';
 import { describe, expect, it } from 'vitest';
 import { createStarterProject } from '@/pattern/template/starterProject';
 import { buildPanelMesh, type PanelMesh } from '@/pattern/panel';
@@ -24,7 +24,7 @@ describe('wrap enclosure', () => {
     const shapes = body.bodyShapes();
     const elbowY = body.armChain(1).mid[1];
     let lowerChecked = 0;
-    for (const pattern of [presetPattern('tshirt'), presetPattern('shirt')]) {
+    for (const pattern of [templatePattern('tshirt'), templatePattern('shirt')]) {
       const sleeve = panelNamed(pattern, '右袖');
       const mesh = buildPanelMesh(pattern, sleeve.id)!;
       const draped = drapePositions(mesh, sleeve, body);
@@ -50,7 +50,7 @@ describe('wrap enclosure', () => {
   // A frame that jumps at the elbow fillet swings a whole column sideways between two rows; the
   // long shirt sleeve spans the fillet, so every column must stay continuous down the arm.
   it('keeps the sleeve columns continuous across the elbow', () => {
-    const pattern = presetPattern('shirt');
+    const pattern = templatePattern('shirt');
     const sleeve = panelNamed(pattern, '右袖');
     const mesh = buildPanelMesh(pattern, sleeve.id)!;
     const draped = drapePositions(mesh, sleeve, body);
@@ -85,11 +85,11 @@ describe('wrap enclosure', () => {
   it('keeps the cut area of every draped panel', () => {
     const patterns = [
       project.pattern,
-      presetPattern('tshirt'),
-      presetPattern('shirt'),
-      presetPattern('hoodie'),
-      presetPattern('skirt'),
-      presetPattern('dress'),
+      templatePattern('tshirt'),
+      templatePattern('shirt'),
+      templatePattern('hoodie'),
+      templatePattern('skirt'),
+      templatePattern('dress'),
     ];
     for (const pattern of patterns) {
       for (const panel of Object.values(pattern.panels)) {
@@ -129,7 +129,7 @@ describe('wrap enclosure', () => {
   // The hood halves read the head proxy, not the neck ring: they crown at the skull top, reach the
   // neckline and stay on the head and neck surfaces.
   it('covers the head with the hood halves', () => {
-    const pattern = presetPattern('hoodie');
+    const pattern = templatePattern('hoodie');
     const shapes = body.bodyShapes();
     const targets = shapes.filter(shape =>
       shape.kind === 'ellipsoid' || (shape.kind === 'tube' && shape.part === 'neck'));

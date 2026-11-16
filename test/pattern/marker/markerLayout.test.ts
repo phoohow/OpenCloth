@@ -1,7 +1,30 @@
 import { describe, expect, it } from 'vitest';
 import { createEmptyPattern } from '@/model/defaults';
+import type { Pattern, Vec2 } from '@/model/types';
 import { buildMarkerLayout } from '@/pattern/marker/markerLayout';
-import { addSquare } from '../../core/command/fixtures';
+
+/** Counter-clockwise 10 cm square panel with prefixed ids. */
+function addSquare(pattern: Pattern, prefix: string, x: number, y: number, size: number): void {
+  const corners: Vec2[] = [
+    { x, y }, { x: x + size, y }, { x: x + size, y: y + size }, { x, y: y + size },
+  ];
+  const pointIds = corners.map((pos, i) => {
+    const id = `${prefix}_p${i}`;
+    pattern.points[id] = { id, pos };
+    return id;
+  });
+  const edgeIds = pointIds.map((_, i) => {
+    const id = `${prefix}_e${i}`;
+    pattern.edges[id] = {
+      id, type: 'line', startPointId: pointIds[i]!, endPointId: pointIds[(i + 1) % 4]!,
+    };
+    return id;
+  });
+  pattern.panels[`${prefix}_panel`] = {
+    id: `${prefix}_panel`, name: prefix, outlineEdgeIds: edgeIds, dartIds: [], internalLineIds: [],
+    seamAllowanceCm: 1, fabricId: 'f', meshResolutionCm: 3, visible: true, locked: false,
+  };
+}
 
 /** One square panel graded 2 cm wider at size L. */
 function gradedSquare() {

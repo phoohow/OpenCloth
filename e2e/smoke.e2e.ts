@@ -16,6 +16,9 @@ test('自动着装并导出截图', async ({ page }) => {
   expect(gpuMissing, 'WebGPU 不可用，检查浏览器与显卡驱动').toBe(false);
 
   await expect(page.getByText('未着装 — 播放或执行「自动着装」开始缝合')).toBeVisible();
+  // The global shortcut listener mounts with the app shell, so give the first frame time to settle
+  // before driving the keyboard: pressing in the same tick as the first paint reaches nobody.
+  await page.getByTestId('viewport-3d').click();
   await page.keyboard.press('Control+d');
   await expect(page.getByText('模拟中')).toBeVisible();
 

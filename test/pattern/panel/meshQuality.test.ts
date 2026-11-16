@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FILE_TEMPLATES, presetPattern } from '@/pattern/template';
+import { FILE_TEMPLATES, templatePattern } from '@/pattern/template';
 import { sampleEdge } from '@/pattern/panel';
 import { buildPanelMesh, samplePanelOutline, type PanelMesh } from '@/pattern/panel/panelBuilder';
 import type { Vec2 } from '@/model/types';
@@ -53,7 +53,7 @@ function smallestAngle(mesh: PanelMesh): number {
 }
 
 describe('版片网格质量', () => {
-  const pattern = presetPattern('tshirt');
+  const pattern = templatePattern('tshirt');
   const panel = Object.values(pattern.panels).find(p => p.name === '前片')!;
 
   for (const resolution of [2.5, 1.5]) {
