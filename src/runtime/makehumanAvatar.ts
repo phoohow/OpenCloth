@@ -44,3 +44,11 @@ export function makehumanAvatarMeshes(body: MakehumanBody): AssetMesh[] {
     { name: 'eyes', mesh: meshOf(body, body.eyeIndices), material: EYE },
   ];
 }
+
+/** Vertex and triangle counts of the built body surface and its eyes. */
+export function makehumanAvatarCounts(body: MakehumanBody): { vertices: number; triangles: number } {
+  return {
+    vertices: body.positions.length / 3,
+    triangles: (body.bodyIndices.length + body.eyeIndices.length) / 3,
+  };
+}

@@ -62,7 +62,7 @@ export function App() {
   return (
     <>
       {isMobileUi() ? <MobileShell {...shellProps} /> : <DesktopShell {...shellProps} />}
-      {showPerfPanel && <PerfPanel />}
+      {showPerfPanel && <PerfPanel engineRef={engineRef} />}
       <ToastHost />
       <input
         ref={projectInputRef}

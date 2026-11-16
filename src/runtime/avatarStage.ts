@@ -12,7 +12,7 @@ import {
 import { getModelBlob } from '@/io/storage';
 import { bodyKey, makehumanBody } from '@/avatar';
 import type { PresenterHost } from '@/runtime/presenters/host';
-import { makehumanAvatarMeshes } from '@/runtime/makehumanAvatar';
+import { makehumanAvatarCounts, makehumanAvatarMeshes } from '@/runtime/makehumanAvatar';
 import { SimplifiedBodyStage } from '@/runtime/simplifiedBodyStage';
 
 /** Key the body asset is loaded under and released by. */
@@ -42,9 +42,14 @@ export class AvatarStage {
   private simplifiedVisible = false;
   /** Low-detail body proxy drawn over the skin, when enabled. */
   private simplified: SimplifiedBodyStage | null = null;
+  /** Geometry counts of the built-in body; null while an imported model is drawn. */
+  private bodyCounts: { vertices: number; triangles: number } | null = null;
 
   /** Asset of the current body; null before the first build. */
   get handle(): AssetHandle | null { return this.asset; }
+
+  /** Vertex and triangle counts of the drawn body, or null for an unmeasured imported model. */
+  get bodyStats(): { vertices: number; triangles: number } | null { return this.bodyCounts; }
 
   /** True while the body carries the selection highlight. */
   get hasOverlay(): boolean { return this.highlighted && this.asset !== null; }
@@ -209,6 +214,7 @@ export class AvatarStage {
     this.appearance = undefined;
     this.appliedSkin = '';
     this.highlighted = false;
+    this.bodyCounts = null;
   }
 
   /** Releases the body when the viewport tears the scene down. */
@@ -223,21 +229,23 @@ export class AvatarStage {
       return await host.assets.load(AVATAR_ASSET_KEY, source);
     } catch (err) {
       console.warn('Avatar model unavailable, falling back to the MakeHuman body:', err);
-      return host.assets.load(AVATAR_ASSET_KEY, {
-        kind: 'meshes', meshes: makehumanAvatarMeshes(makehumanBody(avatar.params)),
-      });
+      const body = makehumanBody(avatar.params);
+      this.bodyCounts = makehumanAvatarCounts(body);
+      return host.assets.load(AVATAR_ASSET_KEY, { kind: 'meshes', meshes: makehumanAvatarMeshes(body) });
     }
   }
 
   /** Imported model file of the body, or the MakeHuman mesh built from its measurements. */
   private async sourceOf(avatar: Avatar): Promise<AssetSource> {
     if (avatar.source === 'glb' && avatar.glbUrl) {
+      this.bodyCounts = null;
       return { kind: 'model', url: avatar.glbUrl, targetHeight: avatar.params.heightCm / 100 };
     }
     if (avatar.source === 'glb' && avatar.glbObjectKey) {
       try {
         const blob = await getModelBlob(avatar.glbObjectKey);
         if (blob) {
+          this.bodyCounts = null;
           return {
             kind: 'model',
             data: await blob.arrayBuffer(),
@@ -249,7 +257,9 @@ export class AvatarStage {
         console.warn('Avatar model unavailable, falling back to the MakeHuman body:', err);
       }
     }
-    return { kind: 'meshes', meshes: makehumanAvatarMeshes(makehumanBody(avatar.params)) };
+    const body = makehumanBody(avatar.params);
+    this.bodyCounts = makehumanAvatarCounts(body);
+    return { kind: 'meshes', meshes: makehumanAvatarMeshes(body) };
   }
 
   /** Writes the appearance onto the current asset and records what was applied. */

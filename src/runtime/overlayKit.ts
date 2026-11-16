@@ -29,6 +29,8 @@ export class OverlayKit {
   private trimKey = '';
   /** World points of the pending 3D measurement, in placement order. */
   private measurePoints: Vec3[] = [];
+  /** Line endpoints the topstitch overlay currently draws. */
+  topstitchVertices = 0;
 
   constructor(private readonly host: PresenterHost) {}
 
@@ -40,6 +42,7 @@ export class OverlayKit {
     this.pairCount = -1;
     this.topstitchKey = '';
     this.trimKey = '';
+    this.topstitchVertices = 0;
   }
 
   /**
@@ -64,9 +67,9 @@ export class OverlayKit {
     const signature = topstitchSignature(project, input);
     if (signature !== this.topstitchKey) {
       this.topstitchKey = signature;
-      this.topstitches.attach(
-        this.host, topstitchSegments(project, input.panels), positions, normals,
-      );
+      const segments = topstitchSegments(project, input.panels);
+      this.topstitchVertices = segments.length * 2;
+      this.topstitches.attach(this.host, segments, positions, normals);
       return;
     }
     this.topstitches.update(positions, normals);

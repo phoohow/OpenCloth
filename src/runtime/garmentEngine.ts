@@ -40,6 +40,16 @@ export type { CameraPreset, ReferenceObject };
 export { applyObjectTransform } from '@/runtime/objectTransforms';
 export { DRESS_FRAMES, DRESS_GLIDE, RELAX_FRAMES, SEW_FRAMES } from '@/runtime/dressingStages';
 
+/** Static geometry the scene draws: the body, the cloth panels and the thread lines over them. */
+export interface MeshStats {
+  /** Body surface and eyes; null for an imported model whose mesh is not measured. */
+  avatar: { vertices: number; triangles: number } | null;
+  /** Merged cloth mesh; both zero before the first panel builds. */
+  panels: { vertices: number; triangles: number };
+  /** Endpoints of the seam and topstitch lines. */
+  threadVertices: number;
+}
+
 /** Orchestrates the garment pipeline: pattern → mesh → drape placement → GPU simulation → render meshes. */
 export class GarmentEngine {
   /** Merged particle space, triangle ownership and the constraints that stitch panels together. */
@@ -592,6 +602,19 @@ export class GarmentEngine {
   /** Triangle indices of the merged cloth, or null before a build. */
   clothIndices(): Uint32Array | null {
     return this.build.input?.indices ?? null;
+  }
+
+  /** Vertex and triangle counts of the static scene geometry, read without touching the solver. */
+  meshStats(): MeshStats {
+    const input = this.build.input;
+    return {
+      avatar: this.avatarView.stage.bodyStats,
+      panels: {
+        vertices: input ? input.positions.length / 3 : 0,
+        triangles: input ? input.indices.length / 3 : 0,
+      },
+      threadVertices: this.assembly.seamPairs.length * 2 + this.overlays.topstitchVertices,
+    };
   }
 
   /** Grabs the cloth under a screen point for a pointer drag; false when the point misses it. */
