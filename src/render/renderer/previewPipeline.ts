@@ -21,14 +21,14 @@ const PREVIEW_SIZE = 128;
 /** Backdrop of a preview, matching the asset-panel row. */
 const BACKGROUND = '#1f1f24';
 
-/** Framing of the model portrait: share of the frame the body fills, in model heights. */
+/** Framing of the model portrait: share of the frame the figure fills. */
 const BODY_FILL = 0.92;
 
-/** Framing of a garment portrait: share of the frame its bounding sphere fills at most. */
-const GARMENT_FILL = 0.96;
+/** Share of the model height the portrait keeps, measured down from the head. */
+const UPPER_BODY_SPAN = 0.30;
 
-/** Turn of the garment camera, so the icon reads as a volume rather than a flat silhouette. */
-const GARMENT_YAW_DEG = 24;
+/** Framing of a garment portrait: share of the frame the garment fills. */
+const GARMENT_FILL = 0.96;
 
 /** Field of view of the model camera, in degrees. */
 const MODEL_FOV = 30;
@@ -232,44 +232,44 @@ function portraitLights(): LightData[] {
   ];
 }
 
-/** Camera facing the body from the front, framing it from the feet to just above the head. */
+/** Camera facing the model from the front, framing it from the hip to just above the head. */
 function portraitCamera(bounds: Bounds): CameraState {
   const height = Math.max(bounds.max.y - bounds.min.y, 1e-3);
-  const distance = height / BODY_FILL / (2 * Math.tan(degToRad(MODEL_FOV) / 2));
-  return lookingCamera(bounds, distance, 0, height);
+  // Framed on height alone: an out-of-frame hand reads better than a body shrunk to show it.
+  const span = height * UPPER_BODY_SPAN / BODY_FILL;
+  const distance = span / (2 * Math.tan(degToRad(MODEL_FOV) / 2));
+  const center = boundsCenter(bounds);
+  return lookingCamera({ x: center.x, y: bounds.max.y - span / 2, z: center.z }, distance, span);
 }
 
-/** Camera turned off the garment's front, so the icon shows the drape and not just an outline. */
+/** Camera facing the garment from the front at a distance its bounding sphere fits in. */
 function garmentCamera(bounds: Bounds): CameraState {
   const width = Math.max(bounds.max.x - bounds.min.x, 1e-3);
   const height = Math.max(bounds.max.y - bounds.min.y, 1e-3);
   const depth = Math.max(bounds.max.z - bounds.min.z, 1e-3);
-  // Fit the bounding sphere, so no turn of the piece can push a sleeve out of the square frame.
   const radius = Math.hypot(width, height, depth) / 2;
   const distance = radius / Math.sin(degToRad(MODEL_FOV) / 2) / GARMENT_FILL;
-  return lookingCamera(bounds, distance, GARMENT_YAW_DEG, radius * 2);
+  return lookingCamera(boundsCenter(bounds), distance, radius * 2);
 }
 
-/** Camera centred on `bounds`, `distance` away and turned by `yawDeg` around the vertical axis. */
-function lookingCamera(
-  bounds: Bounds,
-  distance: number,
-  yawDeg: number,
-  viewHeightMeters: number,
-): CameraState {
-  const center = {
+/** Centre of a bounding box. */
+function boundsCenter(bounds: Bounds): { x: number; y: number; z: number } {
+  return {
     x: (bounds.min.x + bounds.max.x) / 2,
     y: (bounds.min.y + bounds.max.y) / 2,
     z: (bounds.min.z + bounds.max.z) / 2,
   };
-  const yaw = degToRad(yawDeg);
+}
+
+/** Perspective camera on the +Z axis, `distance` in front of `center`, looking straight at it. */
+function lookingCamera(
+  center: { x: number; y: number; z: number },
+  distance: number,
+  viewHeightMeters: number,
+): CameraState {
   return {
     projection: 'perspective',
-    position: {
-      x: center.x + Math.sin(yaw) * distance,
-      y: center.y,
-      z: center.z + Math.cos(yaw) * distance,
-    },
+    position: { x: center.x, y: center.y, z: center.z + distance },
     target: center,
     up: { x: 0, y: 1, z: 0 },
     fovDeg: MODEL_FOV,
