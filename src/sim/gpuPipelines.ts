@@ -1,5 +1,6 @@
 import {
   INTEGRATE_WGSL, SOLVE_WGSL, COLLIDE_WGSL, UPDATE_WGSL, NORMALS_WGSL, SET_PIN_WGSL,
+  SELF_COLLISION_GRID_WGSL, SELF_COLLISION_SOLVE_WGSL,
 } from '@/sim/shaders/shaders';
 
 /** Compute-visible buffer entry kinds, in binding order. */
@@ -13,6 +14,8 @@ export interface SimLayouts {
   update: GPUBindGroupLayout;
   normals: GPUBindGroupLayout;
   setPin: GPUBindGroupLayout;
+  selfGrid: GPUBindGroupLayout;
+  selfSolve: GPUBindGroupLayout;
 }
 
 /** One compute pipeline per simulation pass, plus the layouts their bind groups use. */
@@ -23,6 +26,10 @@ export interface SimPipelines {
   update: GPUComputePipeline;
   normals: GPUComputePipeline;
   setPin: GPUComputePipeline;
+  selfClear: GPUComputePipeline;
+  selfFill: GPUComputePipeline;
+  selfProject: GPUComputePipeline;
+  selfApply: GPUComputePipeline;
   layouts: SimLayouts;
 }
 
@@ -46,6 +53,8 @@ export function createSimPipelines(device: GPUDevice): SimPipelines {
   const collideModule = makeModule(COLLIDE_WGSL);
   const updateModule = makeModule(UPDATE_WGSL);
   const normalsModule = makeModule(NORMALS_WGSL);
+  const selfGridModule = makeModule(SELF_COLLISION_GRID_WGSL);
+  const selfSolveModule = makeModule(SELF_COLLISION_SOLVE_WGSL);
 
   const layoutIntegrate = createLayout(device, [
     'storage', 'storage', 'storage', 'storage', 'uniform', 'read-only-storage',
@@ -61,6 +70,12 @@ export function createSimPipelines(device: GPUDevice): SimPipelines {
     'read-only-storage', 'read-only-storage', 'uniform',
   ]);
   const layoutSetPin = createLayout(device, ['storage', 'read-only-storage', 'uniform', 'read-only-storage']);
+  const layoutSelfGrid = createLayout(device, ['uniform', 'read-only-storage', 'storage', 'storage']);
+  // Nine entries: the shared params block and the eight buffers a projection reads or writes.
+  const layoutSelfSolve = createLayout(device, [
+    'uniform', 'storage', 'read-only-storage', 'read-only-storage', 'read-only-storage',
+    'read-only-storage', 'read-only-storage', 'read-only-storage', 'storage',
+  ]);
 
   const createPipeline = (module: GPUShaderModule, entryPoint: string, layout: GPUBindGroupLayout) =>
     device.createComputePipeline({
@@ -75,6 +90,10 @@ export function createSimPipelines(device: GPUDevice): SimPipelines {
     update: createPipeline(updateModule, 'updateVelocity', layoutUpdate),
     normals: createPipeline(normalsModule, 'computeNormals', layoutNormals),
     setPin: createPipeline(makeModule(SET_PIN_WGSL), 'setPin', layoutSetPin),
+    selfClear: createPipeline(selfGridModule, 'clearSlots', layoutSelfGrid),
+    selfFill: createPipeline(selfGridModule, 'fillSlots', layoutSelfGrid),
+    selfProject: createPipeline(selfSolveModule, 'project', layoutSelfSolve),
+    selfApply: createPipeline(selfSolveModule, 'applyPush', layoutSelfSolve),
     layouts: {
       integrate: layoutIntegrate,
       solve: layoutSolve,
@@ -82,6 +101,8 @@ export function createSimPipelines(device: GPUDevice): SimPipelines {
       update: layoutUpdate,
       normals: layoutNormals,
       setPin: layoutSetPin,
+      selfGrid: layoutSelfGrid,
+      selfSolve: layoutSelfSolve,
     },
   };
 }

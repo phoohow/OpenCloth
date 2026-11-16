@@ -1,6 +1,6 @@
 import type { SimulationConfig, FabricPhysics } from '@/model/types';
 import type { AvatarCollider, MeshCollider } from '@/avatar/collider';
-import { liftBuriedPositions, liftMovedPositions } from '@/sim/bodyRecovery';
+import { liftBuriedPositions } from '@/sim/bodyRecovery';
 import { type Constraint } from '@/sim/buffers/constraintBuilder';
 import { buildNormalAdjacency } from '@/sim/buffers/normalAdjacency';
 import {
@@ -25,7 +25,7 @@ import {
   createParticleMaterialBuffers, writeParticleMaterialBuffers, type ParticleMaterialBuffers,
 } from '@/sim/particleMaterials';
 import { ClothGrab, usableGrabWeights } from '@/sim/clothGrab';
-import { SelfCollisionSolver } from '@/sim/selfCollision';
+import { SelfCollisionPass } from '@/sim/selfCollisionPass';
 import { frameProfiler } from '@/base/perf';
 import {
   collideBodyForMesh, createMeshColliderBuffers, refreshMeshColliderBuffers, type MeshColliderBuffers,
@@ -125,20 +125,14 @@ export class ClothSimulator {
   private initialPosInvMass: Float32Array = new Float32Array(0);
   /** Inverse mass of every unpinned particle, taken from its own panel's fabric weight. */
   private baseInvMass: Float32Array = new Float32Array(0);
-  /** Inverse mass mirror for the CPU self-collision pass, in step with the GPU buffers. */
-  private invMassMirror: Float32Array = new Float32Array(0);
   /** Collision layer of every particle, from its panel's `collisionLayer`. */
   private layerByParticle: Uint8Array = new Uint8Array(0);
-  /** Scratch upload buffer holding self-collision corrected positions. */
-  private selfCollisionWriteback: Float32Array<ArrayBuffer> = new Float32Array(0);
-  /** Positions as the GPU left them, before the CPU self-collision pass moved any. */
-  private selfCollisionBefore: Float32Array<ArrayBuffer> = new Float32Array(0);
   /** Body collider held for the CPU passes that lift buried particles out of the surface. */
   private colliderMesh: MeshCollider | null = null;
-  private selfCollisionSolver = new SelfCollisionSolver(0);
-  /** Self-collision settings of the most recent step, read again by every readback. */
+  /** Self-collision rounds of the substep loop; null until the pipelines exist. */
+  private selfCollision: SelfCollisionPass | null = null;
+  /** Self-collision switch of the most recent step. */
   private selfCollisionEnabled = true;
-  private clothThickness = 0.002;
   private layerSpacing = 0.004;
   /** Particle indices currently pinned (inverse mass = 0). */
   private pinnedSet = new Set<number>();
@@ -236,6 +230,11 @@ export class ClothSimulator {
 
     this.pipelines = createSimPipelines(dev);
     this.rebuildNormalTopology(input);
+    this.selfCollision = new SelfCollisionPass(dev, this.pipelines);
+    this.selfCollision.configure(pc, this.layerByParticle);
+    this.selfCollision.bind(this.predictedBuf, this.posInvMassBuf, this.thicknessBuf);
+    this.uploadClearance();
+    this.selfCollision.setStitchPairs(input.seamConstraints);
     this.createBindGroups();
 
     // Constraint groups need the solve pipeline, so they are installed after it.
@@ -263,17 +262,10 @@ export class ClothSimulator {
     this.initialized = true;
   }
 
-  /**
-   * Rebuilds the per-particle layer map, the inverse-mass mirror and the self-collision scratch
-   * for the current particle layout.
-   */
+  /** Rebuilds the per-particle layer map the self-collision rounds read, and re-uploads it. */
   private syncCollisionState(input: ClothSimInput): void {
-    const pc = this.particleCount;
-    this.layerByParticle = computeParticleLayers(input, pc);
-    this.invMassMirror = new Float32Array(pc);
-    this.syncInvMassMirror();
-    this.selfCollisionSolver = new SelfCollisionSolver(pc);
-    this.selfCollisionWriteback = new Float32Array(pc * 4);
+    this.layerByParticle = computeParticleLayers(input, this.particleCount);
+    this.selfCollision?.setLayers(this.layerByParticle);
   }
 
   /** Distance a particle of `index` is kept from the body surface, in meters. */
@@ -292,56 +284,26 @@ export class ClothSimulator {
     liftBuriedPositions(collider, positions, i => this.clearanceAt(i), i => this.pinnedSet.has(i));
   }
 
-  /** Refreshes the inverse-mass mirror from the live pin set and base masses. */
-  private syncInvMassMirror(): void {
-    const pc = this.particleCount;
-    if (this.invMassMirror.length !== pc) this.invMassMirror = new Float32Array(pc);
-    for (let i = 0; i < pc; i++) this.invMassMirror[i] = this.pinnedSet.has(i) ? 0 : this.baseInvMass[i]!;
-  }
-
   /** Rewrites the per-particle damping and friction after a panel material changed. */
   private uploadMaterialFields(input: ClothSimInput): void {
     writeParticleMaterialBuffers(this.device, this.materialBufs, input, this.panelPhysics, this.particleCount);
   }
 
+  /** Pushes the widest particle clearance, which widens the cell the grid hashes with. */
+  private uploadClearance(): void {
+    let thicknessMax = 0;
+    for (let i = 0; i < this.thicknessByParticle.length; i++) {
+      const value = this.thicknessByParticle[i]!;
+      if (value > thicknessMax) thicknessMax = value;
+    }
+    this.selfCollision?.setThicknessMax(thicknessMax);
+  }
+
   /** Copies the cloth self-collision and seam-tearing tunables of one frame step. */
   private applySelfCollisionConfig(config: SimulationConfig): void {
     this.selfCollisionEnabled = config.selfCollision !== false;
-    this.clothThickness = clothThicknessMeters(config);
     this.layerSpacing = layerSpacingMeters(config);
     this.seamTearing = config.seamTearing === true;
-  }
-
-  /**
-   * Projects overlapping particle pairs apart on the CPU and uploads the corrected positions to
-   * the solver's position buffer, so the next substep starts from them. Velocity keeps the value
-   * the UPDATE pass computed, and previous positions are left alone.
-   */
-  private applySelfCollision(): void {
-    if (!this.selfCollisionEnabled) return;
-    const pc = this.particleCount;
-    if (this.selfCollisionBefore.length !== pc * 3) this.selfCollisionBefore = new Float32Array(pc * 3);
-    this.selfCollisionBefore.set(this.readPositions);
-    const result = this.selfCollisionSolver.resolve(this.readPositions, this.invMassMirror, this.layerByParticle, {
-      thickness: this.clothThickness,
-      thicknesses: this.thicknessByParticle,
-      layerSpacing: this.layerSpacing,
-      stitched: this.simInput?.seamConstraints,
-    });
-    if (!result.moved) return;
-    // This pass runs after the collide pass of the frame, so the separation it applies can leave
-    // fabric inside the body: lift those particles before the frame is uploaded.
-    if (this.colliderMesh) {
-      liftMovedPositions(this.colliderMesh, this.readPositions, this.selfCollisionBefore, i => this.clearanceAt(i));
-    }
-    const data = this.selfCollisionWriteback;
-    for (let i = 0; i < pc; i++) {
-      data[i * 4] = this.readPositions[i * 3]!;
-      data[i * 4 + 1] = this.readPositions[i * 3 + 1]!;
-      data[i * 4 + 2] = this.readPositions[i * 3 + 2]!;
-      data[i * 4 + 3] = this.invMassMirror[i]!;
-    }
-    this.device.queue.writeBuffer(this.posInvMassBuf, 0, data);
   }
 
   /** Neutralizes seam constraints stretched past their strength-derived tear length. */
@@ -530,6 +492,8 @@ export class ClothSimulator {
     }
 
     const wg = (n: number) => Math.ceil(n / 256);
+    const selfCollision = this.selfCollisionEnabled ? this.selfCollision : null;
+    const selfCellSize = selfCollision?.cellSize(this.layerSpacing) ?? 0;
 
     // One encoder + submit per substep: queue writes are ordered against submits,
     // so each substep's uniforms are visible only to its own dispatches.
@@ -564,6 +528,9 @@ export class ClothSimulator {
           pass.end();
         }
       }
+
+      // Cloth against itself, on the solved positions, before the body pushes anything back out
+      selfCollision?.dispatch(encoder, selfCellSize, this.layerSpacing);
 
       // Body collision; the floor plane is always active and always dispatched
       {
@@ -645,7 +612,6 @@ export class ClothSimulator {
 
     this.baseInvMass = computeBaseInvMass(input, this.panelPhysics, input.particleCount);
     this.uploadMaterialFields(input);
-    this.syncInvMassMirror();
     for (let i = 0; i < input.particleCount; i++) {
       const w = this.pinnedSet.has(i) ? 0 : this.baseInvMass[i];
       this.initialPosInvMass[i * 4 + 3] = w;
@@ -662,6 +628,7 @@ export class ClothSimulator {
     this.simInput.seamConstraints = constraints;
     this.installGroup('seam', constraints);
     this.seamOpenLengths = this.group('seam').batched.batches.map(batch => batch.map(c => c.restLength));
+    this.selfCollision?.setStitchPairs(constraints);
     this.tornSeams.clear();
     if (this.seamProgress > 0) this.setSeamProgress(this.seamProgress);
     this.rebuildNormalTopology(this.simInput);
@@ -715,7 +682,6 @@ export class ClothSimulator {
         this.readbackNormalsBuf.unmap();
         this.readbackContactBuf.unmap();
       });
-      frameProfiler.span('sim.selfCollision', () => this.applySelfCollision());
       frameProfiler.span('sim.seams', () => this.resolveSeamTears());
       this.positionsVersion++;
     } catch {
@@ -769,7 +735,7 @@ export class ClothSimulator {
     this.uploadIndices(input.indices);
     this.rebuildNormalTopology(input);
     this.uploadMaterialFields(input);
-    this.syncInvMassMirror();
+    this.selfCollision?.setLayers(this.layerByParticle);
 
     const data = new Float32Array(pc * 4);
     for (let i = 0; i < pc; i++) {
@@ -855,6 +821,8 @@ export class ClothSimulator {
     if (!this.initialized || thickness.length !== this.particleCount) return;
     this.thicknessByParticle = new Float32Array(thickness);
     this.layerByParticle = new Uint8Array(layers);
+    this.selfCollision?.setLayers(this.layerByParticle);
+    this.uploadClearance();
     this.device.queue.writeBuffer(
       this.thicknessBuf, 0, this.thicknessByParticle.buffer as ArrayBuffer,
       this.thicknessByParticle.byteOffset, this.thicknessByParticle.byteLength,
@@ -922,7 +890,6 @@ export class ClothSimulator {
       const index = particleIndices[i];
       invMasses[i] = pinned ? 0 : this.baseInvMass[index];
       this.initialPosInvMass[index * 4 + 3] = invMasses[i];
-      if (this.invMassMirror.length > index) this.invMassMirror[index] = invMasses[i];
       if (pinned) this.pinnedSet.add(index);
       else this.pinnedSet.delete(index);
     }
@@ -994,5 +961,7 @@ export class ClothSimulator {
     for (const group of this.groups.values()) buffers.push(...group.batched.buffers, ...group.paramBufs);
     this.groups.clear();
     for (const buffer of buffers) buffer?.destroy();
+    this.selfCollision?.destroy();
+    this.selfCollision = null;
   }
 }

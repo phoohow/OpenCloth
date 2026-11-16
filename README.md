@@ -52,7 +52,6 @@ npm run preview
 | `npm run test:e2e` | Playwright 冒烟用例（需本机 Chrome） |
 | `npm run lint` | ESLint |
 | `npm run typecheck` | 类型检查 |
-| `npm run perf:gate` | 大面积布料的性能门禁 |
 | `npm run arch:report` | 输出依赖矩阵、循环与分层违例 |
 | `npm run arch:check` | 检查分层、环、门面与文件规模（CI 必过） |
 

@@ -132,3 +132,23 @@ export function packPinParams(indexCount: number, particleCount: number): Float3
   u32[1] = particleCount;
   return data;
 }
+
+/** SELF_COLLISION SelfParams block: 32 bytes; lengths in meters. */
+export function packSelfCollisionParams(
+  particleCount: number,
+  tableMask: number,
+  itemsPerCell: number,
+  cellSize: number,
+  layerSpacing: number,
+  maxMove: number,
+): Float32Array<ArrayBuffer> {
+  const data = new Float32Array(8);
+  const u32 = new Uint32Array(data.buffer);
+  u32[0] = particleCount;
+  u32[1] = tableMask;
+  u32[2] = itemsPerCell;
+  data[4] = cellSize;
+  data[5] = layerSpacing;
+  data[6] = maxMove;
+  return data;
+}

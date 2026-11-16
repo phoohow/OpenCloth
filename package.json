@@ -16,8 +16,6 @@
     "lint": "eslint src --ext .ts,.tsx",
     "typecheck": "tsc --noEmit",
     "data:makehuman": "node scripts/makehuman-data.mjs",
-    "perf:baseline": "node scripts/self-collision-baseline.mjs",
-    "perf:gate": "vitest run test/sim/productionScale.test.ts",
     "arch:report": "node scripts/check-architecture.mjs",
     "arch:check": "node scripts/check-architecture.mjs --check"
   },

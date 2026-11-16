@@ -24,7 +24,6 @@ const LABELS: Record<string, string> = {
   'sim.readback': '模拟回读',
   'sim.map': '回读等待',
   'sim.unpack': '回读解包',
-  'sim.selfCollision': '自碰撞',
   'sim.seams': '缝线撕裂',
   'sim.present': '结果上屏',
   'present.cloth': '服装网格',

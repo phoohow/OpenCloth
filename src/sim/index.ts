@@ -7,5 +7,4 @@ export * from '@/sim/meshColliderBuffers';
 export * from '@/sim/picking';
 export * from '@/sim/seamConstraints';
 export * from '@/sim/seamStrength';
-export * from '@/sim/selfCollision';
 export * from '@/sim/simUniforms';
