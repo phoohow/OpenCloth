@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMenuStore } from '@/ui/menu/menuStore';
 import { shortcutsByScope, type ShortcutScope } from '@/ui/menu/shortcuts';
 import { detectWebGPU } from '@/render/common';
@@ -8,29 +8,23 @@ import { ProductionDialog } from '@/ui/menu/productionDialog';
 import type { ProductionKind } from '@/ui/menu/production';
 import type { MenuActions } from '@/ui/menu/actions';
 import { reportActionError } from '@/ui/widgets/toast';
-import type {
-  Screenshot2DContent, Screenshot3DContent, ScreenshotRequest, ScreenshotViewport,
+import { DISPLAY_LAYER_OPTIONS } from '@/ui/optionTables';
+import { useUIStore } from '@/store';
+import type { DisplayOptions } from '@/ui/viewport2D/render';
+import {
+  CAPTURE_3D_SUBJECTS, exportFrame, type Capture3DSubject, type CaptureRequest, type CaptureViewport,
 } from '@/ui/screenshot';
 
 const SCOPE_ORDER: ShortcutScope[] = ['全局', '3D 视口', '2D 制版', '菜单栏'];
 
-/** Panes the debug screenshot can be taken from. */
-const SCREENSHOT_VIEWPORTS: ReadonlyArray<{ value: ScreenshotViewport; label: string }> = [
-  { value: '3d', label: '3D 视口' },
-  { value: '2d', label: '2D 制版' },
-];
+/** Title of the capture dialog for one pane. */
+const CAPTURE_TITLES: Record<CaptureViewport, string> = {
+  '3d': '3D 截帧预览',
+  '2d': '2D 截帧预览',
+};
 
-/** What each pane can keep in the picture. */
-const SCREENSHOT_3D: ReadonlyArray<{ value: Screenshot3DContent; label: string }> = [
-  { value: 'full', label: '完整场景' },
-  { value: 'garment', label: '仅服装' },
-  { value: 'body', label: '仅人体' },
-];
-const SCREENSHOT_2D: ReadonlyArray<{ value: Screenshot2DContent; label: string }> = [
-  { value: 'full', label: '完整场景' },
-  { value: 'pattern', label: '仅版片' },
-  { value: 'body', label: '仅人体' },
-];
+/** What the 2D preview draws: the panels themselves plus the pane's display layers. */
+type Keep2D = { panels: boolean; display: DisplayOptions };
 
 /** Modal host for Help ▸ Shortcuts, About OpenCloth, the debug screenshot and the collaboration dialogs. */
 export function MenuDialogs({ actions }: { actions: MenuActions }) {
@@ -59,12 +53,15 @@ export function MenuDialogs({ actions }: { actions: MenuActions }) {
           ...(dialog === 'review' ? styles.panelWide : null),
           ...(dialog === 'integration' ? styles.panelPreview : null),
           ...(dialog === 'production' ? styles.panelPreview : null),
+          ...(dialog === 'screenshot' ? styles.panelPreview : null),
         }}
         onClick={e => e.stopPropagation()}
       >
         {dialog === 'shortcuts' ? <ShortcutsDialog />
           : dialog === 'about' ? <AboutDialog />
-          : dialog === 'screenshot' ? <ScreenshotDialog actions={actions} />
+          : dialog === 'screenshot' ? (
+            <CaptureDialog actions={actions} viewport={dialogParam === '2d' ? '2d' : '3d'} />
+          )
           : dialog === 'review' ? <ReviewDialog initialProjectId={dialogParam} />
           : dialog === 'integration' ? <IntegrationDialog />
           : <ProductionDialog initialKind={dialogParam as ProductionKind | null} />}
@@ -134,74 +131,122 @@ function AboutDialog() {
   );
 }
 
-/** Debug screenshot: pick the pane and the subject, then export one PNG. */
-function ScreenshotDialog({ actions }: { actions: MenuActions }) {
+/**
+ * Debug capture: a rail of subjects on the left, the frame they produce on the right. The preview
+ * is the shot itself, refreshed whenever a subject changes, so the export matches what is shown.
+ */
+function CaptureDialog({ actions, viewport }: { actions: MenuActions; viewport: CaptureViewport }) {
   const closeDialog = useMenuStore(s => s.closeDialog);
-  const dialogParam = useMenuStore(s => s.dialogParam);
-  const [request, setRequest] = useState<ScreenshotRequest>({
-    viewport: dialogParam === '2d' ? '2d' : '3d',
-    content: 'full',
-  });
+  const [keep3d, setKeep3d] = useState<ReadonlySet<Capture3DSubject>>(
+    () => new Set(CAPTURE_3D_SUBJECTS.map(subject => subject.key)),
+  );
+  const [keep2d, setKeep2d] = useState<Keep2D>(() => ({
+    panels: true,
+    display: { ...useUIStore.getState().displayOptions },
+  }));
+  const [frame, setFrame] = useState<{ blob: Blob; url: string } | null>(null);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  /** Object URL of the shown frame, revoked as soon as another one replaces it. */
+  const urlRef = useRef<string | null>(null);
 
-  const run = async (): Promise<void> => {
+  const request = useMemo<CaptureRequest>(() => (viewport === '3d'
+    ? { viewport: '3d', subjects: CAPTURE_3D_SUBJECTS.map(s => s.key).filter(key => keep3d.has(key)) }
+    : { viewport: '2d', options: keep2d }), [viewport, keep3d, keep2d]);
+
+  // Drop the last URL when the dialog closes, so the blob is not kept alive.
+  useEffect(() => () => {
+    if (urlRef.current) URL.revokeObjectURL(urlRef.current);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
     setBusy(true);
-    setMessage(null);
-    try {
-      const file = await actions.debugScreenshot(request);
-      setMessage(file ? `已导出 ${file}` : '导出失败：请先在界面中显示该视口');
-    } catch (err) {
-      reportActionError(err, '截图导出失败');
-    } finally {
+    void actions.debugFrame(request).then(blob => {
+      if (cancelled) return;
+      if (urlRef.current) URL.revokeObjectURL(urlRef.current);
+      urlRef.current = blob ? URL.createObjectURL(blob) : null;
       setBusy(false);
-    }
-  };
+      setFrame(blob && urlRef.current ? { blob, url: urlRef.current } : null);
+    }).catch(err => {
+      if (cancelled) return;
+      setBusy(false);
+      setFrame(null);
+      reportActionError(err, '截帧失败');
+    });
+    return () => { cancelled = true; };
+  }, [actions, request]);
 
   return (
     <>
-      <div style={styles.title}>导出调试截图</div>
-      <div style={styles.body}>
-        <ChoiceRow label="视口" options={SCREENSHOT_VIEWPORTS} value={request.viewport}
-          onChange={viewport => setRequest({ viewport, content: 'full' })} />
-        {request.viewport === '3d'
-          ? <ChoiceRow label="内容" options={SCREENSHOT_3D} value={request.content}
-            onChange={content => setRequest({ viewport: '3d', content })} />
-          : <ChoiceRow label="内容" options={SCREENSHOT_2D} value={request.content}
-            onChange={content => setRequest({ viewport: '2d', content })} />}
-        <div style={styles.note}>只影响导出的图片；工程、模拟和显示设置都保持原样。</div>
-        {message && <div style={styles.message}>{message}</div>}
+      <div style={styles.title}>{CAPTURE_TITLES[viewport]}</div>
+      <div style={styles.captureBody}>
+        <div style={styles.captureRail}>
+          <div style={styles.railTitle}>显示对象</div>
+          {viewport === '3d' ? CAPTURE_3D_SUBJECTS.map(subject => (
+            <CheckRow
+              key={subject.key}
+              label={subject.label}
+              checked={keep3d.has(subject.key)}
+              onChange={() => setKeep3d(prev => toggleIn(prev, subject.key))}
+            />
+          )) : (
+            <>
+              <CheckRow
+                label="版片"
+                checked={keep2d.panels}
+                onChange={() => setKeep2d(prev => ({ ...prev, panels: !prev.panels }))}
+              />
+              {DISPLAY_LAYER_OPTIONS.map(layer => (
+                <CheckRow
+                  key={layer.key}
+                  label={layer.label}
+                  checked={keep2d.display[layer.key]}
+                  onChange={() => setKeep2d(prev => ({
+                    ...prev,
+                    display: { ...prev.display, [layer.key]: !prev.display[layer.key] },
+                  }))}
+                />
+              ))}
+            </>
+          )}
+        </div>
+        <div style={styles.capturePreview}>
+          {frame ? <img src={frame.url} alt="截帧预览" style={styles.previewImage} />
+            : <div style={styles.previewNote}>{busy ? '正在截帧…' : '该视口当前无可读画面'}</div>}
+          {busy && frame && <div style={styles.previewBusy}>正在截帧…</div>}
+        </div>
       </div>
       <div style={styles.footer}>
-        <button style={styles.exportBtn} disabled={busy} onClick={() => void run()}>
-          {busy ? '导出中…' : '导出 PNG'}
-        </button>
+        <button
+          style={{ ...styles.exportBtn, ...(!frame || busy ? styles.exportBtnDisabled : null) }}
+          disabled={!frame || busy}
+          onClick={() => frame && exportFrame(frame.blob, request)}
+        >导出 PNG</button>
         <button style={styles.closeBtn} onClick={closeDialog}>关闭</button>
       </div>
     </>
   );
 }
 
-/** One labelled row of mutually exclusive choices. */
-function ChoiceRow<T extends string>({ label, options, value, onChange }: {
+/** One subject row: a checkbox and its name. */
+function CheckRow({ label, checked, onChange }: {
   label: string;
-  options: ReadonlyArray<{ value: T; label: string }>;
-  value: T;
-  onChange: (value: T) => void;
+  checked: boolean;
+  onChange: () => void;
 }) {
   return (
-    <div style={styles.field}>
-      <span style={styles.fieldLabel}>{label}</span>
-      <div style={styles.choices}>
-        {options.map(option => (
-          <button key={option.value} type="button" onClick={() => onChange(option.value)}
-            style={{ ...styles.choice, ...(option.value === value ? styles.choiceActive : null) }}>
-            {option.label}
-          </button>
-        ))}
-      </div>
-    </div>
+    <label style={styles.checkRow}>
+      <input type="checkbox" checked={checked} onChange={onChange} style={styles.checkBox} />
+      <span>{label}</span>
+    </label>
   );
+}
+
+/** Copy of a subject set with one entry flipped. */
+function toggleIn<T>(set: ReadonlySet<T>, key: T): Set<T> {
+  const next = new Set(set);
+  if (next.has(key)) next.delete(key); else next.add(key);
+  return next;
 }
 
 const styles: Record<string, React.CSSProperties> = {
@@ -233,20 +278,36 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '1px 6px', fontSize: 'var(--oc-fs-micro)', color: '#cfe4ff', fontFamily: 'inherit', whiteSpace: 'nowrap',
   },
   footer: { display: 'flex', justifyContent: 'flex-end', gap: 8, paddingTop: 12 },
-  field: { display: 'flex', flexDirection: 'column', gap: 6 },
-  fieldLabel: { color: '#7d7d88', fontSize: 'var(--oc-fs-micro)' },
-  choices: { display: 'flex', gap: 6, flexWrap: 'wrap' },
-  choice: {
-    padding: '4px 12px', background: '#2a2a30', border: '1px solid #3a3a42', borderRadius: 3,
-    color: '#aaa', cursor: 'pointer', fontSize: 'var(--oc-fs-micro)',
+  captureBody: { flex: 1, minHeight: 0, display: 'flex', gap: 12, paddingTop: 10 },
+  captureRail: {
+    width: 178, flex: '0 0 auto', overflowY: 'auto', padding: '6px 8px',
+    background: '#1d1d21', border: '1px solid #33333a', borderRadius: 4,
   },
-  choiceActive: { background: '#2a3a4a', border: '1px solid #4da6ff', color: '#fff' },
-  note: { color: '#777', fontSize: 'var(--oc-fs-note)', lineHeight: 1.5 },
-  message: { color: '#9fd4a8', fontSize: 'var(--oc-fs-micro)' },
+  railTitle: {
+    color: '#7d7d88', fontSize: 'var(--oc-fs-micro)', letterSpacing: 1,
+    padding: '2px 2px 6px', borderBottom: '1px solid #33333a', marginBottom: 4,
+  },
+  checkRow: {
+    display: 'flex', alignItems: 'center', gap: 7, padding: '5px 2px',
+    fontSize: 'var(--oc-fs-micro)', color: '#ccc', cursor: 'pointer', userSelect: 'none',
+  },
+  checkBox: { width: 13, height: 13, accentColor: '#4da6ff', cursor: 'pointer', margin: 0 },
+  capturePreview: {
+    flex: 1, minWidth: 0, position: 'relative', display: 'flex',
+    alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+    background: '#15171b', border: '1px solid #33333a', borderRadius: 4,
+  },
+  previewImage: { maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block' },
+  previewNote: { color: '#7d8b99', fontSize: 'var(--oc-fs-body)' },
+  previewBusy: {
+    position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+    background: 'rgba(15,17,21,0.6)', color: '#cfe4ff', fontSize: 'var(--oc-fs-body)',
+  },
   exportBtn: {
     padding: '5px 14px', background: '#2a6a3a', border: '1px solid #3f9e55', borderRadius: 3,
     color: '#fff', cursor: 'pointer', fontSize: 'var(--oc-fs-micro)',
   },
+  exportBtnDisabled: { opacity: 0.45, cursor: 'default' },
   closeBtn: {
     padding: '5px 14px', background: '#2a4a6a', border: '1px solid #3d6f9e', borderRadius: 3,
     color: '#fff', cursor: 'pointer', fontSize: 'var(--oc-fs-micro)',

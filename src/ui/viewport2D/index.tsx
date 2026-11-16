@@ -37,7 +37,7 @@ import { ViewportHint } from '@/ui/widgets/viewportHint';
 import { reportActionError } from '@/ui/widgets/toast';
 import { isAssetDrag, currentAssetDrag, endAssetDrag, readAssetDrag } from '@/ui/assets/assetDrag';
 import { applyFabricToPanels, placeTrimOnPanel } from '@/ui/assets/applyAsset';
-import { registerViewport2DCapture, type Screenshot2DContent } from '@/ui/screenshot';
+import { registerViewport2DCapture, type Capture2DOptions } from '@/ui/screenshot';
 import { createEmptyPattern } from '@/model/defaults';
 
 /** 2D drafting canvas: draws the pattern and turns pointer and keyboard input into pattern edits. */
@@ -193,11 +193,11 @@ export function Viewport2D() {
   }, [sceneState]);
 
   /**
-   * Rendering of the pane for the debug screenshot export, in a fresh canvas: the same frame, or
-   * one of its two subjects alone. No interaction layer is dropped from the full frame.
+   * Rendering of the pane for the debug capture preview, in a fresh canvas: the same frame with the
+   * requested layers, or the body alone when the panels are switched off.
    */
-  const captureRef = useRef<(content: Screenshot2DContent) => HTMLCanvasElement | null>(() => null);
-  captureRef.current = (content) => {
+  const captureRef = useRef<(options: Capture2DOptions) => HTMLCanvasElement | null>(() => null);
+  captureRef.current = ({ panels, display }) => {
     const container = containerRef.current;
     if (!container) return null;
     const w = container.clientWidth, h = container.clientHeight;
@@ -211,35 +211,28 @@ export function Viewport2D() {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     const scene = sceneState();
-    const display = displayOptions as DisplayOptions;
-    if (content === 'body') {
-      const blank = createEmptyPattern();
-      drawScene(ctx, w, h, {
-        ...scene,
-        pattern: blank,
-        meshPattern: blank,
-        offsets: new Map(),
-        selection: [], hover: null, markHint: null, dropHint: null, preview: null,
-        rect: null, draft: null, snapHint: null, insertHint: null, seamHover: null,
-        showSeams: false,
-        gradingOutlines: [],
-        // The body reference is the subject here even when the pane has it switched off.
-        display: { ...display, gradingOverlay: false, bodyGuide: true },
-        bodyGuide: bodyGuide ?? bodyGuideGeometry({ body, mesh: bodyMesh }),
-      });
-    } else if (content === 'pattern') {
-      drawScene(ctx, w, h, {
-        ...scene,
-        bodyGuide: undefined,
-        display: { ...display, bodyGuide: false },
-      });
-    } else {
-      drawScene(ctx, w, h, scene);
+    const still: SceneState = {
+      ...scene,
+      display,
+      bodyGuide: display.bodyGuide ? bodyGuide ?? bodyGuideGeometry({ body, mesh: bodyMesh }) : undefined,
+    };
+    if (panels) {
+      drawScene(ctx, w, h, still);
+      return canvas;
     }
+    const blank = createEmptyPattern();
+    drawScene(ctx, w, h, {
+      ...still,
+      pattern: blank,
+      meshPattern: blank,
+      offsets: new Map(),
+      showSeams: false,
+      gradingOutlines: [],
+    });
     return canvas;
   };
 
-  useEffect(() => registerViewport2DCapture(content => captureRef.current(content)), []);
+  useEffect(() => registerViewport2DCapture(options => captureRef.current(options)), []);
   useEffect(() => { render(); }, [render, repaintToken]);
 
   // Tool switches clear any in-progress stroke and the hover affordance of the previous tool.
