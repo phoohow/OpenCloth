@@ -115,13 +115,13 @@ function displayItems(unavailable: string | null) {
 export function Toolbar2D() {
   const activeTool = useUIStore(s => s.activeTool);
   const setTool = useUIStore(s => s.setTool);
-  const requestFit = useUIStore(s => s.requestFit);
   const displayOptions = useUIStore(s => s.displayOptions);
   const setDisplayOption = useUIStore(s => s.setDisplayOption);
   const marqueeKinds = useUIStore(s => s.marqueeKinds);
   const setMarqueeKinds = useUIStore(s => s.setMarqueeKinds);
   const trimKind = useUIStore(s => s.trimKind);
   const setTrimKind = useUIStore(s => s.setTrimKind);
+  const hiddenLayers = DISPLAY_LAYER_OPTIONS.filter(l => !displayOptions[l.key]);
 
   return (
     <div style={styles.bar}>
@@ -161,27 +161,32 @@ export function Toolbar2D() {
       <ProblemMenu />
       <AutoMenu />
       <div style={styles.spacer} />
-      <Dropdown
+      <ToggleMenu
+        icon="marquee"
         label="框选"
-        items={MARQUEE_KINDS.map(({ kind, label }) => ({
-          key: kind,
-          label: `${marqueeKinds.includes(kind) ? '✓ ' : '　'}${label}`,
-        }))}
-        onPick={key => {
+        title={marqueeKinds.length === 0 ? '框选：拖框不收集对象' : `框选对象 · ${marqueeLabels(marqueeKinds)}`}
+        items={MARQUEE_KINDS.map(({ kind, label }) => ({ key: kind, label, checked: marqueeKinds.includes(kind) }))}
+        onToggle={key => {
           const kind = key as PatternElementKind;
           setMarqueeKinds(marqueeKinds.includes(kind)
             ? marqueeKinds.filter(k => k !== kind)
             : [...marqueeKinds, kind]);
         }}
       />
-      <Dropdown
+      <ToggleMenu
+        icon="eye"
         label="显示"
-        items={DISPLAY_LAYER_OPTIONS.map(l => ({ key: l.key, label: `${displayOptions[l.key] ? '✓ ' : '　'}${l.label}` }))}
-        onPick={key => setDisplayOption(key as keyof DisplayOptions, !displayOptions[key as keyof DisplayOptions])}
+        title={hiddenLayers.length === 0 ? '显示图层 · 全部显示' : `显示图层 · 已隐藏：${hiddenLayers.map(l => l.label).join('、')}`}
+        items={DISPLAY_LAYER_OPTIONS.map(l => ({ key: l.key, label: l.label, checked: displayOptions[l.key] }))}
+        onToggle={key => setDisplayOption(key as keyof DisplayOptions, !displayOptions[key as keyof DisplayOptions])}
       />
-      <button style={styles.textBtn} title="单击适配版型范围 (F)" onClick={requestFit}>适应</button>
     </div>
   );
+}
+
+/** Names of the element kinds a marquee collects, for the toolbar tooltip. */
+function marqueeLabels(kinds: PatternElementKind[]): string {
+  return MARQUEE_KINDS.filter(k => kinds.includes(k.kind)).map(k => k.label).join('、');
 }
 
 /** Structure entries that arm a tool show their active state. */
@@ -496,6 +501,43 @@ function ToolMenu({ icon, label, title, options, current, onPick }: {
             onClick={() => { onPick(o.key); setOpen(false); }}
           >
             {o.key === current ? '✓ ' : '　'}{o.label}
+          </div>
+        ))}
+      </MenuPopup>
+    </div>
+  );
+}
+
+/** Icon button that opens a list of independent toggles, each marked with a check. */
+function ToggleMenu({ icon, label, title, items, onToggle }: {
+  icon: IconName;
+  /** Short accessible name; the tooltip carries the current selection. */
+  label: string;
+  title: string;
+  items: Array<{ key: string; label: string; checked: boolean }>;
+  onToggle: (key: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const anchorRef = useRef<HTMLDivElement>(null);
+  return (
+    <div ref={anchorRef} style={{ position: 'relative' }}>
+      <button
+        style={{ ...styles.toolBtn, width: 34 }}
+        title={title}
+        aria-label={label}
+        onClick={() => setOpen(o => !o)}
+      >
+        <Icon name={icon} size={15} />
+        <Icon name="chevron-down" size={8} style={{ marginLeft: 1, opacity: 0.75 }} />
+      </button>
+      <MenuPopup open={open} anchor={anchorRef} onClose={() => setOpen(false)}>
+        {items.map(item => (
+          <div
+            key={item.key}
+            style={{ ...styles.menuItem, ...(item.checked ? styles.menuItemActive : null) }}
+            onClick={() => onToggle(item.key)}
+          >
+            {item.checked ? '✓ ' : '　'}{item.label}
           </div>
         ))}
       </MenuPopup>
