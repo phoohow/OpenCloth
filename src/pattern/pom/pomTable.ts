@@ -40,7 +40,7 @@ export function pomBase(project: Project): PomBase {
 }
 
 /** Value a POM reads from the base pattern or the avatar, in centimetres. */
-export function basePomValue(pom: PomPoint, pattern: Pattern, project: Project): number | null {
+function basePomValue(pom: PomPoint, pattern: Pattern, project: Project): number | null {
   if (pom.kind === 'body') {
     const key = pom.refs.bodyKey;
     if (key === 'height') return project.avatar.params.heightCm;

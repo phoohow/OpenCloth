@@ -1,5 +1,5 @@
 /**
- * Debug screenshots of one viewport, with the garment and the body separable.
+ * Screenshots of one viewport, with the garment and the body separable.
  *
  * The 3D pane is read from its canvas, so isolating a subject applies the pane's own display state
  * for the frames the canvas is read and restores it right after. The 2D pane renders a fresh frame
@@ -51,7 +51,7 @@ export function screenshotName(projectName: string, request: ScreenshotRequest):
 }
 
 /** Exports one screenshot; returns the file name, or null when the pane cannot be read. */
-export async function exportDebugScreenshot(
+export async function captureViewport(
   viewport: Viewport | null,
   request: ScreenshotRequest,
 ): Promise<string | null> {

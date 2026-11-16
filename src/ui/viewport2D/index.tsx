@@ -37,7 +37,7 @@ import { ViewportHint } from '@/ui/widgets/viewportHint';
 import { reportActionError } from '@/ui/widgets/toast';
 import { isAssetDrag, currentAssetDrag, endAssetDrag, readAssetDrag } from '@/ui/assets/assetDrag';
 import { applyFabricToPanels, placeTrimOnPanel } from '@/ui/assets/applyAsset';
-import { registerViewport2DCapture, type Screenshot2DContent } from '@/ui/debug/screenshot';
+import { registerViewport2DCapture, type Screenshot2DContent } from '@/ui/screenshot';
 import { createEmptyPattern } from '@/model/defaults';
 
 /** 2D drafting canvas: draws the pattern and turns pointer and keyboard input into pattern edits. */

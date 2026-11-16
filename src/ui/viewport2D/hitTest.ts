@@ -1,5 +1,5 @@
 import type { Pattern, Vec2 } from '@/model/types';
-import { computeBBox, distanceToPolyline, pointInPolygon } from '@/base/geom';
+import { distanceToPolyline, pointInPolygon } from '@/base/geom';
 import { distance2, nearlyEqual2 } from '@/base/math';
 import { projectOnSegment2 } from '@/base/geom';
 import { sampleEdge, sampleEdgeInterval } from '@/pattern/panel';
@@ -210,14 +210,6 @@ export function panelsOfPoint(pattern: Pattern, pointId: string): string[] {
     }
   }
   return result;
-}
-
-/** Whether the points' bounding box overlaps the rect. */
-export function rectIntersectsBBox(rect: Rect, points: readonly Vec2[]): boolean {
-  if (points.length === 0) return false;
-  const bounds = computeBBox(points);
-  return bounds.max.x >= rect.min.x && bounds.min.x <= rect.max.x
-    && bounds.max.y >= rect.min.y && bounds.min.y <= rect.max.y;
 }
 
 /** Element rows of the given kinds whose geometry the marquee rect covers. Panels stay plain scene ids. */

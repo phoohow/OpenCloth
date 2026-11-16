@@ -74,18 +74,6 @@ export function cleanDraftLoop(points: readonly Vec2[]): Vec2[] {
   return loop;
 }
 
-/** Whether a draft leaves the tool armed for the next stroke instead of finishing. */
-export function draftIsIdle(draft: DraftState): boolean {
-  if (!draft) return true;
-  switch (draft.tool) {
-    case 'pen': return draft.points.length === 0;
-    case 'polyline': return draft.points.length === 0;
-    case 'seam': return draft.sides.length === 0;
-    case 'measure': return !draft.pointAId;
-    default: return true;
-  }
-}
-
 /** Rect/ellipse/circle outline corners from a drag rectangle; square/circle with shift. */
 export function shapeFrame(start: Vec2, current: Vec2, shape: 'rect' | 'circle' | 'ellipse', square: boolean): { min: Vec2; max: Vec2 } {
   let dx = current.x - start.x;

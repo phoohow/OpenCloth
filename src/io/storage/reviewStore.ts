@@ -136,12 +136,6 @@ export async function listVersions(projectId: string): Promise<ReviewVersionReco
     .sort((a, b) => b.seq - a.seq);
 }
 
-/** Latest version of one project, or null when it has none. */
-export async function latestVersion(projectId: string): Promise<ReviewVersionRecord | null> {
-  const versions = await listVersions(projectId);
-  return versions[0] ?? null;
-}
-
 /** Deletes a project together with its versions, comments and events. */
 export async function deleteCloudProject(projectId: string): Promise<void> {
   const versions = await readByProject<ReviewVersionRecord>(VERSION_STORE, projectId);

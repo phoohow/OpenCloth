@@ -43,26 +43,6 @@ export interface FabricSlotPlan {
   slotForPanel: number[];
 }
 
-/** Distinct materials worn by the given panels, plus each panel's slot index. */
-export function fabricSlotPlan(project: Project, panelIds: string[]): FabricSlotPlan {
-  const fabrics: (Fabric | null)[] = [];
-  const indexOf = new Map<string, number>();
-  const slotForPanel: number[] = [];
-  for (const panelId of panelIds) {
-    const fabric = fabricForPanel(project, panelId);
-    // Panels without a record share one fallback slot.
-    const key = fabric ? fabric.id : 'missing';
-    let slot = indexOf.get(key);
-    if (slot === undefined) {
-      slot = fabrics.length;
-      fabrics.push(fabric);
-      indexOf.set(key, slot);
-    }
-    slotForPanel.push(slot);
-  }
-  return { fabrics, slotForPanel };
-}
-
 /** Prints one panel draws in the viewport and composites into 3D, in insertion order. */
 export function panelPrints(project: Project, panelId: string): Print[] {
   return Object.values(project.pattern.prints ?? {}).filter(

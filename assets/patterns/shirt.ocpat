@@ -3,7 +3,6 @@
   "key": "shirt",
   "name": "衬衫",
   "summary": "左右前片 · 过肩 · 后背片 · 长袖 · 克夫 · 领座 · 翻领",
-  "icon": "shirt",
   "params": {
     "chestCm": 100,
     "lengthCm": 72,

@@ -5,6 +5,7 @@ import {
 } from '@/store';
 import { AppendTemplateCommand, ApplyTemplateCommand } from '@/pattern/template';
 import type { GarmentTemplate } from '@/pattern/template';
+import { useAssetPreview } from '@/ui/assets/assetPreviews';
 import { Icon } from '@/ui/icons';
 import {
   importTemplatesViaPicker, saveCurrentPatternAsTemplate,
@@ -58,6 +59,8 @@ export function PatternAssets() {
 
 function TemplateRow({ template, onDelete }: { template: GarmentTemplate; onDelete?: () => void }) {
   const executeCommand = useProjectStore(s => s.executeCommand);
+  // The icon is a still of the garment itself, simulated and drawn by the render layer.
+  const preview = useAssetPreview('pattern', template.key, template.revision);
 
   return (
     <div
@@ -65,7 +68,9 @@ function TemplateRow({ template, onDelete }: { template: GarmentTemplate; onDele
       title={template.summary}
     >
       <span style={styles.glyph}>
-        <Icon name={template.icon} size={22} style={{ color: '#c3c9d4' }} />
+        {preview
+          ? <img src={preview} alt="" draggable={false} style={styles.thumbnail} />
+          : <Icon name="panel" size={16} style={{ color: '#6c7484' }} />}
       </span>
       <span style={styles.text}>
         <span style={styles.name}>{template.name}</span>

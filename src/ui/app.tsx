@@ -13,8 +13,8 @@ import { ToastHost } from '@/ui/widgets/toast';
 import { PerfPanel } from '@/ui/debug/perfPanel';
 import { createMenuActions, shortcutActions } from '@/ui/menu/actions';
 import type { MenuActions } from '@/ui/menu/actions';
+import { PROJECT_FILE_EXTENSION } from '@/io/serialization';
 import { useUIStore, isSplitLayout, leftPaneOf, isRightPanelShown, type PaneId } from '@/store';
-import { PROJECT_FILE_EXTENSION } from '@/model';
 import type { GarmentEngine } from '@/runtime';
 import type { Viewport } from '@/runtime';
 import {

@@ -24,6 +24,12 @@ const BACKGROUND = '#1f1f24';
 /** Framing of the model portrait: share of the frame the body fills, in model heights. */
 const BODY_FILL = 0.92;
 
+/** Framing of a garment portrait: share of the frame its bounding sphere fills at most. */
+const GARMENT_FILL = 0.96;
+
+/** Turn of the garment camera, so the icon reads as a volume rather than a flat silhouette. */
+const GARMENT_YAW_DEG = 24;
+
 /** Field of view of the model camera, in degrees. */
 const MODEL_FOV = 30;
 
@@ -55,6 +61,8 @@ export interface Previewer {
   model(url: string): Promise<string | null>;
   /** Draws procedural body meshes as a portrait; null when they cannot be built. */
   body(meshes: readonly AssetMesh[]): Promise<string | null>;
+  /** Draws a settled garment on its own, with no body behind it. */
+  garment(meshes: readonly AssetMesh[]): Promise<string | null>;
   /** Draws an equirectangular image as it looks around the horizon; null when it cannot be read. */
   environment(url: string): Promise<string | null>;
   dispose(): void;
@@ -73,6 +81,8 @@ class PreviewPipeline implements Previewer {
   private tail: Promise<unknown> = Promise.resolve();
   /** Distinguishes the asset keys of successive procedural bodies. */
   private bodyCount = 0;
+  /** Distinguishes the asset keys of successive settled garments. */
+  private garmentCount = 0;
 
   constructor(deps: PreviewDeps) {
     this.backend = deps.backend;
@@ -91,6 +101,11 @@ class PreviewPipeline implements Previewer {
     return this.enqueue(() => this.drawAsset(key, { kind: 'meshes', meshes }));
   }
 
+  garment(meshes: readonly AssetMesh[]): Promise<string | null> {
+    const key = `preview:garment:${++this.garmentCount}`;
+    return this.enqueue(() => this.drawAsset(key, { kind: 'meshes', meshes }, garmentCamera));
+  }
+
   environment(url: string): Promise<string | null> {
     return this.enqueue(() => this.drawEnvironment(url));
   }
@@ -100,12 +115,16 @@ class PreviewPipeline implements Previewer {
     this.graph.dispose();
   }
 
-  /** Loads one asset and frames its portrait from the front. */
-  private async drawAsset(key: string, source: AssetSource): Promise<string | null> {
+  /** Loads one asset and frames its portrait with the given camera. */
+  private async drawAsset(
+    key: string,
+    source: AssetSource,
+    camera: (bounds: Bounds) => CameraState = portraitCamera,
+  ): Promise<string | null> {
     const handle = await this.backend.assets.load(key, source).catch(() => null);
     if (!handle) return null;
     try {
-      return await this.frame(assetScene(key), portraitCamera(handle.bounds));
+      return await this.frame(assetScene(key), camera(handle.bounds));
     } finally {
       this.backend.assets.release(key);
     }
@@ -216,20 +235,45 @@ function portraitLights(): LightData[] {
 /** Camera facing the body from the front, framing it from the feet to just above the head. */
 function portraitCamera(bounds: Bounds): CameraState {
   const height = Math.max(bounds.max.y - bounds.min.y, 1e-3);
+  const distance = height / BODY_FILL / (2 * Math.tan(degToRad(MODEL_FOV) / 2));
+  return lookingCamera(bounds, distance, 0, height);
+}
+
+/** Camera turned off the garment's front, so the icon shows the drape and not just an outline. */
+function garmentCamera(bounds: Bounds): CameraState {
+  const width = Math.max(bounds.max.x - bounds.min.x, 1e-3);
+  const height = Math.max(bounds.max.y - bounds.min.y, 1e-3);
+  const depth = Math.max(bounds.max.z - bounds.min.z, 1e-3);
+  // Fit the bounding sphere, so no turn of the piece can push a sleeve out of the square frame.
+  const radius = Math.hypot(width, height, depth) / 2;
+  const distance = radius / Math.sin(degToRad(MODEL_FOV) / 2) / GARMENT_FILL;
+  return lookingCamera(bounds, distance, GARMENT_YAW_DEG, radius * 2);
+}
+
+/** Camera centred on `bounds`, `distance` away and turned by `yawDeg` around the vertical axis. */
+function lookingCamera(
+  bounds: Bounds,
+  distance: number,
+  yawDeg: number,
+  viewHeightMeters: number,
+): CameraState {
   const center = {
     x: (bounds.min.x + bounds.max.x) / 2,
-    y: bounds.min.y + height / 2,
+    y: (bounds.min.y + bounds.max.y) / 2,
     z: (bounds.min.z + bounds.max.z) / 2,
   };
-  // Distance that makes the body span BODY_FILL of the frame at the model field of view.
-  const distance = height / BODY_FILL / (2 * Math.tan(degToRad(MODEL_FOV) / 2));
+  const yaw = degToRad(yawDeg);
   return {
     projection: 'perspective',
-    position: { x: center.x, y: center.y, z: center.z + distance },
+    position: {
+      x: center.x + Math.sin(yaw) * distance,
+      y: center.y,
+      z: center.z + Math.cos(yaw) * distance,
+    },
     target: center,
     up: { x: 0, y: 1, z: 0 },
     fovDeg: MODEL_FOV,
-    viewHeightMeters: height,
+    viewHeightMeters,
     aspect: 1,
     near: 0.05,
     far: 20,

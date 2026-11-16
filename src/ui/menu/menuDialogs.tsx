@@ -10,7 +10,7 @@ import type { MenuActions } from '@/ui/menu/actions';
 import { reportActionError } from '@/ui/widgets/toast';
 import type {
   Screenshot2DContent, Screenshot3DContent, ScreenshotRequest, ScreenshotViewport,
-} from '@/ui/debug/screenshot';
+} from '@/ui/screenshot';
 
 const SCOPE_ORDER: ShortcutScope[] = ['全局', '3D 视口', '2D 制版', '菜单栏'];
 

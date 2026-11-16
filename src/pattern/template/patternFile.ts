@@ -1,8 +1,8 @@
 import { genId } from '@/base/id';
 import type { Pattern } from '@/model/types';
 import { DEFAULT_MESH_RESOLUTION_CM } from '@/model';
-import { patternFromJson } from '@/pattern/auto/aiContract';
-import type { GarmentTemplate, TemplateIcon } from '@/pattern/template/garmentTemplate';
+import { patternFromJson } from '@/pattern/patternJson';
+import type { GarmentTemplate } from '@/pattern/template/garmentTemplate';
 
 /**
  * A `.ocpat` file carries display metadata and one complete `Pattern`: points, edges, panels,
@@ -10,16 +10,12 @@ import type { GarmentTemplate, TemplateIcon } from '@/pattern/template/garmentTe
  */
 export const PATTERN_FILE_EXTENSION = '.ocpat';
 
-/** Glyph names a template file may declare; unknown names fall back to the panel glyph. */
-const FILE_ICONS: readonly string[] = ['t-shirt', 'shirt', 'hoodie', 'dress', 'skirt', 'panel'];
-
 /** One garment template stored as a standalone file. */
 export interface PatternFile {
   /** Stable catalogue key, unique across the default folder and imported templates. */
   key: string;
   name: string;
   summary?: string;
-  icon?: TemplateIcon;
   /** Display position in the template tab; files without it sort after the rest by name. */
   order?: number;
   /** Measurements the geometry was drafted from; informational, not applied again. */
@@ -37,7 +33,6 @@ interface ParsedPatternFile {
 export interface PatternFileMeta {
   name: string;
   summary?: string;
-  icon?: TemplateIcon;
   key?: string;
   order?: number;
   params?: Record<string, number>;
@@ -69,9 +64,6 @@ export function parsePatternFile(text: string): ParsedPatternFile {
   alignRecordIds(pattern);
   fillPanelDefaults(pattern);
 
-  const icon = typeof raw.icon === 'string' && FILE_ICONS.includes(raw.icon)
-    ? raw.icon as TemplateIcon
-    : undefined;
   const summary = typeof raw.summary === 'string' && raw.summary.trim()
     ? raw.summary.trim()
     : deriveSummary(pattern);
@@ -87,7 +79,6 @@ export function parsePatternFile(text: string): ParsedPatternFile {
     key: raw.key,
     name: raw.name.trim(),
     summary,
-    ...(icon ? { icon } : {}),
     ...(order !== undefined ? { order } : {}),
     ...(params && Object.keys(params).length > 0 ? { params } : {}),
     pattern,
@@ -106,7 +97,6 @@ export function encodePatternFile(pattern: Pattern, meta: PatternFileMeta): stri
     key: meta.key ?? genId('tpl'),
     name: meta.name.trim() || '未命名版型',
     summary: meta.summary?.trim() || deriveSummary(draft),
-    ...(meta.icon ? { icon: meta.icon } : {}),
     ...(meta.order !== undefined ? { order: meta.order } : {}),
     ...(meta.params ? { params: { ...meta.params } } : {}),
     pattern: draft,
@@ -136,13 +126,23 @@ export function patternFileToTemplate(
   return {
     key: file.key,
     name: file.name,
-    icon: file.icon ?? 'panel',
+    revision: contentRevision(file.pattern),
     summary: file.summary ?? deriveSummary(file.pattern),
     ...(file.params ? { params: { ...file.params } } : {}),
     source,
     ...(assetId ? { assetId } : {}),
     generate: fabricId => instantiatePattern(file.pattern, fabricId),
   };
+}
+
+/** Cheap fingerprint of a pattern's content, used to cache the rendered thumbnail. */
+function contentRevision(pattern: Pattern): string {
+  const text = JSON.stringify(pattern);
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    hash = Math.imul(hash ^ text.charCodeAt(i), 0x01000193);
+  }
+  return (hash >>> 0).toString(36);
 }
 
 /** Panel names shown under a template that did not declare a summary. */

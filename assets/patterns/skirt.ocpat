@@ -3,7 +3,6 @@
   "key": "skirt",
   "name": "裙子",
   "summary": "腰头 · 环形裙片 · A 字摆",
-  "icon": "skirt",
   "params": {
     "waistCm": 70,
     "hipCm": 98,

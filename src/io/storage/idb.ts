@@ -63,14 +63,6 @@ export function openIdb(spec: IdbSpec): Promise<IDBDatabase> {
   return guarded;
 }
 
-/** Drops every cached connection; used when a store is deleted or a schema is reset. */
-export function closeIdb(): void {
-  for (const opening of connections.values()) {
-    void opening.then(db => db.close()).catch(() => { });
-  }
-  connections.clear();
-}
-
 /** Resolves one request, keeping the IndexedDB result type. */
 export function requestResult<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -108,12 +100,6 @@ export function withStores<T>(
     transaction.onerror = () => reject(transaction.error ?? new Error('本机数据库事务失败'));
     transaction.onabort = () => reject(transaction.error ?? new Error('本机数据库事务被中止'));
   }));
-}
-
-/** Runs a body against a cached connection; the connection stays open for the next call. */
-export async function withDb<T>(spec: IdbSpec, run: (db: IDBDatabase) => Promise<T>): Promise<T> {
-  const db = await openIdb(spec);
-  return run(db);
 }
 
 /** Runs one request against a single store and resolves once its transaction commits. */

@@ -1,6 +1,6 @@
 import type { Command, Fabric, Pattern, ProjectContext } from '@/model/types';
 import { createFabric } from '@/model';
-import { appendPattern, layoutByHeight } from '@/pattern/template/patternLayout';
+import { appendPattern, layoutByHeight } from '@/pattern/template/sheetLayout';
 import { type GarmentTemplate } from '@/pattern/template/garmentTemplate';
 import { bodyLandmarks } from '@/avatar';
 

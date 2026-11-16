@@ -49,7 +49,7 @@ npm run preview
 | `npm run preview` | 预览构建产物 |
 | `npm run test` | 单元测试（watch） |
 | `npm run test:run` | 单元测试（跑一遍） |
-| `npm run test:e2e` | Playwright 端到端测试（需本机 Chrome） |
+| `npm run test:e2e` | Playwright 冒烟用例（需本机 Chrome） |
 | `npm run lint` | ESLint |
 | `npm run typecheck` | 类型检查 |
 | `npm run perf:gate` | 大面积布料的性能门禁 |
@@ -60,8 +60,8 @@ npm run preview
 
 ```
 src/
-  common/    公共层：数学、几何、ID、文本、时间、单位、平台能力与端口类型（零业务依赖）
-  model/     领域数据契约、默认值、校验与场景配置 schema
+  base/      公共层：数学、几何、ID、文本、时间、单位、平台能力与端口类型（零业务依赖）
+  model/     领域数据契约、默认值、校验与场景配置
   pattern/   版型几何、模板、排料、放码、POM
   analysis/  合身 / 应变 / 压力的纯计算
   sim/       WebGPU 布料求解与碰撞
@@ -75,8 +75,8 @@ src/
   api/       window.opencloth 自动化门面
   tools/     独立 Node CLI 工具
 scripts/     架构守卫、基线与工程脚本
-test/        单元测试（test/architecture 为架构约束）
-e2e/         Playwright 用例
+test/        核心算法单元测试（几何、求解、排料、放码校验）
+e2e/         Playwright 冒烟用例
 assets/      环境贴图、图标、降噪权重与 MakeHuman 人体数据
 ```
 
@@ -96,7 +96,6 @@ assets/      环境贴图、图标、降噪权重与 MakeHuman 人体数据
   "key": "my-jacket",
   "name": "我的夹克",
   "summary": "前片 · 后片 · 袖",
-  "icon": "t-shirt",
   "params": { "chestCm": 96 },
   "pattern": { "points": {}, "edges": {}, "panels": {}, "seams": {} }
 }
@@ -108,7 +107,8 @@ assets/      环境贴图、图标、降噪权重与 MakeHuman 人体数据
   缺少的集合会补空，版片缺省字段会用默认值补齐，再经过拓扑校验。
 - 每个版片建议带 `drape`（包裹信息）并配好 `seams`，否则应用后只能平铺、不会自动缝合；解析时会给出提示。
 - `params` 只记录打版时的尺寸，不参与生成；多尺码请用工程里的尺码表与放码。
-- `icon` 可选 `t-shirt` / `shirt` / `hoodie` / `dress` / `skirt` / `panel`，缺省为 `panel`。
+- 文件里不需要图标：素材库会读取版型，按本机模特模拟 120 帧待布料稳定后渲染一张缩略图
+  （只画服装、不画人体），所以新增或改动文件后图标自动更新。
 - 应用时所有实体 ID 会重新生成、`fabricId` 会改成工程当前面料，所以同一版型可以反复「添加」而不冲突。
 - `.ocpat` 与工程文件 `.ocproj` 都是标准 JSON 文本，用专属后缀区分用途。打开工程只接受
   `.ocproj`，导入版型和默认文件夹扫描只接受 `.ocpat`。

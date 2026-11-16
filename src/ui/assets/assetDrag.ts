@@ -12,7 +12,7 @@ export interface AssetDragGhost {
 }
 
 /** Drag data type marking a catalogue drag, so viewports can tell it from a file drag. */
-export const ASSET_DRAG_TYPE = 'application/x-opencloth-asset';
+const ASSET_DRAG_TYPE = 'application/x-opencloth-asset';
 
 /** Size of the floating drag image, in pixels. */
 const GHOST_SIZE = 44;

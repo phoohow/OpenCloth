@@ -59,11 +59,6 @@ export function dialogButton(kind: 'primary' | 'secondary' | 'danger', pad = 10)
   };
 }
 
-/** Small print under a section; `lineHeight` differs where the text is denser. */
-export function dialogNote(lineHeight = 1.5): CSSProperties {
-  return { color: '#777', fontSize: 'var(--oc-fs-note)', lineHeight };
-}
-
 /** Empty-state or inline help text; `pad` is the uniform padding around it. */
 export function dialogHint(pad = 4): CSSProperties {
   return { color: '#777', fontSize: 'var(--oc-fs-micro)', padding: pad };

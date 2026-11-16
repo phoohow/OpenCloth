@@ -28,7 +28,7 @@ export function saveCurrentPatternAsTemplate(): void {
   if (!name || !name.trim()) return;
 
   try {
-    const text = encodePatternFile(project.pattern, { name: name.trim(), icon: 'panel' });
+    const text = encodePatternFile(project.pattern, { name: name.trim() });
     downloadTextFile(`${safeFileName(name.trim())}${PATTERN_FILE_EXTENSION}`, text);
     notify(`已导出「${name.trim()}」，可放入默认文件夹或用「导入版型」添加`);
   } catch (error) {

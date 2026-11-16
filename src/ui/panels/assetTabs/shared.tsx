@@ -113,9 +113,11 @@ export const styles: Record<string, CSSProperties> = {
   },
   preview: { flex: '0 0 auto', width: 38, height: 38, borderRadius: 3, background: '#1f1f24', objectFit: 'contain' },
   glyph: {
-    flex: '0 0 auto', width: 30, height: 30, borderRadius: 3, background: '#1f1f24',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    flex: '0 0 auto', width: 38, height: 38, borderRadius: 3, background: '#1f1f24',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
   },
+  /** A rendered thumbnail fills its glyph box; the image carries the same backdrop colour. */
+  thumbnail: { display: 'block', width: 38, height: 38, objectFit: 'contain' },
   text: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' },
   name: { color: '#ddd', fontSize: 'var(--oc-fs-micro)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   meta: { color: '#7d7d88', fontSize: 'var(--oc-fs-note)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },

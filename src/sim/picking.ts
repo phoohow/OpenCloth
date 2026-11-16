@@ -36,14 +36,6 @@ export function computeParticlePanelMap(input: ClothSimInput): Uint32Array {
   return map;
 }
 
-/** Builds the particle panel map, validated against one name per panel slot. */
-export function buildParticlePanelMap(input: ClothSimInput, panelNames: string[]): Uint32Array {
-  if (panelNames.length !== input.panels.length) {
-    throw new Error(`panelNames length ${panelNames.length} must match panels length ${input.panels.length}`);
-  }
-  return computeParticlePanelMap(input);
-}
-
 /**
  * Perpendicular distance from a point to a ray (dir need not be normalized);
  * Infinity when the projection falls behind the ray origin.

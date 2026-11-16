@@ -3,7 +3,6 @@
   "key": "dress",
   "name": "连衣裙",
   "summary": "收腰上身片 · 两片裙身",
-  "icon": "dress",
   "params": {
     "chestCm": 92,
     "waistCm": 76,

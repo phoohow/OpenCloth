@@ -3,7 +3,6 @@
   "key": "tshirt",
   "name": "T 恤",
   "summary": "前片 · 后片 · 短袖",
-  "icon": "t-shirt",
   "params": {
     "chestCm": 96,
     "lengthCm": 64,

@@ -3,7 +3,6 @@ export * from '@/model/assetLibrary';
 export * from '@/model/defaults';
 export * from '@/model/elementRef';
 export * from '@/model/fabric';
-export * from '@/model/format';
 export * from '@/model/knit';
 export * from '@/model/layers';
 export * from '@/model/normalize';

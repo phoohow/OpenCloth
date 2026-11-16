@@ -3,7 +3,6 @@
   "key": "hoodie",
   "name": "卫衣",
   "summary": "前片 · 后片 · 落肩长袖 · 罗纹 · 兜帽",
-  "icon": "hoodie",
   "params": {
     "chestCm": 110,
     "lengthCm": 70,

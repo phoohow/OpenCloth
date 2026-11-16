@@ -8,7 +8,7 @@ const POINT_KINDS = new Set(['corner', 'smooth']);
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v);
 
-/** Strict field checks for AI-produced pattern JSON before it touches the model. */
+/** Strict field checks for an imported pattern JSON before it touches the model. */
 function collectStructuralErrors(raw: Record<string, unknown>, errors: string[]): void {
   for (const key of ['points', 'edges', 'panels'] as const) {
     if (!isRecord(raw[key])) errors.push(`缺少「${key}」集合或其不是对象`);
@@ -42,11 +42,11 @@ function collectStructuralErrors(raw: Record<string, unknown>, errors: string[])
 }
 
 /**
- * Strict import boundary for JSON patterns (FR-13.3): parses JSON text, checks required
- * fields, fills absent collections through `normalizePattern`, then validates topology.
- * Any failure throws an aggregated Chinese error prefixed with `label`.
+ * Strict import boundary for a pattern JSON document: parses the text, checks required fields,
+ * fills absent collections through `normalizePattern`, then validates topology. Any failure
+ * throws an aggregated Chinese error prefixed with `label`.
  */
-export function patternFromJson(json: string, label = 'AI 版型'): Pattern {
+export function patternFromJson(json: string, label = '版型 JSON'): Pattern {
   let raw: unknown;
   try {
     raw = JSON.parse(json);

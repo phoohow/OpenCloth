@@ -47,16 +47,8 @@ const FILES = scanFolder().sort((a, b) =>
 export const FILE_TEMPLATES: GarmentTemplate[] = FILES.map(({ file }) =>
   patternFileToTemplate(file, 'file'));
 
-/** Catalogue keys of the files, in display order. */
-export const FILE_TEMPLATE_KEYS: string[] = FILE_TEMPLATES.map(template => template.key);
-
-/** Drafting measurements recorded in each file, keyed by catalogue key. */
-export const FILE_TEMPLATE_PARAMS: Record<string, Record<string, number>> = Object.fromEntries(
-  FILE_TEMPLATES.map(template => [template.key, template.params ?? {}]),
-);
-
 /** Builds a fresh pattern from one file; without a key it takes the first file. */
-export function presetPattern(key?: string, fabricId = 'fabric_default'): Pattern {
+export function templatePattern(key?: string, fabricId = 'fabric_default'): Pattern {
   const template = key
     ? FILE_TEMPLATES.find(item => item.key === key)
     : FILE_TEMPLATES[0];
@@ -64,9 +56,4 @@ export function presetPattern(key?: string, fabricId = 'fabric_default'): Patter
     throw new Error(key ? `未知的版型：${key}` : '默认文件夹里没有版型文件');
   }
   return template.generate(fabricId);
-}
-
-/** Pattern of the first file, or null when the folder has no templates. */
-export function defaultPattern(fabricId: string): Pattern | null {
-  return FILE_TEMPLATES[0]?.generate(fabricId) ?? null;
 }

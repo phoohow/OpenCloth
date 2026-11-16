@@ -441,7 +441,7 @@ function nearestVertexRun(mesh: TriangleMesh, pts: Vec2[]): number[] {
 /**
  * Fold polylines of a panel: its internal lines marked `fold`, in pattern centimetre coordinates.
  */
-export function panelFoldLines(pattern: Pattern, panelId: string): Vec2[][] {
+function panelFoldLines(pattern: Pattern, panelId: string): Vec2[][] {
   const panel = pattern.panels[panelId];
   if (!panel) return [];
   return panel.internalLineIds

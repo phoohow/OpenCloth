@@ -1,8 +1,10 @@
 import type { Pattern, Project } from '@/model/types';
-import { PROJECT_FILE_EXTENSION } from '@/model';
 import type { Command } from '@/commands';
 import { createBlankProject } from '@/pattern/template';
-import { projectCodec, downloadTextFile, readFileAsText } from '@/io/serialization';
+import { patternFromJson } from '@/pattern';
+import {
+  PROJECT_FILE_EXTENSION, downloadTextFile, projectCodec, readFileAsText,
+} from '@/io/serialization';
 import { embedProjectAssets } from '@/io/storage';
 import {
   clearRecent, listAutosaves, listRecent, pruneOrphanBlobs, pushRecent, readAutosave, readRecent,
@@ -12,7 +14,6 @@ import { parsePatternDxf } from '@/io/dxf';
 import { parseGerberPattern } from '@/io/import';
 import { parseHpglPattern } from '@/io/import';
 import { parsePdfPattern } from '@/io/import';
-import { patternFromJson } from '@/pattern/auto';
 
 /** Host callbacks the project service needs from the composition root. */
 export interface ProjectServicePorts {

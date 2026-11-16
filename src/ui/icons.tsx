@@ -19,8 +19,8 @@ export const ICON_NAMES = [
   'collapse-all', 'expand-all', 'status-dot', 'menu', 'close',
   // Transport
   'play', 'pause', 'reset', 'step',
-  // Garment templates
-  't-shirt', 'shirt', 'hoodie', 'dress', 'skirt',
+  // Asset library tabs
+  't-shirt',
 ] as const;
 
 /** Name of one UI glyph, drawn from `assets/icons/<name>.svg`. */
@@ -34,8 +34,8 @@ const SOURCES: Record<string, string> = Object.fromEntries(
   ).map(([path, source]) => [path.replace(/^.*\//, '').replace(/\.svg$/, ''), source]),
 );
 
-/** Raw SVG markup of one glyph, for hosts that need the drawing itself. */
-export function iconSource(name: IconName): string {
+/** Raw SVG markup of one glyph. */
+function iconSource(name: IconName): string {
   return SOURCES[name] ?? '';
 }
 

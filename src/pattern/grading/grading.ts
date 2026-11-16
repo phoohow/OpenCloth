@@ -7,11 +7,6 @@ export function orderedSizes(project: Project): SizeDef[] {
   return [...(project.sizes ?? [])].sort((a, b) => a.seq - b.seq);
 }
 
-/** True once the project carries a chart with a resolved active size. */
-export function gradingActive(project: Project): boolean {
-  return (project.sizes?.length ?? 0) > 0 && !!project.activeSizeId;
-}
-
 /** Size the stored pattern geometry is currently resolved to. */
 export function activeSize(project: Project): SizeDef | null {
   return project.sizes?.find(s => s.id === project.activeSizeId) ?? null;

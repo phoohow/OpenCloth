@@ -193,12 +193,6 @@ export function simStepLabel(dt: number): string {
   return `${(dt * 1000).toFixed(1)} ms`;
 }
 
-/** Next step length in SIM_STEP_OPTIONS order, wrapping at the end; off-list values land on the first. */
-export function nextSimStep(dt: number): number {
-  const index = SIM_STEP_OPTIONS.indexOf(dt);
-  return SIM_STEP_OPTIONS[(index + 1) % SIM_STEP_OPTIONS.length];
-}
-
 /** Display names of the construction layers, body outward. */
 export const GARMENT_LAYER_LABELS: Record<GarmentLayer, string> = {
   lining: '里布', padding: '填充', shell: '外壳',
@@ -221,11 +215,6 @@ export const PANEL_WRAP_MODES: Array<{ value: PanelWrapMode; label: string }> = 
   { value: 'head-left', label: '头部 · 左半' },
   { value: 'head-right', label: '头部 · 右半' },
 ];
-
-/** Display name of one wrap mode. */
-export function panelWrapLabel(mode: PanelWrapMode): string {
-  return PANEL_WRAP_MODES.find(option => option.value === mode)?.label ?? mode;
-}
 
 /** Body landmarks offered as the top-edge level of each part. */
 export function anchorOptionsFor(region: PanelDrape['region']): Array<{ value: BodyLandmark; label: string }> {

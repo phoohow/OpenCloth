@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 /** Kinds of preview the render backend can draw for a catalogue row. */
-export type PreviewKind = 'model' | 'body' | 'environment';
+type PreviewKind = 'model' | 'body' | 'environment' | 'pattern';
 
 /** Draws one catalogue asset as a preview data URL; null when it cannot be rendered. */
 type PreviewDrawer = (key: string) => Promise<string | null>;
@@ -17,9 +17,12 @@ export function registerAssetPreviews(next: Partial<Record<PreviewKind, PreviewD
   Object.assign(drawers, next);
 }
 
-/** Preview of one asset, drawn on first request and cached for the session. */
-export function assetPreview(kind: PreviewKind, key: string): Promise<string | null> {
-  const cacheKey = `${kind}|${key}`;
+/**
+ * Preview of one asset, drawn on first request and cached for the session. `token` names a
+ * revision of the asset, so an edited file is drawn again instead of reusing the old image.
+ */
+function assetPreview(kind: PreviewKind, key: string, token?: string): Promise<string | null> {
+  const cacheKey = `${kind}|${key}|${token ?? ''}`;
   const pending = requests.get(cacheKey);
   if (pending) return pending;
   const draw = drawers[kind];
@@ -30,16 +33,16 @@ export function assetPreview(kind: PreviewKind, key: string): Promise<string | n
 }
 
 /** Preview of one catalogue asset, starting the render the first time a row asks for it. */
-export function useAssetPreview(kind: PreviewKind, key: string | null): string | null {
+export function useAssetPreview(kind: PreviewKind, key: string | null, token?: string): string | null {
   const [preview, setPreview] = useState<string | null>(null);
 
   useEffect(() => {
     setPreview(null);
     if (!key) return undefined;
     let cancelled = false;
-    void assetPreview(kind, key).then(result => { if (!cancelled) setPreview(result); });
+    void assetPreview(kind, key, token).then(result => { if (!cancelled) setPreview(result); });
     return () => { cancelled = true; };
-  }, [kind, key]);
+  }, [kind, key, token]);
 
   return preview;
 }

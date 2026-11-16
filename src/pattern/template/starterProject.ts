@@ -1,13 +1,13 @@
 import { createDefaultProject } from '@/model';
 import type { Project } from '@/model/types';
-import { defaultPattern } from '@/pattern/template/fileTemplates';
+import { FILE_TEMPLATES } from '@/pattern/template/fileTemplates';
 
 /** Fresh project carrying the first template's garment so the scene opens dressed. */
 export function createStarterProject(): Project {
   const project = createDefaultProject();
   const fabric = Object.values(project.fabrics)[0];
-  const pattern = fabric ? defaultPattern(fabric.id) : null;
-  if (pattern) project.pattern = pattern;
+  const template = FILE_TEMPLATES[0];
+  if (fabric && template) project.pattern = template.generate(fabric.id);
   return project;
 }
 

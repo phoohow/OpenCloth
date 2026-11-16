@@ -9,7 +9,7 @@ import { SnapshotCommand } from '@/commands/patternSnapshot';
 import { prunePattern } from '@/commands/patternStructureCommands';
 import { filletCorner } from '@/pattern/geom';
 import { edgeCurve, splitBezier } from '@/pattern/geom';
-import { edgeLength, pointAtT } from '@/pattern/geom';
+import { edgeLength } from '@/pattern/geom';
 import { arcSpan, arcTForPoint, evalBezier } from '@/base/geom';
 import { clamp01, distance2 } from '@/base/math';
 import { projectOnSegment2 } from '@/base/geom';
@@ -27,11 +27,6 @@ export interface FilletChange {
 /** Edge ids referenced by either side of a seam. */
 function seamEdgeIds(seam: Seam): string[] {
   return [seam.a?.edgeId ?? '', seam.b?.edgeId ?? ''];
-}
-
-/** Point placement on an edge at arc-length fraction t. */
-export function edgePointAtT(pattern: Pattern, edgeId: string, t: number): Vec2 | null {
-  return pointAtT(pattern, edgeId, t);
 }
 
 /**

@@ -1,6 +1,3 @@
-import type { Pattern } from '@/model/types';
-import { patternDocument } from '@/model/document/patternDocument';
-
 /** Selectable element kinds in the 2D drafting workspace. */
 export type PatternElementKind = 'panel' | 'point' | 'edge' | 'internal' | 'dart' | 'seam' | 'notch' | 'annotation' | 'measurement' | 'print' | 'topstitch' | 'trim';
 
@@ -18,16 +15,6 @@ export function parseElementNodeId(nodeId: string): { kind: PatternElementKind; 
   return m ? { kind: m[1] as PatternElementKind, id: m[2] } : null;
 }
 
-/** Whether a row addresses an element rather than a plain scene object. */
-export function isElementNodeId(nodeId: string): boolean {
-  return parseElementNodeId(nodeId) !== null;
-}
-
-/** Row addresses one of the given kinds. */
-export function isKind(nodeId: string, kind: PatternElementKind): boolean {
-  return parseElementNodeId(nodeId)?.kind === kind;
-}
-
 /** Selection rows of one kind, unwrapped to object ids. */
 export function idsOfKind(selection: readonly string[], kind: PatternElementKind): string[] {
   const out: string[] = [];
@@ -39,23 +26,3 @@ export function idsOfKind(selection: readonly string[], kind: PatternElementKind
   return out;
 }
 
-/**
- * Panel ids touched by the selection: direct picks plus the owning panels of the
- * selected points, edges and pattern objects.
- */
-export function affectedPanelIds(pattern: Pattern, selection: readonly string[]): string[] {
-  const document = patternDocument(pattern);
-  const panels = new Set(idsOfKind(selection, 'panel'));
-  for (const edgeId of idsOfKind(selection, 'edge')) document.panelsOfEdge(edgeId).forEach(id => panels.add(id));
-  for (const pointId of idsOfKind(selection, 'point')) document.panelsOfPoint(pointId).forEach(id => panels.add(id));
-  for (const seamId of idsOfKind(selection, 'seam')) document.panelsOfSeam(seamId).forEach(id => panels.add(id));
-  for (const lineId of idsOfKind(selection, 'internal')) document.panelsOfInternalLine(lineId).forEach(id => panels.add(id));
-  for (const dartId of idsOfKind(selection, 'dart')) document.panelsOfDart(dartId).forEach(id => panels.add(id));
-  for (const kind of ['print', 'topstitch', 'trim'] as const) {
-    for (const id of idsOfKind(selection, kind)) {
-      const owner = document.panelOfMarking(kind, id);
-      if (owner) panels.add(owner);
-    }
-  }
-  return [...panels];
-}

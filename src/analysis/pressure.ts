@@ -7,21 +7,6 @@
 /** Nominal compliance used to turn one millimetre of indentation into contact pressure. */
 export const DEFAULT_PRESSURE_KPA_PER_MM = 1;
 
-/** Eight colour bands from light contact to the highest pressure. */
-const PRESSURE_COLORS: ReadonlyArray<readonly [number, number, number]> = [
-  [0.17, 0.32, 0.51],
-  [0.17, 0.42, 0.69],
-  [0.22, 0.63, 0.41],
-  [0.63, 0.76, 0.23],
-  [0.93, 0.79, 0.29],
-  [0.93, 0.54, 0.21],
-  [0.90, 0.24, 0.24],
-  [0.61, 0.17, 0.17],
-];
-
-/** Neutral colour of a vertex that is not touching the body. */
-const NO_CONTACT_COLOR: readonly [number, number, number] = [0.2, 0.2, 0.22];
-
 /** Per-vertex estimated contact pressure, in kilopascals. */
 export interface PressureField {
   pressureKpa: Float32Array;
@@ -134,18 +119,3 @@ export function pressureStats(
   };
 }
 
-/**
- * Maps pressure onto the eight colour bands up to `maxKpa`; vertices without contact stay neutral.
- * Values above the scale clamp to the last band.
- */
-export function pressureColor(
-  value: number,
-  maxKpa: number,
-): [number, number, number] {
-  if (!Number.isFinite(value) || value <= 0 || !Number.isFinite(maxKpa) || maxKpa <= 0) {
-    return [NO_CONTACT_COLOR[0], NO_CONTACT_COLOR[1], NO_CONTACT_COLOR[2]];
-  }
-  const index = Math.min(PRESSURE_COLORS.length - 1, Math.floor(value / maxKpa * PRESSURE_COLORS.length));
-  const color = PRESSURE_COLORS[Math.max(0, index)]!;
-  return [color[0], color[1], color[2]];
-}

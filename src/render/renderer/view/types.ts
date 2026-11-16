@@ -48,29 +48,6 @@ export interface DrawList {
   readonly items: readonly DrawItem[];
 }
 
-/** Default view settings of a fresh viewport. */
-export function defaultViewSettings(): ViewSettings {
-  return {
-    fill: 'physical',
-    wire: 'off',
-    mode: 'raster',
-    wireOptions: { color: 0x66ccff, depth: 'tested' },
-    toneMapping: 'aces',
-    exposure: 1,
-    trace: {
-      maxBounces: 8,
-      frameBudget: 500000,
-      maxSamples: 256,
-      renderScale: 1,
-      denoise: true,
-      denoiseModel: 'base',
-      filterGlossyFactor: 1,
-      clampDirect: 0,
-      clampIndirect: 8,
-    },
-  };
-}
-
 /** Whether the view traces; an auxiliary-only frame stays on the raster pipeline. */
 export function traces(view: RenderView): boolean {
   return view.settings.mode === 'pathtrace' && view.settings.wire !== 'only'

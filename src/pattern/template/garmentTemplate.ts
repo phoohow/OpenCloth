@@ -1,15 +1,13 @@
 import type { Pattern } from '@/model/types';
 
-/** Glyph key of a template card; the UI resolves it to an icon. */
-export type TemplateIcon = 't-shirt' | 'shirt' | 'hoodie' | 'dress' | 'skirt' | 'panel';
-
 /** A ready-made garment pattern read from a file, which the user can apply and then edit. */
 export interface GarmentTemplate {
   key: string;
   name: string;
-  icon: TemplateIcon;
   /** Panel composition shown under the template name. */
   summary: string;
+  /** Fingerprint of the pattern content, so a rewritten file is drawn again instead of cached. */
+  revision: string;
   /** Measurements the geometry was drafted from; informational only. */
   params?: Record<string, number>;
   /** Bundled files and imported files are grouped separately in the template tab. */

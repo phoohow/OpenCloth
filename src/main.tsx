@@ -10,7 +10,8 @@ import { createRenderWorld } from '@/render/world';
 import { createViewport } from '@/runtime';
 import { RenderHostContext, type RenderHostFactory } from '@/ui/viewport3D/renderHost';
 import { registerAssetPreviews } from '@/ui/assets/assetPreviews';
-import { hydrateTemplates } from '@/store';
+import { getTemplates, hydrateTemplates } from '@/store';
+import { thumbnailMeshes, settleTemplate } from '@/runtime/templateThumbnail';
 import { loadMakehumanBody } from '@/avatar/makehuman/data';
 import { makehumanBody } from '@/avatar';
 import { makehumanAvatarMeshes } from '@/runtime/makehumanAvatar';
@@ -27,21 +28,30 @@ interface PreviewSession {
 }
 
 let previews: Promise<PreviewSession | null> | null = null;
-function previewPipeline(): Promise<Previewer | null> {
+function previewSession(): Promise<PreviewSession | null> {
   previews ??= createBackend(document.createElement('canvas'))
     .then(backend => ({ backend, pipeline: createPreviewer({ backend }) }))
     .catch(() => null);
-  return previews.then(session => session?.pipeline ?? null);
+  return previews;
 }
 
 registerAssetPreviews({
-  model: async url => (await previewPipeline())?.model(url) ?? null,
-  // The catalogue hands over a preset's measurements as JSON; the body is built from them here.
+  model: async url => (await previewSession())?.pipeline.model(url) ?? null,
+  // The model tab hands over a body's measurements as JSON; the body is built from them here.
   body: async key => {
     const params = JSON.parse(key) as AvatarParams;
-    return (await previewPipeline())?.body(makehumanAvatarMeshes(makehumanBody(params))) ?? null;
+    const session = await previewSession();
+    return session?.pipeline.body(makehumanAvatarMeshes(makehumanBody(params))) ?? null;
   },
-  environment: async url => (await previewPipeline())?.environment(url) ?? null,
+  environment: async url => (await previewSession())?.pipeline.environment(url) ?? null,
+  // A template's icon is the garment itself: simulated to rest, then drawn without the body.
+  pattern: async key => {
+    const template = getTemplates().find(item => item.key === key);
+    const session = await previewSession();
+    if (!template || !session) return null;
+    const settled = await settleTemplate(template, session.backend.device.device());
+    return settled ? session.pipeline.garment(thumbnailMeshes(settled)) : null;
+  },
 });
 
 // The preview device lasts as long as the document; the entry holds it and releases it last.

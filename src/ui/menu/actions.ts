@@ -16,7 +16,7 @@ import type { Viewport } from '@/runtime';
 import type { CameraProjection, EditPreviewTier, Project } from '@/model/types';
 import { reportActionError } from '@/ui/widgets/toast';
 import { importTemplatesViaPicker, saveCurrentPatternAsTemplate } from '@/ui/patternTemplateIo';
-import { exportDebugScreenshot, type ScreenshotRequest } from '@/ui/debug/screenshot';
+import { captureViewport, type ScreenshotRequest } from '@/ui/screenshot';
 import { createProjectService } from '@/runtime';
 
 interface MenuActionContext {
@@ -209,7 +209,7 @@ export function createMenuActions(refs: MenuActionContext): MenuActions {
       exportScreenshot(viewport.canvas, `${project().meta.name}.png`);
     },
     openDebugScreenshot: () => useMenuStore.getState().openDialog('screenshot'),
-    debugScreenshot: request => exportDebugScreenshot(refs.rendererRef.current, request),
+    debugScreenshot: request => captureViewport(refs.rendererRef.current, request),
     exportAnimation: () => {
       const viewport = refs.rendererRef.current;
       if (!viewport) return;

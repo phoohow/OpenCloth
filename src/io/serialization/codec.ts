@@ -1,6 +1,9 @@
 import type { Project } from '@/model/types';
 import { normalizeFabrics, normalizeLayers, normalizePattern, normalizePoms } from '@/model';
 
+/** Extension of a saved project document; the contents are JSON text. */
+export const PROJECT_FILE_EXTENSION = '.ocproj';
+
 /** Encodes and decodes a Project as .ocproj. */
 export const projectCodec = {
   /** Serializes the project without touching the argument. */

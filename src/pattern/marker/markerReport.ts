@@ -1,6 +1,6 @@
 import { csvTable } from '@/base/text';
 import { polygonArea } from '@/base/geom';
-import type { MarkerLayout, MarkerPlacement } from '@/pattern/marker/markerLayout';
+import type { MarkerLayout } from '@/pattern/marker/markerLayout';
 
 /** Cost input for a marker report; prices are per running metre of fabric. */
 export interface MarkerCostOptions {
@@ -83,9 +83,4 @@ export function markerReportCsv(report: MarkerReport): string {
     rows.push([panel.name, String(panel.count), panel.areaM2.toFixed(4)]);
   }
   return csvTable(rows);
-}
-
-/** Total placed outline area; exposed for callers that already have placements. */
-export function placedAreaM2(placements: MarkerPlacement[]): number {
-  return placements.reduce((sum, entry) => sum + polygonArea(entry.piece.outline), 0) / 10_000;
 }
