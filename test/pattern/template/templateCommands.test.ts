@@ -5,10 +5,10 @@ import {
 } from '@/pattern/template/templateCommands';
 import type { ProjectContext } from '@/model/types';
 
-import { GARMENT_TEMPLATES, presetPattern } from '@/pattern/template';
+import { FILE_TEMPLATES, presetPattern } from '@/pattern/template';
 import type { GarmentTemplate } from '@/pattern/template';
 
-const shirtTemplate = GARMENT_TEMPLATES.find(template => template.key === 'shirt')!;
+const shirtTemplate = FILE_TEMPLATES.find(template => template.key === 'shirt')!;
 
 /** A template whose generated copy carries one notch, so an append adds a mark. */
 const notchedTemplate: GarmentTemplate = {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GARMENT_TEMPLATES, presetPattern } from '@/pattern/template';
+import { FILE_TEMPLATES, presetPattern } from '@/pattern/template';
 import { sampleEdge } from '@/pattern/panel';
 import { buildPanelMesh, samplePanelOutline, type PanelMesh } from '@/pattern/panel/panelBuilder';
 import type { Vec2 } from '@/model/types';
@@ -86,7 +86,7 @@ describe('edge vertex runs', () => {
   // A seam stitches vertex run to vertex run, so a run that stops one mesh step short of a corner
   // leaves that last piece of the edge unstitched, and the two pieces open a notch there once the
   // garment is dressed. Every run therefore has to start and end on the edge's own endpoints.
-  for (const template of GARMENT_TEMPLATES) {
+  for (const template of FILE_TEMPLATES) {
     it(`covers both corners of every ${template.key} edge`, () => {
       const pattern = template.generate('fabric_default');
       for (const panel of Object.values(pattern.panels)) {

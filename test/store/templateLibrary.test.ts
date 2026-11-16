@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { encodePatternFile, GARMENT_TEMPLATES, PRESET_KEYS, presetPattern } from '@/pattern/template';
+import { encodePatternFile, FILE_TEMPLATES, FILE_TEMPLATE_KEYS, presetPattern } from '@/pattern/template';
 
 /** In-memory stand-in for the local template asset store. */
 const state = vi.hoisted(() => ({ records: new Map<string, Record<string, unknown>>() }));
@@ -18,19 +18,17 @@ beforeEach(() => {
 });
 
 describe('template library', () => {
-  it('starts with the file-backed built-ins and keeps them after hydration', async () => {
+  it('starts with every file in the default folder and keeps them after hydration', async () => {
     const lib = await import('@/store/templateLibrary');
     expect(lib.getTemplates().map(template => template.key))
-      .toEqual(GARMENT_TEMPLATES.map(template => template.key));
-    expect(lib.readBundledTemplates().map(template => template.key).sort())
-      .toEqual([...PRESET_KEYS].sort());
+      .toEqual(FILE_TEMPLATES.map(template => template.key));
 
     let notified = 0;
     const unsubscribe = lib.subscribeTemplates(() => { notified += 1; });
     await lib.hydrateTemplates();
 
     const keys = lib.getTemplates().map(template => template.key);
-    expect(keys).toEqual([...PRESET_KEYS]);
+    expect(keys).toEqual([...FILE_TEMPLATE_KEYS]);
     expect(lib.getTemplates().every(template => template.source === 'file')).toBe(true);
     expect(notified).toBeGreaterThan(0);
     unsubscribe();

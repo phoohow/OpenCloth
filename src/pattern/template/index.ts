@@ -1,6 +1,6 @@
 export {
-  GARMENT_TEMPLATES, PRESET_KEYS, PRESET_PARAMS, presetPattern,
-} from '@/pattern/template/builtinTemplates';
+  FILE_TEMPLATES, FILE_TEMPLATE_KEYS, FILE_TEMPLATE_PARAMS, presetPattern, defaultPattern,
+} from '@/pattern/template/fileTemplates';
 export { createStarterProject, createBlankProject } from '@/pattern/template/starterProject';
 export { type GarmentTemplate } from '@/pattern/template/garmentTemplate';
 export {

@@ -1,12 +1,13 @@
 import { createDefaultProject } from '@/model';
 import type { Project } from '@/model/types';
-import { presetPattern } from '@/pattern/template/builtinTemplates';
+import { defaultPattern } from '@/pattern/template/fileTemplates';
 
-/** Fresh project carrying the default garment so the scene opens dressed. */
+/** Fresh project carrying the first template's garment so the scene opens dressed. */
 export function createStarterProject(): Project {
   const project = createDefaultProject();
   const fabric = Object.values(project.fabrics)[0];
-  if (fabric) project.pattern = presetPattern('tshirt', fabric.id);
+  const pattern = fabric ? defaultPattern(fabric.id) : null;
+  if (pattern) project.pattern = pattern;
   return project;
 }
 

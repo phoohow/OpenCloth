@@ -1,9 +1,10 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { validatePattern, type Pattern } from '@/model';
 import {
-  PRESET_KEYS, encodePatternFile, instantiatePattern,
+  encodePatternFile, instantiatePattern,
   parsePatternFile, patternFileToTemplate, presetPattern,
 } from '@/pattern/template';
 import { createStarterProject } from '@/pattern/template/starterProject';
@@ -130,18 +131,18 @@ describe('instantiating a file template', () => {
     expect(Object.keys(ctx.project.pattern.panels)).toHaveLength(12);
   });
 
-  it('loads every preset in the default folder', () => {
-    for (const key of PRESET_KEYS) {
-      const path = fileURLToPath(new URL(
-        `../../../assets/patterns/${key}.ocpat`, import.meta.url,
-      ));
-      const { file, warnings } = parsePatternFile(readFileSync(path, 'utf8'));
-      expect(file.key).toBe(key);
-      expect(file.params?.chestCm ?? file.params?.waistCm).toBeGreaterThan(0);
-      expect(Object.keys(file.pattern.panels).length).toBeGreaterThan(0);
-      expect(Object.keys(file.pattern.seams).length).toBeGreaterThan(0);
-      expect(warnings).toEqual([]);
-      expect(validatePattern(instantiatePattern(file.pattern, 'fabric_x'))).toEqual([]);
+  it('loads every file in the default folder', () => {
+    const dir = fileURLToPath(new URL('../../../assets/patterns/', import.meta.url));
+    const names = readdirSync(dir).filter(name => name.endsWith('.ocpat'));
+    expect(names.length).toBeGreaterThan(0);
+    for (const name of names) {
+      const { file, warnings } = parsePatternFile(readFileSync(join(dir, name), 'utf8'));
+      expect(file.key.length, name).toBeGreaterThan(0);
+      expect(file.params?.chestCm ?? file.params?.waistCm, name).toBeGreaterThan(0);
+      expect(Object.keys(file.pattern.panels).length, name).toBeGreaterThan(0);
+      expect(Object.keys(file.pattern.seams).length, name).toBeGreaterThan(0);
+      expect(warnings, name).toEqual([]);
+      expect(validatePattern(instantiatePattern(file.pattern, 'fabric_x')), name).toEqual([]);
     }
   });
 });

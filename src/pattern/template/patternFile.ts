@@ -15,11 +15,13 @@ const FILE_ICONS: readonly string[] = ['t-shirt', 'shirt', 'hoodie', 'dress', 's
 
 /** One garment template stored as a standalone file. */
 export interface PatternFile {
-  /** Stable catalogue key, unique across built-in, bundled and user templates. */
+  /** Stable catalogue key, unique across the default folder and imported templates. */
   key: string;
   name: string;
   summary?: string;
   icon?: TemplateIcon;
+  /** Display position in the template tab; files without it sort after the rest by name. */
+  order?: number;
   /** Measurements the geometry was drafted from; informational, not applied again. */
   params?: Record<string, number>;
   pattern: Pattern;
@@ -37,6 +39,7 @@ export interface PatternFileMeta {
   summary?: string;
   icon?: TemplateIcon;
   key?: string;
+  order?: number;
   params?: Record<string, number>;
 }
 
@@ -79,11 +82,13 @@ export function parsePatternFile(text: string): ParsedPatternFile {
         .filter((entry): entry is [string, number] => typeof entry[1] === 'number' && Number.isFinite(entry[1])),
     )
     : undefined;
+  const order = typeof raw.order === 'number' && Number.isFinite(raw.order) ? raw.order : undefined;
   const file: PatternFile = {
     key: raw.key,
     name: raw.name.trim(),
     summary,
     ...(icon ? { icon } : {}),
+    ...(order !== undefined ? { order } : {}),
     ...(params && Object.keys(params).length > 0 ? { params } : {}),
     pattern,
   };
@@ -102,6 +107,7 @@ export function encodePatternFile(pattern: Pattern, meta: PatternFileMeta): stri
     name: meta.name.trim() || '未命名版型',
     summary: meta.summary?.trim() || deriveSummary(draft),
     ...(meta.icon ? { icon: meta.icon } : {}),
+    ...(meta.order !== undefined ? { order: meta.order } : {}),
     ...(meta.params ? { params: { ...meta.params } } : {}),
     pattern: draft,
   };

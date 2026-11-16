@@ -1,23 +1,14 @@
 import { genId } from '@/base/id';
 import {
-  GARMENT_TEMPLATES, parsePatternFile, patternFileToTemplate, type GarmentTemplate,
+  FILE_TEMPLATES, parsePatternFile, patternFileToTemplate, type GarmentTemplate,
 } from '@/pattern/template';
 import {
   deletePatternTemplateAsset, listPatternTemplateAssets, savePatternTemplateAsset,
   type PatternTemplateAsset,
 } from '@/io/storage';
 
-/** Keys already supplied by the shipped files; the same files are not parsed twice. */
-const BUILTIN_KEYS = new Set(GARMENT_TEMPLATES.map(template => template.key));
-
-/** Every `.ocpat` in the default folder; Vite turns this into one bundle-time lookup. */
-const BUNDLED_FILES: Record<string, unknown> = import.meta.glob(
-  '/assets/patterns/*.ocpat',
-  { query: '?raw', import: 'default', eager: true },
-);
-
-/** Catalogue entries visible to the pattern tab, rebuilt whenever a source changes. */
-let snapshot: readonly GarmentTemplate[] = [...GARMENT_TEMPLATES];
+/** Catalogue entries visible to the pattern tab, rebuilt whenever an import changes. */
+let snapshot: readonly GarmentTemplate[] = [...FILE_TEMPLATES];
 const listeners = new Set<() => void>();
 let pending: Promise<void> | null = null;
 
@@ -39,17 +30,16 @@ export interface TemplateImportResult {
   warnings: string[];
 }
 
-/** Reads bundled files and saved imports, then publishes one deduplicated catalogue. */
+/** Merges the folder templates with saved imports; the first entry for a key wins. */
 async function reload(): Promise<void> {
-  const bundled = readBundledTemplates(BUILTIN_KEYS);
   let assets: PatternTemplateAsset[] = [];
   try {
     assets = await listPatternTemplateAssets();
   } catch {
-    // Local storage is optional; built-in and bundled templates still work without it.
+    // Local storage is optional; folder templates still work without it.
   }
   const byKey = new Map<string, GarmentTemplate>();
-  for (const template of [...GARMENT_TEMPLATES, ...bundled, ...userTemplates(assets)]) {
+  for (const template of [...FILE_TEMPLATES, ...userTemplates(assets)]) {
     if (!byKey.has(template.key)) byKey.set(template.key, template);
   }
   snapshot = [...byKey.values()];
@@ -60,33 +50,6 @@ async function reload(): Promise<void> {
 export function hydrateTemplates(): Promise<void> {
   pending ??= reload().finally(() => { pending = null; });
   return pending;
-}
-
-/** Parses files in the default folder, skipping invalid ones and keys already in `skipKeys`. */
-export function readBundledTemplates(skipKeys: ReadonlySet<string> = new Set()): GarmentTemplate[] {
-  const out: GarmentTemplate[] = [];
-  for (const path of Object.keys(BUNDLED_FILES).sort()) {
-    try {
-      const raw = BUNDLED_FILES[path]!;
-      const text = typeof raw === 'string' ? raw : JSON.stringify(raw);
-      if (skipKeys.has(fileKey(text) ?? '')) continue;
-      const { file } = parsePatternFile(text);
-      out.push(patternFileToTemplate(file, 'file'));
-    } catch (error) {
-      console.error(`Bundled template ${path} failed to load:`, error);
-    }
-  }
-  return out;
-}
-
-/** Reads only a file's key, so already-loaded presets are not validated a second time. */
-function fileKey(text: string): string | null {
-  try {
-    const doc = JSON.parse(text) as { key?: unknown };
-    return typeof doc.key === 'string' ? doc.key : null;
-  } catch {
-    return null;
-  }
 }
 
 /** Parses saved imports, keeping the asset id so a row can be removed later. */
@@ -125,7 +88,7 @@ export async function importPatternTexts(
       const parsed = parsePatternFile(entry.text);
       const { key, name } = parsed.file;
       if (reserved.has(key)) {
-        result.errors.push(`${entry.name}：key「${key}」与内置或文件夹版型重复`);
+        result.errors.push(`${entry.name}：key「${key}」与默认文件夹里的版型重复`);
         continue;
       }
       const assetId = existing.get(key) ?? genId('asset');

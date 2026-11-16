@@ -8,7 +8,7 @@ import { bodyLandmarks, makehumanBody } from '@/avatar';
 import { drapePositions, planWraps } from '@/pattern/drape';
 import { flatLayout } from '@/tools/flatLayout';
 import { collapseSeamPairs, type SeamPairRef } from '@/pattern/drape';
-import { GARMENT_TEMPLATES } from '@/pattern/template';
+import { FILE_TEMPLATES } from '@/pattern/template';
 import { polylineLength } from '@/base/geom';
 import { SoftCanvas, type Camera, type RGB, type XYZ } from '@/tools/softwareRender';
 import { writePng } from '@/tools/pngOut';
@@ -51,10 +51,11 @@ function parseArgs(argv: string[]): Options {
   const stageArg = get('stage', 'flat');
   const stage: Options['stage'] =
     stageArg === 'wrapped' || stageArg === 'sewn' ? stageArg : 'flat';
+  const template = get('template', FILE_TEMPLATES[0]?.key ?? '');
   return {
-    template: get('template', 'tshirt'),
+    template,
     stage,
-    out: get('out', `.preview/${get('template', 'tshirt')}-${get('stage', 'flat')}.png`),
+    out: get('out', `.preview/${template}-${get('stage', 'flat')}.png`),
     width: Number(get('width', '330')),
   };
 }
@@ -94,7 +95,7 @@ interface SeamPair {
 
 /** Builds the pattern, its panel placement for the chosen stage and its seams. */
 function buildScene(opts: Options): Scene {
-  const template = GARMENT_TEMPLATES.find(t => t.key === opts.template);
+  const template = FILE_TEMPLATES.find(t => t.key === opts.template);
   if (!template) throw new Error(`unknown template ${opts.template}`);
   const pattern = template.generate('fabric_default');
   const body = bodyLandmarks(AVATAR);

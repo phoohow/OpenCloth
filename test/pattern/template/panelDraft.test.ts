@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { GARMENT_TEMPLATES } from '@/pattern/template';
+import { FILE_TEMPLATES } from '@/pattern/template';
 import { buildPanelMesh } from '@/pattern/panel/panelBuilder';
 import type { Pattern } from '@/model/types';
 
 /** Every template's default pattern, keyed by template key. */
-const patterns: Array<[string, Pattern]> = GARMENT_TEMPLATES.map(template =>
+const patterns: Array<[string, Pattern]> = FILE_TEMPLATES.map(template =>
   [template.key, template.generate('fabric_default')]);
 
 describe('template panels', () => {

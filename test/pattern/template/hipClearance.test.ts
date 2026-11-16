@@ -1,4 +1,4 @@
-import { presetPattern, PRESET_PARAMS } from '@/pattern/template';
+import { presetPattern, FILE_TEMPLATE_PARAMS } from '@/pattern/template';
 import { describe, expect, it } from 'vitest';
 import { samplePanelOutline } from '@/pattern/panel/panelBuilder';
 import type { Panel, Pattern } from '@/model/types';
@@ -34,7 +34,7 @@ describe('skirt hip clearance', () => {
     const pattern = presetPattern('skirt');
     const front = Object.values(pattern.panels).filter(panel => panel.name.startsWith('前裙片'));
     const girth = hipGirth(pattern, front, 18) * 2;
-    expect(girth).toBeGreaterThanOrEqual(PRESET_PARAMS.skirt.hipCm);
+    expect(girth).toBeGreaterThanOrEqual(FILE_TEMPLATE_PARAMS.skirt.hipCm);
   });
 });
 
@@ -44,6 +44,6 @@ describe('dress hip clearance', () => {
     const front = Object.values(pattern.panels).find(panel => panel.name === '前裙片');
     expect(front).toBeTruthy();
     const girth = hipGirth(pattern, [front!], 18) * 2;
-    expect(girth).toBeGreaterThanOrEqual(PRESET_PARAMS.dress.hipCm);
+    expect(girth).toBeGreaterThanOrEqual(FILE_TEMPLATE_PARAMS.dress.hipCm);
   });
 });
