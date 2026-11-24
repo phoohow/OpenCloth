@@ -1,0 +1,189 @@
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  background: #1a1a1e;
+  color: #e0e0e0;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font-family: inherit;
+}
+
+:root {
+  --oc-fs-note: 10px;
+  --oc-fs-micro: 11px;
+  --oc-fs-body: 12px;
+  --oc-fs-label: 13px;
+  --oc-fs-heading: 14px;
+  --oc-fs-dialog-title: 15px;
+  --oc-h-control: 20px;
+  --oc-h-row: 22px;
+  --oc-h-section-header: 24px;
+  --oc-w-field: 130px;
+  --oc-w-icon: 15px;
+  --oc-w-field-label: 50px;
+  --oc-w-slider-thumb: 14px;
+}
+
+html[data-ui-mode="mobile"] {
+  --oc-fs-note: 11px;
+  --oc-fs-micro: 12px;
+  --oc-fs-body: 13px;
+  --oc-fs-label: 14px;
+  --oc-fs-heading: 15px;
+  --oc-fs-dialog-title: 16px;
+  --oc-h-control: 26px;
+  --oc-h-row: 28px;
+  --oc-h-section-header: 30px;
+  --oc-w-field: 156px;
+  --oc-w-icon: 18px;
+  --oc-w-field-label: 60px;
+  --oc-w-slider-thumb: 26px;
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+html[data-ui-mode="mobile"] body {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+html[data-ui-mode="mobile"],
+html[data-ui-mode="mobile"] body,
+html[data-ui-mode="mobile"] #root {
+  height: 100vh;
+  height: 100dvh;
+}
+
+input[type="number"],
+input[type="text"] {
+  font-size: var(--oc-fs-micro);
+}
+
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  background: #3a3a42;
+  border-radius: 2px;
+  outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: var(--oc-w-slider-thumb);
+  height: var(--oc-w-slider-thumb);
+  background: #4da6ff;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: var(--oc-w-slider-thumb);
+  height: var(--oc-w-slider-thumb);
+  background: #4da6ff;
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+}
+
+input[type="range"].oc-range-headless.oc-range-headless::-webkit-slider-thumb {
+  background: transparent;
+}
+
+input[type="range"].oc-range-headless.oc-range-headless::-moz-range-thumb {
+  background: transparent;
+  border: none;
+}
+
+html[data-ui-mode="mobile"] input[type="range"] {
+  height: 28px;
+  background: transparent;
+}
+
+html[data-ui-mode="mobile"] input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  background: #3a3a42;
+  border-radius: 2px;
+}
+
+html[data-ui-mode="mobile"] input[type="range"]::-webkit-slider-thumb {
+  margin-top: calc((4px - var(--oc-w-slider-thumb)) / 2);
+}
+
+html[data-ui-mode="mobile"] input[type="range"]::-moz-range-track {
+  height: 4px;
+  background: #3a3a42;
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1a1a1e;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3a3a42;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #4a4a52;
+}
+
+.oc-asset-row {
+  background: #2a2a30;
+  border: 1px solid #3a3a42;
+  border-radius: 4px;
+  padding: 4px 5px;
+  transition: background 0.12s, border-color 0.12s, padding 0.12s;
+}
+
+.oc-asset-row-pickable:hover {
+  background: #32323a;
+  border-color: #4a4a54;
+}
+
+.oc-asset-row-drag { cursor: grab; }
+.oc-asset-row-drag:active { cursor: grabbing; }
+
+.oc-asset-grip {
+  opacity: 0.35;
+  transition: opacity 0.12s;
+}
+
+.oc-asset-row:hover .oc-asset-grip { opacity: 0.9; }
+
+.oc-asset-action,
+.oc-asset-danger {
+  opacity: 0.5;
+  transition: opacity 0.12s, color 0.12s;
+}
+
+.oc-asset-row:hover .oc-asset-action,
+.oc-asset-row:hover .oc-asset-danger { opacity: 1; }
+
+.oc-asset-danger:hover { color: #e24b4a; }
+
+[data-density="compact"] .oc-asset-meta { display: none; }
+[data-density="compact"] .oc-asset-row { padding: 3px 4px; }

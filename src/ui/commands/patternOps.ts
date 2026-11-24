@@ -1,0 +1,174 @@
+import {
+  BreakPointCommand, BlendSeamJointCommand, ConnectPointsCommand, CreateMultiSeamCommand,
+  CreatePanelFromEdgesCommand, FilletCornersCommand, MergeCollinearEdgesCommand, MirrorPanelCommand,
+  MergePanelsCommand, OffsetInternalLineCommand, PanelFromInternalLoopCommand, RhombusDartCommand,
+  SimplifyCurveCommand, SyncMirrorCommand, PanelBooleanCommand, type MirrorAxis,
+  type PanelBooleanOp, type SeamPart, ArrangePanelsCommand,
+} from '@/commands';
+import { idsOfKind } from '@/model';
+import { useProjectStore, useUIStore, type ToolType } from '@/store';
+import { askText } from '@/ui/widgets/askDialog';
+import { reportActionError } from '@/ui/widgets/toast';
+
+export const STRUCTURE_ITEMS: StructureItem[] = [
+  { key: 'split', label: '轮廓分割', hint: '逐点单击画线 · Enter 执行' },
+  { key: 'hole', label: '开内孔', hint: '逐点单击画闭合环 · Enter 执行' },
+  { key: 'mirror-y', label: '纵向镜像', hint: '选中一个版片' },
+  { key: 'mirror-x', label: '横向镜像', hint: '选中一个版片' },
+  { key: 'mirror-edge', label: '沿边镜像', hint: '选中一个版片和一条轴边' },
+  { key: 'sync-mirror', label: '同步镜像', hint: '选中源版片' },
+  { key: 'merge', label: '合并版片', hint: '选中两个版片' },
+  { key: 'from-edges', label: '由边成片', hint: '选中三条以上首尾相接的边' },
+  { key: 'bool-union', label: '布尔并集', hint: '选中两个版片，生成新片' },
+  { key: 'bool-intersect', label: '布尔交集', hint: '选中两个版片，生成新片' },
+  { key: 'bool-difference', label: '布尔差集', hint: '选中两个版片，从第一片减去第二片' },
+  { key: 'fillet', label: '倒圆角', hint: '选中角点后输入半径' },
+  { key: 'break', label: '断开顶点', hint: '选中一个顶点' },
+  { key: 'connect', label: '连接端点', hint: '选中两个自由端点' },
+  { key: 'merge-collinear', label: '共线合并', hint: '选中两条以上共线边' },
+  { key: 'simplify', label: '简化曲线', hint: '选中曲线边后输入容差' },
+  { key: 'offset-line', label: '等距内线', hint: '选中基准边后输入距离' },
+  { key: 'loop-panel', label: '内线成片', hint: '选中一条闭合内部线' },
+  { key: 'rhombus-dart', label: '菱形省', hint: '选中一条边后输入省量与省长' },
+  { key: 'multi-seam', label: '多段缝合', hint: '按顺序选中一条基准边和多条目标边' },
+  { key: 'blend-start', label: '起点圆顺', hint: '选中一条缝合' },
+  { key: 'blend-end', label: '终点圆顺', hint: '选中一条缝合' },
+];
+
+export const MARK_ITEMS: Array<{ key: ToolType; label: string; hint: string }> = [
+  { key: 'notch', label: '刀口', hint: '单击轮廓边' },
+  { key: 'annotation', label: '注释', hint: '单击版片' },
+  { key: 'measure', label: '尺寸线', hint: '依次单击两个顶点' },
+  { key: 'topstitch', label: '明线', hint: '单击轮廓边' },
+  { key: 'trim', label: '辅料', hint: '选中版片后放一个辅料' },
+];
+
+export type StructureAction =
+  | 'split' | 'hole'
+  | 'mirror-y' | 'mirror-x' | 'mirror-edge' | 'sync-mirror' | 'merge' | 'from-edges' | 'multi-seam'
+  | 'bool-union' | 'bool-intersect' | 'bool-difference'
+  | 'fillet' | 'break' | 'connect' | 'merge-collinear' | 'simplify' | 'offset-line' | 'loop-panel'
+  | 'rhombus-dart' | 'blend-start' | 'blend-end';
+
+export interface StructureItem {
+  key: StructureAction;
+  label: string;
+  hint?: string;
+}
+
+async function askNumbers(title: string, initial: string): Promise<number[]> {
+  const raw = await askText({ title, initial, hint: '多个数值用逗号分隔' });
+  if (!raw) return [];
+  return raw.split(/[,，\s]+/).map(Number).filter(Number.isFinite);
+}
+
+async function askNumber(title: string, initial: string): Promise<number | null> {
+  const raw = await askText({ title, initial, hint: '输入一个大于 0 的数值' });
+  if (!raw) return null;
+  const [value] = raw.split(/[,，\s]+/).map(Number);
+  return value !== undefined && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+export async function runStructure(action: StructureAction): Promise<void> {
+  const setTool = useUIStore.getState().setTool;
+  if (action === 'split' || action === 'hole') {
+    setTool(action);
+    return;
+  }
+
+  const pattern = useProjectStore.getState().project.pattern;
+  const selection = useUIStore.getState().selection;
+  const execute = useProjectStore.getState().executeCommand;
+  const panels = idsOfKind(selection, 'panel').filter(id => !!pattern.panels[id]);
+  const edges = idsOfKind(selection, 'edge').filter(id => !!pattern.edges[id]);
+  const points = idsOfKind(selection, 'point').filter(id => !!pattern.points[id]);
+  try {
+    if (action === 'mirror-y' || action === 'mirror-x') {
+      if (panels.length !== 1) throw new Error('请先选中一个要镜像的版片');
+      execute(new MirrorPanelCommand(panels[0]!, action === 'mirror-y' ? 'y' : 'x'));
+    } else if (action === 'mirror-edge') {
+      if (panels.length !== 1 || edges.length !== 1) throw new Error('请选中一个版片和一条轴边');
+      execute(new MirrorPanelCommand(panels[0]!, edges[0]! as MirrorAxis));
+    } else if (action === 'sync-mirror') {
+      if (panels.length !== 1) throw new Error('请先选中源版片');
+      execute(new SyncMirrorCommand(panels[0]!));
+    } else if (action === 'merge') {
+      if (panels.length !== 2) throw new Error('请选中两个版片');
+      execute(new MergePanelsCommand([panels[0]!, panels[1]!]));
+    } else if (action === 'bool-union' || action === 'bool-intersect' || action === 'bool-difference') {
+      if (panels.length !== 2) throw new Error('请选中两个版片');
+      const op: PanelBooleanOp = action === 'bool-union' ? 'union'
+        : action === 'bool-intersect' ? 'intersect' : 'difference';
+      const cmd = new PanelBooleanCommand([panels[0]!, panels[1]!], op);
+      execute(cmd);
+      useUIStore.getState().select(cmd.resultPanelIds);
+    } else if (action === 'multi-seam') {
+      if (edges.length < 3) throw new Error('请选中一条基准边和至少两条目标边');
+      const [aId, ...bIds] = edges;
+      const parts: SeamPart[] = bIds.map((edgeBId, i) => ({
+        edgeBId,
+        tB0: 0,
+        tB1: 1,
+        tA0: i / bIds.length,
+        tA1: (i + 1) / bIds.length,
+      }));
+      execute(new CreateMultiSeamCommand(aId!, parts));
+    } else if (action === 'from-edges') {
+      if (edges.length < 3) throw new Error('请至少选中三条首尾相接的边');
+      execute(new CreatePanelFromEdgesCommand(edges));
+    } else if (action === 'fillet') {
+      if (points.length === 0) throw new Error('请先选中角点');
+      const radius = await askNumber('圆角半径(cm)', '1.5');
+      if (radius === null) return;
+      execute(new FilletCornersCommand(points, radius));
+    } else if (action === 'break') {
+      if (points.length !== 1) throw new Error('请选中一个要断开的顶点');
+      execute(new BreakPointCommand(points[0]!));
+    } else if (action === 'connect') {
+      if (points.length !== 2) throw new Error('请选中两个自由端点');
+      execute(new ConnectPointsCommand(points[0]!, points[1]!));
+    } else if (action === 'merge-collinear') {
+      if (edges.length < 2) throw new Error('请选中两条以上共线相邻边');
+      execute(new MergeCollinearEdgesCommand(edges));
+    } else if (action === 'simplify') {
+      if (edges.length === 0) throw new Error('请选中要简化的曲线边');
+      const [deviation] = await askNumbers('拟合容差(cm)', '0.05');
+      if (deviation === undefined) return;
+      execute(new SimplifyCurveCommand(edges, { ...(deviation > 0 ? { maxDeviationCm: deviation } : {}) }));
+    } else if (action === 'offset-line') {
+      if (edges.length !== 1) throw new Error('请选中一条基准边');
+      const distances = (await askNumbers('等距距离(cm)', '1, 2')).filter(v => v > 0);
+      if (distances.length === 0) return;
+      execute(new OffsetInternalLineCommand(edges[0]!, distances));
+    } else if (action === 'loop-panel') {
+      const lineIds = idsOfKind(selection, 'internal');
+      if (lineIds.length !== 1) throw new Error('请选中一条闭合内部线');
+      const owner = Object.values(pattern.panels).find(p => p.internalLineIds.includes(lineIds[0]!));
+      if (!owner) throw new Error('内部线没有所属版片');
+      execute(new PanelFromInternalLoopCommand(owner.id, lineIds[0]!));
+    } else if (action === 'rhombus-dart') {
+      if (edges.length !== 1) throw new Error('请选中省所在的边');
+      const panel = Object.values(pattern.panels).find(p => p.outlineEdgeIds.includes(edges[0]!));
+      if (!panel) throw new Error('这条边不属于任何版片');
+      const [intake, length] = await askNumbers('省量与省长(cm)', '2, 8');
+      if (!(intake > 0) || !(length > 0)) return;
+      execute(new RhombusDartCommand(panel.id, edges[0]!, 0.5, intake, length));
+    } else if (action === 'blend-start' || action === 'blend-end') {
+      const seams = idsOfKind(selection, 'seam').filter(id => !!pattern.seams[id]);
+      if (seams.length !== 1) throw new Error('请选中一条缝合');
+      const radius = await askNumber('圆顺半径(cm)', '1.5');
+      if (radius === null) return;
+      execute(new BlendSeamJointCommand(seams[0]!, action === 'blend-start' ? 'start' : 'end', radius));
+    }
+  } catch (err) {
+    reportActionError(err);
+  }
+}
+
+export function autoPlacePanels(): void {
+  try {
+    useProjectStore.getState().executeCommand(new ArrangePanelsCommand());
+  } catch (err) {
+    reportActionError(err);
+  }
+}

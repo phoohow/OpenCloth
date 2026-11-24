@@ -1,0 +1,51 @@
+import type { DrawBucket, DrawStage, MaterialData } from '@/render/common';
+import type { DrawItem, DrawList, RenderView } from '@/render/renderer/view/types';
+import type { WorldView } from '@/render/world';
+
+import { resolveMaterials } from '@/render/renderer/view/materialResolver';
+
+const STAGE_ORDER: Record<DrawStage, number> = { scene: 0, postTone: 1, gizmo: 2 };
+
+const BUCKET_ORDER: Record<DrawBucket, number> = {
+  opaque: 0, transparent: 1, overlay: 0, gizmo: 0,
+};
+
+export function buildDrawList(world: WorldView, view: RenderView): DrawList {
+  const items: DrawItem[] = [];
+  for (const entity of world.entities({ layers: view.layers, channels: view.channels })) {
+    if (view.hideTags && view.hideTags.some(tag => entity.tags.has(tag))) continue;
+    const resolved = resolveMaterials(entity, world, view);
+    const drawable = resolved.base.length > 0 || resolved.wire !== null
+      || resolved.trace.length > 0;
+    if (!drawable) continue;
+    const bucket: DrawBucket = resolved.stage === 'scene'
+      ? sceneBucket(resolved.base)
+      : resolved.stage === 'postTone' ? 'overlay' : 'gizmo';
+    items.push({
+      entity: entity.id,
+      mesh: entity.mesh,
+      materials: resolved.base,
+      traceMaterials: resolved.trace,
+      wire: resolved.wire,
+      transform: entity.transform,
+      bounds: entity.bounds,
+      stage: resolved.stage,
+      bucket,
+    });
+  }
+
+  items.sort((a, b) => STAGE_ORDER[a.stage] - STAGE_ORDER[b.stage]
+    || BUCKET_ORDER[a.bucket] - BUCKET_ORDER[b.bucket]
+    || a.entity - b.entity);
+  return { items };
+}
+
+function sceneBucket(materials: readonly { data: MaterialData }[]): DrawBucket {
+  for (const material of materials) {
+    if (material.data.blending === 'alpha' || material.data.blending === 'additive') {
+      return 'transparent';
+    }
+  }
+
+  return 'opaque';
+}

@@ -1,0 +1,413 @@
+import type { Vec2 } from '@/model/types';
+import type { GarmentEngine } from '@/runtime';
+
+import { pointInPolygon } from '@/base/geom';
+import { averagePoint2, lerp2 } from '@/base/math';
+import { AddInternalLineCommand } from '@/commands';
+import { samplePanelOutline } from '@/pattern/panel';
+import { useProjectStore, useSimStore, useUIStore } from '@/store';
+import { isTapGesture, isMobileUi } from '@/ui/mobile/mobileUi';
+import { CLAMP_CURSOR, OPEN_CLAMP_CURSOR, PIN_CURSOR, UNPIN_CURSOR } from '@/ui/viewport3D/cursors';
+import { reportActionError } from '@/ui/widgets/toast';
+import { useEffect, type RefObject } from 'react';
+
+const CAMERA: Hover = { mode: 'camera', pin: null };
+
+const SKETCH_STEP_CM = 0.15;
+
+type HoverMode = 'camera' | 'drag' | 'pin' | 'unpin' | 'sketch' | 'measure';
+
+interface Hover {
+  mode: HoverMode;
+  pin: number | null;
+}
+
+interface Modifiers {
+  alt: boolean;
+  shift: boolean;
+}
+
+export function useClothPicking(
+  canvasRef: RefObject<HTMLCanvasElement>,
+  containerRef: RefObject<HTMLDivElement>,
+  engineRef: RefObject<GarmentEngine | null>,
+): void {
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const container = containerRef.current;
+    if (!canvas || !container) return;
+
+    const toNdc = (clientX: number, clientY: number) => {
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: ((clientX - rect.left) / rect.width) * 2 - 1,
+        y: -(((clientY - rect.top) / rect.height) * 2 - 1),
+      };
+    };
+
+    const selectPanelAt = (clientX: number, clientY: number) => {
+      const engine = engineRef.current;
+      if (!engine) return;
+      const { x, y } = toNdc(clientX, clientY);
+      const panelId = engine.pickPanelAtScreen(x, y);
+      engine.setSelectedPanels(panelId ? [panelId] : []);
+      const ui = useUIStore.getState();
+      if (panelId) ui.select([panelId]);
+      else ui.clearSelection();
+    };
+
+    const classify = (
+      clientX: number, clientY: number, mods: Modifiers, touch: boolean,
+    ): Hover => {
+      const engine = engineRef.current;
+      if (!engine || !engine.isSimReady()) return CAMERA;
+      const tool = useUIStore.getState().activeTool;
+      const unpinRequested = tool === 'unpin' || (mods.alt && mods.shift);
+      const { x, y } = toNdc(clientX, clientY);
+
+      if (unpinRequested) {
+        const pin = engine.hoverPinAtScreen(x, y);
+        return pin === null ? CAMERA : { mode: 'unpin', pin };
+      }
+
+      if (!engine.hoverClothAtScreen(x, y)) return CAMERA;
+      if (tool === 'sketch3d') return { mode: 'sketch', pin: null };
+      if (tool === 'measure3d') return { mode: 'measure', pin: null };
+      if (tool === 'pin' || mods.alt) return { mode: 'pin', pin: null };
+      if (touch || isMobileUi() || !useSimStore.getState().isPlaying) return CAMERA;
+      return { mode: 'drag', pin: null };
+    };
+
+    let hover: Hover = CAMERA;
+    let pointer: { x: number; y: number } | null = null;
+    let mods: Modifiers = { alt: false, shift: false };
+    let pointerConsumed = false;
+    let dragPointer: number | null = null;
+    let sketchPointer: number | null = null;
+    let sketchPanelId: string | null = null;
+    let sketchPoints: Vec2[] = [];
+
+    let cursor = '';
+
+    const setCursor = (value: string) => {
+      if (value === cursor) return;
+      cursor = value;
+      canvas.style.cursor = value;
+    };
+
+    const cursorFor = (mode: HoverMode): string => {
+      if (mode === 'drag') return OPEN_CLAMP_CURSOR;
+      if (mode === 'pin') return PIN_CURSOR;
+      if (mode === 'unpin') return UNPIN_CURSOR;
+      if (mode === 'sketch' || mode === 'measure') return 'crosshair';
+      return 'default';
+    };
+
+    const applyHover = (next: Hover) => {
+      if (next.mode !== hover.mode || next.pin !== hover.pin) {
+        hover = next;
+        engineRef.current?.setHoveredPin(next.mode === 'unpin' ? next.pin : null);
+      }
+
+      if (dragPointer === null) setCursor(cursorFor(next.mode));
+    };
+
+    const refreshHover = () => {
+      if (!pointer) {
+        applyHover(CAMERA);
+        return;
+      }
+
+      applyHover(classify(pointer.x, pointer.y, mods, false));
+    };
+
+    let hoverFrame = 0;
+    const scheduleHover = () => {
+      if (hoverFrame) return;
+      hoverFrame = requestAnimationFrame(() => {
+        hoverFrame = 0;
+        refreshHover();
+      });
+    };
+
+    const applyPin = (engine: GarmentEngine, index: number, pinned: boolean) => {
+      void engine.setPin(index, pinned).then(() => {
+        useSimStore.getState().bumpPins();
+        refreshHover();
+      });
+    };
+
+    const commitSketchRun = () => {
+      const panelId = sketchPanelId;
+      const points = sketchPoints;
+      sketchPanelId = null;
+      sketchPoints = [];
+      if (!panelId || points.length < 2) return;
+      const pattern = useProjectStore.getState().project.pattern;
+      const panel = pattern.panels[panelId];
+      if (!panel) return;
+      const outline = samplePanelOutline(pattern, panel);
+      const inside = points
+        .map(point => clampIntoPanel(outline, point))
+        .filter((point): point is Vec2 => point !== null);
+      if (inside.length < 2) return;
+      try {
+        useProjectStore.getState().executeCommand(new AddInternalLineCommand(panelId, inside));
+      } catch (err) {
+        reportActionError(err);
+      }
+    };
+
+    const extendSketch = (ndcX: number, ndcY: number) => {
+      const walked = engineRef.current?.extendSketchStroke(ndcX, ndcY);
+      if (!walked) return;
+      if (walked.panelId !== sketchPanelId) {
+        commitSketchRun();
+        sketchPanelId = walked.panelId;
+        sketchPoints = [];
+      }
+
+      const last = sketchPoints[sketchPoints.length - 1];
+      if (last && Math.hypot(walked.point.x - last.x, walked.point.y - last.y) < SKETCH_STEP_CM) return;
+      sketchPoints.push(walked.point);
+    };
+
+    const cancelSketch = () => {
+      const pointerId = sketchPointer;
+      sketchPointer = null;
+      sketchPanelId = null;
+      sketchPoints = [];
+      engineRef.current?.endSketchStroke();
+      if (pointerId !== null && canvas.hasPointerCapture(pointerId)) canvas.releasePointerCapture(pointerId);
+      refreshHover();
+    };
+
+    const finishSketch = (e: PointerEvent) => {
+      if (sketchPointer === null || e.pointerId !== sketchPointer) return;
+      sketchPointer = null;
+      engineRef.current?.endSketchStroke();
+      if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
+      commitSketchRun();
+      refreshHover();
+    };
+
+    const onPointerMove = (e: PointerEvent) => {
+      mods = { alt: e.altKey, shift: e.shiftKey };
+      pointer = { x: e.clientX, y: e.clientY };
+      if (dragPointer !== null) {
+        if (e.pointerId !== dragPointer) return;
+        const { x, y } = toNdc(e.clientX, e.clientY);
+        engineRef.current?.moveClothDrag(x, y);
+        return;
+      }
+
+      if (sketchPointer !== null) {
+        if (e.pointerId !== sketchPointer) return;
+        const { x, y } = toNdc(e.clientX, e.clientY);
+        extendSketch(x, y);
+        return;
+      }
+
+      if (e.pointerType === 'touch') return;
+      scheduleHover();
+    };
+
+    const onPointerDown = (e: PointerEvent) => {
+      pointerConsumed = false;
+      if (dragPointer !== null || sketchPointer !== null) return;
+      const engine = engineRef.current;
+      if (!engine || e.button !== 0) return;
+      const touch = e.pointerType === 'touch';
+      const target = classify(e.clientX, e.clientY, mods, touch);
+      if (target.mode === 'camera') return;
+      if (!touch) applyHover(target);
+
+      const { x, y } = toNdc(e.clientX, e.clientY);
+      if (target.mode === 'drag') {
+        if (!engine.beginClothDrag(x, y)) return;
+        pointerConsumed = true;
+        dragPointer = e.pointerId;
+        e.stopPropagation();
+        e.preventDefault();
+        setCursor(CLAMP_CURSOR);
+        canvas.setPointerCapture(e.pointerId);
+        return;
+      }
+
+      if (target.mode === 'sketch') {
+        const started = engine.beginSketchStroke(x, y);
+        if (!started) return;
+        pointerConsumed = true;
+        e.stopPropagation();
+        e.preventDefault();
+        sketchPointer = e.pointerId;
+        sketchPanelId = started.panelId;
+        sketchPoints = [started.point];
+        canvas.setPointerCapture(e.pointerId);
+        return;
+      }
+
+      if (target.mode === 'measure') {
+        pointerConsumed = true;
+        e.stopPropagation();
+        useUIStore.getState().setMeasure3d(engine.measureAtScreen(x, y));
+        return;
+      }
+
+      pointerConsumed = true;
+      e.stopPropagation();
+      if (target.mode === 'unpin') {
+        if (target.pin !== null) applyPin(engine, target.pin, false);
+        return;
+      }
+
+      const hit = engine.pickClothParticleAtScreen(x, y);
+      if (!hit) return;
+      if (!engine.getPinMarkers().includes(hit.index)) applyPin(engine, hit.index, true);
+    };
+
+    const finishDrag = (pointerId: number) => {
+      dragPointer = null;
+      engineRef.current?.endClothDrag();
+      useUIStore.getState().setDragForce3d(null);
+      if (canvas.hasPointerCapture(pointerId)) canvas.releasePointerCapture(pointerId);
+      refreshHover();
+    };
+
+    const endDrag = (e: PointerEvent) => {
+      if (dragPointer === null || e.pointerId !== dragPointer) return;
+      finishDrag(e.pointerId);
+    };
+
+    const onWindowBlur = () => {
+      pointer = null;
+      if (dragPointer !== null) finishDrag(dragPointer);
+      else if (sketchPointer !== null) {
+        sketchPointer = null;
+        engineRef.current?.endSketchStroke();
+        commitSketchRun();
+        applyHover(CAMERA);
+      } else {
+        applyHover(CAMERA);
+      }
+    };
+
+    const onPointerLeave = () => {
+      if (dragPointer !== null || sketchPointer !== null) return;
+      pointer = null;
+      applyHover(CAMERA);
+    };
+
+    const onKeyChange = (e: KeyboardEvent) => {
+      if (!e.altKey && !e.shiftKey && !mods.alt && !mods.shift) return;
+      mods = { alt: e.altKey, shift: e.shiftKey };
+      scheduleHover();
+    };
+
+    const onEscape = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (useUIStore.getState().activeTool === 'measure3d') {
+        engineRef.current?.clearMeasurement();
+        useUIStore.getState().setMeasure3d(null);
+      }
+
+      if (sketchPointer !== null) cancelSketch();
+    };
+
+    const onDoubleClick = (e: MouseEvent) => {
+      if (e.altKey) return;
+      selectPanelAt(e.clientX, e.clientY);
+    };
+
+    let tap: { x: number; y: number; at: number; id: number } | null = null;
+    const onCanvasPointerDown = (e: PointerEvent) => {
+      if (e.pointerType !== 'touch') return;
+      tap = { x: e.clientX, y: e.clientY, at: performance.now(), id: e.pointerId };
+    };
+    const onCanvasPointerUp = (e: PointerEvent) => {
+      if (e.pointerType !== 'touch' || !tap || tap.id !== e.pointerId) return;
+      const started = tap;
+      tap = null;
+      if (pointerConsumed) return;
+      if (!isTapGesture(e.clientX - started.x, e.clientY - started.y, performance.now() - started.at)) return;
+      selectPanelAt(e.clientX, e.clientY);
+    };
+    const onCanvasPointerCancel = () => {
+      tap = null;
+    };
+
+    let lastTool = useUIStore.getState().activeTool;
+    let lastPlaying = useSimStore.getState().isPlaying;
+    let lastPins = useSimStore.getState().pinsVersion;
+    const onStoreChange = () => {
+      const ui = useUIStore.getState();
+      const sim = useSimStore.getState();
+      const toolChanged = ui.activeTool !== lastTool;
+      if (!toolChanged && sim.isPlaying === lastPlaying && sim.pinsVersion === lastPins) return;
+      const leavingMeasure = toolChanged && lastTool === 'measure3d';
+      const leavingSketch = toolChanged && sketchPointer !== null;
+      lastTool = ui.activeTool;
+      lastPlaying = sim.isPlaying;
+      lastPins = sim.pinsVersion;
+      if (leavingMeasure) {
+        engineRef.current?.clearMeasurement();
+        ui.setMeasure3d(null);
+      }
+
+      if (leavingSketch) cancelSketch();
+      scheduleHover();
+    };
+    const unsubUI = useUIStore.subscribe(onStoreChange);
+    const unsubSim = useSimStore.subscribe(onStoreChange);
+
+    container.addEventListener('pointerdown', onPointerDown, true);
+    canvas.addEventListener('dblclick', onDoubleClick);
+    canvas.addEventListener('pointerdown', onCanvasPointerDown);
+    canvas.addEventListener('pointermove', onPointerMove);
+    canvas.addEventListener('pointerleave', onPointerLeave);
+    canvas.addEventListener('pointerup', onCanvasPointerUp);
+    canvas.addEventListener('pointerup', endDrag);
+    canvas.addEventListener('pointerup', finishSketch);
+    canvas.addEventListener('pointercancel', onCanvasPointerCancel);
+    canvas.addEventListener('pointercancel', endDrag);
+    canvas.addEventListener('pointercancel', finishSketch);
+    window.addEventListener('keydown', onKeyChange);
+    window.addEventListener('keydown', onEscape);
+    window.addEventListener('keyup', onKeyChange);
+    window.addEventListener('blur', onWindowBlur);
+    return () => {
+      container.removeEventListener('pointerdown', onPointerDown, true);
+      canvas.removeEventListener('dblclick', onDoubleClick);
+      canvas.removeEventListener('pointerdown', onCanvasPointerDown);
+      canvas.removeEventListener('pointermove', onPointerMove);
+      canvas.removeEventListener('pointerleave', onPointerLeave);
+      canvas.removeEventListener('pointerup', onCanvasPointerUp);
+      canvas.removeEventListener('pointerup', endDrag);
+      canvas.removeEventListener('pointerup', finishSketch);
+      canvas.removeEventListener('pointercancel', onCanvasPointerCancel);
+      canvas.removeEventListener('pointercancel', endDrag);
+      canvas.removeEventListener('pointercancel', finishSketch);
+      window.removeEventListener('keydown', onKeyChange);
+      window.removeEventListener('keydown', onEscape);
+      window.removeEventListener('keyup', onKeyChange);
+      window.removeEventListener('blur', onWindowBlur);
+      unsubUI();
+      unsubSim();
+      if (hoverFrame) cancelAnimationFrame(hoverFrame);
+      setCursor('default');
+      useUIStore.getState().setDragForce3d(null);
+    };
+  }, [canvasRef, containerRef, engineRef]);
+}
+
+function clampIntoPanel(outline: Vec2[], point: Vec2): Vec2 | null {
+  if (pointInPolygon(outline, point)) return point;
+  if (outline.length === 0) return null;
+  const centre = averagePoint2(outline);
+  for (let step = 1; step <= 8; step++) {
+    const candidate = lerp2(point, centre, step / 8);
+    if (pointInPolygon(outline, candidate)) return candidate;
+  }
+
+  return null;
+}

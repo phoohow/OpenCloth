@@ -1,0 +1,104 @@
+import type { Project, Seam, SeamType } from '@/model/types';
+
+import { SEAM_TYPES, SEAM_TYPE_LABELS, parseSceneRef } from '@/model';
+import { seamJoint, seamNumber, type SeamJointEnd } from '@/pattern/seam';
+import { patchValue } from '@/ui/sceneCommands';
+import { seamPanelNames } from '@/ui/sceneTree';
+import {
+  CheckRow, ColorRow, Hint, Row, Section, SelectRow, SliderRow,
+} from '@/ui/widgets/propertyRows';
+
+function writeSeam(seam: Seam, label: string, patch: Partial<Seam>): void {
+  patchValue(
+    label,
+    p => p.pattern.seams[seam.id],
+    (ctx, value) => {
+      ctx.project.pattern.seams[seam.id] = { ...value };
+    },
+    { ...seam, ...patch },
+  );
+}
+
+export function SeamData({ project, nodeId }: { project: Project; nodeId: string }) {
+  const nodeRef = parseSceneRef(nodeId);
+  if (nodeRef.kind !== 'seam') return <Hint>缝合线已删除。</Hint>;
+  const seamId = nodeRef.id;
+  const seam = project.pattern.seams[seamId];
+  if (!seam) return <Hint>缝合线已删除。</Hint>;
+  const [nameA, nameB] = seamPanelNames(project, seam);
+  const seamNo = seamNumber(project.pattern, seam.id);
+
+  const setSeam = (label: string, patch: Partial<Seam>) => writeSeam(seam, label, patch);
+
+  return (
+    <>
+      <Section title={seamNo === null ? '缝合线' : `缝合线 ${seamNo}`}>
+        <Row label="甲边">{nameA}</Row>
+        <Row label="乙边">{nameB}</Row>
+      </Section>
+      <Section title="缝合">
+        <SelectRow label="缝型" tip="这条缝合线的缝制方式" value={seam.type}
+          options={SEAM_TYPES.map(t => ({ value: t, label: SEAM_TYPE_LABELS[t] }))}
+          onChange={v => setSeam('修改缝型', { type: v as SeamType })} />
+        <SliderRow label="强度" tip="缝合约束的刚硬程度" min={0.05} max={1} step={0.05} value={seam.strength} commitOnRelease
+          onChange={v => setSeam('修改缝合强度', { strength: v })} />
+        <CheckRow label="乙边反向" tip="反转乙边的配对方向" checked={seam.flip}
+          onChange={v => setSeam(v ? '反转乙边配对' : '恢复乙边配对', { flip: v })} />
+        <Row label="甲区间">{`${(seam.a.t0 * 100).toFixed(0)}% – ${(seam.a.t1 * 100).toFixed(0)}%`}</Row>
+        <Row label="乙区间">{`${(seam.b.t0 * 100).toFixed(0)}% – ${(seam.b.t1 * 100).toFixed(0)}%`}</Row>
+        <SliderRow label="甲起点" tip="沿甲边的比例，0 在起点、1 在终点" min={0} max={1} step={0.01} value={seam.a.t0} commitOnRelease
+          onChange={v => setSeam('修改甲区间', { a: { ...seam.a, t0: Math.min(v, seam.a.t1 - 0.01) } })} />
+        <SliderRow label="甲终点" tip="沿甲边的比例，0 在起点、1 在终点" min={0} max={1} step={0.01} value={seam.a.t1} commitOnRelease
+          onChange={v => setSeam('修改甲区间', { a: { ...seam.a, t1: Math.max(v, seam.a.t0 + 0.01) } })} />
+        <SliderRow label="乙起点" tip="沿乙边的比例，0 在起点、1 在终点" min={0} max={1} step={0.01} value={seam.b.t0} commitOnRelease
+          onChange={v => setSeam('修改乙区间', { b: { ...seam.b, t0: Math.min(v, seam.b.t1 - 0.01) } })} />
+        <SliderRow label="乙终点" tip="沿乙边的比例，0 在起点、1 在终点" min={0} max={1} step={0.01} value={seam.b.t1} commitOnRelease
+          onChange={v => setSeam('修改乙区间', { b: { ...seam.b, t1: Math.max(v, seam.b.t0 + 0.01) } })} />
+        {seam.type === 'gather' && (
+          <SliderRow label="缩缝比例" tip="乙边相对甲边缩短的比例" min={0.5} max={1} step={0.01} value={seam.gatherRatio ?? 1} commitOnRelease
+            onChange={v => setSeam('修改缩缝比例', { gatherRatio: v })} />
+        )}
+        <CheckRow label="对位点" tip="在缝合处加一个对齐标记" checked={seam.a.anchorT !== undefined}
+          onChange={v => setSeam(v ? '添加对位点' : '取消对位点', {
+            a: { ...seam.a, anchorT: v ? (seam.a.t0 + seam.a.t1) / 2 : undefined },
+            b: { ...seam.b, anchorT: v ? (seam.b.t0 + seam.b.t1) / 2 : undefined },
+          })} />
+        {seam.a.anchorT !== undefined && (
+          <>
+            <SliderRow label="甲对位" tip="对位点在甲边上的位置" min={seam.a.t0} max={seam.a.t1} step={0.01} value={seam.a.anchorT} commitOnRelease
+              onChange={v => setSeam('移动甲对位点', { a: { ...seam.a, anchorT: v } })} />
+            <SliderRow label="乙对位" tip="对位点在乙边上的位置" min={seam.b.t0} max={seam.b.t1} step={0.01} value={seam.b.anchorT ?? (seam.b.t0 + seam.b.t1) / 2} commitOnRelease
+              onChange={v => setSeam('移动乙对位点', { b: { ...seam.b, anchorT: v } })} />
+          </>
+        )}
+      </Section>
+      <Section title="接角">
+        <JointRow project={project} seamId={seamId} end="start" />
+        <JointRow project={project} seamId={seamId} end="end" />
+      </Section>
+    </>
+  );
+}
+
+export function SeamMaterialTab({ project, nodeId }: { project: Project; nodeId: string }) {
+  const nodeRef = parseSceneRef(nodeId);
+  if (nodeRef.kind !== 'seam') return <Hint>缝合线已删除。</Hint>;
+  const seam = project.pattern.seams[nodeRef.id];
+  if (!seam) return <Hint>缝合线已删除。</Hint>;
+
+  return (
+    <Section title="材质">
+      <ColorRow label="颜色" tip="缝线在视口中的颜色；未改动时 2D 按缝合线序号取调色板的颜色"
+        value={seam.threadColor} onChange={v => writeSeam(seam, '修改线色', { threadColor: v })} />
+    </Section>
+  );
+}
+
+function JointRow({ project, seamId, end }: { project: Project; seamId: string; end: SeamJointEnd }) {
+  const joint = seamJoint(project.pattern, seamId, end);
+  const label = end === 'start' ? '起点' : '终点';
+  if (!joint) return <Row label={label}>不在角点</Row>;
+  const note = joint.bendDeg < 0.1 ? (joint.overlap ? '重叠' : '顺直')
+    : joint.overlap ? `重叠 ${joint.bendDeg.toFixed(1)}°` : `弯折 ${joint.bendDeg.toFixed(1)}°`;
+  return <Row label={label}>{`${joint.angleDeg.toFixed(1)}° ${note}`}</Row>;
+}

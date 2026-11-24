@@ -1,0 +1,54 @@
+import { downloadBlob } from '@/base/platform';
+
+const MIME_CANDIDATES = ['video/webm;codecs=vp9', 'video/webm', 'video/webm;codecs=vp8'];
+
+const DEFAULT_DURATION_MS = 5000;
+
+const DEFAULT_FPS = 30;
+
+export interface AnimationExportOptions {
+  durationMs?: number;
+  fps?: number;
+}
+
+function supportedMimeType(): string | undefined {
+  if (typeof MediaRecorder.isTypeSupported !== 'function') return undefined;
+  return MIME_CANDIDATES.find(type => MediaRecorder.isTypeSupported(type));
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+export async function recordCanvasToWebM(
+  canvas: HTMLCanvasElement,
+  filename = 'animation.webm',
+  options: AnimationExportOptions = {},
+): Promise<'saved' | 'unsupported'> {
+  if (typeof MediaRecorder === 'undefined' || typeof canvas.captureStream !== 'function') return 'unsupported';
+  const durationMs = options.durationMs ?? DEFAULT_DURATION_MS;
+  const fps = options.fps ?? DEFAULT_FPS;
+
+  const stream = canvas.captureStream(fps);
+  const mimeType = supportedMimeType();
+  const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+  const chunks: Blob[] = [];
+  recorder.ondataavailable = event => { if (event.data.size > 0) chunks.push(event.data); };
+  const stopped = new Promise<void>(resolve => { recorder.onstop = () => resolve(); });
+
+  try {
+    recorder.start();
+  } catch {
+    stream.getTracks().forEach(track => track.stop());
+    return 'unsupported';
+  }
+
+  await wait(durationMs);
+  if (recorder.state !== 'inactive') recorder.stop();
+  await stopped;
+  stream.getTracks().forEach(track => track.stop());
+
+  if (chunks.length === 0) return 'unsupported';
+  downloadBlob(new Blob(chunks, { type: recorder.mimeType || 'video/webm' }), filename);
+  return 'saved';
+}

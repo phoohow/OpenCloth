@@ -1,0 +1,56 @@
+import { describe, expect, it } from 'vitest';
+import { buildAdjacency } from '@/sim/particles';
+import type { Constraint } from '@/sim/common';
+
+const WELD: Constraint = { p0: 3, p1: 4, restLength: 0, compliance: 1 };
+
+const INDICES = new Uint32Array([0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7]);
+
+function groupTriangles(adjacency: ReturnType<typeof buildAdjacency>, group: number): number[] {
+  const start = adjacency.groupStart[group]!;
+  const end = adjacency.groupStart[group + 1]!;
+  return Array.from(adjacency.groupTriangles.subarray(start, end)).sort((a, b) => a - b);
+}
+
+describe('buildAdjacency', () => {
+  it('gives every particle its own group without weld pairs', () => {
+    const adjacency = buildAdjacency(INDICES, 8, []);
+    expect(Array.from(adjacency.groupOfParticle)).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+    expect(adjacency.groupCount).toBe(8);
+    expect(adjacency.groupTriangles.length).toBe(12);
+    expect(groupTriangles(adjacency, 0)).toEqual([0, 1]);
+    expect(groupTriangles(adjacency, 1)).toEqual([0]);
+  });
+
+  it('welds the stitched pair into one group spanning both panels', () => {
+    const adjacency = buildAdjacency(INDICES, 8, [WELD]);
+    expect(adjacency.groupCount).toBe(7);
+    expect(adjacency.groupOfParticle[3]).toBe(adjacency.groupOfParticle[4]);
+    expect(groupTriangles(adjacency, adjacency.groupOfParticle[3]!)).toEqual([1, 2, 3]);
+    expect(groupTriangles(adjacency, adjacency.groupOfParticle[2]!)).toEqual([0, 1]);
+  });
+
+  it('joins the vertices of a longer stitch chain transitively', () => {
+    const adjacency = buildAdjacency(INDICES, 8, [
+      WELD, { p0: 4, p1: 5, restLength: 0, compliance: 1 }, { p0: 5, p1: 6, restLength: 0, compliance: 1 },
+    ]);
+    expect(adjacency.groupCount).toBe(5);
+    expect(adjacency.groupOfParticle[3]).toBe(adjacency.groupOfParticle[6]);
+    expect(adjacency.groupOfParticle[4]).toBe(adjacency.groupOfParticle[6]);
+    expect(groupTriangles(adjacency, adjacency.groupOfParticle[3]!)).toEqual([1, 2, 3]);
+  });
+
+  it('ignores weld pairs outside the particle range', () => {
+    const adjacency = buildAdjacency(INDICES, 8, [
+      { p0: 3, p1: 99, restLength: 0, compliance: 1 },
+    ]);
+    expect(adjacency.groupCount).toBe(8);
+  });
+
+  it('is deterministic', () => {
+    const first = buildAdjacency(INDICES, 8, [WELD]);
+    const second = buildAdjacency(INDICES, 8, [WELD]);
+    expect(Array.from(first.groupStart)).toEqual(Array.from(second.groupStart));
+    expect(Array.from(first.groupTriangles)).toEqual(Array.from(second.groupTriangles));
+  });
+});

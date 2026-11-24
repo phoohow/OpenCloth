@@ -1,0 +1,1295 @@
+{
+  "order": 6,
+  "key": "pants-short",
+  "name": "短裤",
+  "summary": "前裤片 · 后裤片 · 腰头 · 及膝裤脚",
+  "params": {
+    "waistCm": 72,
+    "hipCm": 104,
+    "outseamCm": 48,
+    "hemCm": 56,
+    "riseCm": 31.5
+  },
+  "pattern": {
+    "points": {
+      "front_left_cfWaist": {
+        "id": "front_left_cfWaist",
+        "pos": {
+          "x": -119,
+          "y": 0
+        }
+      },
+      "front_left_sideWaist": {
+        "id": "front_left_sideWaist",
+        "pos": {
+          "x": -101,
+          "y": 0
+        }
+      },
+      "front_left_sideHip": {
+        "id": "front_left_sideHip",
+        "pos": {
+          "x": -97,
+          "y": -21
+        }
+      },
+      "front_left_sideCrotch": {
+        "id": "front_left_sideCrotch",
+        "pos": {
+          "x": -95,
+          "y": -31.5
+        }
+      },
+      "front_left_sideKnee": {
+        "id": "front_left_sideKnee",
+        "pos": {
+          "x": -96.5,
+          "y": -40
+        }
+      },
+      "front_left_sideHem": {
+        "id": "front_left_sideHem",
+        "pos": {
+          "x": -96,
+          "y": -48
+        }
+      },
+      "front_left_cfHem": {
+        "id": "front_left_cfHem",
+        "pos": {
+          "x": -124,
+          "y": -48
+        }
+      },
+      "front_left_inseamKnee": {
+        "id": "front_left_inseamKnee",
+        "pos": {
+          "x": -123.5,
+          "y": -40
+        }
+      },
+      "front_left_crotchPoint": {
+        "id": "front_left_crotchPoint",
+        "pos": {
+          "x": -125,
+          "y": -36
+        },
+        "handleOut": {
+          "x": -125,
+          "y": -32.8
+        },
+        "handleIn": {
+          "x": -125,
+          "y": -32.8
+        }
+      },
+      "front_left_cfCrotch": {
+        "id": "front_left_cfCrotch",
+        "pos": {
+          "x": -119,
+          "y": -30
+        },
+        "handleIn": {
+          "x": -120.6,
+          "y": -30.5
+        },
+        "handleOut": {
+          "x": -120.6,
+          "y": -30.5
+        }
+      },
+      "front_right_cfWaist": {
+        "id": "front_right_cfWaist",
+        "pos": {
+          "x": -46,
+          "y": 0
+        }
+      },
+      "front_right_sideWaist": {
+        "id": "front_right_sideWaist",
+        "pos": {
+          "x": -64,
+          "y": 0
+        }
+      },
+      "front_right_sideHip": {
+        "id": "front_right_sideHip",
+        "pos": {
+          "x": -68,
+          "y": -21
+        }
+      },
+      "front_right_sideCrotch": {
+        "id": "front_right_sideCrotch",
+        "pos": {
+          "x": -70,
+          "y": -31.5
+        }
+      },
+      "front_right_sideKnee": {
+        "id": "front_right_sideKnee",
+        "pos": {
+          "x": -68.5,
+          "y": -40
+        }
+      },
+      "front_right_sideHem": {
+        "id": "front_right_sideHem",
+        "pos": {
+          "x": -69,
+          "y": -48
+        }
+      },
+      "front_right_cfHem": {
+        "id": "front_right_cfHem",
+        "pos": {
+          "x": -41,
+          "y": -48
+        }
+      },
+      "front_right_inseamKnee": {
+        "id": "front_right_inseamKnee",
+        "pos": {
+          "x": -41.5,
+          "y": -40
+        }
+      },
+      "front_right_crotchPoint": {
+        "id": "front_right_crotchPoint",
+        "pos": {
+          "x": -40,
+          "y": -36
+        },
+        "handleOut": {
+          "x": -40,
+          "y": -32.8
+        },
+        "handleIn": {
+          "x": -40,
+          "y": -32.8
+        }
+      },
+      "front_right_cfCrotch": {
+        "id": "front_right_cfCrotch",
+        "pos": {
+          "x": -46,
+          "y": -30
+        },
+        "handleIn": {
+          "x": -44.4,
+          "y": -30.5
+        },
+        "handleOut": {
+          "x": -44.4,
+          "y": -30.5
+        }
+      },
+      "back_left_cfWaist": {
+        "id": "back_left_cfWaist",
+        "pos": {
+          "x": -9,
+          "y": 0
+        }
+      },
+      "back_left_sideWaist": {
+        "id": "back_left_sideWaist",
+        "pos": {
+          "x": 9,
+          "y": 0
+        }
+      },
+      "back_left_sideHip": {
+        "id": "back_left_sideHip",
+        "pos": {
+          "x": 13,
+          "y": -21
+        }
+      },
+      "back_left_sideCrotch": {
+        "id": "back_left_sideCrotch",
+        "pos": {
+          "x": 15.5,
+          "y": -31.5
+        }
+      },
+      "back_left_sideKnee": {
+        "id": "back_left_sideKnee",
+        "pos": {
+          "x": 13.8,
+          "y": -40
+        }
+      },
+      "back_left_sideHem": {
+        "id": "back_left_sideHem",
+        "pos": {
+          "x": 14.3,
+          "y": -48
+        }
+      },
+      "back_left_cfHem": {
+        "id": "back_left_cfHem",
+        "pos": {
+          "x": -14.2,
+          "y": -48
+        }
+      },
+      "back_left_inseamKnee": {
+        "id": "back_left_inseamKnee",
+        "pos": {
+          "x": -13.7,
+          "y": -40
+        }
+      },
+      "back_left_crotchPoint": {
+        "id": "back_left_crotchPoint",
+        "pos": {
+          "x": -15,
+          "y": -36
+        },
+        "handleOut": {
+          "x": -15,
+          "y": -32.8
+        },
+        "handleIn": {
+          "x": -15,
+          "y": -32.8
+        }
+      },
+      "back_left_cfCrotch": {
+        "id": "back_left_cfCrotch",
+        "pos": {
+          "x": -9,
+          "y": -30
+        },
+        "handleIn": {
+          "x": -10.6,
+          "y": -30.5
+        },
+        "handleOut": {
+          "x": -10.6,
+          "y": -30.5
+        }
+      },
+      "back_right_cfWaist": {
+        "id": "back_right_cfWaist",
+        "pos": {
+          "x": 64,
+          "y": 0
+        }
+      },
+      "back_right_sideWaist": {
+        "id": "back_right_sideWaist",
+        "pos": {
+          "x": 46,
+          "y": 0
+        }
+      },
+      "back_right_sideHip": {
+        "id": "back_right_sideHip",
+        "pos": {
+          "x": 42,
+          "y": -21
+        }
+      },
+      "back_right_sideCrotch": {
+        "id": "back_right_sideCrotch",
+        "pos": {
+          "x": 39.5,
+          "y": -31.5
+        }
+      },
+      "back_right_sideKnee": {
+        "id": "back_right_sideKnee",
+        "pos": {
+          "x": 41.3,
+          "y": -40
+        }
+      },
+      "back_right_sideHem": {
+        "id": "back_right_sideHem",
+        "pos": {
+          "x": 40.8,
+          "y": -48
+        }
+      },
+      "back_right_cfHem": {
+        "id": "back_right_cfHem",
+        "pos": {
+          "x": 69.3,
+          "y": -48
+        }
+      },
+      "back_right_inseamKnee": {
+        "id": "back_right_inseamKnee",
+        "pos": {
+          "x": 68.8,
+          "y": -40
+        }
+      },
+      "back_right_crotchPoint": {
+        "id": "back_right_crotchPoint",
+        "pos": {
+          "x": 70,
+          "y": -36
+        },
+        "handleOut": {
+          "x": 70,
+          "y": -32.8
+        },
+        "handleIn": {
+          "x": 70,
+          "y": -32.8
+        }
+      },
+      "back_right_cfCrotch": {
+        "id": "back_right_cfCrotch",
+        "pos": {
+          "x": 64,
+          "y": -30
+        },
+        "handleIn": {
+          "x": 65.6,
+          "y": -30.5
+        },
+        "handleOut": {
+          "x": 65.6,
+          "y": -30.5
+        }
+      },
+      "bandFront_leftBottom": {
+        "id": "bandFront_leftBottom",
+        "pos": {
+          "x": 92,
+          "y": 0
+        }
+      },
+      "bandFront_rightBottom": {
+        "id": "bandFront_rightBottom",
+        "pos": {
+          "x": 128,
+          "y": 0
+        }
+      },
+      "bandFront_rightTop": {
+        "id": "bandFront_rightTop",
+        "pos": {
+          "x": 128,
+          "y": 4
+        }
+      },
+      "bandFront_leftTop": {
+        "id": "bandFront_leftTop",
+        "pos": {
+          "x": 92,
+          "y": 4
+        }
+      },
+      "bandBack_leftBottom": {
+        "id": "bandBack_leftBottom",
+        "pos": {
+          "x": 132,
+          "y": 0
+        }
+      },
+      "bandBack_rightBottom": {
+        "id": "bandBack_rightBottom",
+        "pos": {
+          "x": 168,
+          "y": 0
+        }
+      },
+      "bandBack_rightTop": {
+        "id": "bandBack_rightTop",
+        "pos": {
+          "x": 168,
+          "y": 4
+        }
+      },
+      "bandBack_leftTop": {
+        "id": "bandBack_leftTop",
+        "pos": {
+          "x": 132,
+          "y": 4
+        }
+      }
+    },
+    "edges": {
+      "front_left_waist": {
+        "id": "front_left_waist",
+        "type": "line",
+        "startPointId": "front_left_cfWaist",
+        "endPointId": "front_left_sideWaist",
+        "semantic": "waist"
+      },
+      "front_left_sideHip": {
+        "id": "front_left_sideHip",
+        "type": "line",
+        "startPointId": "front_left_sideWaist",
+        "endPointId": "front_left_sideHip",
+        "semantic": "sideSeam"
+      },
+      "front_left_sideThigh": {
+        "id": "front_left_sideThigh",
+        "type": "line",
+        "startPointId": "front_left_sideHip",
+        "endPointId": "front_left_sideCrotch",
+        "semantic": "sideSeam"
+      },
+      "front_left_sideShin": {
+        "id": "front_left_sideShin",
+        "type": "line",
+        "startPointId": "front_left_sideCrotch",
+        "endPointId": "front_left_sideKnee",
+        "semantic": "sideSeam"
+      },
+      "front_left_sideAnkle": {
+        "id": "front_left_sideAnkle",
+        "type": "line",
+        "startPointId": "front_left_sideKnee",
+        "endPointId": "front_left_sideHem",
+        "semantic": "sideSeam"
+      },
+      "front_left_hem": {
+        "id": "front_left_hem",
+        "type": "line",
+        "startPointId": "front_left_sideHem",
+        "endPointId": "front_left_cfHem",
+        "semantic": "hem"
+      },
+      "front_left_inseamAnkle": {
+        "id": "front_left_inseamAnkle",
+        "type": "line",
+        "startPointId": "front_left_cfHem",
+        "endPointId": "front_left_inseamKnee",
+        "semantic": "free"
+      },
+      "front_left_inseamThigh": {
+        "id": "front_left_inseamThigh",
+        "type": "line",
+        "startPointId": "front_left_inseamKnee",
+        "endPointId": "front_left_crotchPoint",
+        "semantic": "free"
+      },
+      "front_left_crotch": {
+        "id": "front_left_crotch",
+        "type": "bezier",
+        "startPointId": "front_left_crotchPoint",
+        "endPointId": "front_left_cfCrotch",
+        "semantic": "free"
+      },
+      "front_left_centre": {
+        "id": "front_left_centre",
+        "type": "line",
+        "startPointId": "front_left_cfCrotch",
+        "endPointId": "front_left_cfWaist",
+        "semantic": "free"
+      },
+      "front_right_centre": {
+        "id": "front_right_centre",
+        "type": "line",
+        "startPointId": "front_right_cfWaist",
+        "endPointId": "front_right_cfCrotch",
+        "semantic": "free"
+      },
+      "front_right_crotch": {
+        "id": "front_right_crotch",
+        "type": "bezier",
+        "startPointId": "front_right_cfCrotch",
+        "endPointId": "front_right_crotchPoint",
+        "semantic": "free"
+      },
+      "front_right_inseamThigh": {
+        "id": "front_right_inseamThigh",
+        "type": "line",
+        "startPointId": "front_right_crotchPoint",
+        "endPointId": "front_right_inseamKnee",
+        "semantic": "free"
+      },
+      "front_right_inseamAnkle": {
+        "id": "front_right_inseamAnkle",
+        "type": "line",
+        "startPointId": "front_right_inseamKnee",
+        "endPointId": "front_right_cfHem",
+        "semantic": "free"
+      },
+      "front_right_hem": {
+        "id": "front_right_hem",
+        "type": "line",
+        "startPointId": "front_right_cfHem",
+        "endPointId": "front_right_sideHem",
+        "semantic": "hem"
+      },
+      "front_right_sideAnkle": {
+        "id": "front_right_sideAnkle",
+        "type": "line",
+        "startPointId": "front_right_sideHem",
+        "endPointId": "front_right_sideKnee",
+        "semantic": "sideSeam"
+      },
+      "front_right_sideShin": {
+        "id": "front_right_sideShin",
+        "type": "line",
+        "startPointId": "front_right_sideKnee",
+        "endPointId": "front_right_sideCrotch",
+        "semantic": "sideSeam"
+      },
+      "front_right_sideThigh": {
+        "id": "front_right_sideThigh",
+        "type": "line",
+        "startPointId": "front_right_sideCrotch",
+        "endPointId": "front_right_sideHip",
+        "semantic": "sideSeam"
+      },
+      "front_right_sideHip": {
+        "id": "front_right_sideHip",
+        "type": "line",
+        "startPointId": "front_right_sideHip",
+        "endPointId": "front_right_sideWaist",
+        "semantic": "sideSeam"
+      },
+      "front_right_waist": {
+        "id": "front_right_waist",
+        "type": "line",
+        "startPointId": "front_right_sideWaist",
+        "endPointId": "front_right_cfWaist",
+        "semantic": "waist"
+      },
+      "back_left_waist": {
+        "id": "back_left_waist",
+        "type": "line",
+        "startPointId": "back_left_cfWaist",
+        "endPointId": "back_left_sideWaist",
+        "semantic": "waist"
+      },
+      "back_left_sideHip": {
+        "id": "back_left_sideHip",
+        "type": "line",
+        "startPointId": "back_left_sideWaist",
+        "endPointId": "back_left_sideHip",
+        "semantic": "sideSeam"
+      },
+      "back_left_sideThigh": {
+        "id": "back_left_sideThigh",
+        "type": "line",
+        "startPointId": "back_left_sideHip",
+        "endPointId": "back_left_sideCrotch",
+        "semantic": "sideSeam"
+      },
+      "back_left_sideShin": {
+        "id": "back_left_sideShin",
+        "type": "line",
+        "startPointId": "back_left_sideCrotch",
+        "endPointId": "back_left_sideKnee",
+        "semantic": "sideSeam"
+      },
+      "back_left_sideAnkle": {
+        "id": "back_left_sideAnkle",
+        "type": "line",
+        "startPointId": "back_left_sideKnee",
+        "endPointId": "back_left_sideHem",
+        "semantic": "sideSeam"
+      },
+      "back_left_hem": {
+        "id": "back_left_hem",
+        "type": "line",
+        "startPointId": "back_left_sideHem",
+        "endPointId": "back_left_cfHem",
+        "semantic": "hem"
+      },
+      "back_left_inseamAnkle": {
+        "id": "back_left_inseamAnkle",
+        "type": "line",
+        "startPointId": "back_left_cfHem",
+        "endPointId": "back_left_inseamKnee",
+        "semantic": "free"
+      },
+      "back_left_inseamThigh": {
+        "id": "back_left_inseamThigh",
+        "type": "line",
+        "startPointId": "back_left_inseamKnee",
+        "endPointId": "back_left_crotchPoint",
+        "semantic": "free"
+      },
+      "back_left_crotch": {
+        "id": "back_left_crotch",
+        "type": "bezier",
+        "startPointId": "back_left_crotchPoint",
+        "endPointId": "back_left_cfCrotch",
+        "semantic": "free"
+      },
+      "back_left_centre": {
+        "id": "back_left_centre",
+        "type": "line",
+        "startPointId": "back_left_cfCrotch",
+        "endPointId": "back_left_cfWaist",
+        "semantic": "free"
+      },
+      "back_right_centre": {
+        "id": "back_right_centre",
+        "type": "line",
+        "startPointId": "back_right_cfWaist",
+        "endPointId": "back_right_cfCrotch",
+        "semantic": "free"
+      },
+      "back_right_crotch": {
+        "id": "back_right_crotch",
+        "type": "bezier",
+        "startPointId": "back_right_cfCrotch",
+        "endPointId": "back_right_crotchPoint",
+        "semantic": "free"
+      },
+      "back_right_inseamThigh": {
+        "id": "back_right_inseamThigh",
+        "type": "line",
+        "startPointId": "back_right_crotchPoint",
+        "endPointId": "back_right_inseamKnee",
+        "semantic": "free"
+      },
+      "back_right_inseamAnkle": {
+        "id": "back_right_inseamAnkle",
+        "type": "line",
+        "startPointId": "back_right_inseamKnee",
+        "endPointId": "back_right_cfHem",
+        "semantic": "free"
+      },
+      "back_right_hem": {
+        "id": "back_right_hem",
+        "type": "line",
+        "startPointId": "back_right_cfHem",
+        "endPointId": "back_right_sideHem",
+        "semantic": "hem"
+      },
+      "back_right_sideAnkle": {
+        "id": "back_right_sideAnkle",
+        "type": "line",
+        "startPointId": "back_right_sideHem",
+        "endPointId": "back_right_sideKnee",
+        "semantic": "sideSeam"
+      },
+      "back_right_sideShin": {
+        "id": "back_right_sideShin",
+        "type": "line",
+        "startPointId": "back_right_sideKnee",
+        "endPointId": "back_right_sideCrotch",
+        "semantic": "sideSeam"
+      },
+      "back_right_sideThigh": {
+        "id": "back_right_sideThigh",
+        "type": "line",
+        "startPointId": "back_right_sideCrotch",
+        "endPointId": "back_right_sideHip",
+        "semantic": "sideSeam"
+      },
+      "back_right_sideHip": {
+        "id": "back_right_sideHip",
+        "type": "line",
+        "startPointId": "back_right_sideHip",
+        "endPointId": "back_right_sideWaist",
+        "semantic": "sideSeam"
+      },
+      "back_right_waist": {
+        "id": "back_right_waist",
+        "type": "line",
+        "startPointId": "back_right_sideWaist",
+        "endPointId": "back_right_cfWaist",
+        "semantic": "waist"
+      },
+      "bandFront_waist": {
+        "id": "bandFront_waist",
+        "type": "line",
+        "startPointId": "bandFront_leftBottom",
+        "endPointId": "bandFront_rightBottom",
+        "semantic": "waist"
+      },
+      "bandFront_right": {
+        "id": "bandFront_right",
+        "type": "line",
+        "startPointId": "bandFront_rightBottom",
+        "endPointId": "bandFront_rightTop",
+        "semantic": "free"
+      },
+      "bandFront_top": {
+        "id": "bandFront_top",
+        "type": "line",
+        "startPointId": "bandFront_rightTop",
+        "endPointId": "bandFront_leftTop",
+        "semantic": "free"
+      },
+      "bandFront_left": {
+        "id": "bandFront_left",
+        "type": "line",
+        "startPointId": "bandFront_leftTop",
+        "endPointId": "bandFront_leftBottom",
+        "semantic": "free"
+      },
+      "bandBack_waist": {
+        "id": "bandBack_waist",
+        "type": "line",
+        "startPointId": "bandBack_leftBottom",
+        "endPointId": "bandBack_rightBottom",
+        "semantic": "waist"
+      },
+      "bandBack_right": {
+        "id": "bandBack_right",
+        "type": "line",
+        "startPointId": "bandBack_rightBottom",
+        "endPointId": "bandBack_rightTop",
+        "semantic": "free"
+      },
+      "bandBack_top": {
+        "id": "bandBack_top",
+        "type": "line",
+        "startPointId": "bandBack_rightTop",
+        "endPointId": "bandBack_leftTop",
+        "semantic": "free"
+      },
+      "bandBack_left": {
+        "id": "bandBack_left",
+        "type": "line",
+        "startPointId": "bandBack_leftTop",
+        "endPointId": "bandBack_leftBottom",
+        "semantic": "free"
+      }
+    },
+    "panels": {
+      "front_left_panel": {
+        "id": "front_left_panel",
+        "name": "前裤片（左）",
+        "outlineEdgeIds": [
+          "front_left_waist",
+          "front_left_sideHip",
+          "front_left_sideThigh",
+          "front_left_sideShin",
+          "front_left_sideAnkle",
+          "front_left_hem",
+          "front_left_inseamAnkle",
+          "front_left_inseamThigh",
+          "front_left_crotch",
+          "front_left_centre"
+        ],
+        "seamAllowanceCm": 1,
+        "drape": {
+          "region": "leg",
+          "zone": "front",
+          "side": "left",
+          "anchor": "waist"
+        },
+        "grainAngleDeg": 90
+      },
+      "front_right_panel": {
+        "id": "front_right_panel",
+        "name": "前裤片（右）",
+        "outlineEdgeIds": [
+          "front_right_centre",
+          "front_right_crotch",
+          "front_right_inseamThigh",
+          "front_right_inseamAnkle",
+          "front_right_hem",
+          "front_right_sideAnkle",
+          "front_right_sideShin",
+          "front_right_sideThigh",
+          "front_right_sideHip",
+          "front_right_waist"
+        ],
+        "seamAllowanceCm": 1,
+        "drape": {
+          "region": "leg",
+          "zone": "front",
+          "side": "right",
+          "anchor": "waist"
+        },
+        "grainAngleDeg": 90
+      },
+      "back_left_panel": {
+        "id": "back_left_panel",
+        "name": "后裤片（左）",
+        "outlineEdgeIds": [
+          "back_left_waist",
+          "back_left_sideHip",
+          "back_left_sideThigh",
+          "back_left_sideShin",
+          "back_left_sideAnkle",
+          "back_left_hem",
+          "back_left_inseamAnkle",
+          "back_left_inseamThigh",
+          "back_left_crotch",
+          "back_left_centre"
+        ],
+        "seamAllowanceCm": 1,
+        "drape": {
+          "region": "leg",
+          "zone": "back",
+          "side": "left",
+          "anchor": "waist"
+        },
+        "grainAngleDeg": 90
+      },
+      "back_right_panel": {
+        "id": "back_right_panel",
+        "name": "后裤片（右）",
+        "outlineEdgeIds": [
+          "back_right_centre",
+          "back_right_crotch",
+          "back_right_inseamThigh",
+          "back_right_inseamAnkle",
+          "back_right_hem",
+          "back_right_sideAnkle",
+          "back_right_sideShin",
+          "back_right_sideThigh",
+          "back_right_sideHip",
+          "back_right_waist"
+        ],
+        "seamAllowanceCm": 1,
+        "drape": {
+          "region": "leg",
+          "zone": "back",
+          "side": "right",
+          "anchor": "waist"
+        },
+        "grainAngleDeg": 90
+      },
+      "bandFront_panel": {
+        "id": "bandFront_panel",
+        "name": "前腰头",
+        "outlineEdgeIds": [
+          "bandFront_waist",
+          "bandFront_right",
+          "bandFront_top",
+          "bandFront_left"
+        ],
+        "seamAllowanceCm": 0.7,
+        "drape": {
+          "region": "torso",
+          "zone": "front",
+          "anchor": "waist",
+          "anchorOffsetCm": 4
+        },
+        "grainAngleDeg": 0
+      },
+      "bandBack_panel": {
+        "id": "bandBack_panel",
+        "name": "后腰头",
+        "outlineEdgeIds": [
+          "bandBack_waist",
+          "bandBack_right",
+          "bandBack_top",
+          "bandBack_left"
+        ],
+        "seamAllowanceCm": 0.7,
+        "drape": {
+          "region": "torso",
+          "zone": "back",
+          "anchor": "waist",
+          "anchorOffsetCm": 4
+        },
+        "grainAngleDeg": 0
+      }
+    },
+    "seams": {
+      "seam_1": {
+        "id": "seam_1",
+        "type": "normal",
+        "a": {
+          "edgeId": "front_left_centre",
+          "t0": 0,
+          "t1": 1
+        },
+        "b": {
+          "edgeId": "front_right_centre",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": true,
+        "strength": 1,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      },
+      "seam_2": {
+        "id": "seam_2",
+        "type": "normal",
+        "a": {
+          "edgeId": "front_left_crotch",
+          "t0": 0,
+          "t1": 1
+        },
+        "b": {
+          "edgeId": "front_right_crotch",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": true,
+        "strength": 1,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      },
+      "seam_3": {
+        "id": "seam_3",
+        "type": "normal",
+        "a": {
+          "edgeId": "back_left_centre",
+          "t0": 0,
+          "t1": 1
+        },
+        "b": {
+          "edgeId": "back_right_centre",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": true,
+        "strength": 1,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      },
+      "seam_4": {
+        "id": "seam_4",
+        "type": "normal",
+        "a": {
+          "edgeId": "back_left_crotch",
+          "t0": 0,
+          "t1": 1
+        },
+        "b": {
+          "edgeId": "back_right_crotch",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": true,
+        "strength": 1,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      },
+      "seam_5": {
+        "id": "seam_5",
+        "type": "normal",
+        "a": {
+          "edgeId": "front_left_sideHip",
+          "t0": 0,
+          "t1": 1
+        },
+        "b": {
+          "edgeId": "back_left_sideHip",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": false,
+        "strength": 1,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      },
+      "seam_6": {
+        "id": "seam_6",
+        "type": "normal",
+        "a": {
+          "edgeId": "front_left_sideThigh",
+          "t0": 0,
+          "t1": 1
+        },
+        "b": {
+          "edgeId": "back_left_sideThigh",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": false,
+        "strength": 1,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      },
+      "seam_7": {
+        "id": "seam_7",
+        "type": "normal",
+        "a": {
+          "edgeId": "front_left_sideShin",
+          "t0": 0,
+          "t1": 1
+        },
+        "b": {
+          "edgeId": "back_left_sideShin",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": false,
+        "strength": 1,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      },
+      "seam_8": {
+        "id": "seam_8",
+        "type": "normal",
+        "a": {
+          "edgeId": "front_left_sideAnkle",
+          "t0": 0,
+          "t1": 1
+        },
+        "b": {
+          "edgeId": "back_left_sideAnkle",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": false,
+        "strength": 1,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      },
+      "seam_9": {
+        "id": "seam_9",
+        "type": "normal",
+        "a": {
+          "edgeId": "front_left_inseamThigh",
+          "t0": 0,
+          "t1": 1
+        },
+        "b": {
+          "edgeId": "back_left_inseamThigh",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": false,
+        "strength": 1,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      },
+      "seam_10": {
+        "id": "seam_10",
+        "type": "normal",
+        "a": {
+          "edgeId": "front_left_inseamAnkle",
+          "t0": 0,
+          "t1": 1
+        },
+        "b": {
+          "edgeId": "back_left_inseamAnkle",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": false,
+        "strength": 1,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      },
+      "seam_11": {
+        "id": "seam_11",
+        "type": "normal",
+        "a": {
+          "edgeId": "front_right_sideHip",
+          "t0": 0,
+          "t1": 1
+        },
+        "b": {
+          "edgeId": "back_right_sideHip",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": false,
+        "strength": 1,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      },
+      "seam_12": {
+        "id": "seam_12",
+        "type": "normal",
+        "a": {
+          "edgeId": "front_right_sideThigh",
+          "t0": 0,
+          "t1": 1
+        },
+        "b": {
+          "edgeId": "back_right_sideThigh",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": false,
+        "strength": 1,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      },
+      "seam_13": {
+        "id": "seam_13",
+        "type": "normal",
+        "a": {
+          "edgeId": "front_right_sideShin",
+          "t0": 0,
+          "t1": 1
+        },
+        "b": {
+          "edgeId": "back_right_sideShin",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": false,
+        "strength": 1,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      },
+      "seam_14": {
+        "id": "seam_14",
+        "type": "normal",
+        "a": {
+          "edgeId": "front_right_sideAnkle",
+          "t0": 0,
+          "t1": 1
+        },
+        "b": {
+          "edgeId": "back_right_sideAnkle",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": false,
+        "strength": 1,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      },
+      "seam_15": {
+        "id": "seam_15",
+        "type": "normal",
+        "a": {
+          "edgeId": "front_right_inseamThigh",
+          "t0": 0,
+          "t1": 1
+        },
+        "b": {
+          "edgeId": "back_right_inseamThigh",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": false,
+        "strength": 1,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      },
+      "seam_16": {
+        "id": "seam_16",
+        "type": "normal",
+        "a": {
+          "edgeId": "front_right_inseamAnkle",
+          "t0": 0,
+          "t1": 1
+        },
+        "b": {
+          "edgeId": "back_right_inseamAnkle",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": false,
+        "strength": 1,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      },
+      "seam_17": {
+        "id": "seam_17",
+        "type": "normal",
+        "a": {
+          "edgeId": "bandFront_waist",
+          "t0": 0,
+          "t1": 0.5
+        },
+        "b": {
+          "edgeId": "front_left_waist",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": true,
+        "strength": 1,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      },
+      "seam_18": {
+        "id": "seam_18",
+        "type": "normal",
+        "a": {
+          "edgeId": "bandFront_waist",
+          "t0": 0.5,
+          "t1": 1
+        },
+        "b": {
+          "edgeId": "front_right_waist",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": true,
+        "strength": 1,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      },
+      "seam_19": {
+        "id": "seam_19",
+        "type": "normal",
+        "a": {
+          "edgeId": "bandBack_waist",
+          "t0": 0,
+          "t1": 0.5
+        },
+        "b": {
+          "edgeId": "back_left_waist",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": true,
+        "strength": 1,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      },
+      "seam_20": {
+        "id": "seam_20",
+        "type": "normal",
+        "a": {
+          "edgeId": "bandBack_waist",
+          "t0": 0.5,
+          "t1": 1
+        },
+        "b": {
+          "edgeId": "back_right_waist",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": true,
+        "strength": 1,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      },
+      "seam_21": {
+        "id": "seam_21",
+        "type": "normal",
+        "a": {
+          "edgeId": "bandFront_right",
+          "t0": 0,
+          "t1": 1
+        },
+        "b": {
+          "edgeId": "bandBack_right",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": false,
+        "strength": 1,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      },
+      "seam_22": {
+        "id": "seam_22",
+        "type": "normal",
+        "a": {
+          "edgeId": "bandFront_left",
+          "t0": 0,
+          "t1": 1
+        },
+        "b": {
+          "edgeId": "bandBack_left",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": false,
+        "strength": 1,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      }
+    },
+    "darts": {},
+    "internalLines": {},
+    "notches": {},
+    "annotations": {},
+    "measurements": {},
+    "prints": {},
+    "topstitches": {},
+    "trims": {}
+  }
+}

@@ -1,0 +1,77 @@
+import type { KnitSpec } from '@/model';
+
+export const KNIT_TILE_CM = 10;
+
+const MAX_TILE_STITCHES = 96;
+
+function clampCount(value: number, lo: number, hi: number): number {
+  return Math.max(lo, Math.min(hi, Math.round(value)));
+}
+
+function repeatCount(value: number, repeat: number): number {
+  return Math.max(repeat, Math.round(clampCount(value, 1, MAX_TILE_STITCHES) / repeat) * repeat);
+}
+
+function stitchRepeat(stitch: KnitSpec['stitch']): { x: number; y: number } {
+  if (stitch === 'rib2') return { x: 4, y: 1 };
+  if (stitch === 'cable') return { x: 6, y: 8 };
+  return { x: 1, y: 1 };
+}
+
+export function knitTextureDataUrl(spec: KnitSpec, size = 512): string {
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return '';
+
+  ctx.fillStyle = '#f4f4f4';
+  ctx.fillRect(0, 0, size, size);
+  const repeat = stitchRepeat(spec.stitch);
+  const cols = repeatCount(spec.needleGauge, repeat.x);
+  const rows = repeatCount(spec.rowGauge, repeat.y);
+  const cellW = size / cols;
+  const cellH = size / rows;
+  ctx.lineWidth = Math.max(1, cellW * 0.16);
+  ctx.lineCap = 'round';
+
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const x = col * cellW;
+      const y = row * cellH;
+      if (spec.stitch === 'rib2' && col % 4 >= 2) {
+        ctx.strokeStyle = '#bdbdbd';
+        ctx.beginPath();
+        ctx.moveTo(x + cellW * 0.2, y + cellH * 0.5);
+        ctx.lineTo(x + cellW * 0.8, y + cellH * 0.5);
+        ctx.stroke();
+        continue;
+      }
+
+      if (spec.stitch === 'cable' && row % 8 === 4 && col % 6 >= 2 && col % 6 < 4) {
+        ctx.strokeStyle = '#9f9f9f';
+        ctx.beginPath();
+        ctx.moveTo(x + cellW * 0.2, y + cellH * 0.15);
+        ctx.lineTo(x + cellW * 0.8, y + cellH * 0.85);
+        ctx.moveTo(x + cellW * 0.2, y + cellH * 0.85);
+        ctx.lineTo(x + cellW * 0.8, y + cellH * 0.15);
+        ctx.stroke();
+        continue;
+      }
+
+      ctx.strokeStyle = '#cfcfcf';
+      ctx.beginPath();
+      ctx.moveTo(x + cellW * 0.2, y + cellH * 0.15);
+      ctx.lineTo(x + cellW * 0.5, y + cellH * 0.78);
+      ctx.lineTo(x + cellW * 0.8, y + cellH * 0.15);
+      ctx.stroke();
+      ctx.strokeStyle = '#e0e0e0';
+      ctx.beginPath();
+      ctx.moveTo(x + cellW * 0.5, y + cellH * 0.78);
+      ctx.lineTo(x + cellW * 0.5, y + cellH * 1.0);
+      ctx.stroke();
+    }
+  }
+
+  return canvas.toDataURL('image/png');
+}

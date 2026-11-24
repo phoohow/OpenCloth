@@ -1,0 +1,1612 @@
+{
+  "order": 3,
+  "key": "hoodie",
+  "name": "卫衣",
+  "summary": "前片 · 后片 · 落肩长袖 · 罗纹 · 兜帽",
+  "params": {
+    "chestCm": 110,
+    "lengthCm": 70,
+    "sleeveLengthCm": 54,
+    "cuffCm": 21,
+    "shoulderCm": 46,
+    "neckWidthCm": 20,
+    "neckDepthCm": 8,
+    "hoodHeightCm": 23.8
+  },
+  "pattern": {
+    "points": {
+      "pt_5t_mwhz835i": {
+        "id": "pt_5t_mwhz835i",
+        "pos": {
+          "x": -84.91867289412647,
+          "y": -70
+        }
+      },
+      "pt_5u_mwhz835i": {
+        "id": "pt_5u_mwhz835i",
+        "pos": {
+          "x": -29.918672894126473,
+          "y": -70
+        }
+      },
+      "pt_5v_mwhz835i": {
+        "id": "pt_5v_mwhz835i",
+        "pos": {
+          "x": -29.918672894126473,
+          "y": -25.519999999999996
+        },
+        "kind": "smooth",
+        "handleOut": {
+          "x": -31.018672894126475,
+          "y": -15.619999999999997
+        }
+      },
+      "pt_5w_mwhz835i": {
+        "id": "pt_5w_mwhz835i",
+        "pos": {
+          "x": -31.418672894126473,
+          "y": -3.519999999999996
+        },
+        "kind": "smooth",
+        "handleIn": {
+          "x": -31.968672894126474,
+          "y": -13.419999999999995
+        }
+      },
+      "pt_5x_mwhz835i": {
+        "id": "pt_5x_mwhz835i",
+        "pos": {
+          "x": -47.41867289412647,
+          "y": 0
+        },
+        "kind": "smooth",
+        "handleOut": {
+          "x": -49.66867289412647,
+          "y": -5.333333333333329
+        }
+      },
+      "pt_5y_mwhz835i": {
+        "id": "pt_5y_mwhz835i",
+        "pos": {
+          "x": -67.41867289412647,
+          "y": 0
+        },
+        "kind": "smooth",
+        "handleIn": {
+          "x": -65.16867289412647,
+          "y": -5.333333333333329
+        }
+      },
+      "pt_5z_mwhz835i": {
+        "id": "pt_5z_mwhz835i",
+        "pos": {
+          "x": -83.41867289412647,
+          "y": -3.519999999999996
+        },
+        "kind": "smooth",
+        "handleOut": {
+          "x": -82.86867289412648,
+          "y": -13.419999999999995
+        }
+      },
+      "pt_60_mwhz835j": {
+        "id": "pt_60_mwhz835j",
+        "pos": {
+          "x": -84.91867289412647,
+          "y": -25.519999999999996
+        },
+        "kind": "smooth",
+        "handleIn": {
+          "x": -83.81867289412648,
+          "y": -15.619999999999997
+        }
+      },
+      "pt_65_mwhz835j": {
+        "id": "pt_65_mwhz835j",
+        "pos": {
+          "x": -57.41867289412647,
+          "y": -8
+        },
+        "kind": "smooth",
+        "handleIn": {
+          "x": -53.54367289412647,
+          "y": -8
+        },
+        "handleOut": {
+          "x": -61.29367289412647,
+          "y": -8
+        }
+      },
+      "pt_6c_mwhz835j": {
+        "id": "pt_6c_mwhz835j",
+        "pos": {
+          "x": -25.918672894126473,
+          "y": -70
+        }
+      },
+      "pt_6d_mwhz835j": {
+        "id": "pt_6d_mwhz835j",
+        "pos": {
+          "x": 29.081327105873527,
+          "y": -70
+        }
+      },
+      "pt_6e_mwhz835j": {
+        "id": "pt_6e_mwhz835j",
+        "pos": {
+          "x": 29.081327105873527,
+          "y": -25.519999999999996
+        },
+        "kind": "smooth",
+        "handleOut": {
+          "x": 27.981327105873525,
+          "y": -15.619999999999997
+        }
+      },
+      "pt_6f_mwhz835j": {
+        "id": "pt_6f_mwhz835j",
+        "pos": {
+          "x": 27.581327105873527,
+          "y": -3.519999999999996
+        },
+        "kind": "smooth",
+        "handleIn": {
+          "x": 27.031327105873526,
+          "y": -13.419999999999995
+        }
+      },
+      "pt_6g_mwhz835j": {
+        "id": "pt_6g_mwhz835j",
+        "pos": {
+          "x": 11.581327105873527,
+          "y": 0
+        },
+        "kind": "smooth",
+        "handleOut": {
+          "x": 9.331327105873527,
+          "y": -1.8666666666666742
+        }
+      },
+      "pt_6h_mwhz835j": {
+        "id": "pt_6h_mwhz835j",
+        "pos": {
+          "x": -8.418672894126473,
+          "y": 0
+        },
+        "kind": "smooth",
+        "handleIn": {
+          "x": -6.168672894126473,
+          "y": -1.8666666666666742
+        }
+      },
+      "pt_6i_mwhz835j": {
+        "id": "pt_6i_mwhz835j",
+        "pos": {
+          "x": -24.418672894126473,
+          "y": -3.519999999999996
+        },
+        "kind": "smooth",
+        "handleOut": {
+          "x": -23.868672894126473,
+          "y": -13.419999999999995
+        }
+      },
+      "pt_6j_mwhz835j": {
+        "id": "pt_6j_mwhz835j",
+        "pos": {
+          "x": -25.918672894126473,
+          "y": -25.519999999999996
+        },
+        "kind": "smooth",
+        "handleIn": {
+          "x": -24.818672894126472,
+          "y": -15.619999999999997
+        }
+      },
+      "pt_6o_mwhz835j": {
+        "id": "pt_6o_mwhz835j",
+        "pos": {
+          "x": 1.5813271058735268,
+          "y": -2.799999999999997
+        },
+        "kind": "smooth",
+        "handleIn": {
+          "x": 5.456327105873527,
+          "y": -2.8000000000000114
+        },
+        "handleOut": {
+          "x": -2.2936728941264732,
+          "y": -2.8000000000000114
+        }
+      },
+      "pt_6v_mwhz835j": {
+        "id": "pt_6v_mwhz835j",
+        "pos": {
+          "x": -144.21867289412646,
+          "y": -48
+        }
+      },
+      "pt_6w_mwhz835j": {
+        "id": "pt_6w_mwhz835j",
+        "pos": {
+          "x": -123.21867289412646,
+          "y": -48
+        }
+      },
+      "pt_6x_mwhz835j": {
+        "id": "pt_6x_mwhz835j",
+        "pos": {
+          "x": -113.91867289412646,
+          "y": -7.6771138577721985
+        },
+        "kind": "smooth",
+        "handleOut": {
+          "x": -113.91867289412646,
+          "y": -4.4527260375078725
+        }
+      },
+      "pt_6y_mwhz835j": {
+        "id": "pt_6y_mwhz835j",
+        "pos": {
+          "x": -133.71867289412646,
+          "y": 0
+        },
+        "kind": "smooth",
+        "handleIn": {
+          "x": -125.79867289412645,
+          "y": 0
+        },
+        "handleOut": {
+          "x": -141.63867289412644,
+          "y": 0
+        }
+      },
+      "pt_6z_mwhz835j": {
+        "id": "pt_6z_mwhz835j",
+        "pos": {
+          "x": -153.51867289412647,
+          "y": -7.6771138577721985
+        },
+        "kind": "smooth",
+        "handleIn": {
+          "x": -153.51867289412647,
+          "y": -4.4527260375078725
+        }
+      },
+      "pt_76_mwhz835j": {
+        "id": "pt_76_mwhz835j",
+        "pos": {
+          "x": 42.381327105873524,
+          "y": -48
+        }
+      },
+      "pt_77_mwhz835j": {
+        "id": "pt_77_mwhz835j",
+        "pos": {
+          "x": 63.381327105873524,
+          "y": -48
+        }
+      },
+      "pt_78_mwhz835j": {
+        "id": "pt_78_mwhz835j",
+        "pos": {
+          "x": 72.68132710587352,
+          "y": -7.6771138577721985
+        },
+        "kind": "smooth",
+        "handleOut": {
+          "x": 72.68132710587352,
+          "y": -4.4527260375078725
+        }
+      },
+      "pt_79_mwhz835j": {
+        "id": "pt_79_mwhz835j",
+        "pos": {
+          "x": 52.881327105873524,
+          "y": 0
+        },
+        "kind": "smooth",
+        "handleIn": {
+          "x": 60.801327105873526,
+          "y": 0
+        },
+        "handleOut": {
+          "x": 44.96132710587352,
+          "y": 0
+        }
+      },
+      "pt_7a_mwhz835j": {
+        "id": "pt_7a_mwhz835j",
+        "pos": {
+          "x": 33.08132710587353,
+          "y": -7.6771138577721985
+        },
+        "kind": "smooth",
+        "handleIn": {
+          "x": 33.08132710587353,
+          "y": -4.4527260375078725
+        }
+      },
+      "pt_7h_mwhz835j": {
+        "id": "pt_7h_mwhz835j",
+        "pos": {
+          "x": 101.68132710587352,
+          "y": -6.5
+        }
+      },
+      "pt_7i_mwhz835j": {
+        "id": "pt_7i_mwhz835j",
+        "pos": {
+          "x": 156.68132710587352,
+          "y": -6.5
+        }
+      },
+      "pt_7j_mwhz835j": {
+        "id": "pt_7j_mwhz835j",
+        "pos": {
+          "x": 156.68132710587352,
+          "y": 0
+        }
+      },
+      "pt_7k_mwhz835j": {
+        "id": "pt_7k_mwhz835j",
+        "pos": {
+          "x": 101.68132710587352,
+          "y": 0
+        }
+      },
+      "pt_7q_mwhz835k": {
+        "id": "pt_7q_mwhz835k",
+        "pos": {
+          "x": 160.68132710587352,
+          "y": -6.5
+        }
+      },
+      "pt_7r_mwhz835k": {
+        "id": "pt_7r_mwhz835k",
+        "pos": {
+          "x": 215.68132710587352,
+          "y": -6.5
+        }
+      },
+      "pt_7s_mwhz835k": {
+        "id": "pt_7s_mwhz835k",
+        "pos": {
+          "x": 215.68132710587352,
+          "y": 0
+        }
+      },
+      "pt_7t_mwhz835k": {
+        "id": "pt_7t_mwhz835k",
+        "pos": {
+          "x": 160.68132710587352,
+          "y": 0
+        }
+      },
+      "pt_7z_mwhz835k": {
+        "id": "pt_7z_mwhz835k",
+        "pos": {
+          "x": -109.91867289412647,
+          "y": -6
+        }
+      },
+      "pt_80_mwhz835k": {
+        "id": "pt_80_mwhz835k",
+        "pos": {
+          "x": -88.91867289412647,
+          "y": -6
+        }
+      },
+      "pt_81_mwhz835k": {
+        "id": "pt_81_mwhz835k",
+        "pos": {
+          "x": -88.91867289412647,
+          "y": 0
+        }
+      },
+      "pt_82_mwhz835k": {
+        "id": "pt_82_mwhz835k",
+        "pos": {
+          "x": -109.91867289412647,
+          "y": 0
+        }
+      },
+      "pt_88_mwhz835k": {
+        "id": "pt_88_mwhz835k",
+        "pos": {
+          "x": 76.68132710587352,
+          "y": -6
+        }
+      },
+      "pt_89_mwhz835k": {
+        "id": "pt_89_mwhz835k",
+        "pos": {
+          "x": 97.68132710587352,
+          "y": -6
+        }
+      },
+      "pt_8a_mwhz835k": {
+        "id": "pt_8a_mwhz835k",
+        "pos": {
+          "x": 97.68132710587352,
+          "y": 0
+        }
+      },
+      "pt_8b_mwhz835k": {
+        "id": "pt_8b_mwhz835k",
+        "pos": {
+          "x": 76.68132710587352,
+          "y": 0
+        }
+      },
+      "pt_8h_mwhz835k": {
+        "id": "pt_8h_mwhz835k",
+        "pos": {
+          "x": -215.68132710587352,
+          "y": -23.8
+        },
+        "kind": "smooth",
+        "handleIn": {
+          "x": -215.08132710587353,
+          "y": -19.516000000000002
+        }
+      },
+      "pt_8i_mwhz835k": {
+        "id": "pt_8i_mwhz835k",
+        "pos": {
+          "x": -202.14690497815837,
+          "y": -23.8
+        }
+      },
+      "pt_8j_mwhz835k": {
+        "id": "pt_8j_mwhz835k",
+        "pos": {
+          "x": -191.6,
+          "y": -23.8
+        },
+        "kind": "smooth",
+        "handleOut": {
+          "x": -190,
+          "y": -15.708
+        }
+      },
+      "pt_8k_mwhz835k": {
+        "id": "pt_8k_mwhz835k",
+        "pos": {
+          "x": -188.6,
+          "y": -0.11899999999999977
+        },
+        "kind": "smooth",
+        "handleIn": {
+          "x": -188.6,
+          "y": -4.759999999999998
+        },
+        "handleOut": {
+          "x": -195.10026747643624,
+          "y": -0.11899999999999977
+        }
+      },
+      "pt_8l_mwhz835k": {
+        "id": "pt_8l_mwhz835k",
+        "pos": {
+          "x": -210.26755825478747,
+          "y": 0
+        },
+        "kind": "smooth",
+        "handleIn": {
+          "x": -203.76729077835122,
+          "y": -0.11899999999999977
+        },
+        "handleOut": {
+          "x": -210.70065976287435,
+          "y": -9.520000000000001
+        }
+      },
+      "pt_8s_mwhz835k": {
+        "id": "pt_8s_mwhz835k",
+        "pos": {
+          "x": -184.6,
+          "y": -23.8
+        },
+        "kind": "smooth",
+        "handleIn": {
+          "x": -184,
+          "y": -19.516000000000002
+        }
+      },
+      "pt_8t_mwhz835k": {
+        "id": "pt_8t_mwhz835k",
+        "pos": {
+          "x": -171.06557787228485,
+          "y": -23.8
+        }
+      },
+      "pt_8u_mwhz835k": {
+        "id": "pt_8u_mwhz835k",
+        "pos": {
+          "x": -160.51867289412647,
+          "y": -23.8
+        },
+        "kind": "smooth",
+        "handleOut": {
+          "x": -158.91867289412647,
+          "y": -15.708
+        }
+      },
+      "pt_8v_mwhz835k": {
+        "id": "pt_8v_mwhz835k",
+        "pos": {
+          "x": -157.51867289412647,
+          "y": -0.11899999999999977
+        },
+        "kind": "smooth",
+        "handleIn": {
+          "x": -157.51867289412647,
+          "y": -4.759999999999998
+        },
+        "handleOut": {
+          "x": -164.01894037056272,
+          "y": -0.11899999999999977
+        }
+      },
+      "pt_8w_mwhz835k": {
+        "id": "pt_8w_mwhz835k",
+        "pos": {
+          "x": -179.18623114891395,
+          "y": 0
+        },
+        "kind": "smooth",
+        "handleIn": {
+          "x": -172.6859636724777,
+          "y": -0.11899999999999977
+        },
+        "handleOut": {
+          "x": -179.61933265700083,
+          "y": -9.520000000000001
+        }
+      }
+    },
+    "edges": {
+      "edge_61_mwhz835j": {
+        "id": "edge_61_mwhz835j",
+        "type": "line",
+        "startPointId": "pt_5t_mwhz835i",
+        "endPointId": "pt_5u_mwhz835i",
+        "semantic": "hem"
+      },
+      "edge_62_mwhz835j": {
+        "id": "edge_62_mwhz835j",
+        "type": "line",
+        "startPointId": "pt_5u_mwhz835i",
+        "endPointId": "pt_5v_mwhz835i",
+        "semantic": "sideSeam"
+      },
+      "edge_63_mwhz835j": {
+        "id": "edge_63_mwhz835j",
+        "type": "bezier",
+        "startPointId": "pt_5v_mwhz835i",
+        "endPointId": "pt_5w_mwhz835i",
+        "semantic": "armhole"
+      },
+      "edge_64_mwhz835j": {
+        "id": "edge_64_mwhz835j",
+        "type": "line",
+        "startPointId": "pt_5w_mwhz835i",
+        "endPointId": "pt_5x_mwhz835i",
+        "semantic": "shoulder"
+      },
+      "edge_66_mwhz835j": {
+        "id": "edge_66_mwhz835j",
+        "type": "bezier",
+        "startPointId": "pt_5x_mwhz835i",
+        "endPointId": "pt_65_mwhz835j",
+        "semantic": "neckline"
+      },
+      "edge_67_mwhz835j": {
+        "id": "edge_67_mwhz835j",
+        "type": "bezier",
+        "startPointId": "pt_65_mwhz835j",
+        "endPointId": "pt_5y_mwhz835i",
+        "semantic": "neckline"
+      },
+      "edge_68_mwhz835j": {
+        "id": "edge_68_mwhz835j",
+        "type": "line",
+        "startPointId": "pt_5y_mwhz835i",
+        "endPointId": "pt_5z_mwhz835i",
+        "semantic": "shoulder"
+      },
+      "edge_69_mwhz835j": {
+        "id": "edge_69_mwhz835j",
+        "type": "bezier",
+        "startPointId": "pt_5z_mwhz835i",
+        "endPointId": "pt_60_mwhz835j",
+        "semantic": "armhole"
+      },
+      "edge_6a_mwhz835j": {
+        "id": "edge_6a_mwhz835j",
+        "type": "line",
+        "startPointId": "pt_60_mwhz835j",
+        "endPointId": "pt_5t_mwhz835i",
+        "semantic": "sideSeam"
+      },
+      "edge_6k_mwhz835j": {
+        "id": "edge_6k_mwhz835j",
+        "type": "line",
+        "startPointId": "pt_6c_mwhz835j",
+        "endPointId": "pt_6d_mwhz835j",
+        "semantic": "hem"
+      },
+      "edge_6l_mwhz835j": {
+        "id": "edge_6l_mwhz835j",
+        "type": "line",
+        "startPointId": "pt_6d_mwhz835j",
+        "endPointId": "pt_6e_mwhz835j",
+        "semantic": "sideSeam"
+      },
+      "edge_6m_mwhz835j": {
+        "id": "edge_6m_mwhz835j",
+        "type": "bezier",
+        "startPointId": "pt_6e_mwhz835j",
+        "endPointId": "pt_6f_mwhz835j",
+        "semantic": "armhole"
+      },
+      "edge_6n_mwhz835j": {
+        "id": "edge_6n_mwhz835j",
+        "type": "line",
+        "startPointId": "pt_6f_mwhz835j",
+        "endPointId": "pt_6g_mwhz835j",
+        "semantic": "shoulder"
+      },
+      "edge_6p_mwhz835j": {
+        "id": "edge_6p_mwhz835j",
+        "type": "bezier",
+        "startPointId": "pt_6g_mwhz835j",
+        "endPointId": "pt_6o_mwhz835j",
+        "semantic": "neckline"
+      },
+      "edge_6q_mwhz835j": {
+        "id": "edge_6q_mwhz835j",
+        "type": "bezier",
+        "startPointId": "pt_6o_mwhz835j",
+        "endPointId": "pt_6h_mwhz835j",
+        "semantic": "neckline"
+      },
+      "edge_6r_mwhz835j": {
+        "id": "edge_6r_mwhz835j",
+        "type": "line",
+        "startPointId": "pt_6h_mwhz835j",
+        "endPointId": "pt_6i_mwhz835j",
+        "semantic": "shoulder"
+      },
+      "edge_6s_mwhz835j": {
+        "id": "edge_6s_mwhz835j",
+        "type": "bezier",
+        "startPointId": "pt_6i_mwhz835j",
+        "endPointId": "pt_6j_mwhz835j",
+        "semantic": "armhole"
+      },
+      "edge_6t_mwhz835j": {
+        "id": "edge_6t_mwhz835j",
+        "type": "line",
+        "startPointId": "pt_6j_mwhz835j",
+        "endPointId": "pt_6c_mwhz835j",
+        "semantic": "sideSeam"
+      },
+      "edge_70_mwhz835j": {
+        "id": "edge_70_mwhz835j",
+        "type": "line",
+        "startPointId": "pt_6v_mwhz835j",
+        "endPointId": "pt_6w_mwhz835j",
+        "semantic": "hem"
+      },
+      "edge_71_mwhz835j": {
+        "id": "edge_71_mwhz835j",
+        "type": "line",
+        "startPointId": "pt_6w_mwhz835j",
+        "endPointId": "pt_6x_mwhz835j",
+        "semantic": "sideSeam"
+      },
+      "edge_72_mwhz835j": {
+        "id": "edge_72_mwhz835j",
+        "type": "bezier",
+        "startPointId": "pt_6x_mwhz835j",
+        "endPointId": "pt_6y_mwhz835j",
+        "semantic": "sleeveCap"
+      },
+      "edge_73_mwhz835j": {
+        "id": "edge_73_mwhz835j",
+        "type": "bezier",
+        "startPointId": "pt_6y_mwhz835j",
+        "endPointId": "pt_6z_mwhz835j",
+        "semantic": "sleeveCap"
+      },
+      "edge_74_mwhz835j": {
+        "id": "edge_74_mwhz835j",
+        "type": "line",
+        "startPointId": "pt_6z_mwhz835j",
+        "endPointId": "pt_6v_mwhz835j",
+        "semantic": "sideSeam"
+      },
+      "edge_7b_mwhz835j": {
+        "id": "edge_7b_mwhz835j",
+        "type": "line",
+        "startPointId": "pt_76_mwhz835j",
+        "endPointId": "pt_77_mwhz835j",
+        "semantic": "hem"
+      },
+      "edge_7c_mwhz835j": {
+        "id": "edge_7c_mwhz835j",
+        "type": "line",
+        "startPointId": "pt_77_mwhz835j",
+        "endPointId": "pt_78_mwhz835j",
+        "semantic": "sideSeam"
+      },
+      "edge_7d_mwhz835j": {
+        "id": "edge_7d_mwhz835j",
+        "type": "bezier",
+        "startPointId": "pt_78_mwhz835j",
+        "endPointId": "pt_79_mwhz835j",
+        "semantic": "sleeveCap"
+      },
+      "edge_7e_mwhz835j": {
+        "id": "edge_7e_mwhz835j",
+        "type": "bezier",
+        "startPointId": "pt_79_mwhz835j",
+        "endPointId": "pt_7a_mwhz835j",
+        "semantic": "sleeveCap"
+      },
+      "edge_7f_mwhz835j": {
+        "id": "edge_7f_mwhz835j",
+        "type": "line",
+        "startPointId": "pt_7a_mwhz835j",
+        "endPointId": "pt_76_mwhz835j",
+        "semantic": "sideSeam"
+      },
+      "edge_7l_mwhz835j": {
+        "id": "edge_7l_mwhz835j",
+        "type": "line",
+        "startPointId": "pt_7h_mwhz835j",
+        "endPointId": "pt_7i_mwhz835j",
+        "semantic": "hem"
+      },
+      "edge_7m_mwhz835k": {
+        "id": "edge_7m_mwhz835k",
+        "type": "line",
+        "startPointId": "pt_7i_mwhz835j",
+        "endPointId": "pt_7j_mwhz835j",
+        "semantic": "free"
+      },
+      "edge_7n_mwhz835k": {
+        "id": "edge_7n_mwhz835k",
+        "type": "line",
+        "startPointId": "pt_7j_mwhz835j",
+        "endPointId": "pt_7k_mwhz835j",
+        "semantic": "waist"
+      },
+      "edge_7o_mwhz835k": {
+        "id": "edge_7o_mwhz835k",
+        "type": "line",
+        "startPointId": "pt_7k_mwhz835j",
+        "endPointId": "pt_7h_mwhz835j",
+        "semantic": "free"
+      },
+      "edge_7u_mwhz835k": {
+        "id": "edge_7u_mwhz835k",
+        "type": "line",
+        "startPointId": "pt_7q_mwhz835k",
+        "endPointId": "pt_7r_mwhz835k",
+        "semantic": "hem"
+      },
+      "edge_7v_mwhz835k": {
+        "id": "edge_7v_mwhz835k",
+        "type": "line",
+        "startPointId": "pt_7r_mwhz835k",
+        "endPointId": "pt_7s_mwhz835k",
+        "semantic": "free"
+      },
+      "edge_7w_mwhz835k": {
+        "id": "edge_7w_mwhz835k",
+        "type": "line",
+        "startPointId": "pt_7s_mwhz835k",
+        "endPointId": "pt_7t_mwhz835k",
+        "semantic": "waist"
+      },
+      "edge_7x_mwhz835k": {
+        "id": "edge_7x_mwhz835k",
+        "type": "line",
+        "startPointId": "pt_7t_mwhz835k",
+        "endPointId": "pt_7q_mwhz835k",
+        "semantic": "free"
+      },
+      "edge_83_mwhz835k": {
+        "id": "edge_83_mwhz835k",
+        "type": "line",
+        "startPointId": "pt_7z_mwhz835k",
+        "endPointId": "pt_80_mwhz835k",
+        "semantic": "hem"
+      },
+      "edge_84_mwhz835k": {
+        "id": "edge_84_mwhz835k",
+        "type": "line",
+        "startPointId": "pt_80_mwhz835k",
+        "endPointId": "pt_81_mwhz835k",
+        "semantic": "free"
+      },
+      "edge_85_mwhz835k": {
+        "id": "edge_85_mwhz835k",
+        "type": "line",
+        "startPointId": "pt_81_mwhz835k",
+        "endPointId": "pt_82_mwhz835k",
+        "semantic": "waist"
+      },
+      "edge_86_mwhz835k": {
+        "id": "edge_86_mwhz835k",
+        "type": "line",
+        "startPointId": "pt_82_mwhz835k",
+        "endPointId": "pt_7z_mwhz835k",
+        "semantic": "free"
+      },
+      "edge_8c_mwhz835k": {
+        "id": "edge_8c_mwhz835k",
+        "type": "line",
+        "startPointId": "pt_88_mwhz835k",
+        "endPointId": "pt_89_mwhz835k",
+        "semantic": "hem"
+      },
+      "edge_8d_mwhz835k": {
+        "id": "edge_8d_mwhz835k",
+        "type": "line",
+        "startPointId": "pt_89_mwhz835k",
+        "endPointId": "pt_8a_mwhz835k",
+        "semantic": "free"
+      },
+      "edge_8e_mwhz835k": {
+        "id": "edge_8e_mwhz835k",
+        "type": "line",
+        "startPointId": "pt_8a_mwhz835k",
+        "endPointId": "pt_8b_mwhz835k",
+        "semantic": "waist"
+      },
+      "edge_8f_mwhz835k": {
+        "id": "edge_8f_mwhz835k",
+        "type": "line",
+        "startPointId": "pt_8b_mwhz835k",
+        "endPointId": "pt_88_mwhz835k",
+        "semantic": "free"
+      },
+      "edge_8m_mwhz835k": {
+        "id": "edge_8m_mwhz835k",
+        "type": "line",
+        "startPointId": "pt_8h_mwhz835k",
+        "endPointId": "pt_8i_mwhz835k",
+        "semantic": "neckline"
+      },
+      "edge_8n_mwhz835k": {
+        "id": "edge_8n_mwhz835k",
+        "type": "line",
+        "startPointId": "pt_8i_mwhz835k",
+        "endPointId": "pt_8j_mwhz835k",
+        "semantic": "neckline"
+      },
+      "edge_8o_mwhz835k": {
+        "id": "edge_8o_mwhz835k",
+        "type": "bezier",
+        "startPointId": "pt_8j_mwhz835k",
+        "endPointId": "pt_8k_mwhz835k",
+        "semantic": "free"
+      },
+      "edge_8p_mwhz835k": {
+        "id": "edge_8p_mwhz835k",
+        "type": "bezier",
+        "startPointId": "pt_8k_mwhz835k",
+        "endPointId": "pt_8l_mwhz835k",
+        "semantic": "free"
+      },
+      "edge_8q_mwhz835k": {
+        "id": "edge_8q_mwhz835k",
+        "type": "bezier",
+        "startPointId": "pt_8l_mwhz835k",
+        "endPointId": "pt_8h_mwhz835k",
+        "semantic": "free"
+      },
+      "edge_8x_mwhz835k": {
+        "id": "edge_8x_mwhz835k",
+        "type": "line",
+        "startPointId": "pt_8s_mwhz835k",
+        "endPointId": "pt_8t_mwhz835k",
+        "semantic": "neckline"
+      },
+      "edge_8y_mwhz835k": {
+        "id": "edge_8y_mwhz835k",
+        "type": "line",
+        "startPointId": "pt_8t_mwhz835k",
+        "endPointId": "pt_8u_mwhz835k",
+        "semantic": "neckline"
+      },
+      "edge_8z_mwhz835k": {
+        "id": "edge_8z_mwhz835k",
+        "type": "bezier",
+        "startPointId": "pt_8u_mwhz835k",
+        "endPointId": "pt_8v_mwhz835k",
+        "semantic": "free"
+      },
+      "edge_90_mwhz835k": {
+        "id": "edge_90_mwhz835k",
+        "type": "bezier",
+        "startPointId": "pt_8v_mwhz835k",
+        "endPointId": "pt_8w_mwhz835k",
+        "semantic": "free"
+      },
+      "edge_91_mwhz835k": {
+        "id": "edge_91_mwhz835k",
+        "type": "bezier",
+        "startPointId": "pt_8w_mwhz835k",
+        "endPointId": "pt_8s_mwhz835k",
+        "semantic": "free"
+      }
+    },
+    "darts": {},
+    "internalLines": {
+      "line_93_mwhz835k": {
+        "id": "line_93_mwhz835k",
+        "name": "袋鼠袋",
+        "points": [
+          {
+            "x": -76.41867289412647,
+            "y": -64
+          },
+          {
+            "x": -38.41867289412647,
+            "y": -64
+          },
+          {
+            "x": -36.51867289412647,
+            "y": -46
+          },
+          {
+            "x": -78.31867289412648,
+            "y": -46
+          },
+          {
+            "x": -76.41867289412647,
+            "y": -64
+          }
+        ],
+        "kind": "decor"
+      }
+    },
+    "panels": {
+      "panel_6b_mwhz835j": {
+        "id": "panel_6b_mwhz835j",
+        "name": "前片",
+        "outlineEdgeIds": [
+          "edge_61_mwhz835j",
+          "edge_62_mwhz835j",
+          "edge_63_mwhz835j",
+          "edge_64_mwhz835j",
+          "edge_66_mwhz835j",
+          "edge_67_mwhz835j",
+          "edge_68_mwhz835j",
+          "edge_69_mwhz835j",
+          "edge_6a_mwhz835j"
+        ],
+        "dartIds": [],
+        "internalLineIds": [
+          "line_93_mwhz835k"
+        ],
+        "seamAllowanceCm": 1,
+        "fabricId": "fabric_default",
+        "drape": {
+          "region": "torso",
+          "zone": "front"
+        },
+        "visible": true,
+        "locked": false
+      },
+      "panel_6u_mwhz835j": {
+        "id": "panel_6u_mwhz835j",
+        "name": "后片",
+        "outlineEdgeIds": [
+          "edge_6k_mwhz835j",
+          "edge_6l_mwhz835j",
+          "edge_6m_mwhz835j",
+          "edge_6n_mwhz835j",
+          "edge_6p_mwhz835j",
+          "edge_6q_mwhz835j",
+          "edge_6r_mwhz835j",
+          "edge_6s_mwhz835j",
+          "edge_6t_mwhz835j"
+        ],
+        "dartIds": [],
+        "internalLineIds": [],
+        "seamAllowanceCm": 1,
+        "fabricId": "fabric_default",
+        "drape": {
+          "region": "torso",
+          "zone": "back"
+        },
+        "visible": true,
+        "locked": false
+      },
+      "panel_75_mwhz835j": {
+        "id": "panel_75_mwhz835j",
+        "name": "左袖",
+        "outlineEdgeIds": [
+          "edge_70_mwhz835j",
+          "edge_71_mwhz835j",
+          "edge_72_mwhz835j",
+          "edge_73_mwhz835j",
+          "edge_74_mwhz835j"
+        ],
+        "dartIds": [],
+        "internalLineIds": [],
+        "seamAllowanceCm": 1,
+        "fabricId": "fabric_default",
+        "drape": {
+          "region": "arm",
+          "side": "left",
+          "zone": "full"
+        },
+        "visible": true,
+        "locked": false
+      },
+      "panel_7g_mwhz835j": {
+        "id": "panel_7g_mwhz835j",
+        "name": "右袖",
+        "outlineEdgeIds": [
+          "edge_7b_mwhz835j",
+          "edge_7c_mwhz835j",
+          "edge_7d_mwhz835j",
+          "edge_7e_mwhz835j",
+          "edge_7f_mwhz835j"
+        ],
+        "dartIds": [],
+        "internalLineIds": [],
+        "seamAllowanceCm": 1,
+        "fabricId": "fabric_default",
+        "drape": {
+          "region": "arm",
+          "side": "right",
+          "zone": "full"
+        },
+        "visible": true,
+        "locked": false
+      },
+      "panel_7p_mwhz835k": {
+        "id": "panel_7p_mwhz835k",
+        "name": "前下摆罗纹",
+        "outlineEdgeIds": [
+          "edge_7l_mwhz835j",
+          "edge_7m_mwhz835k",
+          "edge_7n_mwhz835k",
+          "edge_7o_mwhz835k"
+        ],
+        "dartIds": [],
+        "internalLineIds": [],
+        "seamAllowanceCm": 0.7,
+        "fabricId": "fabric_default",
+        "drape": {
+          "region": "torso",
+          "anchor": "shoulderTop",
+          "anchorOffsetCm": -70,
+          "zone": "front"
+        },
+        "visible": true,
+        "locked": false
+      },
+      "panel_7y_mwhz835k": {
+        "id": "panel_7y_mwhz835k",
+        "name": "后下摆罗纹",
+        "outlineEdgeIds": [
+          "edge_7u_mwhz835k",
+          "edge_7v_mwhz835k",
+          "edge_7w_mwhz835k",
+          "edge_7x_mwhz835k"
+        ],
+        "dartIds": [],
+        "internalLineIds": [],
+        "seamAllowanceCm": 0.7,
+        "fabricId": "fabric_default",
+        "drape": {
+          "region": "torso",
+          "anchor": "shoulderTop",
+          "anchorOffsetCm": -70,
+          "zone": "back"
+        },
+        "visible": true,
+        "locked": false
+      },
+      "panel_87_mwhz835k": {
+        "id": "panel_87_mwhz835k",
+        "name": "左袖口罗纹",
+        "outlineEdgeIds": [
+          "edge_83_mwhz835k",
+          "edge_84_mwhz835k",
+          "edge_85_mwhz835k",
+          "edge_86_mwhz835k"
+        ],
+        "dartIds": [],
+        "internalLineIds": [],
+        "seamAllowanceCm": 0.7,
+        "fabricId": "fabric_default",
+        "drape": {
+          "region": "arm",
+          "side": "left",
+          "zone": "full",
+          "anchorOffsetCm": -48
+        },
+        "visible": true,
+        "locked": false
+      },
+      "panel_8g_mwhz835k": {
+        "id": "panel_8g_mwhz835k",
+        "name": "右袖口罗纹",
+        "outlineEdgeIds": [
+          "edge_8c_mwhz835k",
+          "edge_8d_mwhz835k",
+          "edge_8e_mwhz835k",
+          "edge_8f_mwhz835k"
+        ],
+        "dartIds": [],
+        "internalLineIds": [],
+        "seamAllowanceCm": 0.7,
+        "fabricId": "fabric_default",
+        "drape": {
+          "region": "arm",
+          "side": "right",
+          "zone": "full",
+          "anchorOffsetCm": -48
+        },
+        "visible": true,
+        "locked": false
+      },
+      "panel_8r_mwhz835k": {
+        "id": "panel_8r_mwhz835k",
+        "name": "兜帽左片",
+        "outlineEdgeIds": [
+          "edge_8m_mwhz835k",
+          "edge_8n_mwhz835k",
+          "edge_8o_mwhz835k",
+          "edge_8p_mwhz835k",
+          "edge_8q_mwhz835k"
+        ],
+        "dartIds": [],
+        "internalLineIds": [],
+        "seamAllowanceCm": 1,
+        "fabricId": "fabric_default",
+        "drape": {
+          "region": "head",
+          "zone": "left"
+        },
+        "visible": true,
+        "locked": false
+      },
+      "panel_92_mwhz835k": {
+        "id": "panel_92_mwhz835k",
+        "name": "兜帽右片",
+        "outlineEdgeIds": [
+          "edge_8x_mwhz835k",
+          "edge_8y_mwhz835k",
+          "edge_8z_mwhz835k",
+          "edge_90_mwhz835k",
+          "edge_91_mwhz835k"
+        ],
+        "dartIds": [],
+        "internalLineIds": [],
+        "seamAllowanceCm": 1,
+        "fabricId": "fabric_default",
+        "drape": {
+          "region": "head",
+          "zone": "right"
+        },
+        "visible": true,
+        "locked": false
+      }
+    },
+    "seams": {
+      "seam_94_mwhz835k": {
+        "id": "seam_94_mwhz835k",
+        "type": "normal",
+        "a": {
+          "edgeId": "edge_64_mwhz835j",
+          "t0": 0,
+          "t1": 1
+        },
+        "b": {
+          "edgeId": "edge_6n_mwhz835j",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": false,
+        "strength": 0.8,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      },
+      "seam_95_mwhz835k": {
+        "id": "seam_95_mwhz835k",
+        "type": "normal",
+        "a": {
+          "edgeId": "edge_68_mwhz835j",
+          "t0": 0,
+          "t1": 1
+        },
+        "b": {
+          "edgeId": "edge_6r_mwhz835j",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": false,
+        "strength": 0.8,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      },
+      "seam_96_mwhz835k": {
+        "id": "seam_96_mwhz835k",
+        "type": "normal",
+        "a": {
+          "edgeId": "edge_62_mwhz835j",
+          "t0": 0,
+          "t1": 1
+        },
+        "b": {
+          "edgeId": "edge_6l_mwhz835j",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": false,
+        "strength": 0.8,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      },
+      "seam_97_mwhz835k": {
+        "id": "seam_97_mwhz835k",
+        "type": "normal",
+        "a": {
+          "edgeId": "edge_6a_mwhz835j",
+          "t0": 0,
+          "t1": 1
+        },
+        "b": {
+          "edgeId": "edge_6t_mwhz835j",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": false,
+        "strength": 0.8,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      },
+      "seam_98_mwhz835k": {
+        "id": "seam_98_mwhz835k",
+        "type": "normal",
+        "a": {
+          "edgeId": "edge_7d_mwhz835j",
+          "t0": 0,
+          "t1": 1
+        },
+        "b": {
+          "edgeId": "edge_63_mwhz835j",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": false,
+        "strength": 0.8,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      },
+      "seam_99_mwhz835k": {
+        "id": "seam_99_mwhz835k",
+        "type": "normal",
+        "a": {
+          "edgeId": "edge_7e_mwhz835j",
+          "t0": 0,
+          "t1": 1
+        },
+        "b": {
+          "edgeId": "edge_6m_mwhz835j",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": true,
+        "strength": 0.8,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      },
+      "seam_9a_mwhz835k": {
+        "id": "seam_9a_mwhz835k",
+        "type": "normal",
+        "a": {
+          "edgeId": "edge_72_mwhz835j",
+          "t0": 0,
+          "t1": 1
+        },
+        "b": {
+          "edgeId": "edge_69_mwhz835j",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": true,
+        "strength": 0.8,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      },
+      "seam_9b_mwhz835k": {
+        "id": "seam_9b_mwhz835k",
+        "type": "normal",
+        "a": {
+          "edgeId": "edge_73_mwhz835j",
+          "t0": 0,
+          "t1": 1
+        },
+        "b": {
+          "edgeId": "edge_6s_mwhz835j",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": false,
+        "strength": 0.8,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      },
+      "seam_9c_mwhz835k": {
+        "id": "seam_9c_mwhz835k",
+        "type": "normal",
+        "a": {
+          "edgeId": "edge_7c_mwhz835j",
+          "t0": 0,
+          "t1": 1
+        },
+        "b": {
+          "edgeId": "edge_7f_mwhz835j",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": true,
+        "strength": 0.8,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      },
+      "seam_9d_mwhz835k": {
+        "id": "seam_9d_mwhz835k",
+        "type": "normal",
+        "a": {
+          "edgeId": "edge_71_mwhz835j",
+          "t0": 0,
+          "t1": 1
+        },
+        "b": {
+          "edgeId": "edge_74_mwhz835j",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": true,
+        "strength": 0.8,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      },
+      "seam_9e_mwhz835k": {
+        "id": "seam_9e_mwhz835k",
+        "type": "normal",
+        "a": {
+          "edgeId": "edge_7b_mwhz835j",
+          "t0": 0,
+          "t1": 1
+        },
+        "b": {
+          "edgeId": "edge_8e_mwhz835k",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": true,
+        "strength": 1,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      },
+      "seam_9f_mwhz835k": {
+        "id": "seam_9f_mwhz835k",
+        "type": "normal",
+        "a": {
+          "edgeId": "edge_70_mwhz835j",
+          "t0": 0,
+          "t1": 1
+        },
+        "b": {
+          "edgeId": "edge_85_mwhz835k",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": true,
+        "strength": 1,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      },
+      "seam_9g_mwhz835k": {
+        "id": "seam_9g_mwhz835k",
+        "type": "normal",
+        "a": {
+          "edgeId": "edge_61_mwhz835j",
+          "t0": 0,
+          "t1": 1
+        },
+        "b": {
+          "edgeId": "edge_7n_mwhz835k",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": true,
+        "strength": 1,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      },
+      "seam_9h_mwhz835k": {
+        "id": "seam_9h_mwhz835k",
+        "type": "normal",
+        "a": {
+          "edgeId": "edge_6k_mwhz835j",
+          "t0": 0,
+          "t1": 1
+        },
+        "b": {
+          "edgeId": "edge_7w_mwhz835k",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": true,
+        "strength": 1,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      },
+      "seam_9i_mwhz835k": {
+        "id": "seam_9i_mwhz835k",
+        "type": "normal",
+        "a": {
+          "edgeId": "edge_7m_mwhz835k",
+          "t0": 0,
+          "t1": 1
+        },
+        "b": {
+          "edgeId": "edge_7v_mwhz835k",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": false,
+        "strength": 1,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      },
+      "seam_9j_mwhz835k": {
+        "id": "seam_9j_mwhz835k",
+        "type": "normal",
+        "a": {
+          "edgeId": "edge_7o_mwhz835k",
+          "t0": 0,
+          "t1": 1
+        },
+        "b": {
+          "edgeId": "edge_7x_mwhz835k",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": false,
+        "strength": 1,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      },
+      "seam_9k_mwhz835k": {
+        "id": "seam_9k_mwhz835k",
+        "type": "normal",
+        "a": {
+          "edgeId": "edge_8o_mwhz835k",
+          "t0": 0,
+          "t1": 1
+        },
+        "b": {
+          "edgeId": "edge_8z_mwhz835k",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": false,
+        "strength": 0.8,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      },
+      "seam_9l_mwhz835k": {
+        "id": "seam_9l_mwhz835k",
+        "type": "normal",
+        "a": {
+          "edgeId": "edge_8p_mwhz835k",
+          "t0": 0,
+          "t1": 1
+        },
+        "b": {
+          "edgeId": "edge_90_mwhz835k",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": true,
+        "strength": 0.8,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      },
+      "seam_9m_mwhz835k": {
+        "id": "seam_9m_mwhz835k",
+        "type": "normal",
+        "a": {
+          "edgeId": "edge_8m_mwhz835k",
+          "t0": 0,
+          "t1": 1
+        },
+        "b": {
+          "edgeId": "edge_67_mwhz835j",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": false,
+        "strength": 1,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      },
+      "seam_9n_mwhz835k": {
+        "id": "seam_9n_mwhz835k",
+        "type": "normal",
+        "a": {
+          "edgeId": "edge_8n_mwhz835k",
+          "t0": 0,
+          "t1": 1
+        },
+        "b": {
+          "edgeId": "edge_6q_mwhz835j",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": true,
+        "strength": 1,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      },
+      "seam_9o_mwhz835k": {
+        "id": "seam_9o_mwhz835k",
+        "type": "normal",
+        "a": {
+          "edgeId": "edge_8x_mwhz835k",
+          "t0": 0,
+          "t1": 1
+        },
+        "b": {
+          "edgeId": "edge_66_mwhz835j",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": true,
+        "strength": 1,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      },
+      "seam_9p_mwhz835k": {
+        "id": "seam_9p_mwhz835k",
+        "type": "normal",
+        "a": {
+          "edgeId": "edge_8y_mwhz835k",
+          "t0": 0,
+          "t1": 1
+        },
+        "b": {
+          "edgeId": "edge_6p_mwhz835j",
+          "t0": 0,
+          "t1": 1
+        },
+        "flip": false,
+        "strength": 1,
+        "threadColor": "#ff4444",
+        "stitchVisible": true
+      }
+    },
+    "notches": {},
+    "annotations": {},
+    "measurements": {},
+    "prints": {},
+    "topstitches": {},
+    "trims": {}
+  }
+}
