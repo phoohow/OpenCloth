@@ -28,8 +28,8 @@ interface Modifiers {
 }
 
 export function useClothPicking(
-  canvasRef: RefObject<HTMLCanvasElement>,
-  containerRef: RefObject<HTMLDivElement>,
+  canvasRef: RefObject<HTMLCanvasElement | null>,
+  containerRef: RefObject<HTMLDivElement | null>,
   engineRef: RefObject<GarmentEngine | null>,
 ): void {
   useEffect(() => {

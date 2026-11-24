@@ -16,11 +16,10 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["./src/*"]
     },
-    "types": ["vite/client", "@webgpu/types"]
+    "types": ["vite/client", "@webgpu/types", "node"]
   },
   "include": ["src", "test", "e2e"],
   "references": [{ "path": "./tsconfig.node.json" }]

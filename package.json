@@ -23,28 +23,28 @@
   "dependencies": {
     "oidn-webgpu": "^0.6.0",
     "polygon-clipping": "^0.15.7",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "three": "^0.185.1",
     "three-gpu-pathtracer": "^0.0.27",
-    "three-mesh-bvh": "^0.9.17",
-    "zustand": "^5.0.1"
+    "three-mesh-bvh": "^0.9.18",
+    "zustand": "^5.1.0"
   },
   "devDependencies": {
-    "@playwright/test": "^1.64.1",
-    "@types/node": "^26.6.5",
-    "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1",
+    "@playwright/test": "^1.65.1",
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "@types/three": "^0.185.1",
-    "@typescript-eslint/eslint-plugin": "^8.18.0",
-    "@typescript-eslint/parser": "^8.18.0",
-    "@vitejs/plugin-react": "^4.3.4",
+    "@typescript-eslint/eslint-plugin": "^8.74.0",
+    "@typescript-eslint/parser": "^8.74.0",
+    "@vitejs/plugin-react": "^6.3.0",
     "@webgpu/types": "^0.1.74",
-    "eslint": "^9.16.0",
-    "eslint-plugin-react": "^7.37.2",
-    "eslint-plugin-react-hooks": "^5.1.0",
-    "typescript": "^5.6.3",
-    "vite": "^6.0.3",
-    "vitest": "^3.2.4"
+    "eslint": "^10.15.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.14.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.1"
   }
 }

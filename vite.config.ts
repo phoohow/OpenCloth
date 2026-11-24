@@ -4,8 +4,8 @@ import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 
 const RAW_ASSET_DIRS = [
-  resolve(__dirname, 'assets/icons'),
-  resolve(__dirname, 'assets/patterns'),
+  resolve(import.meta.dirname, 'assets/icons'),
+  resolve(import.meta.dirname, 'assets/patterns'),
 ];
 
 const RAW_ASSET_PREFIX = '\0raw-asset:';
@@ -20,10 +20,10 @@ function rawAssetPlugin(): Plugin {
       if (!source.endsWith('?raw')) return null;
       const specifier = source.slice(0, -'?raw'.length);
       const file = specifier.startsWith('/')
-        ? resolve(__dirname, `.${specifier}`)
+        ? resolve(import.meta.dirname, `.${specifier}`)
         : isAbsolute(specifier)
           ? specifier
-          : resolve(importer ? dirname(importer) : __dirname, specifier);
+          : resolve(importer ? dirname(importer) : import.meta.dirname, specifier);
       const allowed = RAW_ASSET_DIRS.some(dir => {
         const inside = relative(dir, file);
         return !!inside && !inside.startsWith('..') && !isAbsolute(inside);
@@ -48,7 +48,7 @@ export default defineConfig(({ mode }) => {
     publicDir: storageAssets ? false : 'assets',
     resolve: {
       alias: [
-        { find: '@', replacement: resolve(__dirname, 'src') },
+        { find: '@', replacement: resolve(import.meta.dirname, 'src') },
         { find: /^three$/, replacement: 'three/webgpu' },
       ],
     },

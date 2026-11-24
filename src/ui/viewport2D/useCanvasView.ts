@@ -17,8 +17,8 @@ export interface CanvasViewInput {
   view: ViewTransform;
   setView: React.Dispatch<React.SetStateAction<ViewTransform>>;
   render: () => void;
-  canvasRef: React.RefObject<HTMLCanvasElement>;
-  containerRef: React.RefObject<HTMLDivElement>;
+  canvasRef: React.RefObject<HTMLCanvasElement | null>;
+  containerRef: React.RefObject<HTMLDivElement | null>;
 }
 
 export function useCanvasView(

@@ -71,8 +71,8 @@ function objectFrame(targets: GizmoTarget[]): GizmoFrame {
 }
 
 export function useTransformGizmo(
-  canvasRef: RefObject<HTMLCanvasElement>,
-  containerRef: RefObject<HTMLDivElement>,
+  canvasRef: RefObject<HTMLCanvasElement | null>,
+  containerRef: RefObject<HTMLDivElement | null>,
   engineRef: RefObject<GarmentEngine | null>,
   viewportRef: RefObject<Viewport | null>,
 ): TransformGizmoState {
